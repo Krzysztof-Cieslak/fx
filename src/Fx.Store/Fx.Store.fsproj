@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The event and blob stores (spec §5): typed events over stored payloads (codecs, schema versions
+    and upcasters), snapshots of folded state, the blob capability (content-addressed by SHA-256),
+    and their in-memory fakes. Pure apart from the capabilities it is handed, so the EFF analyzers
+    apply to every file. The real stores (SQLite and files) are Fx.Store.Live, which only composition
+    roots reference. Spec: docs/modules/store.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="EventSchema.fs" />
+    <Compile Include="TypedLog.fs" />
+    <Compile Include="Blobs.fs" />
+    <Compile Include="Codecs.fs" />
+    <Compile Include="Snapshots.fs" />
+    <Compile Include="Projection.fs" />
+    <Compile Include="Fakes\InMemoryBlobs.fs" />
+    <Compile Include="Fakes\InMemorySnapshots.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+  </ItemGroup>
+</Project>
