@@ -127,6 +127,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
 - Behaviour that differs under Native AOT, found by the diff:
   - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
+  - On linux-musl, the main thread of a Native AOT binary does not know its stack size: `RuntimeHelpers.TryEnsureSufficientExecutionStack()` is false there, so task continuations never run inline on it. Code that relies on inline continuations, such as driving a `FakeClock`, must run on a thread-pool thread (`FakeClock.Advance` throws otherwise).
 - A Native AOT executable sets `FxNativeAot` and sets `PublishAot` only when a runtime identifier is given. Copy the two properties from `src/Fx.Cli/Fx.Cli.fsproj`; the restore section of Commands explains why.
 
 The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `Eff` are enforced by our analyzers; see [Analyzers](#analyzers).

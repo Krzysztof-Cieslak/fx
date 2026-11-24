@@ -248,61 +248,66 @@ let results =
             )
         ])
 
+/// Runs on a thread-pool thread: FakeClock.Advance needs inline continuations, which the main thread
+/// of a musl Native AOT binary never gets.
 let concurrency =
-    Scenario.lines "eff-concurrency" (fun () ->
-        let f = fakes ()
-        let log = ResizeArray<string>()
+    Scenario.task "eff-concurrency" (fun () ->
+        Task.Run<string list>(
+            Func<string list>(fun () ->
+                let f = fakes ()
+                let log = ResizeArray<string>()
 
-        let sleeper name (d: float) (value: 'T) : Eff<Env, 'T> =
-            Trace.span
-                name
-                []
-                (eff {
-                    try
-                        do! Clock.sleep (seconds d)
-                        lock log (fun () -> log.Add $"{name} done")
-                        return value
-                    with :? OperationCanceledException as e ->
-                        lock log (fun () -> log.Add $"{name} cancelled")
-                        return raise e
-                })
+                let sleeper name (d: float) (value: 'T) : Eff<Env, 'T> =
+                    Trace.span
+                        name
+                        []
+                        (eff {
+                            try
+                                do! Clock.sleep (seconds d)
+                                lock log (fun () -> log.Add $"{name} done")
+                                return value
+                            with :? OperationCanceledException as e ->
+                                lock log (fun () -> log.Add $"{name} cancelled")
+                                return raise e
+                        })
 
-        let all =
-            Eff.run f.Env (Eff.all [ sleeper "a" 3.0 1; sleeper "b" 1.0 2; sleeper "c" 2.0 3 ])
+                let all =
+                    Eff.run f.Env (Eff.all [ sleeper "a" 3.0 1; sleeper "b" 1.0 2; sleeper "c" 2.0 3 ])
 
-        let race =
-            Eff.run f.Env (Eff.race [ sleeper "slow" 9.0 "slow"; sleeper "fast" 1.0 "fast" ])
+                let race =
+                    Eff.run f.Env (Eff.race [ sleeper "slow" 9.0 "slow"; sleeper "fast" 1.0 "fast" ])
 
-        let timedOut = Eff.run f.Env (Eff.timeout (seconds 2.0) (sleeper "late" 5.0 0))
-        let inTime = Eff.run f.Env (Eff.timeout (seconds 2.0) (sleeper "early" 1.0 7))
+                let timedOut = Eff.run f.Env (Eff.timeout (seconds 2.0) (sleeper "late" 5.0 0))
+                let inTime = Eff.run f.Env (Eff.timeout (seconds 2.0) (sleeper "early" 1.0 7))
 
-        let failed =
-            Eff.run
-                f.Env
-                (Eff.all
+                let failed =
+                    Eff.run
+                        f.Env
+                        (Eff.all
+                            [
+                                sleeper "x" 5.0 0
+                                // Fails inline when the delay fires: a thread-pool hop (e.g. Task.Yield) would race
+                                // with the next AdvanceToNextDelay.
+                                Eff.bind (fun () -> invalidOp "boom") (Clock.sleep (seconds 1.0))
+                            ])
+
+                while f.Clock.AdvanceToNextDelay() do
+                    ()
+
+                let results =
                     [
-                        sleeper "x" 5.0 0
-                        // Fails inline when the delay fires: a thread-pool hop (e.g. Task.Yield) would race
-                        // with the next AdvanceToNextDelay.
-                        Eff.bind (fun () -> invalidOp "boom") (Clock.sleep (seconds 1.0))
-                    ])
+                        outcome all
+                        outcome race
+                        outcome (timedOut.ContinueWith(fun (t: Task<int option>) -> showOption t.Result))
+                        outcome (inTime.ContinueWith(fun (t: Task<int option>) -> showOption t.Result))
+                        outcome failed
+                    ]
 
-        while f.Clock.AdvanceToNextDelay() do
-            ()
-
-        let results =
-            [
-                outcome all
-                outcome race
-                outcome (timedOut.ContinueWith(fun (t: Task<int option>) -> showOption t.Result))
-                outcome (inTime.ContinueWith(fun (t: Task<int option>) -> showOption t.Result))
-                outcome failed
-            ]
-
-        results
-        @ (log |> Seq.sort |> List.ofSeq)
-        @ (f.Trace.Records |> List.map string |> List.sort)
-        @ [ $"pending delays {f.Clock.PendingDelays}" ])
+                results
+                @ (log |> Seq.sort |> List.ofSeq)
+                @ (f.Trace.Records |> List.map string |> List.sort)
+                @ [ $"pending delays {f.Clock.PendingDelays}" ])
+        ))
 
 let fakesAndReplay =
     Scenario.lines "eff-fakes" (fun () ->
