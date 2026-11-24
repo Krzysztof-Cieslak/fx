@@ -11,12 +11,14 @@
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
+    <File Path="tests/Directory.Build.targets" />
     <Project Path="tests/Fx.Prelude.Tests/Fx.Prelude.Tests.fsproj" />
     <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
     <Project Path="tests/Fx.Aot.Tests/Fx.Aot.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
+    <File Path="tests/aot/Directory.Build.targets" />
     <Project Path="tests/aot/Fx.Aot.Scenarios/Fx.Aot.Scenarios.fsproj" />
     <Project Path="tests/aot/Fx.Aot.Diff/Fx.Aot.Diff.fsproj" />
   </Folder>
