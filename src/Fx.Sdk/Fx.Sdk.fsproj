@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The public F# SDK for extensions (spec §16.1): what an extension may see of the host. Built-in
+    extensions (extensions/) reference this project and nothing else; the architecture tests in
+    Fx.Extensions.Tests enforce it from the compiled metadata. It may expose only the projects it
+    references here (Prelude, Contracts, Effects): never the core (Fx.Extensions, Fx.Rpc, the
+    machine host, the live interpreters). Pure: the EFF analyzers apply to every file.
+    Spec: docs/modules/extensions.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Versions.fs" />
+    <Compile Include="ExtensionEnv.fs" />
+    <Compile Include="Manifest.fs" />
+    <Compile Include="Remote.fs" />
+    <Compile Include="Contribution.fs" />
+    <Compile Include="Hooks.fs" />
+    <Compile Include="Methods.fs" />
+    <Compile Include="Extension.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>
