@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The machine host (spec §4.4, §5): runs machines as actors, the single writers of their event
+    streams, with serialized and attributed inputs, idempotency keys and a control path; process
+    managers across streams; the event-log abstraction and its in-memory interpreter (the durable
+    store is T105). Pure apart from the Eff capabilities it is handed, so the EFF analyzers apply to
+    every file. Spec: docs/modules/machines.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="EventLog.fs" />
+    <Compile Include="InMemoryEventLog.fs" />
+    <Compile Include="Plumbing.fs" />
+    <Compile Include="Actor.fs" />
+    <Compile Include="ActorRegistry.fs" />
+    <Compile Include="ProcessManager.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+  </ItemGroup>
+</Project>

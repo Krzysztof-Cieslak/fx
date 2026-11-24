@@ -13,6 +13,7 @@
     <Project Path="src/Fx.Effects/Fx.Effects.fsproj" />
     <Project Path="src/Fx.Effects.Live/Fx.Effects.Live.fsproj" />
     <Project Path="src/Fx.Machines/Fx.Machines.fsproj" />
+    <Project Path="src/Fx.Machines.Host/Fx.Machines.Host.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -30,6 +31,7 @@
     <Project Path="tests/Fx.Effects.Tests/Fx.Effects.Tests.fsproj" />
     <Project Path="tests/Fx.Effects.Live.Tests/Fx.Effects.Live.Tests.fsproj" />
     <Project Path="tests/Fx.Machines.Tests/Fx.Machines.Tests.fsproj" />
+    <Project Path="tests/Fx.Machines.Host.Tests/Fx.Machines.Host.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
