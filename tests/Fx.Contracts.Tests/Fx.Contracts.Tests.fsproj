@@ -3,6 +3,7 @@
     <Compile Include="Generators.fs" />
     <Compile Include="JsonNumberTests.fs" />
     <Compile Include="JsonTests.fs" />
+    <Compile Include="ValidationTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
