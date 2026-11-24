@@ -39,7 +39,29 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
       - name: Formatting
-        run: dotnet fantomas --check src tests
+        run: dotnet fantomas --check src tests tools
+
+  analyzers:
+    name: Analyzers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore (locked)
+        run: dotnet restore Fx.slnx --locked-mode
+      - name: Analyzers
+        run: bun scripts/analyzers.ts
+      - name: Analyzers reject the failing samples
+        run: bun scripts/analyzers.ts samples --no-build
 
   build:
     name: Build and test (${{ matrix.os }})
