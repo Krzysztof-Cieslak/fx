@@ -128,6 +128,7 @@ type Codec<'T> =
 
 - **Combinators first:** codecs are hand-written with combinators (`Codec.record`, `Codec.union`, `Codec.list`, refinements); a build-time generator is optional later.
 - The same codecs produce the wire schema, interpreter bindings, client types and SDK types. TypeScript authors use `@fx/sdk` codecs producing the same `Schema`.
+- **Own JSON:** exact numbers (no float rounding of int64/decimal), strict reader (duplicate keys rejected, depth-limited); content hashes (events, ledger files, profiles) are taken over one **canonical form**: RFC 8785 key order and escaping, with numbers normalized exactly instead of through doubles. Module spec: `docs/modules/contracts.md`.
 - Core result types: `FileText`, `Match`, `RunResult`, `Evidence`, `BlobRef`, `EditResult`, `TaskResult`.
 
 ### 4.2 Effects with typed environments

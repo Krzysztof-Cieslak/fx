@@ -1,0 +1,49 @@
+{
+  "type": "array",
+  "prefixItems": [
+    {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.5
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "boolean"
+        },
+        "maxItems": 3
+      }
+    },
+    {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "integer",
+          "const": 2
+        },
+        {
+          "type": "string",
+          "maxLength": 8,
+          "pattern": "^[a-z]+$",
+          "format": "hostname"
+        },
+        {}
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  ],
+  "items": false,
+  "minItems": 3,
+  "maxItems": 3
+}

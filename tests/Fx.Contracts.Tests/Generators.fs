@@ -1,4 +1,4 @@
-/// FsCheck generators for JSON values, number texts and strings.
+/// FsCheck generators for JSON values, number texts, strings and preview limits.
 module Fx.Contracts.Tests.Generators
 
 open System
@@ -134,11 +134,31 @@ let rec private jsonOfSize (size: int) : Gen<Json> =
 
 let json: Gen<Json> = Gen.sized jsonOfSize
 
+/// Limits from tiny to generous, negative values included.
+let limits: Gen<Limits> =
+    gen {
+        let! maxChars =
+            Gen.frequency [ 1, Gen.choose (-2, 4); 3, Gen.choose (5, 80); 1, Gen.choose (80, 2000) ]
+
+        let! maxItems = Gen.choose (-1, 12)
+        let! maxDepth = Gen.choose (-1, 5)
+        let! maxStringChars = Gen.choose (-1, 60)
+
+        return
+            {
+                MaxChars = maxChars
+                MaxItems = maxItems
+                MaxDepth = maxDepth
+                MaxStringChars = maxStringChars
+            }
+    }
+
 /// Registered with FsCheck through `config`.
 type Arbitraries =
     static member Json() : Arbitrary<Json> = Arb.fromGen json
     static member JsonNumber() : Arbitrary<JsonNumber> = Arb.fromGen number
     static member String() : Arbitrary<string> = Arb.fromGen text
+    static member Limits() : Arbitrary<Limits> = Arb.fromGen limits
 
 /// 300 tests per property; set PROPERTY_TESTS to run more.
 let config =
