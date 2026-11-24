@@ -18,6 +18,16 @@
       "reason": "Process entry point: writes the outcome of the pure Cli.run to stdout and stderr."
     },
     {
+      "codes": ["AOT002"],
+      "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
+      "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
+    },
+    {
+      "codes": ["AOT003"],
+      "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Canary.fs"],
+      "reason": "The diff harness canary must differ between JIT and native: Assembly.Location is empty only in a native binary."
+    },
+    {
       "codes": ["EFF005"],
       "files": ["tests/Fx.Analyzers.Tests/Samples/Allowed.fsx"],
       "reason": "Sample proving that an allow entry suppresses exactly the codes it lists."
