@@ -10,5 +10,8 @@
     <Compile Include="Json.fs" />
     <Compile Include="JsonReader.fs" />
     <Compile Include="JsonModule.fs" />
+    <Compile Include="Issue.fs" />
+    <Compile Include="Validation.fs" />
+    <Compile Include="Schema.fs" />
   </ItemGroup>
 </Project>
