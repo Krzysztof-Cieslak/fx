@@ -18,6 +18,9 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # .NET SDK image with the Native AOT prerequisites, for the musl jobs. Keep the SDK version in step
+  # with global.json; the digest pins the multi-arch manifest (amd64 and arm64).
+  ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
 
 jobs:
   lint:
@@ -58,3 +61,77 @@ jobs:
         run: dotnet build Fx.slnx --no-restore --configuration Release
       - name: Test
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
+
+  aot:
+    # Native AOT publish of the CLI and the JIT-vs-native diff (spec §20), on every target natively:
+    # no cross-compilation, so each binary also runs where it was built.
+    name: AOT (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm }
+          - { rid: linux-musl-x64, os: ubuntu-24.04, alpine: true }
+          - { rid: linux-musl-arm64, os: ubuntu-24.04-arm, alpine: true }
+          - { rid: osx-arm64, os: macos-26 }
+          - { rid: osx-x64, os: macos-26-intel }
+          - { rid: win-x64, os: windows-2025 }
+          - { rid: win-arm64, os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      RID: ${{ matrix.rid }}
+      # The musl jobs run every command in the Alpine container started below.
+      IN: ${{ matrix.alpine && 'docker exec alpine' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        if: ${{ !matrix.alpine }}
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-aot-${{ matrix.rid }}-
+      - name: Start the Alpine container
+        if: ${{ matrix.alpine }}
+        run: >-
+          docker run --detach --name alpine
+          --user "$(id -u):$(id -g)" --env HOME=/tmp
+          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES
+          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
+          "$ALPINE_SDK_IMAGE" sleep infinity
+      - name: Restore (locked)
+        run: $IN dotnet restore Fx.slnx --locked-mode
+      - name: Publish the CLI
+        run: $IN dotnet publish src/Fx.Cli --configuration Release --runtime "$RID"
+      - name: Publish the AOT scenarios
+        run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
+      - name: Smoke test the native binary
+        id: smoke
+        run: |
+          name=$($IN dotnet msbuild src/Fx.Cli -getProperty:AssemblyName | tr -d '\r')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          bin="artifacts/publish/Fx.Cli/release_$RID/$name"
+          ls -l "$(dirname "$bin")"
+          version=$($IN "$bin" --version | tr -d '\r')
+          echo "$version"
+          [[ "$version" == "$name "* ]]
+          $IN "$bin" --help
+      - name: JIT-vs-native diff
+        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish
+      - name: JIT-vs-native diff self-test
+        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release --no-build -- --rid "$RID" --no-publish --self-test
+      - name: Upload the native binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
+          path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
+          if-no-files-found: error
