@@ -919,7 +919,8 @@ type JudgmentPoint<'Input,'Outcome> =
 - **Manifest:** id/version, SDK and protocol versions, placement (`host | environment | client`), extension runtime, required components, capabilities, contributions, RPC contract, hash.
 - **Extension runtimes:** core `declarative`, `native`, `process`; `bun` from `fx.exthost.bun`.
 - **SDKs at launch:** `Fx.Sdk` (F#) and `@fx/sdk` (TypeScript); other languages via raw JSON-RPC.
-- **Bootstrap order:** declarative → components → process extensions → bun extensions.
+- **Bootstrap order:** native and declarative (in the binary; native first, so contribution types they define are known to the rest) → components (installed only for admitted extensions: trust comes before installation) → process extensions → extensions on contributed runtimes (bun). Every extension is admitted (trust, pins, versions, conflicts) before any of its code runs, and its activation must provide exactly what its manifest declares.
+- **Registry:** a machine whose state is a fold of its events (admitted, activated, failed, disabled); contributions are keyed by typed contribution types, which the core, host hook points and native extensions define. Module spec: `docs/modules/extensions.md`.
 
 ### 16.2 Contribution types
 
@@ -938,10 +939,12 @@ Project-local `.fx/agents` and `.fx/workflows` require project trust.
 | Kind | Type | Combination |
 |---|---|---|
 | Gate | `'Intent -> Eff<_, Allow\|Ask\|Deny>` | `max` over Deny > Ask > Allow; commutative; errors = Deny |
-| Transform | `'T -> 'T` | Composed in declared priority order |
+| Transform | `'T -> Eff<_, 'T>` | Composed in declared priority order; an error fails the pipeline |
 | Contribute | `'T list` | Concatenation |
-| Observe | `'Evt -> Eff<_, unit>` | Parallel; cannot affect results |
-| Interpret | `Interpreter -> Interpreter` | Middleware stack |
+| Observe | `'Evt -> Eff<_, unit>` | Parallel; cannot affect results; failures isolated |
+| Interpret | `Interpreter -> Interpreter` | Middleware stack; in process only |
+
+- Transforms are effects (not `'T -> 'T`) so that an extension process can implement them over the extension protocol; a pure function is `Transform.ofFunction`. Interpreters are records of functions that live in one process, so only native extensions contribute middleware.
 
 ### 16.4 Built-ins: bundled packages, same API
 
@@ -964,6 +967,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 - **Fallbacks:** HTTP/SSE offset-read mirror; ACP adapter.
 - **Environment protocol:** multiplexed streams with credit backpressure, sequenced output, blobs, installer operations, lease survival, transports `Piped | Direct | Dialback`.
 - **Kernel protocol:** §6.4.
+- **Extension protocol:** the host starts an extension process and speaks JSON-RPC over its stdio: `extension/activate|invoke|call|deactivate`, every request naming the extension, so one process (e.g. `fx.exthost.bun`) serves many (§16.1).
 - **Wire (all of the above):** own JSON-RPC 2.0; on byte streams (stdio) newline-delimited JSON plus zero-prefixed binary channel frames, so plain NDJSON peers interoperate; on WebSocket text messages for JSON and binary messages for channels; in-process for embedded mode, with the same serialization. `$/cancelRequest`; `initialize` announces message size, requests in flight, channel windows and the methods each side handles. Module spec: `docs/modules/rpc.md`.
 - **Multi-client:** serialized + attributed inputs; epoch-fenced takeover lease.
 - **Generated types:** TypeScript for clients, extensions, kernels, workflow worker; F# TUI and Fable web share `Evolve` projections.

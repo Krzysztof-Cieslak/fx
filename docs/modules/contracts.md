@@ -178,6 +178,9 @@ Rules and choices:
   `MergeSources12`) and passes decoded values between fields in type-erased slots. A plain applicative
   builder nests one tuple per field, and ILC rejects generic instantiations nested deeper than 4 levels
   inside FSharp.Core closures (IL3054): the AOT publish failed at 7 fields.
+- **Native AOT, unions:** the match function given to `Codec.union` is curried over one encoder per
+  case, and ILC aborts it with IL3054 beyond four cases (a nine-case union failed in T108). Keep unions
+  to four cases or group them, until `union` takes its encoders without currying.
 - **Optional fields** are left out when `None`; reading accepts absent or `null`. Defaulted fields are
   always written. Do not nest `option`s, or combine `Field.optional` with `Codec.option`.
 - **Unions** are objects tagged by a discriminator field (`kind`), with each case's fields next to the
