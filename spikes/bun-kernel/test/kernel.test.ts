@@ -16,6 +16,20 @@ function expectError<K extends CellError["kind"]>(r: CellRunResult, kind: K): Ex
   return r.error as Extract<CellError, { kind: K }>;
 }
 
+/**
+ * The rejection of `promise`. Do not use `expect(promise).rejects` for promises that wait on the
+ * kernel: bun test waits for them in a nested event loop that, on Windows, does not read the
+ * kernel's pipes, so the promise never settles (Bun 1.4.5).
+ */
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (e) {
+    return e;
+  }
+  throw new Error("expected a rejection");
+}
+
 async function eventually(predicate: () => boolean, ms = 5000): Promise<void> {
   const until = Date.now() + ms;
   while (!predicate()) {
@@ -139,14 +153,14 @@ describe("kernel", () => {
   test("value/preview reads a variable by name", async () => {
     await k.run(`const settings = { retries: 3, tags: ["a", "b"] }`);
     expect(await k.request("value/preview", { name: "settings" })).toEqual({ type: "Object", text: "{ retries: 3, tags: [ 'a', 'b' ] }", truncated: false });
-    await expect(k.request("value/preview", { name: "nope" })).rejects.toThrow(/no variable/);
+    expect(String(await rejection(k.request("value/preview", { name: "nope" })))).toContain("no variable");
   });
 
   test("a second cell/run while one is running is refused", async () => {
     const first = k.run(`await new Promise((r) => setTimeout(r, 200)); "first"`);
     await Bun.sleep(20);
     const second = k.run(`"second"`);
-    await expect(second).rejects.toMatchObject({ code: ErrorCodes.busy });
+    expect(await rejection(second)).toMatchObject({ code: ErrorCodes.busy });
     expect((await first).value?.text).toBe("'first'");
   });
 
@@ -231,7 +245,7 @@ describe("cancellation and timeouts", () => {
     expect(answered).toBe(false);
     busy.proc.kill("SIGKILL");
     await busy.close();
-    await expect(pending).rejects.toThrow(/stdout closed/);
+    expect(String(await rejection(pending))).toContain("stdout closed");
   }, SLOW);
 
   test("an async cell that never settles times out", async () => {
