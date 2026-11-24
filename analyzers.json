@@ -38,9 +38,14 @@
       "reason": "IShell interpreter: the only code that starts and controls processes."
     },
     {
-      "codes": ["EFF006"],
+      "codes": ["EFF006", "EFF008"],
       "files": ["src/Fx.Pty/UnixPty.fs", "src/Fx.Pty/WindowsPty.fs"],
       "reason": "ITerminal interpreter: the only code that starts and controls processes on pseudo-terminals (posix_spawn with a PTY, CreateProcessW with ConPTY)."
+    },
+    {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Pty/Native/Posix.fs"],
+      "reason": "The P/Invoke layer of the ITerminal interpreter: `ioctl` picks the declaration for the platform's variadic calling convention."
     },
     {
       "codes": ["AOT002"],

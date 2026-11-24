@@ -1,4 +1,4 @@
-/// AOT003 and EFF001–EFF007: banned APIs.
+/// AOT003 and EFF001–EFF008: banned APIs.
 ///
 /// A use of an API is a call, property access or construction whose declaring type matches a ban.
 /// The first matching ban decides the code, so specific bans come before broad ones. Extend the
@@ -20,6 +20,8 @@ type Target =
     | Overload of typeName: string * name: string * parameters: int
     /// Constructors whose first parameter is a file path string (e.g. `new StreamReader(path)`).
     | PathConstructor of typeName: string
+    /// Functions implemented in native code: `extern` declarations with `[<DllImport>]`.
+    | PInvoke
 
     override t.ToString() =
         match t with
@@ -30,6 +32,7 @@ type Target =
             $"{name}.[{joined}]"
         | Overload(name, m, n) -> $"{name}.{m}/{n}"
         | PathConstructor name -> $"new {name}(path)"
+        | PInvoke -> "P/Invoke"
 
 type Ban =
     {
@@ -54,6 +57,9 @@ let private matches (target: Target) (typeName: string) (m: FSharpMemberOrFuncti
         && (match parameters m with
             | first :: _ -> typeIs [ "System.String" ] first.Type
             | [] -> false)
+    | PInvoke ->
+        m.Attributes
+        |> Seq.exists (fun a -> a.AttributeType.TryFullName = Some "System.Runtime.InteropServices.DllImportAttribute")
 
 /// APIs that look banned by a broad target but are fine.
 let allowed =
@@ -70,6 +76,9 @@ let private ban rule target = { Rule = rule; Target = target }
 
 let bans: Ban list =
     [
+        // EFF008: native code. First, so a P/Invoke is reported as such whatever declares it.
+        ban Rules.nativeCode PInvoke
+
         // AOT003: runtime reflection, dynamic code and reflection-based serializers.
         for ns in
             [
@@ -238,8 +247,15 @@ let bans: Ban list =
             ] do
             ban Rules.console (Members(printing, [ "printf"; "printfn"; "eprintf"; "eprintfn" ]))
 
-        // EFF006: processes.
-        ban Rules.processes (Type "System.Diagnostics.Process")
+        // EFF006: processes, including .NET 11's process handles and custom process creation.
+        for t in
+            [
+                "System.Diagnostics.Process"
+                "Microsoft.Win32.SafeHandles.SafeProcessHandle"
+                "System.Runtime.InteropServices.UnixProcessStartArguments"
+                "System.Runtime.InteropServices.WindowsProcessStartArguments"
+            ] do
+            ban Rules.processes (Type t)
 
         // EFF007: the network and inter-process communication.
         for ns in

@@ -285,8 +285,9 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `EFF003` | the process environment: `Environment.*` (except `NewLine`), `AppContext`, the registry, `TimeZoneInfo.Local` | `src/` |
 | `EFF004` | the filesystem: `File`, `Directory`, `FileInfo`, `FileStream`, `new StreamReader(path)`, `Path.GetTempPath`, `Path.GetFullPath(path)`, … | `src/` |
 | `EFF005` | the console: `Console`, `stdin`/`stdout`/`stderr`, `printf`/`printfn`/`eprintfn` | `src/` |
-| `EFF006` | processes: `Process` | `src/` |
+| `EFF006` | processes: `Process`, `SafeProcessHandle`, custom process creation (`UnixProcessStartArguments`, `WindowsProcessStartArguments`) | `src/` |
 | `EFF007` | network and IPC: `HttpClient`, sockets, `Dns`, `ClientWebSocket`, pipes, … | `src/` |
+| `EFF008` | native code: calls to P/Invoke functions (`extern` with `[<DllImport>]`), which can do any I/O out of sight of the other rules | `src/` |
 
 - **Allowed**:
   - interpolation without printf specifiers, including .NET formats and alignment (`{x:N2}`, `{x,5}`);
@@ -302,5 +303,6 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
   - Known gap: the EFF rules do not see P/Invoke, so the file I/O SQLite does for `src/Fx.Sqlite` needs no entry. Reference `Fx.Sqlite` only from storage interpreters (the event and blob stores, T105) and composition roots, never from the pure core; ban its APIs elsewhere once the first store lands.
   - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same; ban those APIs once the network capability exists (T103, T107).
   - Tests check that every glob in `analyzers.json` still matches a file.
+  - The analyzers cannot read code that uses F# `fixed` (the compiler service fails on it, and the run fails). Pin with a pinned-object-heap array (`GC.AllocateArray(n, pinned = true)`) or a `GCHandle` instead.
 - **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
 - **Upgrading**: the analyzers run inside the `fsharp-analyzers` tool, which loads only analyzers built against its own SDK version and shares its FSharp.Core. Upgrade `FSharp.Analyzers.SDK` and `AnalyzersFSharpCoreVersion` (both in `Directory.Packages.props`) together with the tool in `dotnet-tools.json`.
