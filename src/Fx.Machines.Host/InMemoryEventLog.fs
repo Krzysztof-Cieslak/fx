@@ -15,6 +15,7 @@ open Fx.Machines
 type InMemoryEventLog<'Evt>() =
     let gate = obj ()
     let streams = Dictionary<StreamId, ResizeArray<Recorded<'Evt>>>()
+    let commits = Dictionary<struct (StreamId * IdempotencyKey), Appended>()
 
     let waiters =
         ResizeArray<struct (StreamId * int64 * int64 * TaskCompletionSource<int64>)>()
@@ -52,9 +53,10 @@ type InMemoryEventLog<'Evt>() =
                     let log = eventsOf stream
                     let head = int64 log.Count
 
-                    if head <> expected then
-                        Error(Conflict(expected, head)), []
-                    else
+                    match commits.TryGetValue(struct (stream, meta.Key)) with
+                    | true, first -> Error(Duplicate(meta.Key, first)), []
+                    | false, _ when head <> expected -> Error(Conflict(expected, head)), []
+                    | false, _ ->
                         events
                         |> List.iteri (fun i event ->
                             log.Add(
@@ -66,6 +68,8 @@ type InMemoryEventLog<'Evt>() =
                                 }
                                 : Recorded<'Evt>
                             ))
+
+                        commits[struct (stream, meta.Key)] <- { After = head; Count = events.Length }
 
                         let head = int64 log.Count
 
