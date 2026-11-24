@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Local HTTP transports on Kestrel (spec §3, §17, §18): a loopback or Unix-socket listener with
-    WebSocket and server-sent events, behind a token, Origin and Host check. Native AOT verified by
+    WebSocket and server-sent events, behind a token, Origin and Host check, and the WebSocket client
+    that dials it. Native AOT verified by
     the kestrel-* scenarios in tests/aot (T004, docs/spikes/kestrel.md).
   -->
 
@@ -10,6 +11,7 @@
     <Compile Include="Sse.fs" />
     <Compile Include="WebSocketMessages.fs" />
     <Compile Include="LocalServer.fs" />
+    <Compile Include="LocalClient.fs" />
   </ItemGroup>
 
   <ItemGroup>
