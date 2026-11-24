@@ -157,3 +157,28 @@ jobs:
           name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
           path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
           if-no-files-found: error
+  bun-kernel-spike:
+    name: Bun kernel spike (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: spikes/bun-kernel
+    steps:
+      - uses: actions/checkout@v7
+      # Runs the tests only. The kernel itself runs on the pinned Bun the tests download and verify.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - name: Install (frozen)
+        run: bun install --frozen-lockfile
+      - name: Type-check
+        run: bun check --no-script
+      - name: Test
+        run: bun test
+      - name: Benchmark
+        shell: bash
+        run: bun bench/bench.ts | tee -a "$GITHUB_STEP_SUMMARY"

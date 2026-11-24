@@ -178,6 +178,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
 | Task graph | `bun scripts/tasks.ts check` |
+| Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
@@ -204,6 +205,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `tools/` | Repository tooling in F#: JIT-only, never shipped. Tested by `tests/<Tool>.Tests` |
 | `tools/Fx.Analyzers` | Our F# analyzers ([Analyzers](#analyzers)) |
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
+| `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
+| `docs/spikes/` | Spike findings and recommendations for the tasks that build on them |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
