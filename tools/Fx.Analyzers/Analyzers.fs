@@ -57,7 +57,7 @@ let private effectRules =
     |> List.filter (fun r -> r.Code.StartsWith("EFF", System.StringComparison.Ordinal))
 
 [<CliAnalyzer(EffectsName,
-              "EFF001-EFF007 clock, randomness, environment, filesystem, console, processes or network outside Eff")>]
+              "EFF001-EFF008 clock, randomness, environment, filesystem, console, processes, network or native code outside Eff")>]
 let effects: Analyzer<CliContext> =
     run EffectsName (fun ctx -> Apis.check effectRules (sites ctx))
 

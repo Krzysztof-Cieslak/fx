@@ -98,6 +98,14 @@ let network =
             $"Reach other processes and machines through a capability such as `ILlm` or the JSON-RPC transport (spec §4.2). {shellOptIn}"
     }
 
+let nativeCode =
+    {
+        Code = "EFF008"
+        Title = "native code outside Eff"
+        Instead =
+            $"A P/Invoke can do any I/O, out of sight of the other rules: call it only from a capability interpreter (spec §4.2). {shellOptIn}"
+    }
+
 let all =
     [
         percentA
@@ -110,6 +118,7 @@ let all =
         console
         processes
         network
+        nativeCode
     ]
 
 /// A rule violation at a place in a file.
