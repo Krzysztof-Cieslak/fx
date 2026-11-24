@@ -33,7 +33,7 @@ No change to the spec's design. §20 now names how SQLite is built.
 | `native/sqlite/library.c` | The compile-time options, then `#include "sqlite3.c"`, then a non-variadic shim for `sqlite3_db_config` |
 | `native/sqlite/Sqlite.targets` | Download and verify, compile per RID (static and shared), cache, and wire into the binding and into Native AOT publishes |
 | `src/Fx.Sqlite` | The binding: blittable `DllImport`s and safe wrappers (below) |
-| `tests/Fx.Sqlite.Tests` | 42 tests, including FsCheck round trips of every value type |
+| `tests/Fx.Sqlite.Tests` | Unit tests, including FsCheck round trips of every value type |
 | `tests/aot/Fx.Aot.Scenarios/Scenarios/Sqlite.fs` | The `sqlite-*` scenarios below |
 | `src/Fx.Cli` | `fx --build-info`: the version and the embedded SQLite (so `fx` links SQLite now) |
 | `.github/workflows/ci.yml` | Caches `artifacts/native`; checks that `fx` carries SQLite |
