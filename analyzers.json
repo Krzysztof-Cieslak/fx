@@ -48,6 +48,11 @@
       "reason": "The P/Invoke layer of the ITerminal interpreter: `ioctl` picks the declaration for the platform's variadic calling convention."
     },
     {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Sqlite/Database.fs", "src/Fx.Sqlite/Handles.fs", "src/Fx.Sqlite/Library.fs", "src/Fx.Sqlite/Statement.fs"],
+      "reason": "The SQLite binding: its only P/Invoke callers. Only storage interpreters (T105) may use Fx.Sqlite; tighten that once they exist."
+    },
+    {
       "codes": ["AOT002"],
       "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
       "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
