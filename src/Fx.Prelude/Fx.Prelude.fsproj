@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Bottom layer: no project or package dependencies beyond FSharp.Core; Fable-compatible. -->
+
+  <ItemGroup>
+    <!-- Items are evaluated after all properties, so IntermediateOutputPath is final here. -->
+    <Compile Include="$(IntermediateOutputPath)ProductConstants.g.fs" Link="ProductConstants.g.fs" />
+    <Compile Include="Product.fs" />
+  </ItemGroup>
+
+  <!-- Turns the FxProductName/Version build constants into F# literals. -->
+  <Target Name="GenerateProductConstants" BeforeTargets="BeforeCompile;CoreCompile">
+    <Error
+      Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(FxProductName)', '^[a-z][a-z0-9]*$'))"
+      Text="FxProductName '$(FxProductName)' must match ^[a-z][a-z0-9]*$: it is used as a JS identifier, npm scope, file name and environment-variable prefix." />
+    <PropertyGroup>
+      <ProductConstantsFile>$(IntermediateOutputPath)ProductConstants.g.fs</ProductConstantsFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <ProductConstantsLine Include="// &lt;auto-generated /&gt; from Directory.Build.props by Fx.Prelude.fsproj. Do not edit." />
+      <ProductConstantsLine Include="[&lt;RequireQualifiedAccess&gt;]" />
+      <ProductConstantsLine Include="module Fx.ProductConstants" />
+      <ProductConstantsLine Include="[&lt;Literal&gt;]" />
+      <ProductConstantsLine Include="let Name = &quot;$(FxProductName)&quot;" />
+      <ProductConstantsLine Include="[&lt;Literal&gt;]" />
+      <ProductConstantsLine Include="let Version = &quot;$(Version)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(ProductConstantsFile)" Lines="@(ProductConstantsLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(ProductConstantsFile)" />
+    </ItemGroup>
+  </Target>
+</Project>

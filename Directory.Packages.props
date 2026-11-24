@@ -1,0 +1,10 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="FSharp.Core" Version="11.0.101" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Expecto" Version="11.1.1" />
+    <PackageVersion Include="YoloDev.Expecto.TestSdk" Version="0.16.1" />
+  </ItemGroup>
+</Project>

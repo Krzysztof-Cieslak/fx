@@ -1,0 +1,59 @@
+<Project>
+  <!--
+    Shared settings for every project in the repository.
+
+    FxProductName is the single build-time naming constant (spec §20 "Naming"). The binary
+    name, `.fx/` and `~/.fx` directories, kernel global, SDK package names, `FX_*` environment
+    prefix and protocol namespaces all derive from it through the generated
+    `Fx.ProductConstants` module and `Fx.Product` (src/Fx.Prelude). Never hardcode the name
+    anywhere else.
+  -->
+  <PropertyGroup Label="Product">
+    <FxProductName>fx</FxProductName>
+    <Version>0.0.0</Version>
+    <Product>$(FxProductName)</Product>
+    <Authors>$(FxProductName) contributors</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Build">
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- 1182: unused variables; 3390: malformed XML doc comments. -->
+    <WarnOn>$(WarnOn);1182;3390</WarnOn>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Native AOT">
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- No compiler-generated reflection (e.g. `%A`-based ToString on unions and records). -->
+    <OtherFlags>$(OtherFlags) --reflectionfree</OtherFlags>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Restore">
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true' and '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
+    <!--
+      RID-specific restores (AOT publish) pull host-specific ILCompiler packages; keep them out of
+      the committed, platform-neutral packages.lock.json. Their lockfiles are owned by T003.
+    -->
+    <NuGetLockFilePath Condition="'$(RuntimeIdentifier)' != ''">packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>
