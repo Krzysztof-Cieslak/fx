@@ -28,18 +28,28 @@ We use [lane](https://github.com/lukeed/lane) for isolated worktrees and durable
 - Land with `lane merge`, or `lane push` to open a PR. Run `lane check` before landing, and resolve every stale note (`confirm`, `replace` or `retire`).
 - If `lane` is not set up in this repository yet, run `lane init` once. Then run `lane install skill` and `lane install hooks`.
 
-### One PR per task, stacked
+### One PR per task, in a native GitHub stack
 
-- Every task lands as its own pull request made of focused commits. Do not batch tasks into one PR.
-- If a task depends on a task whose PR is still open, stack it:
-  - `lane new <task> --base <parent-lane-branch>`;
-  - open the PR against that branch with `gh pr create --base <parent-lane-branch>`.
-- A lane has one base. If a task has several unmerged parents, stack it on one of them, and stack those parents on each other first.
-- Before opening a PR, run `lane check` and the CI commands below. Then run `lane push` and open the PR with `gh pr create`.
-- Once the parent PR merges:
-  - retarget the child PR with `gh pr edit <n> --base main`;
-  - update the child with `lane push --base main`;
-  - run `lane prune`.
+Every task lands as its own pull request made of focused commits. Do not batch tasks into one PR. Unmerged task PRs form one **native GitHub stack**, managed with [`gh stack`](https://gh.io/stacks).
+
+- **Roles**:
+  - lane owns the worktrees, branches and notes;
+  - `gh stack link` owns the PRs and the stack on GitHub. It is gh-stack's mode for externally managed branches, so do not also use `gh stack init`/`add`, which track branches locally.
+- **Order**:
+  - GitHub stacks are linear, so the stack is the open tasks in dependency order;
+  - start each new lane on top of the current top of the stack: `lane new <task> --base <top-branch>`, or with no `--base` when nothing is open;
+  - a task with several parents is fine as long as they are all below it in the stack.
+- **Publishing a task**:
+  1. Run `lane check` and the CI commands below.
+  2. Run `lane push`.
+  3. Link the stack, listing branches from bottom to top: `gh stack link --open <bottom-branch> … <task-branch>`, or `gh stack link --open <stack-number> <task-branch>` to append. This creates the PR with the right base and adds it to the stack.
+  4. Edit the generated PR title and body with `gh pr edit`.
+- **Changing a lower task**:
+  - commit in its lane and `lane push`;
+  - then, bottom-up, `lane push` each lane above it; each one rebases onto its recorded base.
+- **Landing**:
+  - merge with `gh stack merge <pr-number>`. It merges everything up to and including that PR atomically;
+  - then `git pull` on `main`, `lane push --base main` the lowest remaining lane, and `lane prune`.
 
 <!-- lane:protocol -->
 ## Context memory
@@ -145,7 +155,10 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | Task graph | `bun scripts/tasks.ts check` |
 
-- After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files. Package versions live only in `Directory.Packages.props`.
+- After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
+  - Package versions live only in `Directory.Packages.props`.
+  - Packages come only from nuget.org (`nuget.config`).
+  - The AOT executable (`src/Fx.Cli`) has no lockfile, because its restore is host-specific.
 - `TreatWarningsAsErrors` is on everywhere. Production code is compiled with `--reflectionfree`, so `%A` is a compile error.
 
 ## Repository layout
