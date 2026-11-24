@@ -20,6 +20,7 @@
     <Compile Include="Scenarios\Collections.fs" />
     <Compile Include="Scenarios\Concurrency.fs" />
     <Compile Include="Scenarios\Effects.fs" />
+    <Compile Include="Scenarios\Machines.fs" />
     <Compile Include="Scenarios\Text.fs" />
     <Compile Include="Scenarios\Runtime.fs" />
     <Compile Include="Scenarios\Kestrel\Support.fs" />
@@ -36,6 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
   </ItemGroup>
