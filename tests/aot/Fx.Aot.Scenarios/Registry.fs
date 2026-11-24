@@ -26,6 +26,8 @@ let all: Scenario list =
             Pty.scenarios
             Store.scenarios
             Variants.scenarios
+            Rpc.Wire.scenarios
+            Rpc.Transports.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff

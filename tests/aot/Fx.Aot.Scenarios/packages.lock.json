@@ -60,6 +60,15 @@
           "Fx.Effects": "[0.0.0, )"
         }
       },
+      "fx.rpc": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
       "fx.sqlite": {
         "type": "Project",
         "dependencies": {

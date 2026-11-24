@@ -8,6 +8,7 @@ let private usage =
     + "  list --canaries    names of the scenarios that must differ (the diff self-test)\n"
     + "  run <name>         run one scenario and print its output\n"
     + "  platform           print the detected platform\n"
+    + "  rpc-peer           serve the JSON-RPC test service on stdin and stdout\n"
 
 let private writeLines (lines: string seq) =
     for line in lines do
@@ -49,6 +50,7 @@ let main argv =
     | [ "platform" ] ->
         writeLines [ string platform ]
         0
+    | [ "rpc-peer" ] -> Rpc.Peer.serve ()
     | _ ->
         stderr.Write usage
         2
