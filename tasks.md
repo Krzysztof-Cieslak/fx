@@ -342,8 +342,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T003 done
-  class T002 inprogress
+  class T001,T002,T003 done
 ```
 
 <!-- /tasks:generated -->
@@ -355,7 +354,7 @@ flowchart LR
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
 | T001 | Scaffold | — | §20 | done | Solution layout, `global.json` (.NET 11), `Directory.Build.props` (Native AOT, warnings-as-errors), single naming constant module, CI skeleton (Linux/macOS/Windows matrix), build/test commands recorded in AGENTS.md. |
-| T002 | Analyzers | T001 | §20 | in-progress | Custom F# analyzers in CI: ban `%A`, printf format specifiers, runtime reflection; initial 'no I/O outside `Eff`' lint. Failing samples prove each rule. |
+| T002 | Analyzers | T001 | §20 | done | Custom F# analyzers in CI: ban `%A`, printf format specifiers, runtime reflection; initial 'no I/O outside `Eff`' lint. Failing samples prove each rule. |
 | T003 | AOT gates | T001 | §20 | done | CI publishes Native AOT on all three OSes; JIT-vs-native diff harness runs the same scenario both ways and fails on any output difference. |
 | T004 | Spike: Kestrel/WS/SSE | T003 | §17, §20 | todo | Kestrel `CreateSlimBuilder` + `RequestDelegate` endpoints + WebSocket + SSE work under AOT on all OSes; findings written to `docs/spikes/`. |
 | T005 | Spike: PTY | T003 | §6.5, §20 | todo | PTY spawn/resize/read under AOT on Linux/macOS (forkpty) and Windows (ConPTY); PowerShell 7 launch verified. |
