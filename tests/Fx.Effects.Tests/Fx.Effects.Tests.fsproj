@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="TestEnv.fs" />
+    <Compile Include="Conformance\FsConformance.fs" />
+    <Compile Include="Conformance\IdsConformance.fs" />
+    <Compile Include="BuilderTests.fs" />
+    <Compile Include="EffResultTests.fs" />
+    <Compile Include="CombinatorTests.fs" />
+    <Compile Include="DynamicBuilderTests.fs" />
+    <Compile Include="TimeTests.fs" />
+    <Compile Include="ClockTests.fs" />
+    <Compile Include="IdTests.fs" />
+    <Compile Include="FsTests.fs" />
+    <Compile Include="ShellTests.fs" />
+    <Compile Include="SecretsTests.fs" />
+    <Compile Include="TraceTests.fs" />
+    <Compile Include="ReplayTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>

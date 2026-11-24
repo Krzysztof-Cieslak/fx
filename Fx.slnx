@@ -9,6 +9,7 @@
   <Folder Name="/src/">
     <Project Path="src/Fx.Prelude/Fx.Prelude.fsproj" />
     <Project Path="src/Fx.Cli/Fx.Cli.fsproj" />
+    <Project Path="src/Fx.Effects/Fx.Effects.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -21,6 +22,7 @@
     <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
     <Project Path="tests/Fx.Aot.Tests/Fx.Aot.Tests.fsproj" />
     <Project Path="tests/Fx.Analyzers.Tests/Fx.Analyzers.Tests.fsproj" />
+    <Project Path="tests/Fx.Effects.Tests/Fx.Effects.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
