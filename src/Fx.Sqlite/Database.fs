@@ -197,7 +197,12 @@ module Database =
             if code <> Native.SQLITE_OK then
                 Error(connection.Error code)
             else
-                configure connection options
+                try
+                    configure connection options
+                with _ ->
+                    connection.Handle.Dispose()
+                    reraise ()
+
                 let db = new Database(connection)
 
                 exec db "SELECT count(*) FROM sqlite_schema" |> Result.map (fun () -> db)
