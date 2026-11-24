@@ -110,6 +110,8 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
 - A Native AOT executable sets `FxNativeAot` and sets `PublishAot` only when a runtime identifier is given. Copy the two properties from `src/Fx.Cli/Fx.Cli.fsproj`; the restore section of Commands explains why.
 
+The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `Eff` are enforced by our analyzers; see [Analyzers](#analyzers).
+
 **Cross-platform**
 - Build paths with `Path` APIs; never hardcode `/` or `\`. Handle CRLF, case-insensitive filesystems and Windows path-length limits.
 - The default shell on Windows is PowerShell 7 (`pwsh`); never assume bash there. PTYs use ConPTY on Windows.
@@ -171,7 +173,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Restore (as CI does) | `dotnet restore Fx.slnx --locked-mode` |
 | Build | `dotnet build Fx.slnx` |
 | Test | `dotnet test --solution Fx.slnx` |
-| Format | `dotnet tool restore` once, then `dotnet fantomas src tests` (CI runs `--check`) |
+| Format | `dotnet tool restore` once, then `dotnet fantomas src tests tools` (CI runs `--check`) |
+| Analyzers | `dotnet tool restore` once, then `bun scripts/analyzers.ts`; `bun scripts/analyzers.ts samples` proves they fail on the samples |
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
 | Task graph | `bun scripts/tasks.ts check` |
@@ -198,6 +201,41 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
 | `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
 | `scripts/` | Repository tooling (Bun) |
+| `tools/` | Repository tooling in F#: JIT-only, never shipped. Tested by `tests/<Tool>.Tests` |
+| `tools/Fx.Analyzers` | Our F# analyzers ([Analyzers](#analyzers)) |
+| `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 
-- Add new F# projects under `src/`, and give each one a matching test project under `tests/`.
+- Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
+
+## Analyzers
+
+`bun scripts/analyzers.ts` runs the analyzers in `tools/Fx.Analyzers` over every project in `Fx.slnx`, and CI fails on any finding. They are built on [FSharp.Analyzers.SDK](https://github.com/ionide/FSharp.Analyzers.SDK) and work on the typed tree, so they see through `open`s, aliases and operators. Each message says what to do instead.
+
+| Code | Bans | Applies to |
+|---|---|---|
+| `AOT001` | `%A` in any format string, including `$"%A{x}"` | `src/`, `tests/`, `tools/` |
+| `AOT002` | printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, `$"%d{x}"`), interpolated strings passed to printf functions (`failwithf $"..."`), composite formats (`String.Format("{0}", x)`) | same |
+| `AOT003` | runtime reflection: `System.Reflection` (`Type.GetMethods`, `Assembly.Load`, `MethodInfo.Invoke`, …), `FSharp.Reflection`, `Activator`, `Reflection.Emit`, `DispatchProxy`, `AssemblyLoadContext`, quotations and `query { }`, expression trees, reflection-based serializers | same |
+| `EFF001` | clock and timers: `DateTime.Now`, `Stopwatch`, `Environment.TickCount`, `Thread.Sleep`, `Task.Delay`, `Async.Sleep`, timers | `src/` |
+| `EFF002` | randomness and ids: `Random`, `Guid.NewGuid`, `RandomNumberGenerator` | `src/` |
+| `EFF003` | the process environment: `Environment.*` (except `NewLine`), `AppContext`, the registry, `TimeZoneInfo.Local` | `src/` |
+| `EFF004` | the filesystem: `File`, `Directory`, `FileInfo`, `FileStream`, `new StreamReader(path)`, `Path.GetTempPath`, `Path.GetFullPath(path)`, … | `src/` |
+| `EFF005` | the console: `Console`, `stdin`/`stdout`/`stderr`, `printf`/`printfn`/`eprintfn` | `src/` |
+| `EFF006` | processes: `Process` | `src/` |
+| `EFF007` | network and IPC: `HttpClient`, sockets, `Dns`, `ClientWebSocket`, pipes, … | `src/` |
+
+- **Allowed**:
+  - interpolation without printf specifiers, including .NET formats and alignment (`{x:N2}`, `{x,5}`);
+  - printf calls without specifiers (`sprintf "text"`) and `%%`;
+  - `nameof`, `typeof<T>`, `typedefof<T>`, `GetType()`, and `Name`/`FullName` on a `Type`;
+  - `System.Reflection.Metadata`, which reads metadata from files;
+  - pure `Path` functions, `Environment.NewLine`, `OperatingSystem.Is*()`;
+  - building request values such as `HttpRequestMessage` and `ProcessStartInfo`.
+- **Scope**: the AOT rules apply to all our F# code, so code can move freely between tests, tools and the binary. The EFF rules are the initial "no I/O outside `Eff`" lint and apply only to production code under `src/`. Tests and tools are imperative shells.
+- **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
+  - Capability interpreters (T103 onwards), such as the real `IClock`, live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/<Project>/SystemClock.fs"], "reason": "IClock interpreter: the only reader of the system clock." }`.
+  - Keep shell files small, so that the pure core stays analyzed.
+  - Tests check that every glob in `analyzers.json` still matches a file.
+- **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
+- **Upgrading**: the analyzers run inside the `fsharp-analyzers` tool, which loads only analyzers built against its own SDK version and shares its FSharp.Core. Upgrade `FSharp.Analyzers.SDK` and `AnalyzersFSharpCoreVersion` (both in `Directory.Packages.props`) together with the tool in `dotnet-tools.json`.
