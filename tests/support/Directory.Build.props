@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    Helper programs that tests start as child processes (e.g. a writer to kill mid-append). They are
+    not test projects: import the root settings directly so that tests/Directory.Build.props
+    (JIT-only Expecto projects) does not apply.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\Directory.Build.props" />
+</Project>

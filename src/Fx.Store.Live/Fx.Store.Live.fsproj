@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The real event and blob stores (the imperative shell of Fx.Store): the event log and snapshots in
+    SQLite (Fx.Sqlite), blobs as files with a SQLite index. Only composition roots (the host, envd,
+    tests) reference this project; each file that touches the world has its own reviewed entry in
+    analyzers.json. Spec: docs/modules/store.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Durability.fs" />
+    <Compile Include="Connections.fs" />
+    <Compile Include="SqliteEventStore.fs" />
+    <Compile Include="FileBlobStore.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sqlite\Fx.Sqlite.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+  </ItemGroup>
+</Project>
