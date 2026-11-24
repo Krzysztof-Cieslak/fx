@@ -17,6 +17,7 @@
     <Compile Include="Queues.fs" />
     <Compile Include="InProcess.fs" />
     <Compile Include="StreamTransport.fs" />
+    <Compile Include="ProcTransport.fs" />
     <Compile Include="WebSocketTransport.fs" />
     <Compile Include="Channels.fs" />
     <Compile Include="Connection.fs" />
