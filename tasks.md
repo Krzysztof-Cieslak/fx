@@ -343,6 +343,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T009 done
+  class T103 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -370,7 +371,7 @@ flowchart LR
 |---|---|---|---|---|---|
 | T101 | Codecs + JSON | T002 | §4.1 | todo | Own JSON AST + AOT-safe reader/writer; `Codec<'T>` combinators (record, union, list, option, refinements), `Schema` ADT, `Validation` with model-readable issues, `Preview` with limits. Property tests for round-trips. |
 | T102 | Schema→TS gen | T101 | §4.1, §17 | todo | Generator emitting TypeScript types/codecs (`.d.ts`) from `Schema`; golden tests. |
-| T103 | Eff + capabilities | T002 | §4.2 | todo | `Eff<'R,'T>`, `eff`/`effResult` builders, 'has' interface conventions, core capability interfaces (`IClock`, `IIds`, …) with test doubles. |
+| T103 | Eff + capabilities | T002 | §4.2 | in-progress | `Eff<'R,'T>`, `eff`/`effResult` builders, 'has' interface conventions, core capability interfaces (`IClock`, `IIds`, …) with test doubles. |
 | T104 | Machine host | T103 | §4.4 | todo | `Machine` type, actor runner (single writer, serialized + attributed inputs), process managers across streams; deterministic tests. |
 | T105 | Event + blob store | T006, T101 | §5 | todo | Append-only typed event streams with sequence numbers, subscribe(afterSeq), snapshots; content-addressed blob store. |
 | T106 | Variants + profiles | T101, T103 | §15 | todo | `IVariants` registry, typed variant slots, profile hashing and recording on every record. |
