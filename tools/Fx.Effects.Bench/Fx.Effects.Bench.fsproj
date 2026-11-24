@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Micro-benchmark of the eff builder against hand-written task code and a closure-composition
+    builder (docs/modules/eff.md, "Performance"). Run it with the command in AGENTS.md, "Commands".
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>
