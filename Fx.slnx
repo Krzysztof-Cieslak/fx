@@ -20,6 +20,7 @@
     <Project Path="tests/Fx.Prelude.Tests/Fx.Prelude.Tests.fsproj" />
     <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
     <Project Path="tests/Fx.Aot.Tests/Fx.Aot.Tests.fsproj" />
+    <Project Path="tests/Fx.Analyzers.Tests/Fx.Analyzers.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
