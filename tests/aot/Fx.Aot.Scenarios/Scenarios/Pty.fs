@@ -20,9 +20,10 @@ let private windows = OperatingSystem.IsWindows()
 
 let private utf8 (text: string) = UTF8Encoding(false).GetBytes text
 
-/// Every wait in a scenario is bounded by this.
+/// Every wait in a scenario is bounded by this. Generous: Windows PowerShell takes about 22 s to
+/// start on the Windows arm64 runner.
 let private limit () =
-    new CancellationTokenSource(TimeSpan.FromSeconds 60.0)
+    new CancellationTokenSource(TimeSpan.FromSeconds 120.0)
 
 let private terminal () =
     LocalTerminal.create (LocalTerminal.defaultShell ()) (Path.GetTempPath())
