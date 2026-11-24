@@ -42,11 +42,13 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(CI)' == 'true' and '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
     <!--
-      RID-specific restores (AOT publish) pull host-specific ILCompiler packages; keep them out of
-      the committed, platform-neutral packages.lock.json. Their lockfiles are owned by T003.
+      RID-specific restores (dotnet publish -r) add RID sections; keep them out of the committed,
+      platform-neutral packages.lock.json. Their lockfiles are owned by T003.
     -->
     <NuGetLockFilePath Condition="'$(RuntimeIdentifier)' != ''">packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <!-- The SDK's bundled FSharp.Core differs byte-wise from nuget.org's; restore only from nuget.config. -->
+    <DisableImplicitLibraryPacksFolder>true</DisableImplicitLibraryPacksFolder>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(CI)' == 'true'">
