@@ -3,6 +3,7 @@ module Fx.Cli.Tests.CliTests
 open Expecto
 open Fx
 open Fx.Cli
+open Fx.Sqlite
 
 [<Tests>]
 let tests =
@@ -26,6 +27,16 @@ let tests =
                 let o = Cli.run [ "--version" ]
                 Expect.equal o.ExitCode 0 "exit code"
                 Expect.equal o.Stdout $"{Product.Name} {Product.Version}\n" "version"
+            }
+
+            test "--build-info names the embedded SQLite" {
+                let o = Cli.run [ "--build-info" ]
+                Expect.equal o.ExitCode 0 "exit code"
+
+                Expect.equal
+                    o.Stdout
+                    $"{Product.Name} {Product.Version}\nsqlite {Library.PinnedVersion} ({Library.PinnedSourceId})\n"
+                    "build info"
             }
 
             test "unknown arguments fail with usage on stderr" {

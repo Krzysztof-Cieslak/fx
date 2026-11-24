@@ -53,6 +53,12 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.sqlite": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
       "fx.transport.http": {
         "type": "Project",
         "dependencies": {

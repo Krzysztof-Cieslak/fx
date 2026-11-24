@@ -61,6 +61,7 @@ let cli: Subject =
                 [
                     case "--version" [ "--version" ]
                     case "--help" [ "--help" ]
+                    case "--build-info" [ "--build-info" ]
                     case "(no arguments)" []
                     { case "unknown arguments" [ "--bogus"; "x" ] with
                         MustSucceed = false

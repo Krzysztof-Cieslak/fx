@@ -31,6 +31,7 @@
     <Compile Include="Scenarios\Kestrel\Transports.fs" />
     <Compile Include="Scenarios\Kestrel\Builders.fs" />
     <Compile Include="Scenarios\Contracts.fs" />
+    <Compile Include="Scenarios\Sqlite.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -40,6 +41,7 @@
     <ProjectReference Include="..\..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Sqlite\Fx.Sqlite.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Contracts\Fx.Contracts.fsproj" />
   </ItemGroup>
