@@ -223,6 +223,17 @@ describe("cancellation and timeouts", () => {
     expect((await k.run(`"alive"`)).value?.text).toBe("'alive'");
   });
 
+  test("only killing the kernel stops a busy loop after an await", async () => {
+    const busy = await KernelHost.launch();
+    const pending = busy.run(`await 0; while (true) {}`, { timeoutMs: 100 });
+    pending.catch(() => {});
+    const answered = await Promise.race([pending.then(() => true, () => true), Bun.sleep(1000).then(() => false)]);
+    expect(answered).toBe(false);
+    busy.proc.kill("SIGKILL");
+    await busy.close();
+    await expect(pending).rejects.toThrow(/stdout closed/);
+  }, SLOW);
+
   test("an async cell that never settles times out", async () => {
     expectError(await k.run(`await new Promise(() => {})`, { timeoutMs: 200 }), "timeout");
     expect((await k.run(`"still alive"`)).value?.text).toBe("'still alive'");

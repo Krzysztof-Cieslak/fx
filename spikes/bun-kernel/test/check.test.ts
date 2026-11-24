@@ -31,6 +31,13 @@ describe("type-checking cells with bun check", () => {
     expect(ds[0]!.message).toContain("'number' is not assignable to parameter of type 'string'");
   });
 
+  test("knows exactly the globals the kernel provides", async () => {
+    const ok = `const u = new URL("https://example.com/a?b=1"); const t = setTimeout(() => console.log(u.searchParams.get("b")), 1); clearTimeout(t); const res: Promise<Response> = fetch(u); new TextEncoder().encode("x").length`;
+    expect(await check(ok)).toEqual([]);
+    expect(codes(await check(`document.title`))).toEqual(["TS2584"]);
+    expect(codes(await check(`process.env.HOME`))).toEqual(["TS2591"]);
+  });
+
   test("validates finish results structurally", async () => {
     const ds = await check(`await ${g}.finish({ kind: "done", summry: "typo" })`);
     expect(codes(ds)).toEqual(["TS2561"]);

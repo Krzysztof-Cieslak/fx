@@ -87,7 +87,7 @@ await cells("console.log x100", 50, () => `for (let i = 0; i < 100; i++) console
     samples.push(ms);
     inKernel.push(r.durationMs);
   }
-  rows.push(["`cell/check` after 200+ cells of history", stats(samples)]);
+  rows.push(["`cell/check` after 1000 cells of history", stats(samples)]);
 }
 
 {
@@ -98,6 +98,16 @@ await k.close();
 
 const fresh = await KernelHost.launch();
 rows.push(["kernel RSS after start", `${(Number((await fresh.run(`(await import("node:process")).memoryUsage().rss`)).value?.text) / 1024 / 1024).toFixed(0)} MiB`]);
+{
+  await fresh.run(`const items = [{ name: "a", size: 1 }]`);
+  const samples: number[] = [];
+  for (let i = 0; i < 20; i++) {
+    const [ms, r] = await timed(() => fresh.request<CellCheckResult>("cell/check", { cellId: `fc${i}`, code: `const r = await ${g}.shell.run("ls"); r.lines.length + items[0]!.size` }));
+    if (r.diagnostics.length > 0) throw new Error(JSON.stringify(r.diagnostics));
+    samples.push(ms);
+  }
+  rows.push(["`cell/check` with one earlier cell", stats(samples)]);
+}
 await fresh.close();
 
 console.log("| Measure | Result |\n|---|---|");
