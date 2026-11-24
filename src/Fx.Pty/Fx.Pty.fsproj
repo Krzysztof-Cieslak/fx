@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Pseudo-terminals (spec §3 envd, §6.5, §20): a PTY on Linux and macOS (posix_spawn, never fork in
+    managed code) and ConPTY on Windows, behind a capability-shaped record of functions. The pure
+    types are in Terminal.fs and VtText.fs; the rest is the imperative shell, with reviewed entries in
+    analyzers.json. Findings: docs/spikes/pty.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Terminal.fs" />
+    <Compile Include="VtText.fs" />
+    <Compile Include="Native\Posix.fs" />
+    <Compile Include="Native\Windows.fs" />
+    <Compile Include="PtyStreams.fs" />
+    <Compile Include="StartInfo.fs" />
+    <Compile Include="UnixPty.fs" />
+    <Compile Include="WindowsPty.fs" />
+    <Compile Include="LocalTerminal.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>

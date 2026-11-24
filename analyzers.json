@@ -38,6 +38,11 @@
       "reason": "IShell interpreter: the only code that starts and controls processes."
     },
     {
+      "codes": ["EFF006"],
+      "files": ["src/Fx.Pty/UnixPty.fs", "src/Fx.Pty/WindowsPty.fs"],
+      "reason": "ITerminal interpreter: the only code that starts and controls processes on pseudo-terminals (posix_spawn with a PTY, CreateProcessW with ConPTY)."
+    },
+    {
       "codes": ["AOT002"],
       "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
       "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
