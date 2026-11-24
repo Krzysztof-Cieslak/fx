@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Machines (spec §4.4): the Machine type, its pure helpers, and the data that travels to and from an
+    actor. Clients share Evolve projections (spec §17, §19.3), so this project is Fable-compatible:
+    FSharp.Core only, no tasks, no I/O. Fx.Machines.Tests checks its references. The effectful runner
+    is Fx.Machines.Host. Spec: docs/modules/machines.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Machine.fs" />
+    <Compile Include="Inputs.fs" />
+  </ItemGroup>
+</Project>

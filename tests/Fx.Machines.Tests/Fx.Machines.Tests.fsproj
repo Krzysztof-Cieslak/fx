@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="MachineTests.fs" />
+    <Compile Include="ArchitectureTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Machines\Fx.Machines.fsproj" />
+  </ItemGroup>
+</Project>
