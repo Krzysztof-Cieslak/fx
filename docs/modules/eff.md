@@ -123,6 +123,7 @@ module Clock =
   - Output is pumped into one bounded channel, so reading one stream never blocks the other.
   - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes (T113) use process groups or job objects.
   - Pipes only: terminals (PTY, ConPTY) are T111.
+- **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes and patches belong to envd's filesystem operations (T111). Reads and writes are whole files.
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
 - **Tracing.** Spec §4.2 names this capability `ITelemetry`; it is `ITrace` because "telemetry" suggests data leaving the machine, and fx has none of that (§18). Traces stay local. Exporting them to a local file or viewer is future work (spec §15, `fx trace`).
