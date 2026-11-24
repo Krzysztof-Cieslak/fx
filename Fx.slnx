@@ -15,6 +15,7 @@
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
     <Project Path="tools/Fx.Analyzers/Fx.Analyzers.fsproj" />
+    <Project Path="tools/Fx.Effects.Bench/Fx.Effects.Bench.fsproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
