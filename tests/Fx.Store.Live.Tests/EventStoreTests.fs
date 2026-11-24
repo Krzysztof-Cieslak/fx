@@ -298,6 +298,36 @@ let tests =
                 Expect.equal (appendOk log stream 0L "k2" [ String('x', 90) ]) 1L "small enough"
             }
 
+            test "JSON nested too deeply to read back is refused before it is written" {
+                use store = newStore ()
+
+                let nested (depth: int) =
+                    Seq.fold (fun json _ -> Json.Array [ json ]) Json.Null (seq { 1..depth })
+
+                let payload depth = { Version = 1; Data = nested depth }
+
+                Expect.throwsT<ArgumentException>
+                    (fun () -> store.Log.Append stream 0L (meta "k1") [ payload 129 ] none |> ignore)
+                    "an event"
+
+                Expect.throwsT<ArgumentException>
+                    (fun () ->
+                        store.Snapshots.Save
+                            stream
+                            "view"
+                            {
+                                Seq = 1L
+                                Version = 1
+                                State = nested 200
+                            }
+                            none
+                        |> ignore)
+                    "a snapshot"
+
+                Expect.equal (wait (store.Log.Append stream 0L (meta "k2") [ payload 128 ] none)) (Ok 1L) "at the limit"
+                Expect.equal (wait (store.Log.Read stream 0L 1 none)).Head.Event (payload 128) "read back"
+            }
+
             test "cancelled calls fail with a cancellation and write nothing" {
                 use store = newStore ()
                 use source = new CancellationTokenSource()

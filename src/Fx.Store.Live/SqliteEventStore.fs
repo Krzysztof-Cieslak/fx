@@ -147,6 +147,44 @@ module internal EventDatabase =
     let selectSnapshot =
         "SELECT seq, version, state FROM snapshots WHERE stream = ? AND name = ?"
 
+/// Checks on what is stored, so that everything written can be read back.
+module internal Stored =
+    /// How deeply arrays and objects nest: `[]` has depth 1, a scalar 0.
+    let depth (json: Json) : int =
+        let pending = Stack<struct (Json * int)>()
+        pending.Push(struct (json, 0))
+        let mutable deepest = 0
+
+        while pending.Count > 0 do
+            let struct (value, depth) = pending.Pop()
+
+            match value with
+            | Json.Array items ->
+                deepest <- max deepest (depth + 1)
+
+                for item in items do
+                    pending.Push(struct (item, depth + 1))
+            | Json.Object members ->
+                deepest <- max deepest (depth + 1)
+
+                for _, item in members do
+                    pending.Push(struct (item, depth + 1))
+            | _ -> ()
+
+        deepest
+
+    /// Canonical JSON text that the store's reader will accept (`ReadOptions.defaults`); a defect
+    /// otherwise, raised before anything is written.
+    let text (what: string) (json: Json) : string =
+        let nesting = depth json
+
+        if nesting > ReadOptions.defaults.MaxDepth then
+            invalidArg
+                what
+                $"JSON nested {nesting} levels deep cannot be read back (at most {ReadOptions.defaults.MaxDepth})."
+
+        Json.serializeCanonical json
+
 /// A waiter of `WaitPast`.
 [<ReferenceEquality>]
 type private Waiter =
@@ -416,7 +454,7 @@ type SqliteEventStore internal (path: string, options: EventStoreOptions, writer
             let serialized =
                 events
                 |> List.map (fun payload ->
-                    let text = Json.serializeCanonical payload.Data
+                    let text = Stored.text (nameof events) payload.Data
 
                     if Encoding.UTF8.GetByteCount text > options.MaxEventBytes then
                         invalidArg
@@ -562,7 +600,7 @@ type SqliteEventStore internal (path: string, options: EventStoreOptions, writer
             let reply =
                 TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
 
-            let text = Json.serializeCanonical snapshot.State
+            let text = Stored.text (nameof snapshot) snapshot.State
             enqueue (Save(stream.Value, name, snapshot, text, reply))
             reply.Task
 
