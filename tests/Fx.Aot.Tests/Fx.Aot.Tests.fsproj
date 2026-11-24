@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Tests for the JIT-vs-native diff harness in tests/aot. -->
+
+  <ItemGroup>
+    <Compile Include="DiffTests.fs" />
+    <Compile Include="ScenarioTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\aot\Fx.Aot.Diff\Fx.Aot.Diff.fsproj" />
+    <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
+  </ItemGroup>
+</Project>
