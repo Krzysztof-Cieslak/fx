@@ -8,6 +8,18 @@ Guidance for AI coding agents working on **fx**. fx is built entirely by coding 
 - If a change requires a design change, update `spec.md` in the same change and explain why.
 - The project is in the **exploration stage**. There is no code yet. The spec's roadmap (§21) gives the build order.
 
+## Picking work: the task graph
+
+- **[`tasks.md`](tasks.md)** is the implementation task graph. Each task is one lane. Dependencies, not phases, decide what can start.
+- Run `bun scripts/tasks.ts ready` to list tasks you can start now. Tasks on the critical path are marked `*`.
+- The lane for a task is named after its id, e.g. `lane new t101-codecs`.
+- Status updates:
+  - set the task to `in-progress` in the lane's first commit;
+  - set it to `done` when it lands.
+- Splitting a task:
+  - split it in the tables, e.g. `T110a` and `T110b`, and give each part explicit dependencies;
+  - then run `bun scripts/tasks.ts` to regenerate the waves and the graph. CI can run `bun scripts/tasks.ts check`.
+
 ## Development workflow: lane
 
 We use [lane](https://github.com/lukeed/lane) for isolated worktrees and durable code memory.
