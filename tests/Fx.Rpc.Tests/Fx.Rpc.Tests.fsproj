@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="WireTests.fs" />
+    <Compile Include="FramingTests.fs" />
+    <Compile Include="HandshakeTests.fs" />
+    <Compile Include="Conformance\RpcConformance.fs" />
+    <Compile Include="TransportTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Rpc\Fx.Rpc.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
+    <!-- TestService, and the rpc-peer child process (its apphost and assembly are copied next to the tests). -->
+    <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
+  </ItemGroup>
+</Project>
