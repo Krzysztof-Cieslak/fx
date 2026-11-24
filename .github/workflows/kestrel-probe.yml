@@ -1,0 +1,67 @@
+name: Kestrel probe
+
+# Binary size and startup of Native AOT variants with and without Kestrel, on every target
+# (docs/spikes/kestrel.md). Runs when the probe changes, or by hand.
+on:
+  pull_request:
+    paths:
+      - docs/spikes/kestrel-probe/**
+      - .github/workflows/kestrel-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # Same image as the musl AOT jobs in ci.yml; keep them in step.
+  ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
+
+jobs:
+  probe:
+    name: Probe (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm }
+          - { rid: linux-musl-x64, os: ubuntu-24.04, alpine: true }
+          - { rid: linux-musl-arm64, os: ubuntu-24.04-arm, alpine: true }
+          - { rid: osx-arm64, os: macos-26 }
+          - { rid: osx-x64, os: macos-26-intel }
+          - { rid: win-x64, os: windows-2025 }
+          - { rid: win-arm64, os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      IN: ${{ matrix.alpine && 'docker exec alpine' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        if: ${{ !matrix.alpine }}
+        with:
+          global-json-file: global.json
+      - name: Start the Alpine container
+        if: ${{ matrix.alpine }}
+        run: >-
+          docker run --detach --name alpine
+          --user "$(id -u):$(id -g)" --env HOME=/tmp
+          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES
+          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
+          "$ALPINE_SDK_IMAGE" sleep infinity
+      - name: Measure
+        run: |
+          echo "### Kestrel probe, ${{ matrix.rid }} (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+          docs/spikes/kestrel-probe/measure.sh "${{ matrix.rid }}" | tee -a "$GITHUB_STEP_SUMMARY"

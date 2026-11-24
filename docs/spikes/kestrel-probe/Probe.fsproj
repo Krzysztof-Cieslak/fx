@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Size and startup probe for docs/spikes/kestrel.md. Each variant adds one feature:
+
+      console              F# hello world (what the fx binary is today)
+      client               + HttpClient (fx needs it anyway for model APIs)
+      server               + Kestrel: CreateEmptyBuilder, UseKestrelCore, one RequestDelegate
+      server-ws            + WebSockets middleware, a WebSocket echo and ClientWebSocket
+      server-ws-routing    + endpoint routing (AddRoutingCore, MapGet with a RequestDelegate)
+      slim-ws-routing      CreateSlimBuilder instead of CreateEmptyBuilder (configuration, logging)
+
+    dotnet publish -c Release -r <rid> -p:Variant=<variant>; measure.sh runs them all.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <AssemblyName>probe</AssemblyName>
+    <PublishDir>bin/$(Variant)/publish/</PublishDir>
+    <DefineConstants Condition="'$(Variant)' != 'console'">$(DefineConstants);CLIENT</DefineConstants>
+    <DefineConstants Condition="$(Variant.Contains('server')) or $(Variant.Contains('slim'))">$(DefineConstants);SERVER</DefineConstants>
+    <DefineConstants Condition="$(Variant.Contains('-ws'))">$(DefineConstants);WS</DefineConstants>
+    <DefineConstants Condition="$(Variant.Contains('routing'))">$(DefineConstants);ROUTING</DefineConstants>
+    <DefineConstants Condition="$(Variant.Contains('slim'))">$(DefineConstants);SLIM</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="11.0.101" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(DefineConstants.Contains('SERVER'))">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

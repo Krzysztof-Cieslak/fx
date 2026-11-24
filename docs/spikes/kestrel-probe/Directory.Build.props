@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    Standalone on purpose: the probe measures plain Native AOT binaries, so it does not import the
+    repository's Directory.Build.props (lockfiles, analyzers' FSharp.Core, artifacts layout). It keeps
+    the settings that change binary size: invariant globalization and reflection-free F#.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <OtherFlags>$(OtherFlags) --reflectionfree</OtherFlags>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <!-- Trim and AOT warnings (IL2xxx, IL3xxx) fail the probe, as they fail the real publish. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Variant Condition="'$(Variant)' == ''">console</Variant>
+    <BaseIntermediateOutputPath>obj/$(Variant)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin/$(Variant)/</BaseOutputPath>
+  </PropertyGroup>
+</Project>
