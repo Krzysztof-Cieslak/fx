@@ -14,4 +14,8 @@
     <Project Path="tests/Fx.Prelude.Tests/Fx.Prelude.Tests.fsproj" />
     <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
   </Folder>
+  <Folder Name="/tests/aot/">
+    <File Path="tests/aot/Directory.Build.props" />
+    <Project Path="tests/aot/Fx.Aot.Scenarios/Fx.Aot.Scenarios.fsproj" />
+  </Folder>
 </Solution>

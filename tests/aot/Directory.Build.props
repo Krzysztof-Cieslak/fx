@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    The JIT-vs-native diff harness (spec §20 CI gates). These are tools, not test projects:
+    Fx.Aot.Scenarios is published with Native AOT and Fx.Aot.Diff runs it both ways. Import the root
+    settings directly so that tests/Directory.Build.props (JIT-only Expecto projects) does not apply.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\Directory.Build.props" />
+</Project>
