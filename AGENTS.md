@@ -6,7 +6,7 @@ Guidance for AI coding agents working on **fx**. fx is built entirely by coding 
 
 - **[`spec.md`](spec.md)** is the design specification. Every change must be consistent with it.
 - If a change requires a design change, update `spec.md` in the same change and explain why.
-- The project is in the **exploration stage**. There is no code yet. The spec's roadmap (§21) gives the build order.
+- The project is in the **exploration stage**. Only the scaffold exists so far. The spec's roadmap (§21) gives the build order.
 
 ## Picking work: the task graph
 
@@ -15,7 +15,7 @@ Guidance for AI coding agents working on **fx**. fx is built entirely by coding 
 - The lane for a task is named after its id, e.g. `lane new t101-codecs`.
 - Status updates:
   - set the task to `in-progress` in the lane's first commit;
-  - set it to `done` when it lands.
+  - set it to `done` in the lane's last commit, so the task becomes done when its PR merges.
 - Splitting a task:
   - split it in the tables, e.g. `T110a` and `T110b`, and give each part explicit dependencies;
   - then run `bun scripts/tasks.ts` to regenerate the waves and the graph. CI can run `bun scripts/tasks.ts check`.
@@ -27,6 +27,19 @@ We use [lane](https://github.com/lukeed/lane) for isolated worktrees and durable
 - Do every task in its own lane: `lane new <task-name>`. Work in the printed worktree path, not in the parent checkout.
 - Land with `lane merge`, or `lane push` to open a PR. Run `lane check` before landing, and resolve every stale note (`confirm`, `replace` or `retire`).
 - If `lane` is not set up in this repository yet, run `lane init` once. Then run `lane install skill` and `lane install hooks`.
+
+### One PR per task, stacked
+
+- Every task lands as its own pull request made of focused commits. Do not batch tasks into one PR.
+- If a task depends on a task whose PR is still open, stack it:
+  - `lane new <task> --base <parent-lane-branch>`;
+  - open the PR against that branch with `gh pr create --base <parent-lane-branch>`.
+- A lane has one base. If a task has several unmerged parents, stack it on one of them, and stack those parents on each other first.
+- Before opening a PR, run `lane check` and the CI commands below. Then run `lane push` and open the PR with `gh pr create`.
+- Once the parent PR merges:
+  - retarget the child PR with `gh pr edit <n> --base main`;
+  - update the child with `lane push --base main`;
+  - run `lane prune`.
 
 <!-- lane:protocol -->
 ## Context memory
@@ -121,4 +134,31 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 
 ## Commands
 
-No build exists yet. When you scaffold the solution, add the build, test, AOT publish and lint commands here.
+Run from the repository root. The SDK is pinned in `global.json`; all output goes to `artifacts/`.
+
+| What | Command |
+|---|---|
+| Restore (as CI does) | `dotnet restore Fx.slnx --locked-mode` |
+| Build | `dotnet build Fx.slnx` |
+| Test | `dotnet test --solution Fx.slnx` |
+| Format | `dotnet tool restore` once, then `dotnet fantomas src tests` (CI runs `--check`) |
+| AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
+| Task graph | `bun scripts/tasks.ts check` |
+
+- After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files. Package versions live only in `Directory.Packages.props`.
+- `TreatWarningsAsErrors` is on everywhere. Production code is compiled with `--reflectionfree`, so `%A` is a compile error.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `Fx.slnx` | The solution |
+| `Directory.Build.props` | Shared build settings and **`FxProductName`, the naming constant** |
+| `Directory.Packages.props` | Central package versions |
+| `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
+| `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant, `PublishAot` is on) |
+| `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
+| `scripts/` | Repository tooling (Bun) |
+
+- Add new F# projects under `src/`, and give each one a matching test project under `tests/`.
+- Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
