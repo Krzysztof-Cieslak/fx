@@ -93,8 +93,9 @@ and `SnapshotsConformance`, the suites the in-memory interpreters pass.
 - An append whose token is cancelled before the writer takes it is not written; once in a transaction
   it completes.
 - **Size.** An event's JSON may not exceed `MaxEventBytes` (1 MiB): large content belongs in the blob
-  store, and the event carries a `BlobRef` (`Codecs.blobRef`). Events must also respect the JSON
-  nesting limit (128, `ReadOptions.defaults`), or reading them fails.
+  store, and the event carries a `BlobRef` (`Codecs.blobRef`). JSON nested deeper than the reader's
+  limit (128, `ReadOptions.defaults`) is refused too, for events and snapshots alike: everything
+  committed must read back, or a stream could never be replayed again.
 
 ### Reading and waiting
 
@@ -263,7 +264,49 @@ append until a waiter wakes, and blob throughput, with both durabilities. Events
 of JSON. The `Store benchmark` workflow runs it on idle GitHub runners whenever the stores change
 and writes the tables to its job summary; a busy development VM measures mostly its scheduler.
 
-Measurements to follow from the first run of the workflow.
+From the workflow on GitHub-hosted runners (`ubuntu-24.04`, `macos-26`, `windows-2025`), November 2026:
+
+| Appends: commits/s (p50 latency) | Linux | macOS | Windows |
+|---|---:|---:|---:|
+| one writer, 1 event per commit, full | 2,484 (408 µs) | 2,885 (261 µs) | 137 (4.7 ms) |
+| one writer, 1 event per commit, normal | 10,177 (68 µs) | 7,953 (71 µs) | 1,278 (61 µs) |
+| one writer, 10 events per commit, full | 2,242 (475 µs) | 2,393 (356 µs) | 171 (4.9 ms) |
+| one writer, 10 events per commit, normal | 6,128 (136 µs) | 5,070 (133 µs) | 717 (98 µs) |
+| 32 writers at once, full | 9,934 (660 µs) | 11,388 (422 µs) | 823 (9.7 ms) |
+| 32 writers at once, normal | 18,512 (369 µs) | 25,462 (159 µs) | 2,260 (505 µs) |
+
+| Reads: p50 (p99) | Linux | macOS | Windows |
+|---|---:|---:|---:|
+| head | 4 µs (5) | 2 µs (3) | 3 µs (5) |
+| one event | 36 µs (68) | 20 µs (47) | 28 µs (68) |
+| a page of 100 events | 354 µs (728) | 236 µs (825) | 237 µs (352) |
+| all 10,000 events | 34 ms | 40 ms | 24 ms |
+| from an append until a waiter wakes (normal) | 91 µs (216) | 108 µs (10,194) | 77 µs (2,141) |
+
+| Blobs | Linux | macOS | Windows |
+|---|---:|---:|---:|
+| put 1 MiB blobs, full | 394 MiB/s | 225 MiB/s | 42 MiB/s |
+| put 1 MiB blobs, normal | 932 MiB/s | 660 MiB/s | 475 MiB/s |
+| put content already stored | 1,461 MiB/s | 1,957 MiB/s | 1,262 MiB/s |
+| get (hash checked) | 798 MiB/s | 1,105 MiB/s | 756 MiB/s |
+| put an 8-byte blob, p50, full / normal | 929 / 130 µs | 1,461 / 198 µs | 12.9 / 0.7 ms |
+
+What this decides:
+
+- **`Full` stays the default.** It costs one sync per transaction: about 0.3–0.5 ms on the Linux and
+  macOS runners (macOS without `fullfsync`) and about 5 ms on Windows (`FlushFileBuffers`). A session
+  appends a few events per second, so even Windows' 137 commits/s for one waiting writer leaves ample
+  room, and nothing committed is lost to an OS crash.
+- **Group commit pays for it under load**: 32 concurrent writers get 4 to 6 times the single-writer
+  commit rate with `Full`, because one sync covers a whole batch.
+- **Reads are cheap.** Replaying 10,000 events, JSON parsing and decoding included, takes 25–40 ms, so
+  snapshots matter for streams far longer than that, and for clients far behind. A subscriber hears of
+  an append about 0.1 ms after it commits.
+- **Blob writes with `Full` sync twice** (the file, then the index), which dominates small blobs,
+  especially on Windows. Code that stores many small blobs (tool output overflow) may want `Normal`
+  for its blob store or batched index rows; that is a variant to measure when such code exists.
+- On the shared development VM (2 cores, load average above 10 from other builds) the same benchmark
+  is dominated by thread scheduling: hand-offs to the writer thread take milliseconds there.
 
 ## Left for later
 
