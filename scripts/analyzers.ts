@@ -63,9 +63,15 @@ function checkNoSuppressions() {
 function analyzeSolution(): number {
   const projects = [...readFileSync(join(ROOT, "Fx.slnx"), "utf8").matchAll(/Path="([^"]+\.fsproj)"/g)].map((m) => m[1]);
   if (projects.length === 0) fail("No F# projects found in Fx.slnx");
-  // In GitHub Actions, findings also become annotations on the pull request.
-  const format = process.env.GITHUB_ACTIONS === "true" ? ["--output-format", "github"] : [];
-  const exitCode = run([...analyzerArgs, ...format, "--configuration", "Release", ...projects.flatMap((p) => ["--project", p])]);
+  const command = [...analyzerArgs, "--configuration", "Release", ...projects.flatMap((p) => ["--project", p])];
+  let exitCode: number;
+  if (process.env.GITHUB_ACTIONS === "true") {
+    // Findings become annotations on the pull request. The tool colours every line, and the runner
+    // only recognises `::error` at the start of a line, so strip the colour codes.
+    const result = runQuiet([...command, "--output-format", "github"]);
+    console.log(result.output.replace(/\x1b\[[0-9;]*m/g, ""));
+    exitCode = result.exitCode;
+  } else exitCode = run(command);
   if (exitCode === 0) console.log(`No analyzer findings in ${projects.length} projects.`);
   return exitCode;
 }
