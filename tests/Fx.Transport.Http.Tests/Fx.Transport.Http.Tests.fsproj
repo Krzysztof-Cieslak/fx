@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="LocalAccessTests.fs" />
+    <Compile Include="SseTests.fs" />
+    <Compile Include="WebSocketMessagesTests.fs" />
+    <Compile Include="LocalServerTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
+  </ItemGroup>
+</Project>
