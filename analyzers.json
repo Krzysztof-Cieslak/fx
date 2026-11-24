@@ -18,6 +18,26 @@
       "reason": "Process entry point: writes the outcome of the pure Cli.run to stdout and stderr."
     },
     {
+      "codes": ["EFF001"],
+      "files": ["src/Fx.Effects.Live/SystemClock.fs"],
+      "reason": "IClock interpreter: the only reader of the system clock and the only real delay."
+    },
+    {
+      "codes": ["EFF002"],
+      "files": ["src/Fx.Effects.Live/SystemIds.fs"],
+      "reason": "IIds interpreter: the only reader of the OS random number generator."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Effects.Live/LocalFs.fs"],
+      "reason": "IFs/IFsRead interpreter: the only code that touches the local filesystem."
+    },
+    {
+      "codes": ["EFF006"],
+      "files": ["src/Fx.Effects.Live/LocalShell.fs"],
+      "reason": "IShell interpreter: the only code that starts and controls processes."
+    },
+    {
       "codes": ["AOT002"],
       "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
       "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
