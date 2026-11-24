@@ -145,6 +145,14 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Bulk data goes over binary channels, not in JSON messages.
 - A new transport passes the conformance suite (`RpcConformance.tests` in `tests/Fx.Rpc.Tests`).
 
+**Extensions** (module spec: [`docs/modules/extensions.md`](docs/modules/extensions.md))
+- A built-in is a package under `extensions/<Name>/` (project `Fx.Ext.<Name>`, id `Product.extensionId "<local id>"`). It references `src/Fx.Sdk` and nothing else; `ArchitectureTests` (tests/Fx.Extensions.Tests) checks the `.fsproj` and the compiled assembly. Reference every new package from `tests/Fx.Extensions.Tests` so the check sees it. `extensions/Fx.Ext.Sample` is the reference.
+- Write it as a value: a `Manifest` (built with `Manifest.create` and the `Declare` helpers) and an `Activate` effect that returns an `Activation`: the contributions and methods the manifest declares, exactly. Native extensions are registered from a static list in the composition root, never loaded from assemblies.
+- Contribute under typed keys (`ContributionType<'T>`): `ContributionType.data` (concatenated), `Hook.gate`, `Hook.transform`, `Hook.observe` (all serve over the extension protocol) or `Hook.interpret` (in process only). Define a hook point next to the code that runs it, and run it with `Hooks.decide`, `transform`, `collect`, `observe`, `interpret` over `ExtensionHost.contributions`. Mark the types spec §16.5 lists `ContributionType.privileged`.
+- Extension code runs in `IExtensionEnv`, its extension's environment (attenuated to the manifest's `capabilities`) with the caller's scope. Keep per-activation state inside `Activate`.
+- Failures carry no exception messages: a failing gate denies, a failing transform fails the pipeline, a failing observer is reported, a throwing method is `MethodFailure.Crashed`.
+- Behaviour must be identical in process and out: the parity suite (`ParitySuite.tests`) runs the sample natively and as a child process (`Fx.Aot.Scenarios ext-peer`). Add cases there when you add a hook kind or a protocol method.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -172,6 +180,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
   - ILC aborts generic instantiations nested deeper than 4 levels inside FSharp.Core's closure machinery (IL3054, "generic recursion"), e.g. a curried call or a generic closure over `'A * ('B * ('C * …))`. Applicative `and!` builders nest one tuple per binding: give them `MergeSources3`, `MergeSources4`, … as `Codec.record` does.
+  - The same limit holds for `Codec.union`: its match function takes one encoder per case, and with more than four cases the curried closure nests too deep (IL3054, found with a nine-case union). Keep a union codec to four cases or fewer; group cases (e.g. one `unknown` case with a description) until `Codec.union` is restructured.
 - Behaviour that differs under Native AOT, found by the diff:
   - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
   - On linux-musl, the main thread of a Native AOT binary does not know its stack size: `RuntimeHelpers.TryEnsureSufficientExecutionStack()` is false there, so task continuations never run inline on it. Code that relies on inline continuations, such as driving a `FakeClock`, must run on a thread-pool thread (`FakeClock.Advance` throws otherwise).
@@ -241,7 +250,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Restore (as CI does) | `dotnet restore Fx.slnx --locked-mode` |
 | Build | `dotnet build Fx.slnx` |
 | Test | `dotnet test --solution Fx.slnx` |
-| Format | `dotnet tool restore` once, then `dotnet fantomas src tests tools` (CI runs `--check`) |
+| Format | `dotnet tool restore` once, then `dotnet fantomas src tests tools extensions` (CI runs `--check`) |
 | Analyzers | `dotnet tool restore` once, then `bun scripts/analyzers.ts`; `bun scripts/analyzers.ts samples` proves they fail on the samples |
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
@@ -284,9 +293,12 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Store` | Typed events (`Payload`, `EventSchema`, upcasters, `EventLog.typed`), snapshots and projections, the `IBlobs` capability, envelope codecs, and the in-memory fakes (pure; spec in [`docs/modules/store.md`](docs/modules/store.md)) |
 | `src/Fx.Store.Live` | The real stores: `SqliteEventStore` (event log and snapshots in SQLite) and `FileBlobStore` (content-addressed files with a SQLite index); referenced only by composition roots |
 | `src/Fx.Variants` | Variant slots, the slot registry, resolution of config layers under policies, profiles and their ids, the `IVariants` capability with recording and replay, eval matrices, the core's slots and `FakeVariants` (pure; references only Contracts and Effects, so the SDK can expose it; spec in [`docs/modules/variants.md`](docs/modules/variants.md)) |
+| `src/Fx.Sdk` | The public F# SDK for extensions (spec §16): manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`. Extensions see this and nothing else of the host (spec in [`docs/modules/extensions.md`](docs/modules/extensions.md)) |
+| `src/Fx.Extensions` | The extension system's core: the registry machine, trust checks, the catalog, the declarative, native and process runtimes, the extension protocol and its F# server (`ExtensionServer`), and the bootstrap (`ExtensionHost`) |
+| `extensions/` | Extension packages, one per directory, using only `src/Fx.Sdk`: `Fx.Ext.Sample` is the reference and the subject of the transport-parity tests (not bundled) |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
-| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff; also the JSON-RPC test service and its child-process peer (`Fx.Aot.Scenarios rpc-peer`), which `tests/Fx.Rpc.Tests` uses |
+| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff; also the JSON-RPC test service and its child-process peer (`Fx.Aot.Scenarios rpc-peer`), which `tests/Fx.Rpc.Tests` uses, and the sample extension's host and child process (`Fx.Aot.Scenarios ext-peer`), which `tests/Fx.Extensions.Tests` uses |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
 | `tests/support` | Programs that tests start as child processes (not test projects), e.g. `Fx.Store.Writer`, which the crash tests kill mid-append. A test project references one to get its apphost next to its own output |
 | `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
@@ -298,9 +310,9 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
-| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md) |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md) |
 
-- Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
+- Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`. Extension packages go under `extensions/`; their tests are the conformance and parity suites in `tests/Fx.Extensions.Tests`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
 
 ## Analyzers
@@ -309,18 +321,18 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 
 | Code | Bans | Applies to |
 |---|---|---|
-| `AOT001` | `%A` in any format string, including `$"%A{x}"` | `src/`, `tests/`, `tools/` |
+| `AOT001` | `%A` in any format string, including `$"%A{x}"` | `src/`, `extensions/`, `tests/`, `tools/` |
 | `AOT002` | printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, `$"%d{x}"`), interpolated strings passed to printf functions (`failwithf $"..."`), composite formats (`String.Format("{0}", x)`) | same |
 | `AOT003` | runtime reflection: `System.Reflection` (`Type.GetMethods`, `Assembly.Load`, `MethodInfo.Invoke`, …), `FSharp.Reflection`, `Activator`, `Reflection.Emit`, `DispatchProxy`, `AssemblyLoadContext`, quotations and `query { }`, expression trees, reflection-based serializers | same |
-| `EFF001` | clock and timers: `DateTime.Now`, `Stopwatch`, `Environment.TickCount`, `Thread.Sleep`, `Task.Delay`, `Async.Sleep`, timers | `src/` |
-| `EFF002` | randomness and ids: `Random`, `Guid.NewGuid`, `RandomNumberGenerator` | `src/` |
-| `EFF003` | the process environment: `Environment.*` (except `NewLine`), `AppContext`, the registry, `TimeZoneInfo.Local` | `src/` |
-| `EFF004` | the filesystem: `File`, `Directory`, `FileInfo`, `FileStream`, `new StreamReader(path)`, `Path.GetTempPath`, `Path.GetFullPath(path)`, … | `src/` |
-| `EFF005` | the console: `Console`, `stdin`/`stdout`/`stderr`, `printf`/`printfn`/`eprintfn` | `src/` |
-| `EFF006` | processes: `Process`, `SafeProcessHandle`, custom process creation (`UnixProcessStartArguments`, `WindowsProcessStartArguments`) | `src/` |
-| `EFF007` | network and IPC: `HttpClient`, sockets, `Dns`, `ClientWebSocket`, pipes, … | `src/` |
-| `EFF008` | native code: calls to P/Invoke functions (`extern` with `[<DllImport>]`), which can do any I/O out of sight of the other rules | `src/` |
-| `EFF009` | SQLite: any use of `Fx.Sqlite` (its file I/O happens in native code, which `EFF004` cannot see) | `src/` |
+| `EFF001` | clock and timers: `DateTime.Now`, `Stopwatch`, `Environment.TickCount`, `Thread.Sleep`, `Task.Delay`, `Async.Sleep`, timers | `src/`, `extensions/` |
+| `EFF002` | randomness and ids: `Random`, `Guid.NewGuid`, `RandomNumberGenerator` | `src/`, `extensions/` |
+| `EFF003` | the process environment: `Environment.*` (except `NewLine`), `AppContext`, the registry, `TimeZoneInfo.Local` | `src/`, `extensions/` |
+| `EFF004` | the filesystem: `File`, `Directory`, `FileInfo`, `FileStream`, `new StreamReader(path)`, `Path.GetTempPath`, `Path.GetFullPath(path)`, … | `src/`, `extensions/` |
+| `EFF005` | the console: `Console`, `stdin`/`stdout`/`stderr`, `printf`/`printfn`/`eprintfn` | `src/`, `extensions/` |
+| `EFF006` | processes: `Process`, `SafeProcessHandle`, custom process creation (`UnixProcessStartArguments`, `WindowsProcessStartArguments`) | `src/`, `extensions/` |
+| `EFF007` | network and IPC: `HttpClient`, sockets, `Dns`, `ClientWebSocket`, pipes, … | `src/`, `extensions/` |
+| `EFF008` | native code: calls to P/Invoke functions (`extern` with `[<DllImport>]`), which can do any I/O out of sight of the other rules | `src/`, `extensions/` |
+| `EFF009` | SQLite: any use of `Fx.Sqlite` (its file I/O happens in native code, which `EFF004` cannot see) | `src/`, `extensions/` |
 
 - **Allowed**:
   - interpolation without printf specifiers, including .NET formats and alignment (`{x:N2}`, `{x,5}`);
@@ -329,7 +341,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
   - `System.Reflection.Metadata`, which reads metadata from files;
   - pure `Path` functions, `Environment.NewLine`, `OperatingSystem.Is*()`;
   - building request values such as `HttpRequestMessage` and `ProcessStartInfo`.
-- **Scope**: the AOT rules apply to all our F# code, so code can move freely between tests, tools and the binary. The EFF rules are the initial "no I/O outside `Eff`" lint and apply only to production code under `src/`. Tests and tools are imperative shells.
+- **Scope**: the AOT rules apply to all our F# code, so code can move freely between tests, tools and the binary. The EFF rules are the initial "no I/O outside `Eff`" lint and apply only to production code under `src/` and `extensions/`. Tests and tools are imperative shells.
 - **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
   - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.

@@ -137,7 +137,7 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 |---|---|
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
 | `IComponents` | T110 |
-| `IPackages`, extension contributions | T108 |
+| `IPackages`; reading extension contributions from `IExtensionEnv` (the host reads them with `ExtensionHost.contributions`, T108) | T109 |
 | `IEnvs` | T112 |
 | `IInterpreter` | T116, T117 |
 | `ILlm` | T118 |
