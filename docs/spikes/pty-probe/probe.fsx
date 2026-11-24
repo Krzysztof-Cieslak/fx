@@ -192,7 +192,47 @@ printfn
 
 printfn ""
 
-// 5. Terminal settings and environment the program sees.
+// 5. Non-ASCII text both ways: typed into the program, and printed by it.
+let sample = "h\u00e9llo \u2713 \u4e16"
+
+let unicode =
+    if windows then
+        [
+            "pwsh", pwsh "Write-Host '@@ready'; $line = [Console]::ReadLine(); Write-Host \"@@in=$line\"; Write-Host '@@out=h\u00e9llo \u2713 \u4e16'"
+            "pwsh, UTF-8 console",
+            pwsh
+                "[Console]::InputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); Write-Host '@@ready'; $line = [Console]::ReadLine(); Write-Host \"@@in=$line\"; Write-Host '@@out=h\u00e9llo \u2713 \u4e16'"
+            "cmd", Exec("cmd", [ "/d"; "/c"; "echo @@ready& set /p line=& call echo @@in=%line%& echo @@out=h\u00e9llo \u2713 \u4e16" ])
+        ]
+    else
+        [ "sh", Script "echo @@ready; read line; echo \"@@in=$line\"; echo '@@out=h\u00e9llo \u2713 \u4e16'" ]
+
+printfn "**Non-ASCII text** (expected `%s`):" sample
+printfn ""
+row [ "Program"; "Typed in, echoed back"; "Printed" ]
+row [ "---"; "---"; "---" ]
+
+for name, program in unicode do
+    let r =
+        run program (Some "@@ready") (fun pty ->
+            pty.Write (Encoding.UTF8.GetBytes(sample + "\r")) CancellationToken.None |> _.Wait())
+
+    let value (key: string) =
+        let plain = VtText.plain r.Text
+        let at = plain.LastIndexOf("@@" + key + "=")
+
+        if at < 0 then
+            "<missing>"
+        else
+            let rest = plain.Substring(at + key.Length + 3)
+            let stop = rest.IndexOf '\n'
+            escape (if stop < 0 then rest else rest.Substring(0, stop))
+
+    row [ name; value "in"; value "out" ]
+
+printfn ""
+
+// 6. Terminal settings and environment the program sees.
 if windows then
     let console =
         run
