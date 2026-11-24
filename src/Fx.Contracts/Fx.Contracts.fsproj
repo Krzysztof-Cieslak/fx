@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Contracts (spec §4.1): the JSON AST, reader and writer, Schema, Validation, Preview and the Codec
+    combinators. Depends only on FSharp.Core (Fx.Prelude may be added) and stays Fable-compatible: no
+    System.Text.Json, spans or reflection. Module spec: docs/modules/contracts.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="JsonNumber.fs" />
+    <Compile Include="Json.fs" />
+    <Compile Include="JsonReader.fs" />
+    <Compile Include="JsonModule.fs" />
+  </ItemGroup>
+</Project>
