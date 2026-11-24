@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="LibraryTests.fs" />
+    <Compile Include="ValueTests.fs" />
+    <Compile Include="ErrorTests.fs" />
+    <Compile Include="TransactionTests.fs" />
+    <Compile Include="WalTests.fs" />
+    <Compile Include="FeatureTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sqlite\Fx.Sqlite.fsproj" />
+  </ItemGroup>
+</Project>
