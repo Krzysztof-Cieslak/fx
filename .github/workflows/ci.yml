@@ -159,6 +159,7 @@ jobs:
           if-no-files-found: error
   bun-kernel-spike:
     name: Bun kernel spike (${{ matrix.os }})
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
