@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Repo.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="SampleTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Failing and clean samples; read from the source tree, never compiled. -->
+    <None Include="Samples/*.fsx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same FSharp.Core as the fsharp-analyzers host that runs the analyzers in CI. -->
+    <PackageReference Update="FSharp.Core" VersionOverride="$(AnalyzersFSharpCoreVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\Fx.Analyzers\Fx.Analyzers.fsproj" />
+  </ItemGroup>
+</Project>
