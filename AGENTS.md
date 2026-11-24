@@ -115,6 +115,17 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - Drive time with `FakeClock.Advance`.
   - Keep effects under a fake clock on the advancing thread (no `Task.Yield`, no real I/O); otherwise the order of events depends on thread-pool timing.
 
+**Machines and actors** (module spec: [`docs/modules/machines.md`](docs/modules/machines.md))
+- A machine is a `Machine` value (`Initial` / `Evolve` / `Handle` / `React`) whose events and state use only FSharp.Core, so clients can share `Evolve` (Fable).
+  - `Handle` gets everything from the world (time, ids, results) in the command.
+  - Events are facts kept forever: add event cases, never change what an old one means.
+- Run machines with `Actor.start` or `Actor.run`, or with an `ActorRegistry` for one actor per stream. Send with `Actor.send`; the control path is `Actor.interrupt`.
+- Every command has an idempotency key. Derive the keys of commands the host makes from the event that caused them, never from the clock or random ids, so retries deduplicate.
+- Interpreters turn expected failures into result commands. A throw stops the actor.
+- Intents are not durable: record work in flight in the state and pick it up in `ActorSpec.Recover`.
+- Actors continue on the sender's thread. Never block a thread on an actor's reply inside a continuation.
+- Test with `InMemoryEventLog` and `FakeClock`: the same inputs must give the same log. A new event store passes `EventLogConformance`.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -228,6 +239,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
 | `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18) |
+| `src/Fx.Machines` | The `Machine` type, its pure helpers, and what is sent to and from actors (Fable-compatible: FSharp.Core only, checked by a test; spec in [`docs/modules/machines.md`](docs/modules/machines.md)) |
+| `src/Fx.Machines.Host` | The machine host: the event-log abstraction and the in-memory log, actors, the actor registry and process managers |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
 | `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |

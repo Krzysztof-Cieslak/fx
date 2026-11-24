@@ -179,6 +179,8 @@ type Machine<'Cmd,'Evt,'S,'Intent> =
 ```
 
 - Shell loop: command → `Handle` → append → `Evolve` → `React` → interpreters → result commands.
+- `Rejection` is `{ Code; Message }`, an expected outcome. `React` sees the state after the event. Intents are not durable: `React` runs when an event is appended, never on replay, so an actor's `Recover` (state → intents) picks up work in flight when it starts.
+- Each actor is the single writer of its stream; process managers carry events across streams through their own stream and an outbox (at-least-once delivery, deduplicated by idempotency keys). Details: `docs/modules/machines.md`.
 - Machines: sessions, runs, strategies, ledger, grants, environment leases, auth flows, component installs, extension state.
 - Strategies: `CodeAct`, `Predict`, `Template`, `Delegate`, `Decide`.
 
@@ -200,6 +202,8 @@ type TurnResult =
 
 - **Event log:** typed durable events with sequence numbers; session tree (forks append); ephemeral deltas vs authoritative items; content-addressed blob payloads.
 - **Commands, not mutations:** prompt (steer/queue), interrupt, approve, fork, revert, move — idempotency keys. **Concurrent inputs from multiple clients are serialized and attributed to their principal.** Interrupt uses a control path that bypasses queues.
+  - Every event records its command's key, sender and cause, so deduplication survives restarts: a command takes effect at most once.
+  - The control path cancels work in flight at once and goes before queued commands.
 - **Durable pending requests:** decision cards, grant requests, workflow gates, forms, auth flows, installs — re-offered to capable clients, expiry policy.
 - **Reconnect:** `subscribe(id, afterSeq)` replays then goes live; large gaps get snapshot + tail.
 - **Crash recovery:** step results journaled; **in-flight tool calls become `OutcomeUnknown` → the run pauses and opens a session-scoped decision with evidence**; nothing auto-resumes. `fx.recall(callId)` / `Out[n]` restore values.
