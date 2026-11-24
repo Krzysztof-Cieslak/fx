@@ -115,7 +115,7 @@ module RemoteActivation =
         fun env ->
             task {
                 match! peer.Activate parameters env.Scope.Cancellation with
-                | Error failure -> return Error("activation failed: " + string failure)
+                | Error failure -> return Error("the process did not activate it: " + string failure)
                 | Ok activated when
                     activated.Manifest.Id <> expected.Id
                     || activated.Manifest.Version <> expected.Version

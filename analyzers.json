@@ -2,13 +2,13 @@
   "scope": [
     {
       "codes": ["AOT*"],
-      "files": ["src/**", "tests/**", "tools/**"],
+      "files": ["src/**", "extensions/**", "tests/**", "tools/**"],
       "reason": "Native AOT rules hold for all hand-written F#, so code can move between tests, tools and the binary."
     },
     {
       "codes": ["EFF*"],
-      "files": ["src/**", "tests/Fx.Analyzers.Tests/Samples/**"],
-      "reason": "No I/O outside Eff is a rule for production code; tests and tools are imperative shells. The samples prove the rules."
+      "files": ["src/**", "extensions/**", "tests/Fx.Analyzers.Tests/Samples/**"],
+      "reason": "No I/O outside Eff is a rule for production code, built-in extensions included; tests and tools are imperative shells. The samples prove the rules."
     }
   ],
   "allow": [

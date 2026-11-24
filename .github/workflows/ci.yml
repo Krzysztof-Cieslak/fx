@@ -39,7 +39,7 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
       - name: Formatting
-        run: dotnet fantomas --check src tests tools
+        run: dotnet fantomas --check src tests tools extensions
 
   analyzers:
     name: Analyzers

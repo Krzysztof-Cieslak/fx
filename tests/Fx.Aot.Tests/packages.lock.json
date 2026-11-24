@@ -99,6 +99,8 @@
           "FSharp.Core": "[11.0.101, )",
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Ext.Sample": "[0.0.0, )",
+          "Fx.Extensions": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Pty": "[0.0.0, )",
@@ -126,6 +128,22 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Effects": "[0.0.0, )"
+        }
+      },
+      "fx.ext.sample": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.extensions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.machines": {
@@ -156,6 +174,15 @@
         }
       },
       "fx.rpc": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.sdk": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
