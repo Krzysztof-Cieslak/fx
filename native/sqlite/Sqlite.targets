@@ -1,0 +1,173 @@
+<Project>
+  <!--
+    Builds the pinned SQLite (Sqlite.props, library.c) for one runtime identifier and wires it in
+    (T006, docs/spikes/sqlite.md). Imported into every project by Directory.Build.targets; it acts on
+    two kinds of projects only:
+
+    - the binding (src/Fx.Sqlite, FxSqliteBinding=true) builds the libraries for its RID (the host's
+      for the usual RID-less build) and copies the shared library to the output of every project that
+      references it, so tests and the JIT side of the JIT-vs-native diff load it;
+    - a Native AOT publish of an executable that references the binding links the static library into
+      the binary (NativeLibrary + DirectPInvoke) and leaves the shared library out of the publish
+      directory: one binary, no system SQLite.
+
+    Both libraries come from the same source and options. The amalgamation is downloaded once and
+    verified; builds are cached under artifacts/native/sqlite/<version>-<build key>/<rid>/, where the
+    key hashes the pin, library.c and this file, so a change to any of them rebuilds. No timestamps
+    are compared, so a CI cache of artifacts/native restores a build as is.
+
+    Compilers: FxSqliteCC, else clang, else gcc on Linux and macOS (as ILCompiler does); MSVC found
+    with vswhere and vcvarsall on Windows (as ILCompiler does). Cross-compiling works where the
+    compiler supports it without a sysroot: another architecture on macOS and Windows. On Linux, set
+    FxSqliteCC to a cross compiler for the target.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)Sqlite.props" />
+
+  <PropertyGroup Label="SQLite build">
+    <FxSqliteCacheDir Condition="'$(FxSqliteCacheDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'native', 'sqlite'))</FxSqliteCacheDir>
+    <FxSqliteArchive Condition="'$(FxSqliteArchive)' == ''">$(FxSqliteCacheDir)$(FxSqliteArchiveName).zip</FxSqliteArchive>
+    <FxSqliteSourceDir>$(FxSqliteCacheDir)$(FxSqliteArchiveName)$([System.IO.Path]::DirectorySeparatorChar)</FxSqliteSourceDir>
+    <FxSqliteLibrarySource>$(MSBuildThisFileDirectory)library.c</FxSqliteLibrarySource>
+    <_FxSqliteLibrarySourceHash>$([MSBuild]::StableStringHash($([System.IO.File]::ReadAllText('$(FxSqliteLibrarySource)')), 'Sha256'))</_FxSqliteLibrarySourceHash>
+    <_FxSqliteTargetsHash>$([MSBuild]::StableStringHash($([System.IO.File]::ReadAllText('$(MSBuildThisFileFullPath)')), 'Sha256'))</_FxSqliteTargetsHash>
+    <FxSqliteBuildKey>$(FxSqliteVersion)-$([MSBuild]::StableStringHash('$(FxSqliteSha256)|$(FxSqliteLibraryName)|$(FxSqliteMacOSMinVersion)|$(_FxSqliteLibrarySourceHash)|$(_FxSqliteTargetsHash)', 'Sha256').Substring(0, 12))</FxSqliteBuildKey>
+
+    <!-- The target: the RID being built or published, else this machine's. -->
+    <FxSqliteRid Condition="'$(FxSqliteRid)' == ''">$(RuntimeIdentifier)</FxSqliteRid>
+    <FxSqliteRid Condition="'$(FxSqliteRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</FxSqliteRid>
+    <_FxSqliteOs>$(FxSqliteRid.Split('-')[0])</_FxSqliteOs>
+    <_FxSqliteArch>$(FxSqliteRid.Substring($([MSBuild]::Add($(FxSqliteRid.LastIndexOf('-')), 1))))</_FxSqliteArch>
+    <_FxSqliteHostArch>$(NETCoreSdkPortableRuntimeIdentifier.Substring($([MSBuild]::Add($(NETCoreSdkPortableRuntimeIdentifier.LastIndexOf('-')), 1))))</_FxSqliteHostArch>
+
+    <FxSqliteOutputDir>$(FxSqliteCacheDir)$(FxSqliteBuildKey)$([System.IO.Path]::DirectorySeparatorChar)$(FxSqliteRid)$([System.IO.Path]::DirectorySeparatorChar)</FxSqliteOutputDir>
+    <FxSqliteStaticFileName Condition="'$(_FxSqliteOs)' == 'win'">$(FxSqliteLibraryName).lib</FxSqliteStaticFileName>
+    <FxSqliteStaticFileName Condition="'$(_FxSqliteOs)' != 'win'">lib$(FxSqliteLibraryName).a</FxSqliteStaticFileName>
+    <FxSqliteSharedFileName Condition="'$(_FxSqliteOs)' == 'win'">$(FxSqliteLibraryName).dll</FxSqliteSharedFileName>
+    <FxSqliteSharedFileName Condition="'$(_FxSqliteOs)' == 'osx'">lib$(FxSqliteLibraryName).dylib</FxSqliteSharedFileName>
+    <FxSqliteSharedFileName Condition="'$(_FxSqliteOs)' != 'win' and '$(_FxSqliteOs)' != 'osx'">lib$(FxSqliteLibraryName).so</FxSqliteSharedFileName>
+    <FxSqliteStaticLibrary>$(FxSqliteOutputDir)static$([System.IO.Path]::DirectorySeparatorChar)$(FxSqliteStaticFileName)</FxSqliteStaticLibrary>
+    <FxSqliteSharedLibrary>$(FxSqliteOutputDir)shared$([System.IO.Path]::DirectorySeparatorChar)$(FxSqliteSharedFileName)</FxSqliteSharedLibrary>
+  </PropertyGroup>
+
+  <!-- The binding: the shared library goes to the output of every project that references it. -->
+  <ItemGroup Condition="'$(FxSqliteBinding)' == 'true'">
+    <None Include="$(FxSqliteSharedLibrary)" Link="$(FxSqliteSharedFileName)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="_FxSqliteBuildForBinding"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="FxSqliteBuildNative"
+          Condition="'$(FxSqliteBinding)' == 'true' and '$(DesignTimeBuild)' != 'true'" />
+
+  <!-- A Native AOT publish: link the static library if the binding is among the assemblies compiled. -->
+  <Target Name="FxSqliteLinkStatic"
+          BeforeTargets="SetupOSSpecificProps"
+          DependsOnTargets="_FxSqliteFindBinding;_FxSqliteLinkStatic"
+          Condition="'$(PublishAot)' == 'true'" />
+
+  <Target Name="_FxSqliteFindBinding">
+    <ItemGroup>
+      <_FxSqliteBindingAssembly Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Fx.Sqlite.dll'" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_FxSqliteLinkStatic Condition="'@(_FxSqliteBindingAssembly)' != ''">true</_FxSqliteLinkStatic>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="_FxSqliteLinkStatic" DependsOnTargets="FxSqliteBuildNative" Condition="'$(_FxSqliteLinkStatic)' == 'true'">
+    <ItemGroup>
+      <DirectPInvoke Include="$(FxSqliteLibraryName)" />
+      <NativeLibrary Include="$(FxSqliteStaticLibrary)" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == '$(FxSqliteSharedFileName)'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Builds both libraries for FxSqliteRid unless the cache has them. Returns their paths. -->
+  <Target Name="FxSqliteBuildNative"
+          DependsOnTargets="_FxSqliteFetch;_FxSqliteCompile"
+          Returns="$(FxSqliteStaticLibrary);$(FxSqliteSharedLibrary)" />
+
+  <Target Name="_FxSqliteFetch" Condition="!Exists('$(FxSqliteSourceDir)verified')">
+    <DownloadFile SourceUrl="$(FxSqliteUrl)" DestinationFolder="$(FxSqliteCacheDir)" DestinationFileName="$(FxSqliteArchiveName).zip" Retries="3" RetryDelayMilliseconds="5000" Condition="!Exists('$(FxSqliteArchive)')" />
+    <GetFileHash Files="$(FxSqliteArchive)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_FxSqliteArchiveHash" />
+    </GetFileHash>
+    <!-- Conditions compare case-insensitively, so the hex case does not matter. -->
+    <Delete Files="$(FxSqliteArchive)" Condition="'$(_FxSqliteArchiveHash)' != '$(FxSqliteSha256)'" />
+    <Error Condition="'$(_FxSqliteArchiveHash)' != '$(FxSqliteSha256)'" Text="$(FxSqliteUrl) has SHA-256 $(_FxSqliteArchiveHash), but native/sqlite/Sqlite.props pins $(FxSqliteSha256). The download was deleted." />
+    <Unzip SourceFiles="$(FxSqliteArchive)" DestinationFolder="$(FxSqliteCacheDir)" OverwriteReadOnlyFiles="true" />
+    <Touch Files="$(FxSqliteSourceDir)verified" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="_FxSqliteCompile" Condition="!Exists('$(FxSqliteStaticLibrary)') or !Exists('$(FxSqliteSharedLibrary)')">
+    <PropertyGroup>
+      <!-- A fresh directory per build; the results are moved into place, so concurrent builds never see half a library. -->
+      <_FxSqliteWork>$(FxSqliteOutputDir)work-$([System.Guid]::NewGuid().ToString('N'))$([System.IO.Path]::DirectorySeparatorChar)</_FxSqliteWork>
+      <_FxSqliteMacOSArch Condition="'$(_FxSqliteArch)' == 'x64'">x86_64</_FxSqliteMacOSArch>
+      <_FxSqliteMacOSArch Condition="'$(_FxSqliteArch)' == 'arm64'">arm64</_FxSqliteMacOSArch>
+    </PropertyGroup>
+
+    <Error Condition="'$(_FxSqliteOs)' != 'linux' and '$(_FxSqliteOs)' != 'osx' and '$(_FxSqliteOs)' != 'win'" Text="Building SQLite for '$(FxSqliteRid)' is not supported: use a linux-*, osx-* or win-* runtime identifier." />
+    <Error Condition="'$(_FxSqliteOs)' == 'linux' and '$(FxSqliteCC)' == '' and ('$(_FxSqliteArch)' != '$(_FxSqliteHostArch)' or $(FxSqliteRid.Contains('-musl-')) != $(NETCoreSdkPortableRuntimeIdentifier.Contains('-musl-')))"
+           Text="Building SQLite for $(FxSqliteRid) on $(NETCoreSdkPortableRuntimeIdentifier) needs a cross compiler: set FxSqliteCC." />
+
+    <MakeDir Directories="$(_FxSqliteWork)static;$(_FxSqliteWork)shared;$(FxSqliteOutputDir)static;$(FxSqliteOutputDir)shared" />
+
+    <PropertyGroup Condition="'$(_FxSqliteOs)' != 'win'">
+      <_FxSqliteTarget Condition="'$(_FxSqliteOs)' == 'osx'">--target=$(_FxSqliteMacOSArch)-apple-macos$(FxSqliteMacOSMinVersion)</_FxSqliteTarget>
+      <_FxSqliteShared Condition="'$(_FxSqliteOs)' == 'osx'">-dynamiclib -install_name @rpath/$(FxSqliteSharedFileName)</_FxSqliteShared>
+      <_FxSqliteShared Condition="'$(_FxSqliteOs)' != 'osx'">-shared -pthread</_FxSqliteShared>
+      <!-- GNU ar: D writes no timestamps or owners. Apple's ar has no D; ZERO_AR_DATE does the same. -->
+      <_FxSqliteArchiver Condition="'$(_FxSqliteOs)' == 'osx'">ZERO_AR_DATE=1 ar rcs</_FxSqliteArchiver>
+      <_FxSqliteArchiver Condition="'$(_FxSqliteOs)' != 'osx'">ar rcsD</_FxSqliteArchiver>
+      <_FxSqliteUnixCommand><![CDATA[
+set -e
+cc="$(FxSqliteCC)"
+if [ -z "$cc" ]; then
+  for candidate in clang gcc; do
+    if command -v "$candidate" >/dev/null 2>&1; then cc="$candidate"; break; fi
+  done
+fi
+if [ -z "$cc" ]; then echo "error: no C compiler: install clang or gcc, or set FxSqliteCC" >&2; exit 1; fi
+echo "Compiling SQLite $(FxSqliteVersion) for $(FxSqliteRid) with $cc"
+$cc $(_FxSqliteTarget) -O2 -fPIC -ffunction-sections -fdata-sections -DNDEBUG -I"$(FxSqliteSourceDir)." -c "$(FxSqliteLibrarySource)" -o "$(_FxSqliteWork)library.o"
+$(_FxSqliteArchiver) "$(_FxSqliteWork)static/$(FxSqliteStaticFileName)" "$(_FxSqliteWork)library.o"
+$cc $(_FxSqliteTarget) $(_FxSqliteShared) -o "$(_FxSqliteWork)shared/$(FxSqliteSharedFileName)" "$(_FxSqliteWork)library.o" -lm
+]]></_FxSqliteUnixCommand>
+    </PropertyGroup>
+    <Exec Condition="'$(_FxSqliteOs)' != 'win'" Command="$(_FxSqliteUnixCommand)" IgnoreStandardErrorWarningFormat="true" />
+
+    <PropertyGroup Condition="'$(_FxSqliteOs)' == 'win'">
+      <_FxSqliteVSWhere>$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))\Microsoft Visual Studio\Installer\vswhere.exe</_FxSqliteVSWhere>
+      <_FxSqliteVCComponent Condition="'$(_FxSqliteArch)' == 'arm64'">ARM64</_FxSqliteVCComponent>
+      <_FxSqliteVCComponent Condition="'$(_FxSqliteArch)' != 'arm64'">x86.x64</_FxSqliteVCComponent>
+      <_FxSqliteVCHost>$(_FxSqliteHostArch.Replace('x64', 'amd64'))</_FxSqliteVCHost>
+      <_FxSqliteVCTarget>$(_FxSqliteArch.Replace('x64', 'amd64'))</_FxSqliteVCTarget>
+      <_FxSqliteVCEnvironment>$(_FxSqliteVCHost)_$(_FxSqliteVCTarget)</_FxSqliteVCEnvironment>
+      <_FxSqliteVCEnvironment Condition="'$(_FxSqliteVCHost)' == '$(_FxSqliteVCTarget)'">$(_FxSqliteVCHost)</_FxSqliteVCEnvironment>
+      <!-- /MT: the static C runtime, which Native AOT links (with the UCRT made dynamic); /Gy /Gw let the linker drop unused code. -->
+      <_FxSqliteCl>cl /nologo /c /O2 /Gy /Gw /MT /DNDEBUG /Brepro /I"$(FxSqliteSourceDir)."</_FxSqliteCl>
+      <_FxSqliteWindowsCommand><![CDATA[
+setlocal
+set "VSDIR="
+for /f "usebackq delims=" %%i in (`"$(_FxSqliteVSWhere)" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.$(_FxSqliteVCComponent) -property installationPath`) do set "VSDIR=%%i"
+if not defined VSDIR (
+  echo error: Visual Studio with the C++ tools for $(_FxSqliteArch) not found ^(vswhere: Microsoft.VisualStudio.Component.VC.Tools.$(_FxSqliteVCComponent)^) 1>&2
+  exit /b 1
+)
+call "%VSDIR%\VC\Auxiliary\Build\vcvarsall.bat" $(_FxSqliteVCEnvironment) >NUL || exit /b 1
+echo Compiling SQLite $(FxSqliteVersion) for $(FxSqliteRid) with MSVC ^($(_FxSqliteVCEnvironment)^)
+$(_FxSqliteCl) /Fo"$(_FxSqliteWork)static\library.obj" "$(FxSqliteLibrarySource)" || exit /b 1
+lib /nologo /Brepro /OUT:"$(_FxSqliteWork)static\$(FxSqliteStaticFileName)" "$(_FxSqliteWork)static\library.obj" || exit /b 1
+$(_FxSqliteCl) "/DSQLITE_API=__declspec(dllexport)" /Fo"$(_FxSqliteWork)shared\library.obj" "$(FxSqliteLibrarySource)" || exit /b 1
+link /nologo /Brepro /DLL /OUT:"$(_FxSqliteWork)shared\$(FxSqliteSharedFileName)" "$(_FxSqliteWork)shared\library.obj" || exit /b 1
+]]></_FxSqliteWindowsCommand>
+    </PropertyGroup>
+    <Error Condition="'$(_FxSqliteOs)' == 'win' and !Exists('$(_FxSqliteVSWhere)')" Text="vswhere.exe not found at '$(_FxSqliteVSWhere)': building SQLite needs Visual Studio (or the Build Tools) with the C++ workload, as Native AOT does." />
+    <Exec Condition="'$(_FxSqliteOs)' == 'win'" Command="$(_FxSqliteWindowsCommand)" IgnoreStandardErrorWarningFormat="true" />
+
+    <Move SourceFiles="$(_FxSqliteWork)static$([System.IO.Path]::DirectorySeparatorChar)$(FxSqliteStaticFileName);$(_FxSqliteWork)shared$([System.IO.Path]::DirectorySeparatorChar)$(FxSqliteSharedFileName)"
+          DestinationFiles="$(FxSqliteStaticLibrary);$(FxSqliteSharedLibrary)" />
+    <RemoveDir Directories="$(_FxSqliteWork)" />
+  </Target>
+</Project>

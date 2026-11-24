@@ -8,4 +8,10 @@
           Condition="'$(FxNativeAot)' == 'true' and '$(RuntimeIdentifier)' == ''">
     <Error Text="$(MSBuildProjectName) is published with Native AOT only: pass a runtime identifier, e.g. dotnet publish -r linux-x64." />
   </Target>
+
+  <!--
+    The pinned SQLite (native/sqlite, docs/spikes/sqlite.md): built for src/Fx.Sqlite and copied next
+    to whatever references it; linked statically into a Native AOT executable that references it.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)native/sqlite/Sqlite.targets" />
 </Project>

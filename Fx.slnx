@@ -16,6 +16,11 @@
     <Project Path="src/Fx.Machines/Fx.Machines.fsproj" />
     <Project Path="src/Fx.Machines.Host/Fx.Machines.Host.fsproj" />
   </Folder>
+  <Folder Name="/native/sqlite/">
+    <File Path="native/sqlite/Sqlite.props" />
+    <File Path="native/sqlite/Sqlite.targets" />
+    <File Path="native/sqlite/library.c" />
+  </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
     <Project Path="tools/Fx.Analyzers/Fx.Analyzers.fsproj" />
