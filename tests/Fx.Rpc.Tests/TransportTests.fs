@@ -116,6 +116,54 @@ let childProcess () : Task<Link> =
                     }
         }
 
+/// The same child, started through the shell capability (`LocalShell`): its standard input and
+/// output are a `Proc`, wrapped by `ProcTransport`, as the process runtime of extensions does (T108).
+let shellChildProcess () : Task<Link> =
+    task {
+        let info = Peer.startInfo ()
+        let shell = LocalShell.create (LocalShell.defaultShell ()) AppContext.BaseDirectory
+
+        let! spawned =
+            shell.Spawn
+                {
+                    Program = Exec(info.FileName, List.ofSeq info.ArgumentList)
+                    Cwd = None
+                    Env = Inherit []
+                }
+                CancellationToken.None
+
+        let proc =
+            match spawned with
+            | Ok proc -> proc
+            | Error e -> failtest (string e)
+
+        let transport =
+            ProcTransport.create (ConnectionLimits.frames clientLimits) proc ignore
+
+        return
+            {
+                Transport = transport
+                Crash =
+                    fun () ->
+                        task {
+                            do! proc.Kill()
+                            let! _ = proc.Wait CancellationToken.None
+                            ()
+                        }
+                Dispose =
+                    fun () ->
+                        task {
+                            transport.Abort()
+
+                            try
+                                let! _ = proc.Wait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds 10.0)
+                                ()
+                            with _ ->
+                                do! proc.Kill()
+                        }
+            }
+    }
+
 let private token = "rpc-tests-token-0123456789-abcdefghijk"
 
 /// `TestService` over WebSocket on a Kestrel listener, reached with `LocalClient`.
@@ -224,6 +272,7 @@ let conformance =
             RpcConformance.tests "in-process" inProcess
             RpcConformance.tests "stream over pipes" memoryPipes
             RpcConformance.tests "stdio child process" childProcess
+            RpcConformance.tests "child process through the shell capability" shellChildProcess
             RpcConformance.tests "websocket" webSocket
             RpcConformance.tests "websocket over a unix socket" webSocketUnix
         ]

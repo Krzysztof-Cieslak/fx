@@ -24,7 +24,7 @@ extension protocols (over stdio), and embedded mode (in process, spec §3). Task
 | `Frames.fs` | `Frame`, `Received`, `TransportError`; channel frame layout; the stream framing |
 | `Transport.fs` | The `Transport` record |
 | `Queues.fs` | The bounded queue every buffer uses, and a task group |
-| `InProcess.fs`, `StreamTransport.fs`, `WebSocketTransport.fs` | The transports |
+| `InProcess.fs`, `StreamTransport.fs`, `ProcTransport.fs`, `WebSocketTransport.fs` | The transports |
 | `Channels.fs` | `Channel` (credit flow control) and the per-connection channel table |
 | `Connection.fs` | `ConnectionLimits`, `Peer` (the engine: reading, dispatching, writing, closing) |
 | `Rpc.fs` | `Handler`, `Service`, `CallOptions` and the typed `Eff` API (`Rpc.connect`, `accept`, `call`, `notify`, channels) |
@@ -219,6 +219,7 @@ connection's limits: `ConnectionLimits.frames`.
 |---|---|---|
 | `InProcess.pair` | none: frames are passed as values | Embedded mode and tests |
 | `StreamTransport.create` | NDJSON lines + zero-byte-prefixed binary frames | stdio, pipes, sockets; owns the streams |
+| `ProcTransport.create` | the stream framing | a child's stdin and stdout as a `Proc` from the shell capability (`Shell.spawn`), so a fake process works too; its stderr goes to a sink. Closing closes the child's stdin; it never kills the child (T108's process runtime does) |
 | `WebSocketTransport.create` | text messages for JSON, binary messages for channel frames | Server: `LocalServer.Endpoint.webSocket` selecting `Protocol.webSocketSubprotocol`; client: `LocalClient.connectWebSocket` |
 
 - **In process, frames are serialized.** The connection always writes JSON text, and the in-process
@@ -267,8 +268,9 @@ connection's limits: `ConnectionLimits.frames`.
   pending-request slots and `Overloaded`, large messages and both size limits, channels (echo, server
   opened, slow reader, reset, limits and multiplexing), malformed input answered as JSON-RPC says,
   oversized frames, a crashed peer, closing, and a peer that closes its output. It runs over in-process,
-  stream over in-memory pipes, a child process on stdio, and WebSocket over loopback and a Unix socket.
-  T108's transport-parity harness reuses it: link the file and the test service.
+  stream over in-memory pipes, a child process on stdio (started directly, and through `LocalShell`
+  with `ProcTransport`), and WebSocket over loopback and a Unix socket. T108's transport-parity suite
+  (`docs/modules/extensions.md`) follows the same pattern for extensions.
 - The test service (`TestService`) and the child peer live in `tests/aot/Fx.Aot.Scenarios`
   (`Scenarios/Rpc/`): `Fx.Aot.Scenarios rpc-peer` serves it on stdio, so the same program is the child
   on the JIT and natively.
