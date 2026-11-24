@@ -3,9 +3,10 @@ id: 01M87TQPA0T7NSQRH0GF3Y9SEG
 anchor: '@file'
 created: 2026-11-24T22:27:30Z
 norm: '1'
-sig: 748043cac81fd8e0
-body_hash: f0e3350d56a85d93
-raw_hash: a0fee062ba0e22c5
+sig: 2f93e74691977137
+body_hash: 0239c66179989b00
+raw_hash: 3b4d75795704c7da
+vouched: 2026-11-24T23:57:42Z
 lines: 1-319
 ---
 
