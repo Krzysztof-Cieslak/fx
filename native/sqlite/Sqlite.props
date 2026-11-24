@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    The pinned SQLite (T006, docs/spikes/sqlite.md). The amalgamation is downloaded from sqlite.org,
+    checked against the SHA-256 below and compiled by Sqlite.targets with the options in library.c.
+
+    To bump: take the version, release year and SHA3-256 from the CSV comment in the source of
+    https://www.sqlite.org/download.html, download the zip, check its SHA3-256 against that page, then
+    record its SHA-256 (MSBuild verifies SHA-256 only) and the SQLITE_VERSION_NUMBER and
+    SQLITE_SOURCE_ID from its sqlite3.h. The tests fail when the loaded library differs from the pin.
+  -->
+  <PropertyGroup Label="SQLite pin">
+    <FxSqliteVersion>3.54.1</FxSqliteVersion>
+    <FxSqliteVersionNumber>3054001</FxSqliteVersionNumber>
+    <FxSqliteSourceId>2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76</FxSqliteSourceId>
+    <FxSqliteArchiveName>sqlite-amalgamation-3540100</FxSqliteArchiveName>
+    <FxSqliteUrl>https://www.sqlite.org/2026/$(FxSqliteArchiveName).zip</FxSqliteUrl>
+    <FxSqliteSha256>0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9</FxSqliteSha256>
+    <!-- What sqlite.org publishes for the zip; kept to cross-check a bump. -->
+    <FxSqliteSha3>92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30</FxSqliteSha3>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SQLite library">
+    <!--
+      The DllImport name. Unique, so that the JIT can never pick up a system SQLite instead (DllImport
+      probes the system paths after the application directory). Native AOT links the static library
+      and binds this name at link time (DirectPInvoke).
+    -->
+    <FxSqliteLibraryName>Fx.Sqlite.Native</FxSqliteLibraryName>
+    <!-- Keep in step with AppleMinOSVersion for osx in the ILCompiler targets of the pinned SDK. -->
+    <FxSqliteMacOSMinVersion>14.0</FxSqliteMacOSMinVersion>
+  </PropertyGroup>
+</Project>
