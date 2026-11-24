@@ -13,5 +13,8 @@
     <Compile Include="Issue.fs" />
     <Compile Include="Validation.fs" />
     <Compile Include="Schema.fs" />
+    <Compile Include="Preview.fs" />
+    <Compile Include="Codec.fs" />
+    <Compile Include="Codecs.fs" />
   </ItemGroup>
 </Project>

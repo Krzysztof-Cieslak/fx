@@ -93,7 +93,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - defects → exceptions;
   - never use exceptions for control flow.
 - **Values, not magic**: build things from records, discriminated unions and combinators. No metaclass-style tricks, no runtime reflection.
-- **Codecs**: write them by hand with combinators (`Codec.record`, `Codec.union`, …). A single codec yields the schema, encoding, validated decoding and the preview.
+- **Codecs**: write them by hand with combinators (`Codec.record`, `Codec.union`, …). A single codec yields the schema, encoding, validated decoding and the preview. Use our JSON (`Fx.Contracts`), never System.Text.Json; hash only `Json.serializeCanonical` output. See [docs/modules/contracts.md](docs/modules/contracts.md).
 - **Configurable behaviour** must be read through `IVariants`. Never read configuration ad hoc, because it has to be recorded and replayable.
 
 **Effects and capabilities** (module spec: [`docs/modules/eff.md`](docs/modules/eff.md))
@@ -218,6 +218,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
+| Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
@@ -235,6 +236,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `Directory.Build.targets` | Rejects a Native AOT publish without a runtime identifier |
 | `Directory.Packages.props` | Central package versions |
 | `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
+| `src/Fx.Contracts` | JSON, `Schema`, `Validation`, `Preview` and the `Codec` combinators (spec §4.1; Fable-compatible) |
 | `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
@@ -252,6 +254,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md) |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.

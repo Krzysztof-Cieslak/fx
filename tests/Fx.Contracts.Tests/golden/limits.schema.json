@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "maxChars": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxItems": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxDepth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxStringChars": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "maxChars",
+    "maxItems",
+    "maxDepth",
+    "maxStringChars"
+  ],
+  "description": "Bounds for a preview."
+}

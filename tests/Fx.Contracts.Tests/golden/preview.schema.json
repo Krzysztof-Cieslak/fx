@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "text",
+    "truncated"
+  ],
+  "description": "A bounded rendering of a value; truncated when something was left out."
+}
