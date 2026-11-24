@@ -126,6 +126,14 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Actors continue on the sender's thread. Never block a thread on an actor's reply inside a continuation.
 - Test with `InMemoryEventLog` and `FakeClock`: the same inputs must give the same log. A new event store passes `EventLogConformance`.
 
+**Event and blob stores** (module spec: [`docs/modules/store.md`](docs/modules/store.md))
+- Stores keep `Payload`s (canonical JSON plus a schema version); type a log with `EventLog.typed schema`. An `EventSchema` is a codec plus upcasters from every older version.
+  - Committed events are never rewritten: change an event's JSON only through a new schema version and a pure upcaster, and keep a test that reads what the old version wrote.
+  - A stream never holds two commits with one idempotency key: a retried append gets `Duplicate` with the first commit.
+- Snapshots are caches of a fold, versioned by their `SnapshotSchema`. Bump the version when the state's shape or `Evolve` changes; old snapshots are then ignored and rebuilt from the log.
+- Events stay small (at most 1 MiB of JSON): put large content in the blob store and keep the `BlobRef` in the event.
+- Composition roots open `SqliteEventStore` and `FileBlobStore` (Fx.Store.Live) with absolute paths and a `Durability`; everything else gets `EventLog`, `SnapshotStore` or `IBlobs` values. Tests use `InMemoryEventLog`, `InMemorySnapshots` and `InMemoryBlobs`; a new store passes the conformance suites in `tests/Fx.Store.Tests/Conformance`.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -137,7 +145,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - pass `RequestDelegate` values only (wrap lambdas: `RequestDelegate(fun ctx -> ...)`). Overloads taking a `Delegate` (`MapGet("/", fun () -> ...)`) go through `RequestDelegateFactory`;
   - never use the JSON helpers (`Results.Json`, `TypedResults.Ok<T>`, `WriteAsJsonAsync`, `ReadFromJsonAsync`) or configuration binding; use our codecs;
   - replace the default `IHostLifetime` (`ConsoleLifetime`, registered even by the empty builder) with a no-op one: it takes over Ctrl+C and SIGTERM, which belong to the entry point.
-- Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through `src/Fx.Sqlite` (details in [`docs/spikes/sqlite.md`](docs/spikes/sqlite.md)).
+- Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through `src/Fx.Sqlite` (details in [`docs/spikes/sqlite.md`](docs/spikes/sqlite.md)), and only in storage interpreters (`EFF009`).
 - Native libraries (SQLite today) are built from pinned, digest-checked sources under `native/<library>/` by MSBuild, never taken from the system. `native/sqlite/Sqlite.targets` is the pattern:
   - one source, two outputs: a static library that a Native AOT publish links in (`NativeLibrary` + `DirectPInvoke`, so the binary stays a single file) and a shared library copied next to every project that references the binding, for the JIT (tests and the JIT side of the diff);
   - give the library a name no system library has (`Fx.Sqlite.Native`): `DllImport` falls back to system paths;
@@ -227,6 +235,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
 | Eff benchmark | `dotnet run -c Release --project tools/Fx.Effects.Bench` (results in `docs/modules/eff.md`) |
+| Store benchmark | `dotnet run -c Release --project tools/Fx.Store.Bench` (results in `docs/modules/store.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
@@ -260,15 +269,19 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Machines` | The `Machine` type, its pure helpers, and what is sent to and from actors (Fable-compatible: FSharp.Core only, checked by a test; spec in [`docs/modules/machines.md`](docs/modules/machines.md)) |
 | `src/Fx.Machines.Host` | The machine host: the event-log abstraction and the in-memory log, actors, the actor registry and process managers |
 | `src/Fx.Sqlite` | The SQLite binding: blittable DllImports, connections, cached prepared statements, transactions, WAL, errors as results. An imperative shell for storage interpreters and composition roots |
+| `src/Fx.Store` | Typed events (`Payload`, `EventSchema`, upcasters, `EventLog.typed`), snapshots and projections, the `IBlobs` capability, envelope codecs, and the in-memory fakes (pure; spec in [`docs/modules/store.md`](docs/modules/store.md)) |
+| `src/Fx.Store.Live` | The real stores: `SqliteEventStore` (event log and snapshots in SQLite) and `FileBlobStore` (content-addressed files with a SQLite index); referenced only by composition roots |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
 | `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
+| `tests/support` | Programs that tests start as child processes (not test projects), e.g. `Fx.Store.Writer`, which the crash tests kill mid-append. A test project references one to get its apphost next to its own output |
 | `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
 | `scripts/` | Repository tooling (Bun) |
 | `tools/` | Repository tooling in F#: JIT-only, never shipped. Tested by `tests/<Tool>.Tests` |
 | `tools/Fx.Analyzers` | Our F# analyzers ([Analyzers](#analyzers)) |
 | `tools/Fx.Effects.Bench` | Micro-benchmark of the `eff` builder (a measurement, so no test project) |
+| `tools/Fx.Store.Bench` | Throughput and latency of the event and blob stores (a measurement, so no test project) |
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
@@ -294,6 +307,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `EFF006` | processes: `Process`, `SafeProcessHandle`, custom process creation (`UnixProcessStartArguments`, `WindowsProcessStartArguments`) | `src/` |
 | `EFF007` | network and IPC: `HttpClient`, sockets, `Dns`, `ClientWebSocket`, pipes, … | `src/` |
 | `EFF008` | native code: calls to P/Invoke functions (`extern` with `[<DllImport>]`), which can do any I/O out of sight of the other rules | `src/` |
+| `EFF009` | SQLite: any use of `Fx.Sqlite` (its file I/O happens in native code, which `EFF004` cannot see) | `src/` |
 
 - **Allowed**:
   - interpolation without printf specifiers, including .NET formats and alignment (`{x:N2}`, `{x,5}`);
@@ -306,9 +320,9 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 - **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
   - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.
-  - Known gap: the EFF rules do not see P/Invoke, so the file I/O SQLite does for `src/Fx.Sqlite` needs no entry. Reference `Fx.Sqlite` only from storage interpreters (the event and blob stores, T105) and composition roots, never from the pure core; ban its APIs elsewhere once the first store lands.
+  - SQLite's file I/O happens in native code that `EFF004` cannot see, so `EFF009` bans the SQLite binding as a whole. Its allow entries are the binding itself (with `EFF008` for its P/Invokes), the storage interpreters (`src/Fx.Store.Live`, one entry per store) and `fx --build-info`. A new store gets its own entry; the pure core never references `Fx.Sqlite`.
   - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same; ban those APIs once the network capability exists (T103, T107).
   - Tests check that every glob in `analyzers.json` still matches a file.
   - The analyzers cannot read code that uses F# `fixed` (the compiler service fails on it, and the run fails). Pin with a pinned-object-heap array (`GC.AllocateArray(n, pinned = true)`) or a `GCHandle` instead.
-- **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
+- **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. A sample that needs types from our own projects `#load`s a stand-in from `Samples/Support/` that calls nothing (scripts cannot declare namespaces, and the projects may not be built), as `Eff009Storage.fsx` does. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
 - **Upgrading**: the analyzers run inside the `fsharp-analyzers` tool, which loads only analyzers built against its own SDK version and shares its FSharp.Core. Upgrade `FSharp.Analyzers.SDK` and `AnalyzersFSharpCoreVersion` (both in `Directory.Packages.props`) together with the tool in `dotnet-tools.json`.

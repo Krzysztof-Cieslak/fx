@@ -104,6 +104,8 @@ module Clock =
 
 `IFs` inherits `IFsRead`. An environment that implements only `IFsRead` is the read-only attenuation of one that implements `IFs`.
 
+The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)).
+
 ### Decisions
 
 - **Time.**
@@ -134,7 +136,6 @@ module Clock =
 | Capability | Task |
 |---|---|
 | `IVariants` | T106 |
-| `IBlobs` | T105 |
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
 | `IComponents` | T110 |
 | `IPackages`, extension contributions | T108 |
