@@ -136,6 +136,15 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Events stay small (at most 1 MiB of JSON): put large content in the blob store and keep the `BlobRef` in the event.
 - Composition roots open `SqliteEventStore` and `FileBlobStore` (Fx.Store.Live) with absolute paths and a `Durability`; everything else gets `EventLog`, `SnapshotStore` or `IBlobs` values. Tests use `InMemoryEventLog`, `InMemorySnapshots` and `InMemoryBlobs`; a new store passes the conformance suites in `tests/Fx.Store.Tests/Conformance`.
 
+**JSON-RPC** (module spec: [`docs/modules/rpc.md`](docs/modules/rpc.md))
+- Define each method once, as a value with codecs (`Method.define`, `Method.withErrors`, `Notification.define`), and build both the handler (`Handler.request`) and the call (`Rpc.call`) from it.
+  - A method's typed errors are its expected failures (`Error` in the handler, `CallError.Failed` at the caller). An exception is a defect: the peer gets `InternalError` with the exception's type, never its message.
+  - Method names follow `Protocol.checkMethodName`: `rpc.` and `$/` are reserved. Extension methods are `Protocol.ownExtensionMethod "group/name"` and `_meta` keys are `Protocol.metaKey "name"`; never write the namespace by hand.
+- Transports wrap streams and sockets that a composition root opened (`StreamTransport`, `WebSocketTransport`, `LocalClient`); `src/Fx.Rpc` does no I/O of its own. Nothing else may write to a stream that carries the protocol: no logging on stdout.
+- A notification handler blocks the ones after it: never wait in it for a call to the same peer.
+- Bulk data goes over binary channels, not in JSON messages.
+- A new transport passes the conformance suite (`RpcConformance.tests` in `tests/Fx.Rpc.Tests`).
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -267,16 +276,17 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
 | `src/Fx.Pty` | Processes on pseudo-terminals (PTY on Linux and macOS, ConPTY on Windows) behind the `Terminal` capability shape; findings in [`docs/spikes/pty.md`](docs/spikes/pty.md) |
-| `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18) |
+| `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18), and `LocalClient`, the WebSocket client that dials it |
 | `src/Fx.Machines` | The `Machine` type, its pure helpers, and what is sent to and from actors (Fable-compatible: FSharp.Core only, checked by a test; spec in [`docs/modules/machines.md`](docs/modules/machines.md)) |
 | `src/Fx.Machines.Host` | The machine host: the event-log abstraction and the in-memory log, actors, the actor registry and process managers |
+| `src/Fx.Rpc` | Our JSON-RPC 2.0 (spec §17): typed methods, the connection engine, binary channels with credit flow control, the `initialize` handshake, and the in-process, stream (stdio) and WebSocket transports (spec in [`docs/modules/rpc.md`](docs/modules/rpc.md)) |
 | `src/Fx.Sqlite` | The SQLite binding: blittable DllImports, connections, cached prepared statements, transactions, WAL, errors as results. An imperative shell for storage interpreters and composition roots |
 | `src/Fx.Store` | Typed events (`Payload`, `EventSchema`, upcasters, `EventLog.typed`), snapshots and projections, the `IBlobs` capability, envelope codecs, and the in-memory fakes (pure; spec in [`docs/modules/store.md`](docs/modules/store.md)) |
 | `src/Fx.Store.Live` | The real stores: `SqliteEventStore` (event log and snapshots in SQLite) and `FileBlobStore` (content-addressed files with a SQLite index); referenced only by composition roots |
 | `src/Fx.Variants` | Variant slots, the slot registry, resolution of config layers under policies, profiles and their ids, the `IVariants` capability with recording and replay, eval matrices, the core's slots and `FakeVariants` (pure; references only Contracts and Effects, so the SDK can expose it; spec in [`docs/modules/variants.md`](docs/modules/variants.md)) |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
-| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
+| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff; also the JSON-RPC test service and its child-process peer (`Fx.Aot.Scenarios rpc-peer`), which `tests/Fx.Rpc.Tests` uses |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
 | `tests/support` | Programs that tests start as child processes (not test projects), e.g. `Fx.Store.Writer`, which the crash tests kill mid-append. A test project references one to get its apphost next to its own output |
 | `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
@@ -288,7 +298,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
-| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md) |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md) |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
@@ -324,7 +334,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
   - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.
   - SQLite's file I/O happens in native code that `EFF004` cannot see, so `EFF009` bans the SQLite binding as a whole. Its allow entries are the binding itself (with `EFF008` for its P/Invokes), the storage interpreters (`src/Fx.Store.Live`, one entry per store) and `fx --build-info`. A new store gets its own entry; the pure core never references `Fx.Sqlite`.
-  - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same; ban those APIs once the network capability exists (T103, T107).
+  - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same. Banning them needs a sample that references ASP.NET Core, which the script samples cannot do. Outgoing connections are covered: `src/Fx.Transport.Http/LocalClient.fs` is the one allowed dialer.
   - Tests check that every glob in `analyzers.json` still matches a file.
   - The analyzers cannot read code that uses F# `fixed` (the compiler service fails on it, and the run fails). Pin with a pinned-object-heap array (`GC.AllocateArray(n, pinned = true)`) or a `GCHandle` instead.
 - **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. A sample that needs types from our own projects `#load`s a stand-in from `Samples/Support/` that calls nothing (scripts cannot declare namespaces, and the projects may not be built), as `Eff009Storage.fsx` does. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
