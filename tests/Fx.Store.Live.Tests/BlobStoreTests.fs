@@ -79,9 +79,11 @@ let tests =
             }
 
             test "blob paths longer than Windows' 260 characters work" {
+                // Between 200 and 240 characters: the index's path stays under 260, which SQLite needs on
+                // Windows, while blob paths (75 more) go over it.
                 let mutable root = Scratch.directory ()
 
-                while root.Length < 220 do
+                while root.Length < 200 do
                     root <- Path.Combine(root, String('d', 40))
 
                 use store = openBlobs root
