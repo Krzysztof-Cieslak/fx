@@ -107,6 +107,21 @@ let tests =
                 Expect.equal error.Code ErrorCode.ReadOnly "read-only"
             }
 
+            test "URI names open with query parameters" {
+                use dir = new TempDir()
+                let path = dir.File "uri.db"
+
+                do
+                    use db = openFile path
+                    exec db "CREATE TABLE t (x); INSERT INTO t VALUES (1)"
+
+                let uri = "file:" + path.Replace('\\', '/') + "?mode=ro"
+                use db = Database.connect uri { OpenOptions.defaults with Uri = true } |> ok "uri"
+                Expect.equal (scalar db "SELECT x FROM t" []) 1L "read"
+                let error = Database.execute db "INSERT INTO t VALUES (2)" [] |> failed "mode=ro"
+                Expect.equal error.Code ErrorCode.ReadOnly "read-only by URI"
+            }
+
             test "misuse is a defect" {
                 use db = Database.memory ()
 
