@@ -143,8 +143,12 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - give the library a name no system library has (`Fx.Sqlite.Native`): `DllImport` falls back to system paths;
   - builds are cached in `artifacts/native/` under a key that hashes their inputs, never compared by timestamp.
 - P/Invoke: blittable `DllImport` signatures only (pointers, `nativeint`, numbers; text as UTF-8 bytes you encode), with `[<assembly: DisableRuntimeMarshalling>]` so a signature that needs marshalling fails on the JIT too.
-  - Never call a variadic C function (e.g. `sqlite3_db_config`) through `DllImport`: variadic arguments go on the stack on Apple arm64. Add a fixed-arity C shim next to the library's sources.
+  - Never call a variadic C function (e.g. `sqlite3_db_config`) through `DllImport`: variadic arguments go on the stack on Apple arm64. Add a fixed-arity C shim next to the library's sources, or declare the variadic arguments exactly as the platform passes them (see `Posix.ioctl` in `src/Fx.Pty`).
   - Pin arrays with a `GCHandle` (`Native.pinned` in `src/Fx.Sqlite`), not `use p = fixed array`: the analyzers' typed-tree walk throws on `fixed`.
+- Native interop and processes (details in [`docs/spikes/pty.md`](docs/spikes/pty.md)); `src/Fx.Pty` follows these rules:
+  - never run managed code between `fork` and `exec`. Create processes that `Process.Start` cannot express with `posix_spawn` from .NET 11's `UnixProcessStartArguments.Start` callback (`WindowsProcessStartArguments.Start` and `CreateProcessW` on Windows): .NET still resolves the program, builds `argv`/`envp` and reaps the child;
+  - P/Invoke signatures use only `int`, `int16`, `nativeint`, `unativeint` and pointers as `nativeint` (`BOOL` as `int`); write structures into zeroed native memory at fixed offsets. Keep the constants that differ per OS in one table per OS;
+  - open descriptors and handles non-inheritable at creation (`O_CLOEXEC`), never "then mark them": another thread may start a process in between.
 - Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
@@ -228,6 +232,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
 | Native libraries | Built by `dotnet build` and `dotnet publish` (no separate step) into `artifacts/native/`. Needs a C compiler, as Native AOT does: clang or gcc on Linux and macOS (`FxSqliteCC` overrides), Visual Studio or the Build Tools with the C++ workload on Windows. The first build downloads the pinned sources; offline, pass `-p:FxSqliteArchive=<zip>` |
+| PTY probe | `dotnet build src/Fx.Pty -c Release`, then `dotnet fsi docs/spikes/pty-probe/probe.fsx`; CI runs it on every target when `src/Fx.Pty` or the probe changes (`pty-probe.yml`) |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
@@ -250,6 +255,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
+| `src/Fx.Pty` | Processes on pseudo-terminals (PTY on Linux and macOS, ConPTY on Windows) behind the `Terminal` capability shape; findings in [`docs/spikes/pty.md`](docs/spikes/pty.md) |
 | `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18) |
 | `src/Fx.Machines` | The `Machine` type, its pure helpers, and what is sent to and from actors (Fable-compatible: FSharp.Core only, checked by a test; spec in [`docs/modules/machines.md`](docs/modules/machines.md)) |
 | `src/Fx.Machines.Host` | The machine host: the event-log abstraction and the in-memory log, actors, the actor registry and process managers |

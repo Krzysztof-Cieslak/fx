@@ -122,7 +122,7 @@ module Clock =
   - Standard input is always closed after `Run` writes it, so programs that read it never hang.
   - Output is pumped into one bounded channel, so reading one stream never blocks the other.
   - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes (T113) use process groups or job objects.
-  - Pipes only: terminals (PTY, ConPTY) are T111.
+  - Pipes only. Terminals (PTY, ConPTY) have their own capability shape, `Terminal` in `src/Fx.Pty` ([`docs/spikes/pty.md`](../spikes/pty.md)); T111 completes it.
 - **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes and patches belong to envd's filesystem operations (T111). Reads and writes are whole files.
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
@@ -144,6 +144,7 @@ module Clock =
 | `IGrants` | T123 |
 | `IContext` | T126 |
 | `ISnapshots` | T111, T205 |
+| `ITerminal` (fake, conformance suite, journaling; the shape and the local interpreter are in `src/Fx.Pty`) | T111 |
 | `IRepo` | T202 |
 | `IRuns` | T212 |
 | `IAgents` | T213 |
