@@ -969,7 +969,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 - **Sandbox drivers** are the process boundary. **Windows v1 runs unsandboxed with a persistent warning**; type-level attenuation and grants still apply.
 - **Egress proxy:** deny-by-default, resolved-address allowlists, method/path rules, credential injection, git push checks, per-tool-call attribution, install source allowlists.
 - **Supply chain:** vendor-index digests by default (pinned-digest policy available), package signatures, sandboxed `Script` installs, read-only `System` installs, lockfiles.
-- **Trust before execution:** project config, extensions, agent/workflow definitions, `.fx/ledger` loading, runtime configs and hooks wait for project trust; `LaunchSpec` must deny runtime injection vectors; localhost listeners require token + `Origin` check.
+- **Trust before execution:** project config, extensions, agent/workflow definitions, `.fx/ledger` loading, runtime configs and hooks wait for project trust; `LaunchSpec` must deny runtime injection vectors; localhost listeners require token + `Origin` check (and a `Host` check against DNS rebinding; no CORS).
 - **Runs:** safe outputs as object capabilities, protected paths, hidden checks, separate evaluators, untrusted trigger payloads, atomic budgets.
 - **Grants** gate sensitive permissions; the **ledger** records choices and committed decision files are PR-reviewed.
 - **Compliance in code:** SIWC constraints; Copilot content exclusions and model policy; no credential pooling or proxying; evals use API keys only.
@@ -1072,7 +1072,7 @@ Action surface (`cells-only` / `hybrid`), TUI style, edit mode, plan mode, edit 
 | Layer | Choice |
 |---|---|
 | Toolchain | .NET 11 SDK / F# 11, Native AOT, pinned `global.json` |
-| Binary | One `fx` binary (CLI, host, envd, TUI) + bundled packages; Kestrel `CreateSlimBuilder` + `RequestDelegate` |
+| Binary | One `fx` binary (CLI, host, envd, TUI) + bundled packages; Kestrel `CreateEmptyBuilder` + `UseKestrelCore` + `RequestDelegate` (not `CreateSlimBuilder`: it reads `appsettings.json` from the working directory; see `docs/spikes/kestrel.md`) |
 | Platforms | Linux (glibc + musl), macOS, **Windows** (x64/arm64); ConPTY, CredMan/DPAPI, PowerShell 7 default shell |
 | Protocols | Own JSON-RPC 2.0; WebSocket + SSE; kernel protocol over stdio |
 | Contracts / SDKs | F# contracts (Fable-compatible); **codec combinators first**; `Fx.Sdk` (F#), `@fx/sdk` (TypeScript) |
