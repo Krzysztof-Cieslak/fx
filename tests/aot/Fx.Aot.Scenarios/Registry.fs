@@ -14,6 +14,12 @@ let all: Scenario list =
             Effects.scenarios
             Text.scenarios
             Runtime.scenarios
+            Kestrel.Http.scenarios
+            Kestrel.Access.scenarios
+            Kestrel.WebSockets.scenarios
+            Kestrel.EventStreams.scenarios
+            Kestrel.Transports.scenarios
+            Kestrel.Builders.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
