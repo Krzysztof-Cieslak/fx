@@ -68,6 +68,11 @@
       "reason": "IBlobs interpreter: the only code that reads and writes blob files (temporary files, atomic renames, syncs) and their SQLite index."
     },
     {
+      "codes": ["EFF007"],
+      "files": ["src/Fx.Transport.Http/LocalClient.fs"],
+      "reason": "Dials local listeners (loopback, Unix socket, named pipe) for WebSocket clients: the only outgoing connection code."
+    },
+    {
       "codes": ["AOT002"],
       "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
       "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
