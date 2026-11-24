@@ -121,6 +121,11 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - No runtime reflection: no `FSharp.Reflection`, `Reflection.Emit`, `DispatchProxy` or dynamic assembly loading.
 - No reflection-based serializers (FSharp.SystemTextJson, Newtonsoft). Use our codecs.
 - F# cannot run C# source generators (System.Text.Json source generation, Request Delegate Generator, LibraryImport, StreamJsonRpc). For Kestrel use `RequestDelegate` endpoints, and for interop use `DllImport` with blittable signatures.
+- Kestrel (details in [`docs/spikes/kestrel.md`](docs/spikes/kestrel.md)); `src/Fx.Transport.Http` follows these rules:
+  - build the host with `WebApplication.CreateEmptyBuilder` + `UseKestrelCore`. `CreateSlimBuilder` and `CreateBuilder` read `appsettings.json` from the working directory, whose `Kestrel:Endpoints` add listeners;
+  - pass `RequestDelegate` values only (wrap lambdas: `RequestDelegate(fun ctx -> ...)`). Overloads taking a `Delegate` (`MapGet("/", fun () -> ...)`) go through `RequestDelegateFactory`;
+  - never use the JSON helpers (`Results.Json`, `TypedResults.Ok<T>`, `WriteAsJsonAsync`, `ReadFromJsonAsync`) or configuration binding; use our codecs;
+  - replace the default `IHostLifetime` (`ConsoleLifetime`, registered even by the empty builder) with a no-op one: it takes over Ctrl+C and SIGTERM, which belong to the entry point.
 - Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through the AOT-verified path.
 - Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
@@ -168,7 +173,7 @@ The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `
   - lockfile reproducibility;
   - workflow IR validation;
   - ledger merge and history-rewrite tests.
-- CI publishes `src/Fx.Cli` with Native AOT for `linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64` (in an Alpine container), `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64`, each on a native runner. Each job smoke-tests the binary, runs the JIT-vs-native diff and its self-test, and uploads the binary as a workflow artifact.
+- CI publishes `src/Fx.Cli` with Native AOT for `linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64` (in an Alpine container), `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64`, each on a native runner. Each job smoke-tests the binary, reports the binary sizes in the job summary, runs the JIT-vs-native diff and its self-test, and uploads the binary as a workflow artifact.
 
 **JIT-vs-native diff** (`tests/aot`)
 - `Fx.Aot.Scenarios` is a Native AOT executable. Its scenarios are values: a name and a function that produces deterministic output lines.
@@ -180,7 +185,8 @@ The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `
   1. Write it with `Scenario.lines` or `Scenario.task` in a module under `Scenarios/`, and add it to that module's `scenarios` list.
   2. If the module is new, add it to `Registry.all` and to the `.fsproj`.
 - Gate a scenario per platform with `Scenario.onlyOn [ Os.Windows ]`, `Scenario.except [ Os.Windows ]` or `Scenario.where (fun p -> not p.Musl)`. Ungated scenarios run everywhere.
-- Scenario output must be deterministic. Do not print times, process ids, temporary paths or string hash codes (they are randomized per process). `Fx.Aot.Tests` runs every scenario twice on the JIT.
+- Scenario output must be deterministic. Do not print times, process ids, temporary paths, ports or string hash codes (they are randomized per process). `Fx.Aot.Tests` runs every scenario twice on the JIT, in parallel with the others.
+- Bound every wait in a scenario (e.g. `Task.WaitAsync`), so that a hang fails the case instead of the job timeout. The Kestrel scenarios (`Scenarios/Kestrel/`) show how to test servers: ephemeral ports, in-process acknowledgements instead of sleeps, and logs printed in a fixed order.
 - To diff another Native AOT executable, add a `Subject` to `Subjects.all` in `Fx.Aot.Diff`.
 - `--self-test` runs the canaries in `Registry.canaries`. They must differ, which proves that the diff detects a divergence. Never put a diverging scenario in `Registry.all`: work around the divergence and document it under "Native AOT" above.
 
@@ -200,6 +206,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Eff benchmark | `dotnet run -c Release --project tools/Fx.Effects.Bench` (results in `docs/modules/eff.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
+| Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
@@ -220,6 +227,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
+| `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
 | `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
@@ -230,7 +238,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `tools/Fx.Effects.Bench` | Micro-benchmark of the `eff` builder (a measurement, so no test project) |
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
-| `docs/spikes/` | Spike findings and recommendations for the tasks that build on them |
+| `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
@@ -263,6 +271,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 - **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
   - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.
+  - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same; ban those APIs once the network capability exists (T103, T107).
   - Tests check that every glob in `analyzers.json` still matches a file.
 - **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
 - **Upgrading**: the analyzers run inside the `fsharp-analyzers` tool, which loads only analyzers built against its own SDK version and shares its FSharp.Core. Upgrade `FSharp.Analyzers.SDK` and `AnalyzersFSharpCoreVersion` (both in `Directory.Packages.props`) together with the tool in `dotnet-tools.json`.
