@@ -2,6 +2,7 @@
 module Fx.Cli.Cli
 
 open Fx
+open Fx.Sqlite
 
 type Outcome =
     {
@@ -12,9 +13,13 @@ type Outcome =
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
+/// The version and the components built into the binary, for bug reports.
+let buildInfo () =
+    versionText + $"sqlite {Library.version ()} ({Library.sourceId ()})\n"
+
 let usage =
     $"{Product.Name} {Product.Version}: exploration stage, nothing usable yet.\n\n"
-    + $"Usage: {Product.binaryName} [--help | --version]\n"
+    + $"Usage: {Product.binaryName} [--help | --version | --build-info]\n"
 
 let run (args: string list) : Outcome =
     match args with
@@ -30,6 +35,12 @@ let run (args: string list) : Outcome =
         {
             ExitCode = 0
             Stdout = versionText
+            Stderr = ""
+        }
+    | [ "--build-info" ] ->
+        {
+            ExitCode = 0
+            Stdout = buildInfo ()
             Stderr = ""
         }
     | other ->
