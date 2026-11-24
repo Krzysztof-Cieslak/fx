@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The JIT-vs-native diff (spec §20 CI gate): runs every case of every subject on the JIT and as the
+    Native AOT binary, and fails on any difference in stdout, stderr or exit code. Runs on the JIT.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Diff.fs" />
+    <Compile Include="Subjects.fs" />
+    <Compile Include="Processes.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+  </ItemGroup>
+</Project>
