@@ -21,6 +21,7 @@
     <File Path="native/sqlite/Sqlite.props" />
     <File Path="native/sqlite/Sqlite.targets" />
     <File Path="native/sqlite/library.c" />
+    <Project Path="src/Fx.Pty/Fx.Pty.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -41,6 +42,7 @@
     <Project Path="tests/Fx.Machines.Tests/Fx.Machines.Tests.fsproj" />
     <Project Path="tests/Fx.Machines.Host.Tests/Fx.Machines.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Sqlite.Tests/Fx.Sqlite.Tests.fsproj" />
+    <Project Path="tests/Fx.Pty.Tests/Fx.Pty.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
