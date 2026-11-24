@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="TestEnv.fs" />
+    <Compile Include="Chat.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="Conformance\EventLogConformance.fs" />
+    <Compile Include="EventLogTests.fs" />
+    <Compile Include="ActorTests.fs" />
+    <Compile Include="DeterminismTests.fs" />
+    <Compile Include="RegistryTests.fs" />
+    <Compile Include="ProcessManagerTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+  </ItemGroup>
+</Project>
