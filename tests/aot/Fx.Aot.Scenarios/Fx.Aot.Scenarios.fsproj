@@ -33,6 +33,7 @@
     <Compile Include="Scenarios\Contracts.fs" />
     <Compile Include="Scenarios\Sqlite.fs" />
     <Compile Include="Scenarios\Pty.fs" />
+    <Compile Include="Scenarios\Store.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -44,6 +45,7 @@
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Sqlite\Fx.Sqlite.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Pty\Fx.Pty.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Contracts\Fx.Contracts.fsproj" />
   </ItemGroup>

@@ -24,6 +24,7 @@ let all: Scenario list =
             Contracts.scenarios
             Sqlite.scenarios
             Pty.scenarios
+            Store.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
