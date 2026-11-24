@@ -211,6 +211,14 @@ let private dispatch (options: Options) (stopping: CancellationToken) (context: 
                 context.Response.Headers.Upgrade <- StringValues "websocket"
                 respond context 426 "websocket upgrade required"
 
+/// Leaves process signals alone. The host's default `ConsoleLifetime` (even with the empty builder)
+/// swallows Ctrl+C and SIGTERM and stops only the server, so the process would keep running: signals
+/// belong to the program's entry point, not to a library.
+type private LibraryLifetime() =
+    interface IHostLifetime with
+        member _.WaitForStartAsync _ = Task.CompletedTask
+        member _.StopAsync _ = Task.CompletedTask
+
 /// A started server. Disposing it stops it.
 type Server(app: WebApplication) =
     /// Where the server listens: `http://127.0.0.1:<port>`, `http://unix:<path>` or `http://pipe:/<name>`.
@@ -257,6 +265,8 @@ let start (options: Options) : Task<Server> =
         builder.Services.Configure<HostOptions>(fun (host: HostOptions) ->
             host.ShutdownTimeout <- options.ShutdownTimeout)
         |> ignore
+
+        builder.Services.AddSingleton<IHostLifetime>(LibraryLifetime()) |> ignore
 
         let app = builder.Build()
 
