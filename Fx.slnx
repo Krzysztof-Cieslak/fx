@@ -6,9 +6,11 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Fx.Prelude/Fx.Prelude.fsproj" />
+    <Project Path="src/Fx.Cli/Fx.Cli.fsproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
     <Project Path="tests/Fx.Prelude.Tests/Fx.Prelude.Tests.fsproj" />
+    <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
   </Folder>
 </Solution>
