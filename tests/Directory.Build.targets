@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    No telemetry of any kind (spec §0, §18). Microsoft.Testing.Platform's telemetry extension arrives
+    transitively (YoloDev.Expecto.TestSdk -> VSTestBridge) and registers itself through this builder
+    hook from its package props; removing the hook keeps it out of the generated entry point.
+    This must live in a .targets file: package props are imported after Directory.Build.props.
+  -->
+  <ItemGroup>
+    <TestingPlatformBuilderHook Remove="98058041-B5B6-4A75-9834-58E6DF796A22" />
+  </ItemGroup>
+</Project>
