@@ -1,4 +1,6 @@
 <Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.targets', '$(MSBuildThisFileDirectory)../'))" />
+
   <!--
     No telemetry of any kind (spec §0, §18). Microsoft.Testing.Platform's telemetry extension arrives
     transitively (YoloDev.Expecto.TestSdk -> VSTestBridge) and registers itself through this builder
