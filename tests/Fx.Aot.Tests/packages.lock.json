@@ -97,10 +97,17 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )"
+        }
+      },
+      "fx.contracts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
         }
       },
       "fx.effects": {
