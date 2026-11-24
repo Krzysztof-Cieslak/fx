@@ -137,7 +137,14 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - pass `RequestDelegate` values only (wrap lambdas: `RequestDelegate(fun ctx -> ...)`). Overloads taking a `Delegate` (`MapGet("/", fun () -> ...)`) go through `RequestDelegateFactory`;
   - never use the JSON helpers (`Results.Json`, `TypedResults.Ok<T>`, `WriteAsJsonAsync`, `ReadFromJsonAsync`) or configuration binding; use our codecs;
   - replace the default `IHostLifetime` (`ConsoleLifetime`, registered even by the empty builder) with a no-op one: it takes over Ctrl+C and SIGTERM, which belong to the entry point.
-- Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through the AOT-verified path.
+- Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through `src/Fx.Sqlite` (details in [`docs/spikes/sqlite.md`](docs/spikes/sqlite.md)).
+- Native libraries (SQLite today) are built from pinned, digest-checked sources under `native/<library>/` by MSBuild, never taken from the system. `native/sqlite/Sqlite.targets` is the pattern:
+  - one source, two outputs: a static library that a Native AOT publish links in (`NativeLibrary` + `DirectPInvoke`, so the binary stays a single file) and a shared library copied next to every project that references the binding, for the JIT (tests and the JIT side of the diff);
+  - give the library a name no system library has (`Fx.Sqlite.Native`): `DllImport` falls back to system paths;
+  - builds are cached in `artifacts/native/` under a key that hashes their inputs, never compared by timestamp.
+- P/Invoke: blittable `DllImport` signatures only (pointers, `nativeint`, numbers; text as UTF-8 bytes you encode), with `[<assembly: DisableRuntimeMarshalling>]` so a signature that needs marshalling fails on the JIT too.
+  - Never call a variadic C function (e.g. `sqlite3_db_config`) through `DllImport`: variadic arguments go on the stack on Apple arm64. Add a fixed-arity C shim next to the library's sources.
+  - Pin arrays with a `GCHandle` (`Native.pinned` in `src/Fx.Sqlite`), not `use p = fixed array`: the analyzers' typed-tree walk throws on `fixed`.
 - Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
@@ -220,6 +227,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
+| Native libraries | Built by `dotnet build` and `dotnet publish` (no separate step) into `artifacts/native/`. Needs a C compiler, as Native AOT does: clang or gcc on Linux and macOS (`FxSqliteCC` overrides), Visual Studio or the Build Tools with the C++ workload on Windows. The first build downloads the pinned sources; offline, pass `-p:FxSqliteArchive=<zip>` |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
@@ -227,6 +235,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
   - Native AOT executables set `PublishAot` only for RID-specific builds. Otherwise even their RID-less restore adds the host's RID, and the lockfile would differ per OS.
   - RID-specific restores (`dotnet publish -r`) are not locked. They write git-ignored `packages.<rid>.lock.json` files, because their content depends on the host (the ILCompiler host package). They add only SDK-implicit packages, which `global.json` pins. CI runs the locked RID-less restore before publishing.
 - `TreatWarningsAsErrors` is on everywhere. Production code is compiled with `--reflectionfree`, so `%A` is a compile error.
+- Bumping SQLite: in `native/sqlite/Sqlite.props`, set the version, the zip's name and URL (with the release year) and its digests. Take the SHA3-256 from the CSV comment in the source of sqlite.org/download.html and check the zip against it; record the zip's SHA-256 (what MSBuild verifies), and `SQLITE_VERSION_NUMBER` and `SQLITE_SOURCE_ID` from its `sqlite3.h`. The tests fail if the library differs from the pin. Read the release notes for changed defaults and compile options.
 
 ## Repository layout
 
@@ -234,7 +243,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 |---|---|
 | `Fx.slnx` | The solution |
 | `Directory.Build.props` | Shared build settings and **`FxProductName`, the naming constant** |
-| `Directory.Build.targets` | Rejects a Native AOT publish without a runtime identifier |
+| `Directory.Build.targets` | Rejects a Native AOT publish without a runtime identifier; imports the native library builds |
 | `Directory.Packages.props` | Central package versions |
 | `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
 | `src/Fx.Contracts` | JSON, `Schema`, `Validation`, `Preview` and the `Codec` combinators (spec §4.1; Fable-compatible) |
@@ -244,6 +253,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Transport.Http` | Local Kestrel listener (loopback, Unix socket, named pipe) with HTTP, WebSocket and SSE behind the token, `Origin` and `Host` checks (spec §18) |
 | `src/Fx.Machines` | The `Machine` type, its pure helpers, and what is sent to and from actors (Fable-compatible: FSharp.Core only, checked by a test; spec in [`docs/modules/machines.md`](docs/modules/machines.md)) |
 | `src/Fx.Machines.Host` | The machine host: the event-log abstraction and the in-memory log, actors, the actor registry and process managers |
+| `src/Fx.Sqlite` | The SQLite binding: blittable DllImports, connections, cached prepared statements, transactions, WAL, errors as results. An imperative shell for storage interpreters and composition roots |
+| `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
 | `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
@@ -288,6 +299,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 - **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
   - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.
+  - Known gap: the EFF rules do not see P/Invoke, so the file I/O SQLite does for `src/Fx.Sqlite` needs no entry. Reference `Fx.Sqlite` only from storage interpreters (the event and blob stores, T105) and composition roots, never from the pure core; ban its APIs elsewhere once the first store lands.
   - Known gap: `EFF007` does not see server listeners (`WebApplication.Create*`, `KestrelServerOptions.Listen*`), so `src/Fx.Transport.Http/LocalServer.fs` needs no entry. It is a shell all the same; ban those APIs once the network capability exists (T103, T107).
   - Tests check that every glob in `analyzers.json` still matches a file.
 - **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
