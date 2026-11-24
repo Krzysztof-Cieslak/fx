@@ -22,6 +22,13 @@
     <Compile Include="Scenarios\Effects.fs" />
     <Compile Include="Scenarios\Text.fs" />
     <Compile Include="Scenarios\Runtime.fs" />
+    <Compile Include="Scenarios\Kestrel\Support.fs" />
+    <Compile Include="Scenarios\Kestrel\Http.fs" />
+    <Compile Include="Scenarios\Kestrel\Access.fs" />
+    <Compile Include="Scenarios\Kestrel\WebSockets.fs" />
+    <Compile Include="Scenarios\Kestrel\EventStreams.fs" />
+    <Compile Include="Scenarios\Kestrel\Transports.fs" />
+    <Compile Include="Scenarios\Kestrel\Builders.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -30,5 +37,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
   </ItemGroup>
 </Project>
