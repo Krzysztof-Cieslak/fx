@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Scenarios whose output must be identical on the JIT and as a Native AOT binary (spec §20).
+    Fx.Aot.Diff runs every scenario both ways and fails on any difference.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Same Native AOT setup as src/Fx.Cli: AOT for RID-specific builds only. -->
+    <FxNativeAot>true</FxNativeAot>
+    <PublishAot Condition="'$(RuntimeIdentifier)' != ''">true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Scenario.fs" />
+    <Compile Include="Scenarios\Language.fs" />
+    <Compile Include="Scenarios\Equality.fs" />
+    <Compile Include="Scenarios\Generics.fs" />
+    <Compile Include="Scenarios\Exceptions.fs" />
+    <Compile Include="Scenarios\Collections.fs" />
+    <Compile Include="Scenarios\Concurrency.fs" />
+    <Compile Include="Scenarios\Text.fs" />
+    <Compile Include="Scenarios\Runtime.fs" />
+    <Compile Include="Scenarios\Canary.fs" />
+    <Compile Include="Registry.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+  </ItemGroup>
+</Project>
