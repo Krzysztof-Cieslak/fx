@@ -25,6 +25,7 @@
     <File Path="native/sqlite/Sqlite.targets" />
     <File Path="native/sqlite/library.c" />
     <Project Path="src/Fx.Pty/Fx.Pty.fsproj" />
+    <Project Path="src/Fx.Rpc/Fx.Rpc.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Our own JSON-RPC 2.0 (spec §17, §20): typed methods over Fx.Contracts codecs, the connection
+    engine (correlation, cancellation, timeouts, batches, backpressure), binary channels with credit
+    flow control, the `initialize` handshake, and the in-process, stream (stdio) and WebSocket
+    transports. No I/O of its own: transports wrap streams and sockets that composition roots open.
+    Spec: docs/modules/rpc.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Protocol.fs" />
+    <Compile Include="Wire.fs" />
+    <Compile Include="Method.fs" />
+    <Compile Include="Handshake.fs" />
+    <Compile Include="Frames.fs" />
+    <Compile Include="Transport.fs" />
+    <Compile Include="Queues.fs" />
+    <Compile Include="InProcess.fs" />
+    <Compile Include="StreamTransport.fs" />
+    <Compile Include="WebSocketTransport.fs" />
+    <Compile Include="Channels.fs" />
+    <Compile Include="Connection.fs" />
+    <Compile Include="Rpc.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>
