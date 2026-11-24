@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The event-log suite is shared with Fx.Machines.Host.Tests: typed logs pass it too. -->
+    <Compile Include="..\Fx.Machines.Host.Tests\Conformance\EventLogConformance.fs" Link="Conformance\EventLogConformance.fs" />
+    <Compile Include="Conformance\BlobsConformance.fs" />
+    <Compile Include="Conformance\SnapshotsConformance.fs" />
+    <Compile Include="TestEnv.fs" />
+    <Compile Include="Notes.fs" />
+    <Compile Include="EventSchemaTests.fs" />
+    <Compile Include="CodecTests.fs" />
+    <Compile Include="BlobTests.fs" />
+    <Compile Include="SnapshotTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Store\Fx.Store.fsproj" />
+  </ItemGroup>
+</Project>
