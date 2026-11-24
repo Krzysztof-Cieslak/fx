@@ -14,6 +14,12 @@
         "resolved": "11.0.0",
         "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
+      "fx.contracts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
       "fx.effects": {
         "type": "Project",
         "dependencies": {

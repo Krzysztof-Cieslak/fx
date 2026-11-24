@@ -21,6 +21,7 @@ let all: Scenario list =
             Kestrel.EventStreams.scenarios
             Kestrel.Transports.scenarios
             Kestrel.Builders.scenarios
+            Contracts.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff

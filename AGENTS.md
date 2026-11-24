@@ -141,6 +141,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
+  - ILC aborts generic instantiations nested deeper than 4 levels inside FSharp.Core's closure machinery (IL3054, "generic recursion"), e.g. a curried call or a generic closure over `'A * ('B * ('C * …))`. Applicative `and!` builders nest one tuple per binding: give them `MergeSources3`, `MergeSources4`, … as `Codec.record` does.
 - Behaviour that differs under Native AOT, found by the diff:
   - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
   - On linux-musl, the main thread of a Native AOT binary does not know its stack size: `RuntimeHelpers.TryEnsureSufficientExecutionStack()` is false there, so task continuations never run inline on it. Code that relies on inline continuations, such as driving a `FakeClock`, must run on a thread-pool thread (`FakeClock.Advance` throws otherwise).
