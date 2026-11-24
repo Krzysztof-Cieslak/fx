@@ -964,6 +964,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 - **Fallbacks:** HTTP/SSE offset-read mirror; ACP adapter.
 - **Environment protocol:** multiplexed streams with credit backpressure, sequenced output, blobs, installer operations, lease survival, transports `Piped | Direct | Dialback`.
 - **Kernel protocol:** §6.4.
+- **Wire (all of the above):** own JSON-RPC 2.0; on byte streams (stdio) newline-delimited JSON plus zero-prefixed binary channel frames, so plain NDJSON peers interoperate; on WebSocket text messages for JSON and binary messages for channels; in-process for embedded mode, with the same serialization. `$/cancelRequest`; `initialize` announces message size, requests in flight, channel windows and the methods each side handles. Module spec: `docs/modules/rpc.md`.
 - **Multi-client:** serialized + attributed inputs; epoch-fenced takeover lease.
 - **Generated types:** TypeScript for clients, extensions, kernels, workflow worker; F# TUI and Fable web share `Evolve` projections.
 
