@@ -199,6 +199,13 @@ let tests =
                     }
                 ]
 
+            test "reasons do not echo the request" {
+                Expect.equal (reason (ForbiddenHost "evil.example")) "forbidden host" "host"
+                Expect.equal (reason (ForbiddenOrigin "https://evil.example")) "forbidden origin" "origin"
+                Expect.equal (reason MissingToken) "missing token" "missing"
+                Expect.equal (reason InvalidToken) "invalid token" "invalid"
+            }
+
             test "status codes" {
                 Expect.equal (statusCode MissingToken) 401 "missing token"
                 Expect.equal (statusCode InvalidToken) 401 "invalid token"

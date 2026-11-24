@@ -163,7 +163,7 @@ let private reject (context: HttpContext) (denied: Denied) : Task =
     if statusCode denied = 401 then
         context.Response.Headers.WWWAuthenticate <- StringValues "Bearer"
 
-    respond context (statusCode denied) (string denied)
+    respond context (statusCode denied) (reason denied)
 
 let private acceptWebSocket
     (request: Request)
