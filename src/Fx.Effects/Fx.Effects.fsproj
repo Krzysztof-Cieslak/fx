@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Effects with typed environments (spec §4.2): Eff, the eff/effResult builders, the core capability
+    interfaces and their deterministic fakes. Pure: no I/O, so the EFF analyzers apply to every file.
+    The real interpreters live in Fx.Effects.Live. Spec: docs/modules/eff.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Core.fs" />
+    <Compile Include="Builders.fs" />
+    <Compile Include="Time.fs" />
+    <Compile Include="Clock.fs" />
+    <Compile Include="Eff.fs" />
+    <Compile Include="EffResult.fs" />
+    <Compile Include="Id.fs" />
+    <Compile Include="Ids.fs" />
+    <Compile Include="Fs.fs" />
+    <Compile Include="Shell.fs" />
+    <Compile Include="Secrets.fs" />
+    <Compile Include="Trace.fs" />
+    <Compile Include="Fakes\FakeClock.fs" />
+    <Compile Include="Fakes\FakeIds.fs" />
+    <Compile Include="Fakes\InMemoryFs.fs" />
+    <Compile Include="Fakes\ScriptedShell.fs" />
+    <Compile Include="Fakes\InMemorySecrets.fs" />
+    <Compile Include="Replay\Journal.fs" />
+  </ItemGroup>
+</Project>
