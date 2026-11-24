@@ -1,4 +1,4 @@
-/// AOT003 and EFF001–EFF008: banned APIs.
+/// AOT003 and EFF001–EFF009: banned APIs.
 ///
 /// A use of an API is a call, property access or construction whose declaring type matches a ban.
 /// The first matching ban decides the code, so specific bans come before broad ones. Extend the
@@ -282,6 +282,10 @@ let bans: Ban list =
                 "System.Net.Mail.SmtpClient"
             ] do
             ban Rules.network (Type t)
+
+        // EFF009: storage. The SQLite binding's file I/O happens in native code, which the
+        // filesystem rule cannot see.
+        ban Rules.storage (Namespace "Fx.Sqlite")
     ]
 
 /// The ban a use of `m` violates, if any.

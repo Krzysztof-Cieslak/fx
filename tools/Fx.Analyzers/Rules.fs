@@ -106,6 +106,14 @@ let nativeCode =
             $"A P/Invoke can do any I/O, out of sight of the other rules: call it only from a capability interpreter (spec §4.2). {shellOptIn}"
     }
 
+let storage =
+    {
+        Code = "EFF009"
+        Title = "SQLite outside a storage interpreter"
+        Instead =
+            $"Keep data behind a store capability (`EventLog`, `SnapshotStore`, `Blobs`, …) whose SQLite interpreter lives in its own file (spec §4.2, docs/modules/store.md). {shellOptIn}"
+    }
+
 let all =
     [
         percentA
@@ -119,6 +127,7 @@ let all =
         processes
         network
         nativeCode
+        storage
     ]
 
 /// A rule violation at a place in a file.
