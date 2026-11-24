@@ -8,6 +8,7 @@
   <ItemGroup>
     <!-- Failing and clean samples; read from the source tree, never compiled. -->
     <None Include="Samples/*.fsx" />
+    <None Include="Samples/Support/*.fs" />
   </ItemGroup>
 
   <ItemGroup>

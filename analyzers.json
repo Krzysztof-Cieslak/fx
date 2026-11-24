@@ -48,14 +48,24 @@
       "reason": "The P/Invoke layer of the ITerminal interpreter: `ioctl` picks the declaration for the platform's variadic calling convention."
     },
     {
-      "codes": ["EFF008"],
-      "files": ["src/Fx.Sqlite/Database.fs", "src/Fx.Sqlite/Handles.fs", "src/Fx.Sqlite/Library.fs", "src/Fx.Sqlite/Statement.fs"],
-      "reason": "The SQLite binding: its only P/Invoke callers. Only storage interpreters (T105) may use Fx.Sqlite; tighten that once they exist."
+      "codes": ["EFF008", "EFF009"],
+      "files": ["src/Fx.Sqlite/**"],
+      "reason": "The SQLite binding itself: its P/Invoke layer (EFF008) and its own API (EFF009)."
     },
     {
-      "codes": ["EFF004"],
+      "codes": ["EFF009"],
+      "files": ["src/Fx.Cli/Cli.fs"],
+      "reason": "--build-info reports the version of the SQLite linked into the binary; it touches no database."
+    },
+    {
+      "codes": ["EFF009"],
+      "files": ["src/Fx.Store.Live/Connections.fs", "src/Fx.Store.Live/SqliteEventStore.fs"],
+      "reason": "EventLog and SnapshotStore interpreter: the event database (one writer thread, pooled readers)."
+    },
+    {
+      "codes": ["EFF004", "EFF009"],
       "files": ["src/Fx.Store.Live/FileBlobStore.fs"],
-      "reason": "IBlobs interpreter: the only code that reads and writes blob files (temporary files, atomic renames, syncs)."
+      "reason": "IBlobs interpreter: the only code that reads and writes blob files (temporary files, atomic renames, syncs) and their SQLite index."
     },
     {
       "codes": ["AOT002"],
