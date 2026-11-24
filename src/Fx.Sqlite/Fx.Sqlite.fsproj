@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The SQLite binding (T006, docs/spikes/sqlite.md): blittable DllImports of the pinned SQLite built
+    from native/sqlite, and safe wrappers (connections, prepared statements, transactions, errors as
+    results). An imperative shell: storage interpreters (the event and blob stores, T105) and
+    composition roots use it; the pure core never does.
+
+    FxSqliteBinding makes native/sqlite/Sqlite.targets build the library for this project and copy
+    the shared library to the output of every project that references it.
+  -->
+
+  <PropertyGroup>
+    <FxSqliteBinding>true</FxSqliteBinding>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Items are evaluated after all properties, so IntermediateOutputPath is final here. -->
+    <Compile Include="$(IntermediateOutputPath)Pinned.g.fs" Link="Pinned.g.fs" />
+    <Compile Include="Native.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Library.fs" />
+    <Compile Include="Handles.fs" />
+    <Compile Include="Statement.fs" />
+    <Compile Include="Database.fs" />
+  </ItemGroup>
+
+  <!-- Turns the pin in native/sqlite/Sqlite.props into F# literals: the DllImport name and the version the binding expects. -->
+  <Target Name="GenerateSqlitePin" BeforeTargets="BeforeCompile;CoreCompile">
+    <PropertyGroup>
+      <SqlitePinFile>$(IntermediateOutputPath)Pinned.g.fs</SqlitePinFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <SqlitePinLine Include="// &lt;auto-generated /&gt; from native/sqlite/Sqlite.props by Fx.Sqlite.fsproj. Do not edit." />
+      <SqlitePinLine Include="[&lt;RequireQualifiedAccess&gt;]" />
+      <SqlitePinLine Include="module internal Fx.Sqlite.Pinned" />
+      <SqlitePinLine Include="[&lt;Literal&gt;]" />
+      <SqlitePinLine Include="let Library = &quot;$(FxSqliteLibraryName)&quot;" />
+      <SqlitePinLine Include="[&lt;Literal&gt;]" />
+      <SqlitePinLine Include="let Version = &quot;$(FxSqliteVersion)&quot;" />
+      <SqlitePinLine Include="[&lt;Literal&gt;]" />
+      <SqlitePinLine Include="let VersionNumber = $(FxSqliteVersionNumber)" />
+      <SqlitePinLine Include="[&lt;Literal&gt;]" />
+      <SqlitePinLine Include="let SourceId = &quot;$(FxSqliteSourceId)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(SqlitePinFile)" Lines="@(SqlitePinLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(SqlitePinFile)" />
+    </ItemGroup>
+  </Target>
+</Project>
