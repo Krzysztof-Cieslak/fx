@@ -51,15 +51,16 @@ type Machine<'Cmd, 'Evt, 'S, 'Intent> =
 
 | Function | Contract |
 |---|---|
-| `Append stream expected meta events` | appends one **commit** (the events of one command) atomically if the head is `expected`, and returns the new head; otherwise `Error (Conflict (expected, actual))`. Never called with an empty list |
+| `Append stream expected meta events` | appends one **commit** (the events of one command) atomically if the head is `expected`, and returns the new head. If the stream already has a commit with the key in `meta`, `Error (Duplicate (key, appended))` with that commit's events (checked first, whatever `expected` is); otherwise, if the head is not `expected`, `Error (Conflict (expected, actual))`. Never called with an empty list |
 | `Read stream after max` | at most `max` events after a sequence number, in order |
 | `Head stream` | the last sequence number, 0 for an empty stream |
 | `WaitPast stream after` | completes with the head once the head is past `after` |
 
 - Sequence numbers start at 1, with no gaps. Streams are independent.
+- **A stream never holds two commits with one key.** So a command takes effect at most once even when the writer does not know the key (a retry after a lost reply, an actor that did not read the whole log), and the caller learns where its events went.
 - Every event carries `EventMeta`: when the actor handled the command (`At`, on `IClock`), who sent it (`By`), its key (`Key`) and its cause (`Cause`). Events of one commit share it.
-- **Interpreters.** `InMemoryEventLog` is for tests, simulations and `fx test`. Its calls complete synchronously, and an append wakes waiting readers inline, before it returns. The durable store is T105. Every interpreter passes `EventLogConformance`, a function from a log to a `Test`.
-- **Events are typed values here.** The durable store serializes them with codecs (T101).
+- **Interpreters.** `InMemoryEventLog` is for tests, simulations and `fx test`. Its calls complete synchronously, and an append wakes waiting readers inline, before it returns. The durable store is `SqliteEventStore` ([store.md](store.md)). Every interpreter passes `EventLogConformance`, a function from a log to a `Test`.
+- **Events are typed values here.** The durable store keeps them as codec JSON with a schema version; `EventLog.typed` (Fx.Store) gives the typed view ([store.md](store.md)).
 - `EventLog.next`, `readAll` and `subscribe` are built on the four functions.
   - **`subscribe log stream after handle`** is spec §5's `subscribe(afterSeq)`. It replays the events after `after`, then follows new commits, in order, without gaps or repeats.
   - It reads in pages, so a slow subscriber never holds up writers. It stops when `handle` returns false, or when its scope is cancelled.
@@ -101,7 +102,7 @@ Each input goes through the shell loop of §4.4, one at a time, in mailbox order
 
 | A key that… | is answered with the first outcome… |
 |---|---|
-| was accepted with events | always: the actor rebuilds its key index from the log's metadata, so this survives restarts |
+| was accepted with events | always: the actor rebuilds its key index from the log's metadata, so this survives restarts. A key the log has but the actor does not know (another writer appended it) gets `Duplicate` from the log, and the actor answers with that commit, its state unchanged |
 | was rejected, or accepted with no events | by the same actor. A new actor handles the command again |
 | was answered `Stopped` | never: the command was not handled |
 

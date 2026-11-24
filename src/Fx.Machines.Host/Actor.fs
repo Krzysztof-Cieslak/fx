@@ -338,6 +338,14 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
         event Level.Info "actor.rejected" (Attr.text "rejection" (string rejection) :: describe pending.Envelope)
         reply pending outcome
 
+    /// The log already has a commit with the command's key that the actor did not know of: the
+    /// command took effect then, so its first outcome is that commit. The state stays as it is.
+    let acceptedBefore (pending: Pending<'Cmd>) (first: Appended) =
+        let outcome = Accepted first
+        lock gate (fun () -> outcomes <- Map.add pending.Envelope.Key outcome outcomes)
+        event Level.Info "actor.duplicate-in-log" (Attr.text "events" (string first) :: describe pending.Envelope)
+        reply pending outcome
+
     /// Evolves and reacts to appended events: the new state and each event's intents.
     let applyAppended (events: 'Evt list) =
         let next, reactions, _ =
@@ -400,6 +408,7 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
                     let applied =
                         match appended with
                         | Error e -> Error e
+                        | Ok(Error(Duplicate(_, first))) -> Ok(Choice2Of2 first)
                         | Ok(Error conflict) -> Error(ConcurrencyException(stream, conflict) :> exn)
                         | Ok(Ok newHead) when newHead <> head + int64 count ->
                             Error(
@@ -408,12 +417,13 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
                             )
                         | Ok(Ok _) ->
                             try
-                                Ok(applyAppended events)
+                                Ok(Choice1Of2(applyAppended events))
                             with e ->
                                 Error e
 
                     match applied with
-                    | Ok(next, reactions) -> accept pending { After = head; Count = count } next reactions
+                    | Ok(Choice1Of2(next, reactions)) -> accept pending { After = head; Count = count } next reactions
+                    | Ok(Choice2Of2 first) -> acceptedBefore pending first
                     | Error e ->
                         replyFault pending e
                         return Exn.rethrow e

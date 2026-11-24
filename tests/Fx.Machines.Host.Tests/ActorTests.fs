@@ -321,6 +321,22 @@ let tests =
                 runIn fakes.Env (Actor.stop first)
             }
 
+            test "a key the log has but the actor does not know gets the log's commit as its first outcome" {
+                let fakes = create ()
+                let log = InMemoryEventLog<Event>()
+                let first = start fakes (spec log.Log)
+                let second = start fakes (spec log.Log)
+                let prompt = envelope "p1" alice (Prompt "one")
+                completed (send fakes first prompt) |> ignore
+                // The second actor never saw the commit, but the log knows the key: nothing is appended.
+                Expect.equal (completed (send fakes second prompt)) (accepted 0L 1) "the first outcome"
+                Expect.equal (completed (send fakes second prompt)) (accepted 0L 1) "remembered"
+                Expect.equal (lines log stream).Length 1 "appended once"
+                Expect.equal (Actor.snapshot second).Seq 0L "its state is unchanged"
+                runIn fakes.Env (Actor.stop first)
+                runIn fakes.Env (Actor.stop second)
+            }
+
             test "a defect in Handle fails that command only" {
                 let fakes = create ()
                 let log = InMemoryEventLog<Event>()

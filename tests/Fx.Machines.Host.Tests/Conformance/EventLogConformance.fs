@@ -66,6 +66,36 @@ let tests (name: string) (create: unit -> EventLog<string>) : Test =
 
                 Expect.equal (wait (log.Head stream CancellationToken.None)) 1L "unchanged")
 
+            testCase "a key the stream already has appends nothing and says where its commit went" (fun () ->
+                let log = create ()
+
+                wait (log.Append stream 0L (meta "k1") [ "a"; "b" ] CancellationToken.None)
+                |> ignore
+
+                let first = { After = 0L; Count = 2 }
+
+                Expect.equal
+                    (wait (log.Append stream 2L (meta "k1") [ "c" ] CancellationToken.None))
+                    (Error(Duplicate(IdempotencyKey "k1", first)))
+                    "at the head"
+
+                Expect.equal
+                    (wait (log.Append stream 0L (meta "k1") [ "c" ] CancellationToken.None))
+                    (Error(Duplicate(IdempotencyKey "k1", first)))
+                    "the key is checked before the head"
+
+                Expect.equal (wait (log.Head stream CancellationToken.None)) 2L "unchanged"
+
+                Expect.equal
+                    (wait (log.Append stream 2L (meta "k2") [ "c" ] CancellationToken.None))
+                    (Ok 3L)
+                    "another key"
+
+                Expect.equal
+                    (wait (log.Append other 0L (meta "k1") [ "x" ] CancellationToken.None))
+                    (Ok 1L)
+                    "keys are per stream")
+
             testCase "an empty commit is a defect" (fun () ->
                 let log = create ()
 

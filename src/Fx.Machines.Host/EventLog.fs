@@ -47,10 +47,14 @@ type Recorded<'Evt> =
 type AppendError =
     /// The stream's head was not the expected sequence number: another writer appended first.
     | Conflict of expected: int64 * actual: int64
+    /// The stream already has a commit with this idempotency key: the command took effect then, with
+    /// these events. Nothing was appended.
+    | Duplicate of key: IdempotencyKey * appended: Appended
 
     override this.ToString() =
         match this with
         | Conflict(expected, actual) -> "conflict: expected head " + string expected + ", found " + string actual
+        | Duplicate(key, appended) -> "duplicate: " + key.Value + " " + string appended
 
 /// An actor found its stream changed by another writer: two actors ran on one stream (spec §17:
 /// takeover is fenced). The actor stops; a new one rebuilds from the log.
@@ -63,12 +67,16 @@ type ConcurrencyException(stream: StreamId, error: AppendError) =
 /// Append-only event streams with sequence numbers (spec §5): what an actor needs from an event store.
 /// A record of functions, data in and out, the cancellation token last.
 ///
-/// Interpreters: `InMemoryEventLog` (this project); the durable store is T105. Every interpreter
-/// passes `EventLogConformance` (tests/Fx.Machines.Host.Tests).
+/// Interpreters: `InMemoryEventLog` (this project) and the durable SQLite store (`SqliteEventStore`
+/// in Fx.Store.Live). Every interpreter passes `EventLogConformance` (tests/Fx.Machines.Host.Tests).
 type EventLog<'Evt> =
     {
         /// Appends one commit if the stream's head is the expected sequence number (0 for an empty
         /// stream), atomically, and returns the new head. The list is never empty.
+        ///
+        /// The commit's key is checked first: a stream never holds two commits with one key, so a
+        /// retried append gets `Duplicate` with the events of the first, whatever its expected head.
+        /// Otherwise a wrong expected head is a `Conflict`.
         Append: StreamId -> int64 -> EventMeta -> 'Evt list -> CancellationToken -> Task<Result<int64, AppendError>>
         /// At most `max` events after a sequence number, in order. Fewer, or none, at the head.
         Read: StreamId -> int64 -> int -> CancellationToken -> Task<Recorded<'Evt> list>
