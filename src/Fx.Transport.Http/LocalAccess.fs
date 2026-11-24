@@ -161,6 +161,14 @@ let decide (policy: AccessPolicy) (request: RequestFacts) : Result<Granted, Deni
                         Protocols = request.WebSocketProtocols |> List.filter (isTokenProtocol >> not)
                     }
 
+/// The response text for a rejection. It does not echo the request's host or origin.
+let reason (denied: Denied) : string =
+    match denied with
+    | ForbiddenHost _ -> "forbidden host"
+    | ForbiddenOrigin _ -> "forbidden origin"
+    | MissingToken -> "missing token"
+    | InvalidToken -> "invalid token"
+
 /// The HTTP status code for a rejection.
 let statusCode (denied: Denied) : int =
     match denied with
