@@ -7,4 +7,18 @@
     <PackageVersion Include="Expecto" Version="11.1.1" />
     <PackageVersion Include="YoloDev.Expecto.TestSdk" Version="0.16.1" />
   </ItemGroup>
+
+  <!--
+    Custom F# analyzers (tools/Fx.Analyzers). They run inside the `fsharp-analyzers` host from
+    dotnet-tools.json, which only loads analyzers built against its own SDK major.minor version, and
+    share its FSharp.Core. Upgrade FSharp.Analyzers.SDK, the tool and AnalyzersFSharpCoreVersion
+    (the SDK's exact FSharp.Core dependency) together.
+  -->
+  <PropertyGroup Label="Analyzers">
+    <AnalyzersFSharpCoreVersion>10.1.404</AnalyzersFSharpCoreVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Analyzers">
+    <PackageVersion Include="FSharp.Analyzers.SDK" Version="0.43.0" />
+  </ItemGroup>
 </Project>
