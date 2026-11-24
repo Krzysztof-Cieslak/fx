@@ -343,6 +343,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T009,T101,T103,T104 done
+  class T006 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -358,7 +359,7 @@ flowchart LR
 | T003 | AOT gates | T001 | §20 | done | CI publishes Native AOT on all three OSes; JIT-vs-native diff harness runs the same scenario both ways and fails on any output difference. |
 | T004 | Spike: Kestrel/WS/SSE | T003 | §17, §20 | done | Kestrel `CreateSlimBuilder` + `RequestDelegate` endpoints + WebSocket + SSE work under AOT on all OSes; findings written to `docs/spikes/`. |
 | T005 | Spike: PTY | T003 | §6.5, §20 | todo | PTY spawn/resize/read under AOT on Linux/macOS (forkpty) and Windows (ConPTY); PowerShell 7 launch verified. |
-| T006 | Spike: SQLite | T003 | §20 | todo | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
+| T006 | Spike: SQLite | T003 | §20 | in-progress | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
 | T007 | Spike: keychains | T003 | §11.4 | todo | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
 | T008 | Spike: tree-sitter | T003 | §6.7 | todo | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
 | T009 | Spike: Bun kernel | T001 | §6.3 | done | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
