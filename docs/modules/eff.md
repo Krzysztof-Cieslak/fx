@@ -183,6 +183,7 @@ type SessionEnv =
   - `ScriptedShell` answers commands from a function, records them, and throws on a command it does not expect.
   - `InMemorySecrets` and `TraceCollector` keep everything in memory.
 - Keep effects that a fake clock drives on the advancing thread: no `Task.Yield` or real I/O. A thread-pool hop races with the next `Advance`, and the JIT-vs-native diff caught exactly that.
+- `Advance` relies on .NET running continuations inline, which it does only on threads with a known stack size. The main thread of a musl Native AOT binary does not have one, so `Advance` throws there. Test runners use thread-pool threads, and the `eff-concurrency` scenario runs on one.
 - **Conformance suites are functions from an interpreter to a `Test`** (`tests/Fx.Effects.Tests/Conformance`). `FsConformance` and `IdsConformance` run against the fakes and against the real interpreters on Linux, macOS and Windows; `Fx.Effects.Live.Tests` compiles the same files. A new interpreter (an envd-backed `Fs`, say) passes the same suite.
 
 ## Record and replay

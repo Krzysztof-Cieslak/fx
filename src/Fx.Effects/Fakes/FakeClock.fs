@@ -1,6 +1,7 @@
 namespace Fx.Effects.Fakes
 
 open System
+open System.Runtime.CompilerServices
 open System.Threading
 open System.Threading.Tasks
 open Fx.Effects
@@ -11,6 +12,10 @@ open Fx.Effects
 /// the clock set to each delay's deadline, and runs what was waiting on it up to its next incomplete
 /// await before firing the next. So an effect that sleeps in a loop runs as many iterations as fit in
 /// the advance, and sees the right time in each.
+///
+/// That relies on .NET running task continuations inline, which it does only on a thread with enough
+/// known stack. The main thread of a musl Native AOT binary is not one (its stack size is unknown), so
+/// `Advance` throws there: drive the clock from a thread-pool thread instead.
 [<Sealed>]
 type FakeClock(start: Instant) =
     let gate = obj ()
@@ -110,6 +115,10 @@ type FakeClock(start: Instant) =
     member _.Advance(duration: TimeSpan) =
         if duration < TimeSpan.Zero then
             invalidArg (nameof duration) "A fake clock only moves forward."
+
+        if not (RuntimeHelpers.TryEnsureSufficientExecutionStack()) then
+            invalidOp
+                "FakeClock.Advance needs a thread where task continuations run inline, or delays fire out of order. Advance from a thread-pool thread."
 
         let target = lock gate (fun () -> mono + duration)
 
