@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="VersionTests.fs" />
+    <Compile Include="ManifestTests.fs" />
+    <Compile Include="ContributionTests.fs" />
+    <Compile Include="HookTests.fs" />
+    <Compile Include="MethodTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
