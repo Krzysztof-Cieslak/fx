@@ -70,11 +70,13 @@ describe("hardened launch", () => {
       const env = await k.run(`const proc = await import("node:process"); Object.keys(proc.env).sort()`);
       const names = (await k.run(`Object.keys(proc.env).sort().join(",")`)).value!.text.slice(1, -1).split(",");
       expect(env.ok).toBe(true);
-      // Bun sets this itself for --no-orphans, so that the kernel's children inherit the behaviour.
-      const setByBun = "BUN_FEATURE_FLAG_NO_ORPHANS";
-      expect(names).toContain(setByBun);
+      // On POSIX, Bun sets this itself for --no-orphans so that the kernel's children inherit it.
+      // On Windows, libuv's spawn (used by Bun.spawn in this harness, not by .NET's Process) copies
+      // a few variables it considers required from the parent when the given environment lacks them.
+      const added = process.platform === "win32" ? ["HOMEDRIVE", "HOMEPATH", "LOGONSERVER", "USERDOMAIN", "USERNAME"] : ["BUN_FEATURE_FLAG_NO_ORPHANS"];
+      if (process.platform !== "win32") expect(names).toContain("BUN_FEATURE_FLAG_NO_ORPHANS");
       const allowed = [...bunKernelLaunch.envAllowlist, ...Object.keys(bunKernelLaunch.envSet)].map((n) => n.toUpperCase());
-      for (const name of names.filter((n) => n !== setByBun)) {
+      for (const name of names.filter((n) => !added.includes(n.toUpperCase()))) {
         expect(allowed).toContain(name.toUpperCase());
         expect(bunKernelLaunch.envDeny.some((p) => matchesPattern(name, p))).toBe(false);
       }
@@ -143,7 +145,7 @@ describe("hardened launch", () => {
 describe("--no-orphans", () => {
   const cleanups: (() => void)[] = [];
   afterAll(() => cleanups.forEach((c) => c()));
-  async function killParent(mode: "hardened" | "control"): Promise<{ kernel: number; child: number }> {
+  async function killParent(mode: "hardened" | "control" | "busy"): Promise<{ kernel: number; child: number }> {
     const parent = Bun.spawn([process.execPath, join(import.meta.dir, "fixtures", "orphan-parent.ts"), mode], { stdout: "pipe", stderr: "inherit" });
     const reader = parent.stdout.getReader();
     let text = "";
@@ -170,12 +172,13 @@ describe("--no-orphans", () => {
     return !processAlive(pid);
   }
 
-  test("positive control: without it, a cell's child outlives a killed host", async () => {
+  test("positive control: without it, a cell's child outlives a killed host (except on Windows)", async () => {
     const { kernel, child } = await killParent("control");
     try {
-      // The kernel itself exits on stdin EOF, but it leaves its descendants behind.
+      // The kernel itself exits on stdin EOF. On POSIX it leaves its descendants behind; on Windows
+      // libuv puts every spawned process in a kill-on-close job object, so they go with it.
       expect(await waitDead(kernel, 5000)).toBe(true);
-      expect(await waitDead(child, 1000)).toBe(false);
+      expect(await waitDead(child, 1000)).toBe(process.platform === "win32");
     } finally {
       try {
         process.kill(child, "SIGKILL");
@@ -187,5 +190,19 @@ describe("--no-orphans", () => {
     const { kernel, child } = await killParent("hardened");
     expect(await waitDead(kernel, 5000)).toBe(true);
     expect(await waitDead(child, 5000)).toBe(true);
+  }, SLOW);
+
+  test("with it, a kernel stuck in a busy loop still dies with the host", async () => {
+    const { kernel, child } = await killParent("busy");
+    try {
+      expect(await waitDead(kernel, 5000)).toBe(true);
+      expect(await waitDead(child, 5000)).toBe(true);
+    } finally {
+      for (const pid of [kernel, child]) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {}
+      }
+    }
   }, SLOW);
 });

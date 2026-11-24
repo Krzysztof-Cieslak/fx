@@ -94,13 +94,15 @@ export interface LaunchOptions {
   hostCall?: HostCallHandler;
   finish?: (params: FinishParams) => FinishResult;
   initialize?: Partial<InitializeParams> | false;
+  /** Pass --trace to the kernel (frames logged to its stderr). Defaults to on in CI. */
+  trace?: boolean;
 }
 
 export class KernelHost {
   readonly stray: string[] = [];
   readonly late: CellLateParams[] = [];
   readonly finishes: FinishParams[] = [];
-  stderr = "";
+  readonly stderrLines: string[] = [];
   info: InitializeResult | undefined;
   /** Keep the owned directories after `close` (for inspection). */
   keepOwned = false;
@@ -122,6 +124,7 @@ export class KernelHost {
     const spec = options.spec ?? (options.workspace ? { ...bunKernelLaunch, cwdPolicy: "workspace" as const } : bunKernelLaunch);
     const vars = { ...ownedVars(layout), "bun.exe": bun.exe, "kernel.entry": kernel.path, "kernel.global": globalName };
     const launch = resolveLaunch(spec, vars, options.parentEnv ?? process.env, { trusted: options.trusted ?? false, workspace: options.workspace });
+    if (options.trace ?? process.env.CI === "true") launch.cmd.push("--trace");
     const proc = Bun.spawn(launch.cmd, { cwd: launch.cwd, env: launch.env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     let host!: KernelHost;
     const peer = new RpcPeer({
@@ -139,7 +142,7 @@ export class KernelHost {
       .on("finish", (p: FinishParams) => (host.finishes.push(p), finish(p)))
       .on("cell/late", (p: CellLateParams) => host.late.push(p));
     void readLines(proc.stdout, (line) => peer.handleLine(line)).then(() => peer.failAll(new Error("kernel stdout closed")));
-    void new Response(proc.stderr).text().then((t) => (host.stderr = t));
+    void readLines(proc.stderr, (line) => host.stderrLines.push(line));
     if (options.initialize !== false) {
       host.info = (await host.peer.request("initialize", {
         protocolVersion,
@@ -152,8 +155,18 @@ export class KernelHost {
     return host;
   }
 
+  get stderr(): string {
+    return this.stderrLines.join("\n");
+  }
+
+  /** Requests that take long print what the kernel said last (diagnostics for CI). */
   request<T>(method: string, params?: unknown): Promise<T> {
-    return this.peer.request(method, params) as Promise<T>;
+    const pending = this.peer.request(method, params) as Promise<T>;
+    const watchdog = setTimeout(() => {
+      console.error(`[host] ${method} unanswered after 4 s (kernel pid ${this.pid}, exit ${this.proc.exitCode}); stray: ${JSON.stringify(this.stray.slice(-5))}`);
+      console.error(this.stderrLines.slice(-40).join("\n"));
+    }, 4000);
+    return pending.finally(() => clearTimeout(watchdog));
   }
 
   private cellCounter = 0;

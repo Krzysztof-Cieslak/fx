@@ -20,9 +20,14 @@ if (!globalName) {
 
 const writeStdout = process.stdout.write.bind(process.stdout);
 const writeStderr = process.stderr.write.bind(process.stderr);
+// --trace logs every frame to stderr (diagnostics only).
+const trace = process.argv.includes("--trace") ? (text: string) => writeStderr(`[kernel ${performance.now().toFixed(1)}] ${text.slice(0, 300)}\n`) : undefined;
 
 const peer = new RpcPeer({
-  write: (frame) => writeStdout("\n" + frame + "\n"),
+  write: (frame) => {
+    trace?.(`-> ${frame}`);
+    writeStdout("\n" + frame + "\n");
+  },
   onStray: (text) => writeStderr(`kernel: ignored input: ${text.slice(0, 200)}\n`),
 });
 const kernel = new Kernel(globalName, peer);
@@ -48,6 +53,10 @@ peer
     return null;
   });
 
-await readLines(Bun.stdin.stream(), (line) => peer.handleLine(line));
+await readLines(Bun.stdin.stream(), (line) => {
+  trace?.(`<- ${line}`);
+  peer.handleLine(line);
+});
+trace?.("stdin closed");
 // The host closed stdin: nothing more can arrive.
 process.exit(0);
