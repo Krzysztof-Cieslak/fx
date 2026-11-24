@@ -147,8 +147,9 @@ let fixTest test = eff {
 // Eff<'R, Patch> when 'R :> IShell and 'R :> ILedger and 'R :> ILlm
 ```
 
-- **Core capabilities:** `IClock`, `IIds`, `IVariants`, `ILlm`, `IJudge`, `ISessionLog`, `IContext`, `IInterpreter`, `IShell`, `IFs`/`IFsRead`, `IRepo`, `IBlobs`, `ISnapshots`, `ILedger`, `IGrants`, `IUser`, `IAgents`, `IRuns`, `ISafeOutputs`, `IPackages`, `IEnvs`, `ISecrets`, `IComponents`, `ITelemetry` (local traces only).
+- **Core capabilities:** `IClock`, `IIds`, `IVariants`, `ILlm`, `IJudge`, `ISessionLog`, `IContext`, `IInterpreter`, `IShell`, `IFs`/`IFsRead`, `IRepo`, `IBlobs`, `ISnapshots`, `ILedger`, `IGrants`, `IUser`, `IAgents`, `IRuns`, `ISafeOutputs`, `IPackages`, `IEnvs`, `ISecrets`, `IComponents`, `ITrace` (local traces only; named so because "telemetry" suggests data leaving the machine).
 - Concrete environments are assembled per session/agent/run from interpreters (`SessionEnv`, `ReplayEnv`, attenuated agent envs).
+- **Scope:** every environment carries a `Scope` (cancellation + current trace span). Capability functions take its cancellation token; structured combinators (`Eff.all`, `race`, `timeout`, `bracket`) run children in a narrower scope and wait for all of them. Capability calls are data in, data out (no streams or callbacks), so they can be journaled and replayed (§15). Details: `docs/modules/eff.md`.
 - **No I/O outside `Eff`** (lint + replay tests). Types are not a security boundary.
 
 ### 4.3 Functions

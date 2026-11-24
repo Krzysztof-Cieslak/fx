@@ -96,6 +96,25 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - **Codecs**: write them by hand with combinators (`Codec.record`, `Codec.union`, …). A single codec yields the schema, encoding, validated decoding and the preview.
 - **Configurable behaviour** must be read through `IVariants`. Never read configuration ad hoc, because it has to be recorded and replayable.
 
+**Effects and capabilities** (module spec: [`docs/modules/eff.md`](docs/modules/eff.md))
+- Write effects with `eff { }`, or `effResult { }` when they have expected failures. Only `Eff` values can be bound. Lift a task with `Eff.ofTask` only inside capability modules and interpreters.
+- Loop with `while` or `for`, never with a recursive `return!`: that builds an ever longer chain of tasks.
+- Never suppress FS3511. Restructure the block (e.g. move a `let rec` out of it) so that it compiles to a state machine.
+- Every environment carries a `Scope`: a cancellation token and the current trace span.
+  - Capability calls pass `env.Scope.Cancellation`. Honour it: `Eff.all`, `race` and `timeout` wait for every child.
+  - Run effects concurrently with `Eff.all`, `both`, `race`, `timeout` and `bracket`, never with `Task.Run` or `Task.WhenAll`.
+- **Adding a capability** (one file, in `src/Fx.Effects` or in the project that owns the capability):
+  1. A record of functions with data in and out, and the `CancellationToken` last. No streams or callbacks, so calls can be recorded, replayed and sent over JSON-RPC. Expected failures are a `Result` with the capability's own error union.
+  2. A "has" interface with one member named after the record: `type IClock = abstract Clock: Clock`.
+  3. A module of effects, e.g. `let sleep<'R when 'R :> IClock and 'R :> IScope> d : Eff<'R, unit> = fun env -> env.Clock.Delay d env.Scope.Cancellation`.
+  4. A deterministic fake, and a conformance suite (a function from an interpreter to a `Test`) that the fake and the real interpreter both pass.
+  5. The real interpreter in its own small file (`src/Fx.Effects.Live` for the core capabilities), with an `analyzers.json` entry for exactly its EFF code, and a JIT-vs-native scenario.
+- **Building an environment**: a record of capability values that implements the "has" interfaces and `IScopeWith` of itself. `WithScope` returns a copy with the new scope. See `tests/Fx.Effects.Tests/TestEnv.fs`. Only composition roots (the host, envd, tests) reference `Fx.Effects.Live`.
+- **Attenuating**: hand an effect a narrower environment with `Eff.local` (e.g. a view that implements only `IFsRead`), or wrap a capability (`Fs.confine root`). These are guardrails; the sandbox is the boundary.
+- **Test doubles**: the fakes in `Fx.Effects.Fakes` (`FakeClock`, `FakeIds`, `InMemoryFs`, `ScriptedShell`, `InMemorySecrets`, `TraceCollector`).
+  - Drive time with `FakeClock.Advance`.
+  - Keep effects under a fake clock on the advancing thread (no `Task.Yield`, no real I/O); otherwise the order of events depends on thread-pool timing.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -177,6 +196,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Analyzers | `dotnet tool restore` once, then `bun scripts/analyzers.ts`; `bun scripts/analyzers.ts samples` proves they fail on the samples |
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
+| Eff benchmark | `dotnet run -c Release --project tools/Fx.Effects.Bench` (results in `docs/modules/eff.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 
@@ -197,6 +217,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `Directory.Packages.props` | Central package versions |
 | `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
 | `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
+| `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
+| `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
 | `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
@@ -204,6 +226,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `scripts/` | Repository tooling (Bun) |
 | `tools/` | Repository tooling in F#: JIT-only, never shipped. Tested by `tests/<Tool>.Tests` |
 | `tools/Fx.Analyzers` | Our F# analyzers ([Analyzers](#analyzers)) |
+| `tools/Fx.Effects.Bench` | Micro-benchmark of the `eff` builder (a measurement, so no test project) |
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them |
@@ -237,7 +260,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
   - building request values such as `HttpRequestMessage` and `ProcessStartInfo`.
 - **Scope**: the AOT rules apply to all our F# code, so code can move freely between tests, tools and the binary. The EFF rules are the initial "no I/O outside `Eff`" lint and apply only to production code under `src/`. Tests and tools are imperative shells.
 - **Opting in (the imperative shell)**: `analyzers.json` is the only escape hatch, and every entry is reviewed like code. An `allow` entry lists `codes`, `files` (globs relative to the repository root) and a mandatory `reason`. Inline `fsharpanalyzer: ignore` comments are rejected.
-  - Capability interpreters (T103 onwards), such as the real `IClock`, live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/<Project>/SystemClock.fs"], "reason": "IClock interpreter: the only reader of the system clock." }`.
+  - Capability interpreters live in their own files and get an entry for exactly the codes they need, e.g. `{ "codes": ["EFF001"], "files": ["src/Fx.Effects.Live/SystemClock.fs"], "reason": "IClock interpreter: …" }`.
   - Keep shell files small, so that the pure core stays analyzed.
   - Tests check that every glob in `analyzers.json` still matches a file.
 - **Changing the rules**: bans are tables in `tools/Fx.Analyzers/Apis.fs` and `Formats.fs`. Every rule needs a failing line in `tests/Fx.Analyzers.Tests/Samples/`, marked `// expect: <code>`. `Clean.fsx` lists what must stay allowed. The tests and the CI samples step check that the findings match the markers exactly.
