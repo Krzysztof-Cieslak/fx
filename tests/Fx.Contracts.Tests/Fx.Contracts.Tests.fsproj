@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Generators.fs" />
+    <Compile Include="JsonNumberTests.fs" />
+    <Compile Include="JsonTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <!-- Expecto.FsCheck only requires FsCheck >= 3.0.0; pin the version we test with. -->
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Contracts\Fx.Contracts.fsproj" />
+  </ItemGroup>
+</Project>
