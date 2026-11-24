@@ -4,8 +4,9 @@
 /// multithreaded runtime (only async-signal-safe calls are allowed between `fork` and `exec`). Instead:
 ///
 /// 1. The parent opens the master with `open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC)`, then
-///    `grantpt`, `unlockpt` and `ptsname_r`, and sets the size on the master. It never opens the
-///    slave, so it never holds the terminal open and never becomes its controlling process.
+///    `grantpt`, `unlockpt` and `ptsname_r`. It opens the slave too (`O_NOCTTY`, so it never
+///    becomes the controlling process) to set the size, and closes it as soon as the child has it,
+///    so that the output ends when the child's side closes.
 /// 2. .NET resolves the program and builds `argv` and `envp`
 ///    (`UnixProcessStartArguments.Start`, which also registers the child for reaping), and the
 ///    callback creates the child with `posix_spawn`: a new session (`POSIX_SPAWN_SETSID`), every
@@ -45,19 +46,38 @@ let private withFd (handle: SafeFileHandle) (f: int -> 'T) : 'T option =
         if added then
             handle.DangerousRelease()
 
-let private setSize (master: SafeFileHandle) (size: PtySize) =
-    withFd master (fun fd ->
-        let mutable ws: Posix.WinSize =
-            {
-                Rows = uint16 size.Rows
-                Cols = uint16 size.Cols
-                XPixel = 0us
-                YPixel = 0us
-            }
+/// Sets the size on either side of the terminal.
+let private setSizeOn (fd: int) (size: PtySize) =
+    let mutable ws: Posix.WinSize =
+        {
+            Rows = uint16 size.Rows
+            Cols = uint16 size.Cols
+            XPixel = 0us
+            YPixel = 0us
+        }
 
-        if Posix.ioctl fd c.SetWinSize (NativePtr.toNativeInt &&ws) <> 0 then
-            raise (Win32Exception(Posix.errno ())))
-    |> ignore
+    if Posix.ioctl fd c.SetWinSize (NativePtr.toNativeInt &&ws) <> 0 then
+        let error = Posix.errno ()
+        raise (Win32Exception(error, $"TIOCSWINSZ: {Posix.describe error}"))
+
+let private setSize (master: SafeFileHandle) (size: PtySize) =
+    withFd master (fun fd -> setSizeOn fd size) |> ignore
+
+/// Opens the slave in this process, without making it the controlling terminal. macOS refuses
+/// terminal ioctls on the master until the slave has been opened once, and resets the size when the
+/// slave is opened while no one has it open: so the slave stays open here until the child has it.
+let private openSlave (slave: string) : Result<SafeFileHandle, string> =
+    let path = Marshal.StringToCoTaskMemUTF8 slave
+
+    try
+        let fd = Posix.openNoMode (path, Posix.ORdWr ||| c.NoCtty ||| c.CloExec)
+
+        if fd < 0 then
+            Error $"open {slave}: {Posix.describe (Posix.errno ())}"
+        else
+            Ok(new SafeFileHandle(nativeint fd, true))
+    finally
+        Marshal.FreeCoTaskMem path
 
 /// Opens a new master and returns it with the path of its slave.
 let private openMaster () : Result<SafeFileHandle * string, string> =
@@ -315,28 +335,35 @@ let spawn (info: ProcessStartInfo) (size: PtySize) : Result<Pty, PtyError> =
     match openMaster () with
     | Error reason -> notStarted reason
     | Ok(master, slave) ->
-        try
-            setSize master size
-            // A new session with the null device as the handles .NET prepares; the callback ignores
-            // them. .NET then never treats the child as a user of its own terminal.
-            info.StartDetached <- true
-            let cwd = info.WorkingDirectory
-
-            let callback =
-                Func<UnixProcessStartArguments, int>(fun args ->
-                    spawnChild
-                        slave
-                        cwd
-                        (NativePtr.toNativeInt args.ResolvedPath)
-                        (NativePtr.toNativeInt args.Arguments)
-                        (NativePtr.toNativeInt args.EnvironmentVariables))
-
-            let proc = UnixProcessStartArguments.Start(info, callback)
-            Ok(ofProcess proc master)
-        with
-        | :? Win32Exception as e ->
+        match openSlave slave with
+        | Error reason ->
             master.Dispose()
-            notStarted e.Message
-        | :? IOException as e ->
-            master.Dispose()
-            notStarted e.Message
+            notStarted reason
+        | Ok slaveHandle ->
+            use _ = slaveHandle
+
+            try
+                setSizeOn (int (slaveHandle.DangerousGetHandle())) size
+                // A new session with the null device as the handles .NET prepares; the callback ignores
+                // them. .NET then never treats the child as a user of its own terminal.
+                info.StartDetached <- true
+                let cwd = info.WorkingDirectory
+
+                let callback =
+                    Func<UnixProcessStartArguments, int>(fun args ->
+                        spawnChild
+                            slave
+                            cwd
+                            (NativePtr.toNativeInt args.ResolvedPath)
+                            (NativePtr.toNativeInt args.Arguments)
+                            (NativePtr.toNativeInt args.EnvironmentVariables))
+
+                let proc = UnixProcessStartArguments.Start(info, callback)
+                Ok(ofProcess proc master)
+            with
+            | :? Win32Exception as e ->
+                master.Dispose()
+                notStarted e.Message
+            | :? IOException as e ->
+                master.Dispose()
+                notStarted e.Message
