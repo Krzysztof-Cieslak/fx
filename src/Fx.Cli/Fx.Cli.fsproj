@@ -5,6 +5,12 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>$(FxProductName)</AssemblyName>
     <PublishAot>true</PublishAot>
+    <!--
+      With PublishAot, even a RID-less restore adds the host RID (for the ILCompiler host package),
+      so a lockfile here would differ per OS. Its only extra packages are SDK-implicit and pinned
+      by global.json. T003 decides how to lock RID-specific restores.
+    -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
