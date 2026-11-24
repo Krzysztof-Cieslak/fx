@@ -114,7 +114,9 @@
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
+          "Fx.Pty": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sqlite": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )"
         }
       },
@@ -157,6 +159,13 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.pty": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
+      },
       "fx.rpc": {
         "type": "Project",
         "dependencies": {
@@ -164,6 +173,12 @@
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Effects": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.sqlite": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
         }
       },
       "fx.transport.http": {
