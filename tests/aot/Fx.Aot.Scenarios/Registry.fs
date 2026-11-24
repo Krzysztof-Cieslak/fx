@@ -12,6 +12,7 @@ let all: Scenario list =
             Collections.scenarios
             Concurrency.scenarios
             Effects.scenarios
+            Machines.scenarios
             Text.scenarios
             Runtime.scenarios
             Kestrel.Http.scenarios
