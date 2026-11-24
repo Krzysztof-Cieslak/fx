@@ -77,6 +77,13 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: "**/packages.lock.json"
+      # Native libraries built from source by the build (native/, e.g. SQLite). Their paths carry a
+      # hash of their inputs, so a restored cache is either used as is or ignored.
+      - name: Cache native libraries
+        uses: actions/cache@v6
+        with:
+          path: artifacts/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/**') }}
       - name: Restore (locked)
         run: dotnet restore Fx.slnx --locked-mode
       - name: Build
@@ -121,6 +128,11 @@ jobs:
           path: ${{ env.NUGET_PACKAGES }}
           key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
           restore-keys: nuget-aot-${{ matrix.rid }}-
+      - name: Cache native libraries
+        uses: actions/cache@v6
+        with:
+          path: artifacts/native
+          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
       - name: Start the Alpine container
         if: ${{ matrix.alpine }}
         run: >-
@@ -147,6 +159,24 @@ jobs:
           echo "$version"
           [[ "$version" == "$name "* ]]
           $IN "$bin" --help
+      - name: SQLite is linked into the binary
+        run: |
+          dir="artifacts/publish/Fx.Cli/release_$RID"
+          name="${{ steps.smoke.outputs.name }}"
+          exe=""
+          [[ "$RID" == win-* ]] && exe=".exe"
+          if ls "$dir" | grep -iE 'sqlite.*\.(so|dylib|dll|a|lib)$'; then
+            echo "::error::a SQLite library was published next to the binary"
+            exit 1
+          fi
+          # The binary alone in an empty directory: the library name is unique to the binding, so
+          # nothing else could satisfy its imports.
+          alone="artifacts/standalone/$RID"
+          rm -rf "$alone" && mkdir -p "$alone" && cp "$dir/$name$exe" "$alone/"
+          info=$($IN "$alone/$name" --build-info | tr -d '\r')
+          echo "$info"
+          version=$($IN dotnet msbuild src/Fx.Sqlite -getProperty:FxSqliteVersion | tr -d '\r')
+          grep -q "^sqlite $version " <<< "$info"
       - name: Report binary sizes
         run: |
           exe=""
