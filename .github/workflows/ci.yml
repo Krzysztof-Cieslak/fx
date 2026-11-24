@@ -147,6 +147,18 @@ jobs:
           echo "$version"
           [[ "$version" == "$name "* ]]
           $IN "$bin" --help
+      - name: Report binary sizes
+        run: |
+          exe=""
+          [[ "$RID" == win-* ]] && exe=".exe"
+          {
+            echo "### Native AOT binaries, $RID"
+            echo "| Binary | Bytes |"
+            echo "|---|---:|"
+            for bin in "Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}" "Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"; do
+              echo "| $(basename "$bin") | $(wc -c < "artifacts/publish/$bin$exe" | tr -d ' ') |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: JIT-vs-native diff
         run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish
       - name: JIT-vs-native diff self-test
