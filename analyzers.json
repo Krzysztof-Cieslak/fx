@@ -1,0 +1,26 @@
+{
+  "scope": [
+    {
+      "codes": ["AOT*"],
+      "files": ["src/**", "tests/**", "tools/**"],
+      "reason": "Native AOT rules hold for all hand-written F#, so code can move between tests, tools and the binary."
+    },
+    {
+      "codes": ["EFF*"],
+      "files": ["src/**", "tests/Fx.Analyzers.Tests/Samples/**"],
+      "reason": "No I/O outside Eff is a rule for production code; tests and tools are imperative shells. The samples prove the rules."
+    }
+  ],
+  "allow": [
+    {
+      "codes": ["EFF005"],
+      "files": ["src/Fx.Cli/Program.fs"],
+      "reason": "Process entry point: writes the outcome of the pure Cli.run to stdout and stderr."
+    },
+    {
+      "codes": ["EFF005"],
+      "files": ["tests/Fx.Analyzers.Tests/Samples/Allowed.fsx"],
+      "reason": "Sample proving that an allow entry suppresses exactly the codes it lists."
+    }
+  ]
+}

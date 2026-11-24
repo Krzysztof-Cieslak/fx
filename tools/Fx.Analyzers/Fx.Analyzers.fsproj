@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Custom F# analyzers that enforce the AGENTS.md bans (spec §20). Run them with
+    `bun scripts/analyzers.ts`; the policy (scope and allowlist) lives in analyzers.json.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Rules.fs" />
+    <Compile Include="Config.fs" />
+    <Compile Include="Sites.fs" />
+    <Compile Include="Formats.fs" />
+    <Compile Include="Apis.fs" />
+    <Compile Include="Analyzers.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The fsharp-analyzers host provides FSharp.Core; build against the exact version it ships. -->
+    <PackageReference Update="FSharp.Core" VersionOverride="$(AnalyzersFSharpCoreVersion)" />
+    <PackageReference Include="FSharp.Analyzers.SDK" />
+  </ItemGroup>
+</Project>

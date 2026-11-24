@@ -3,11 +3,16 @@
     <File Path="Directory.Build.props" />
     <File Path="Directory.Build.targets" />
     <File Path="Directory.Packages.props" />
+    <File Path="analyzers.json" />
     <File Path="global.json" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Fx.Prelude/Fx.Prelude.fsproj" />
     <Project Path="src/Fx.Cli/Fx.Cli.fsproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <File Path="tools/Directory.Build.props" />
+    <Project Path="tools/Fx.Analyzers/Fx.Analyzers.fsproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
