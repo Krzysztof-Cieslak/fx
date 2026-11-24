@@ -14,6 +14,19 @@
         "resolved": "11.0.0",
         "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
+      "fx.effects": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.effects.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
+      },
       "fx.prelude": {
         "type": "Project",
         "dependencies": {

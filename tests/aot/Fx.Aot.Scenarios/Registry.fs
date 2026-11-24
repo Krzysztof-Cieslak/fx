@@ -11,6 +11,7 @@ let all: Scenario list =
             Exceptions.scenarios
             Collections.scenarios
             Concurrency.scenarios
+            Effects.scenarios
             Text.scenarios
             Runtime.scenarios
         ]

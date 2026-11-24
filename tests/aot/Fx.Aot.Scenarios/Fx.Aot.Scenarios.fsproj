@@ -19,6 +19,7 @@
     <Compile Include="Scenarios\Exceptions.fs" />
     <Compile Include="Scenarios\Collections.fs" />
     <Compile Include="Scenarios\Concurrency.fs" />
+    <Compile Include="Scenarios\Effects.fs" />
     <Compile Include="Scenarios\Text.fs" />
     <Compile Include="Scenarios\Runtime.fs" />
     <Compile Include="Scenarios\Canary.fs" />
@@ -27,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
   </ItemGroup>
 </Project>
