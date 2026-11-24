@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Native AOT executables (FxNativeAot) set PublishAot only when a runtime identifier is given, so
+    a publish without one would silently produce a JIT build. See Directory.Build.props "Restore".
+  -->
+  <Target Name="FxRequireRuntimeIdentifierForNativeAot"
+          BeforeTargets="PrepareForPublish"
+          Condition="'$(FxNativeAot)' == 'true' and '$(RuntimeIdentifier)' == ''">
+    <Error Text="$(MSBuildProjectName) is published with Native AOT only: pass a runtime identifier, e.g. dotnet publish -r linux-x64." />
+  </Target>
+</Project>

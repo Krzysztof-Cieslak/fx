@@ -42,8 +42,9 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(CI)' == 'true' and '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
     <!--
-      RID-specific restores (dotnet publish -r) add RID sections; keep them out of the committed,
-      platform-neutral packages.lock.json. Their lockfiles are owned by T003.
+      RID-specific restores (dotnet publish -r) add RID sections that depend on the host (the
+      ILCompiler host package); keep them out of the committed, platform-neutral packages.lock.json.
+      They are not locked: see "Commands" in AGENTS.md.
     -->
     <NuGetLockFilePath Condition="'$(RuntimeIdentifier)' != ''">packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
