@@ -103,7 +103,12 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - No reflection-based serializers (FSharp.SystemTextJson, Newtonsoft). Use our codecs.
 - F# cannot run C# source generators (System.Text.Json source generation, Request Delegate Generator, LibraryImport, StreamJsonRpc). For Kestrel use `RequestDelegate` endpoints, and for interop use `DllImport` with blittable signatures.
 - Avoid libraries that are not AOT-ready. Use the git CLI instead of LibGit2Sharp. Use SQLite only through the AOT-verified path.
-- Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff tests pass.
+- Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
+- The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
+  - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
+- Behaviour that differs under Native AOT, found by the diff:
+  - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
+- A Native AOT executable sets `FxNativeAot` and sets `PublishAot` only when a runtime identifier is given. Copy the two properties from `src/Fx.Cli/Fx.Cli.fsproj`; the restore section of Commands explains why.
 
 **Cross-platform**
 - Build paths with `Path` APIs; never hardcode `/` or `\`. Handle CRLF, case-insensitive filesystems and Windows path-length limits.
@@ -141,6 +146,21 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - lockfile reproducibility;
   - workflow IR validation;
   - ledger merge and history-rewrite tests.
+- CI publishes `src/Fx.Cli` with Native AOT for `linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64` (in an Alpine container), `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64`, each on a native runner. Each job smoke-tests the binary, runs the JIT-vs-native diff and its self-test, and uploads the binary as a workflow artifact.
+
+**JIT-vs-native diff** (`tests/aot`)
+- `Fx.Aot.Scenarios` is a Native AOT executable. Its scenarios are values: a name and a function that produces deterministic output lines.
+- `Fx.Aot.Diff` runs every case two ways and fails on any difference in stdout, stderr or exit code:
+  - on the JIT, as `dotnet <assembly>.dll`. This is the same IL from the same RID-specific build, with the same AOT feature switches;
+  - as the native binary.
+- The cases are every scenario that runs on the current platform, plus a few `fx` command lines.
+- Add a scenario:
+  1. Write it with `Scenario.lines` or `Scenario.task` in a module under `Scenarios/`, and add it to that module's `scenarios` list.
+  2. If the module is new, add it to `Registry.all` and to the `.fsproj`.
+- Gate a scenario per platform with `Scenario.onlyOn [ Os.Windows ]`, `Scenario.except [ Os.Windows ]` or `Scenario.where (fun p -> not p.Musl)`. Ungated scenarios run everywhere.
+- Scenario output must be deterministic. Do not print times, process ids, temporary paths or string hash codes (they are randomized per process). `Fx.Aot.Tests` runs every scenario twice on the JIT.
+- To diff another Native AOT executable, add a `Subject` to `Subjects.all` in `Fx.Aot.Diff`.
+- `--self-test` runs the canaries in `Registry.canaries`. They must differ, which proves that the diff detects a divergence. Never put a diverging scenario in `Registry.all`: work around the divergence and document it under "Native AOT" above.
 
 ## Commands
 
@@ -153,12 +173,14 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Test | `dotnet test --solution Fx.slnx` |
 | Format | `dotnet tool restore` once, then `dotnet fantomas src tests` (CI runs `--check`) |
 | AOT publish | `dotnet publish src/Fx.Cli -c Release -r <rid>`, e.g. `linux-x64`; binary in `artifacts/publish/Fx.Cli/release_<rid>/` |
+| JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
 | Task graph | `bun scripts/tasks.ts check` |
 
 - After adding or upgrading a package, run `dotnet restore Fx.slnx` and commit the updated `packages.lock.json` files.
   - Package versions live only in `Directory.Packages.props`.
   - Packages come only from nuget.org (`nuget.config`).
-  - The AOT executable (`src/Fx.Cli`) has no lockfile, because its restore is host-specific.
+  - Native AOT executables set `PublishAot` only for RID-specific builds. Otherwise even their RID-less restore adds the host's RID, and the lockfile would differ per OS.
+  - RID-specific restores (`dotnet publish -r`) are not locked. They write git-ignored `packages.<rid>.lock.json` files, because their content depends on the host (the ILCompiler host package). They add only SDK-implicit packages, which `global.json` pins. CI runs the locked RID-less restore before publishing.
 - `TreatWarningsAsErrors` is on everywhere. Production code is compiled with `--reflectionfree`, so `%A` is a compile error.
 
 ## Repository layout
@@ -167,10 +189,14 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 |---|---|
 | `Fx.slnx` | The solution |
 | `Directory.Build.props` | Shared build settings and **`FxProductName`, the naming constant** |
+| `Directory.Build.targets` | Rejects a Native AOT publish without a runtime identifier |
 | `Directory.Packages.props` | Central package versions |
 | `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
-| `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant, `PublishAot` is on) |
+| `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
+| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff |
+| `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
+| `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
 | `scripts/` | Repository tooling (Bun) |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`.
