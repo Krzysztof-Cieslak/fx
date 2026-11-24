@@ -124,11 +124,13 @@ export class KernelHost {
     const spec = options.spec ?? (options.workspace ? { ...bunKernelLaunch, cwdPolicy: "workspace" as const } : bunKernelLaunch);
     const vars = { ...ownedVars(layout), "bun.exe": bun.exe, "kernel.entry": kernel.path, "kernel.global": globalName };
     const launch = resolveLaunch(spec, vars, options.parentEnv ?? process.env, { trusted: options.trusted ?? false, workspace: options.workspace });
-    if (options.trace ?? process.env.CI === "true") launch.cmd.push("--trace");
+    const tracing = options.trace ?? process.env.CI === "true";
+    if (tracing) launch.cmd.push("--trace");
     const proc = Bun.spawn(launch.cmd, { cwd: launch.cwd, env: launch.env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     let host!: KernelHost;
     const peer = new RpcPeer({
       write: (frame) => {
+        if (tracing) host.stderrLines.push(`[host ${performance.now().toFixed(1)}] -> ${frame.slice(0, 200)}`);
         proc.stdin.write(frame + "\n");
         proc.stdin.flush();
       },
@@ -141,7 +143,13 @@ export class KernelHost {
       .on("host/call", (p: HostCallParams) => hostCall(p))
       .on("finish", (p: FinishParams) => (host.finishes.push(p), finish(p)))
       .on("cell/late", (p: CellLateParams) => host.late.push(p));
-    void readLines(proc.stdout, (line) => peer.handleLine(line)).then(() => peer.failAll(new Error("kernel stdout closed")));
+    void readLines(proc.stdout, (line) => {
+      if (tracing && line.length > 0) host.stderrLines.push(`[host ${performance.now().toFixed(1)}] <- ${line.slice(0, 200)}`);
+      peer.handleLine(line);
+    }).then(
+      () => peer.failAll(new Error("kernel stdout closed")),
+      (e) => peer.failAll(new Error(`kernel stdout failed: ${e}`)),
+    );
     void readLines(proc.stderr, (line) => host.stderrLines.push(line));
     if (options.initialize !== false) {
       host.info = (await host.peer.request("initialize", {
