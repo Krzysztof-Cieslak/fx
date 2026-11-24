@@ -1,0 +1,19 @@
+# Build output (UseArtifactsOutput)
+artifacts/
+bin/
+obj/
+
+# RID-specific NuGet lockfiles from AOT publishes (see Directory.Build.props)
+packages.*.lock.json
+
+# Tests
+TestResults/
+
+# Editors
+.vs/
+.idea/
+*.user
+*.swp
+
+# Bun / Node
+node_modules/
