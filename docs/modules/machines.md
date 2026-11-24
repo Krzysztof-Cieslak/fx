@@ -232,7 +232,7 @@ How it works:
 
 | What | Task |
 |---|---|
-| The durable event store (SQLite and blobs) passing `EventLogConformance`; snapshots, so a long stream does not replay from 1 | T105 |
+| Actors that start from a snapshot instead of replaying from 1. The stores are ready (`SqliteEventStore`, snapshots and `Projection` in [store.md](store.md)); the actor would not know the keys before the snapshot. `Duplicate` keeps such a command from taking effect twice, but a command that `Handle` now rejects would get a different outcome than the first; a lookup by key in the log closes that | T125 |
 | The session machine on this host: steer/queue, durable pending requests, the client protocol | T125 |
 | Principals behind `Attribution.Principal` | T122 |
 | `OutcomeUnknown` through `Recover` | T128 |

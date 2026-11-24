@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Measures the event store and the blob store: append throughput and latency (one writer, many
+    writers), read and wake-up latency, blob throughput, with full and normal durability
+    (docs/modules/store.md, "Performance"). Run it with the command in AGENTS.md, "Commands".
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
+  </ItemGroup>
+</Project>

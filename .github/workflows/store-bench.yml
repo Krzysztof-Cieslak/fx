@@ -1,0 +1,60 @@
+name: Store benchmark
+
+# Throughput and latency of the event and blob stores (tools/Fx.Store.Bench, docs/modules/store.md
+# "Performance") on idle runners of each OS. Runs when the stores change, or by hand. Results go to
+# the job summary; nothing fails on numbers.
+on:
+  pull_request:
+    paths:
+      - src/Fx.Sqlite/**
+      - src/Fx.Store/**
+      - src/Fx.Store.Live/**
+      - tools/Fx.Store.Bench/**
+      - native/sqlite/**
+      - .github/workflows/store-bench.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  bench:
+    name: Bench (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - name: Cache native libraries
+        uses: actions/cache@v6
+        with:
+          path: artifacts/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/**') }}
+      - name: Restore (locked)
+        run: dotnet restore tools/Fx.Store.Bench --locked-mode
+      - name: Build
+        run: dotnet build tools/Fx.Store.Bench --no-restore --configuration Release
+      - name: Measure
+        run: |
+          echo "### Store benchmark, ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+          dotnet run --project tools/Fx.Store.Bench --no-build --configuration Release | tee -a "$GITHUB_STEP_SUMMARY"

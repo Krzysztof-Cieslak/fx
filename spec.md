@@ -201,7 +201,7 @@ type TurnResult =
 
 ## 5. Sessions, history and context
 
-- **Event log:** typed durable events with sequence numbers; session tree (forks append); ephemeral deltas vs authoritative items; content-addressed blob payloads.
+- **Event log:** typed durable events with sequence numbers; session tree (forks append); ephemeral deltas vs authoritative items; content-addressed blob payloads. Events keep their schema version and are upcast on read, never rewritten; snapshots are versioned caches of folds. Details: `docs/modules/store.md`.
 - **Commands, not mutations:** prompt (steer/queue), interrupt, approve, fork, revert, move — idempotency keys. **Concurrent inputs from multiple clients are serialized and attributed to their principal.** Interrupt uses a control path that bypasses queues.
   - Every event records its command's key, sender and cause, so deduplication survives restarts: a command takes effect at most once.
   - The control path cancels work in flight at once and goes before queued commands.
