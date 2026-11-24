@@ -343,6 +343,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003 done
+  class T009 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -361,7 +362,7 @@ flowchart LR
 | T006 | Spike: SQLite | T003 | §20 | todo | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
 | T007 | Spike: keychains | T003 | §11.4 | todo | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
 | T008 | Spike: tree-sitter | T003 | §6.7 | todo | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
-| T009 | Spike: Bun kernel | T001 | §6.3 | todo | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
+| T009 | Spike: Bun kernel | T001 | §6.3 | in-progress | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
 | T010 | Spike: envd bootstrap | T003 | §9.2 | todo | Upload + exec a native binary into a Docker container and talk to it over stdio JSON-RPC. |
 
 ### Phase 1 — Core (usable for building fx with fx)
