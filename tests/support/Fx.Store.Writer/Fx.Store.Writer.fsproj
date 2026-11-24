@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    A child process for tests/Fx.Store.Live.Tests: appends to an event store until it is told to stop
+    or killed, so the tests can check what an unclean shutdown leaves, and how writers in two
+    processes meet at the head check. Referenced by the tests, which run its apphost from their
+    output directory.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
+  </ItemGroup>
+</Project>

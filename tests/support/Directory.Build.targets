@@ -1,0 +1,4 @@
+<Project>
+  <!-- Like Directory.Build.props here: the root targets apply, tests/Directory.Build.targets does not. -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\Directory.Build.targets" />
+</Project>

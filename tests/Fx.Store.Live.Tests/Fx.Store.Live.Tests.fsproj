@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The conformance suites are shared: the fakes and the real stores pass the same tests. -->
+    <Compile Include="..\Fx.Machines.Host.Tests\Conformance\EventLogConformance.fs" Link="Conformance\EventLogConformance.fs" />
+    <Compile Include="..\Fx.Store.Tests\Conformance\BlobsConformance.fs" Link="Conformance\BlobsConformance.fs" />
+    <Compile Include="..\Fx.Store.Tests\Conformance\SnapshotsConformance.fs" Link="Conformance\SnapshotsConformance.fs" />
+    <Compile Include="..\Fx.Store.Tests\Notes.fs" Link="Notes.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="EventStoreTests.fs" />
+    <Compile Include="CrashTests.fs" />
+    <Compile Include="BlobStoreTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
+    <!-- An executable: its apphost is copied next to the tests, which start it as a child process. -->
+    <ProjectReference Include="..\support\Fx.Store.Writer\Fx.Store.Writer.fsproj" />
+  </ItemGroup>
+</Project>
