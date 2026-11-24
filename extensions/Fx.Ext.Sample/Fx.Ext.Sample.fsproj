@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The sample extension: the reference for built-in extensions and the subject of the transport-parity
+    tests (tests/Fx.Extensions.Tests). Like every package under extensions/, it references the public
+    SDK (src/Fx.Sdk) and nothing else; the architecture tests check the compiled assembly. Not bundled.
+  -->
+  <ItemGroup>
+    <Compile Include="Sample.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
