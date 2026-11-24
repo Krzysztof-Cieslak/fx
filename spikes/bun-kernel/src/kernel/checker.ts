@@ -9,11 +9,15 @@
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { kernelGlobalsDts } from "./globals.ts";
 import type { Diagnostic } from "./protocol.ts";
+
+const GLOBALS_FILE = "kernel-globals.d.ts";
 
 const tsconfig = (typingsFile: string) => ({
   compilerOptions: {
-    lib: ["ESNext", "DOM"],
+    // No DOM: see kernelGlobalsDts.
+    lib: ["ESNext"],
     target: "ESNext",
     module: "Preserve",
     moduleDetection: "force",
@@ -26,7 +30,7 @@ const tsconfig = (typingsFile: string) => ({
   },
   // Only the typings; the named cell and the earlier cells it references are loaded on demand.
   // (`include: ["*.ts"]` would load every cell ever written: ~2x slower after 200 cells.)
-  files: [typingsFile],
+  files: [GLOBALS_FILE, typingsFile],
 });
 
 interface Binding {
@@ -51,6 +55,7 @@ export class Checker {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "tsconfig.json"), JSON.stringify(tsconfig(`${globalName}.d.ts`), null, 2));
     writeFileSync(join(dir, `${globalName}.d.ts`), typings);
+    writeFileSync(join(dir, GLOBALS_FILE), kernelGlobalsDts);
   }
 
   private fileName(cellId: string): string {
@@ -67,7 +72,8 @@ export class Checker {
     const own = new Set([...values, ...types]);
     const header: string[] = [];
     for (const [name, b] of this.visible) {
-      if (own.has(name)) continue;
+      // Only names the cell mentions: the checker then loads the cells it needs, not the whole history.
+      if (own.has(name) || !identifiers.has(name)) continue;
       if (b.value) header.push(`declare let ${name}: typeof import("./${b.file}").${name};`);
       if (b.type) header.push(`type ${name} = import("./${b.file}").${name};`);
     }
