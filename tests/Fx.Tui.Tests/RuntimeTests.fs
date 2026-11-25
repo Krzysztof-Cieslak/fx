@@ -63,7 +63,12 @@ let tests =
                         inbox.Post(Msg.Sent(string cmd, Ok()))
                     }
 
-                let start = Screens.finished 60 18
+                // On the clock the loop's ticks read, so notices last as long as they would.
+                let start =
+                    { Screens.finished 60 18 with
+                        Now = (SystemClock.clock.Now()).UnixMicroseconds
+                    }
+
                 let running = Eff.run env (Runtime.run inbox interpret start)
                 waitFor tty "the result card" (fun text -> text.Contains "✓ Done")
                 Expect.stringContains tty.Text "! runs unsandboxed" "the banner"

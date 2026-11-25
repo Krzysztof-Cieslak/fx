@@ -24,8 +24,12 @@ let TermiosSize = 256
 /// `TCSANOW` (0 on Linux and macOS): change the modes at once.
 let TcsaNow = 0
 
-/// `POLLIN` (1 on Linux and macOS).
-let PollIn = 1s
+/// `fd_set`: 1024 bits on Linux and macOS, descriptor `n` at bit `n % 32` of 32-bit word `n / 32`.
+let FdSetSize = 128
+
+/// `struct timeval`: 16 bytes on both (macOS's `tv_usec` is 32 bits, then padding), seconds at 0 and
+/// microseconds at 8 (little-endian, so writing 64 bits there is right on both).
+let TimevalSize = 16
 
 let EIntr = 4
 
@@ -54,10 +58,9 @@ extern nativeint read(int fd, nativeint buffer, unativeint count)
 [<DllImport(Libc)>]
 extern nativeint write(int fd, nativeint buffer, unativeint count)
 
-/// `poll(struct pollfd *fds, nfds_t n, int timeout)`; `nfds_t` is 64 bits on Linux and 32 on macOS,
-/// passed in a register either way.
+/// `select`, not `poll`: macOS's `poll` does not support devices, terminals included.
 [<DllImport(Libc)>]
-extern int poll(nativeint fds, unativeint count, int timeout)
+extern int select(int count, nativeint read, nativeint write, nativeint except, nativeint timeout)
 
 [<DllImport(Libc, EntryPoint = "ioctl")>]
 extern int private ioctlRegisters(int fd, unativeint request, nativeint arg)

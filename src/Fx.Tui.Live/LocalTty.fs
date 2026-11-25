@@ -94,16 +94,20 @@ module private Unix =
                 else
                     let decoder = Utf8Input()
                     let buffer = Array.zeroCreate<byte> 4096
-                    let fds = Posix.alloc 8
+                    let readable = Posix.alloc Posix.FdSetSize
+                    let timeout = Posix.alloc Posix.TimevalSize
                     let restored = ref 0
 
                     let read () =
-                        // struct pollfd { int fd; short events; short revents; }
-                        Marshal.WriteInt32(fds, 0, 0)
-                        Marshal.WriteInt16(fds, 4, Posix.PollIn)
-                        Marshal.WriteInt16(fds, 6, 0s)
+                        // Standard input (descriptor 0) in the set; wait at most 100 ms.
+                        for i in 0 .. Posix.FdSetSize - 1 do
+                            Marshal.WriteByte(readable, i, 0uy)
 
-                        if Posix.poll (fds, 1un, 100) <= 0 then
+                        Marshal.WriteInt32(readable, 0, 1)
+                        Marshal.WriteInt64(timeout, 0, 0L)
+                        Marshal.WriteInt64(timeout, 8, 100_000L)
+
+                        if Posix.select (1, readable, 0n, 0n, timeout) <= 0 then
                             None
                         else
                             let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned)
