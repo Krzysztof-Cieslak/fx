@@ -27,8 +27,9 @@ answer. What T121 should do in each case is [below](#headless-behaviour-recommen
 Evidence, all in CI:
 
 - the keyring conformance suite (`tests/Fx.Keyring.Tests`) passes against the in-memory fake
-  everywhere, the Credential Manager on Windows (the `os` job's tests), a temporary keychain on macOS arm64
-  and x64, and gnome-keyring on Linux glibc and musl (keyring steps), where it runs once per session
+  everywhere, the Credential Manager on Windows (the `os` job's tests), a temporary keychain on macOS
+  arm64 (x64 until CI's full tier dropped the suites there for the scenarios alone), and gnome-keyring
+  on Linux glibc and musl (keyring steps), where it runs once per session
   algorithm and adds interoperability with libsecret's `secret-tool` and a lock/unlock test;
 - the `keyring-*` scenarios of the JIT-vs-native diff: the D-Bus wire format, the session crypto and
   the headless decisions (pure) and the probe on all eight targets; a full round trip through the real
@@ -253,7 +254,8 @@ Recommendations:
   `win-arm64` (`windows-11-arm`).
 - **The keyring steps** (`.github/scripts/keyring-*.sh`), on `linux-x64` and `osx-arm64` (the `os`
   jobs, when keyring or credential code changes and in the full tier) and on `linux-musl-x64` and
-  `osx-x64` (the `targets` job, full tier), run once the scenarios are published natively:
+  `osx-x64` (the `targets` job, full tier; `osx-x64` runs the probe and the scenarios, not the live
+  tests), run once the scenarios are published natively:
   - **Linux:** installs `dbus`, `gnome-keyring` and `libsecret-tools` (Ubuntu) or `dbus` and
     `gnome-keyring` (Alpine, which also needs a machine id and a password-database entry for the
     container's user, or `dbus-daemon` refuses to start). The native probe must report each state in

@@ -23,9 +23,12 @@ export type Target = {
   rid: string;
   os: string;
   alpine: boolean; // in the Alpine container (musl)
-  keyring: boolean; // the live keyring tests and the probe's headless states
-  sandbox: boolean; // the sandbox suites with this OS's confining driver
+  keyring: boolean; // the live keyring: the probe's headless states and the keyring scenarios
+  sandbox: boolean; // the sandbox scenarios with this OS's confining driver
   bun: boolean; // the pinned Bun's musl build, the kernel conformance and the interpreter on it
+  // Builds and runs the areas' test suites too (on the JIT). Without it, an area runs only what needs
+  // no build beyond the scenarios.
+  suites: boolean;
 };
 
 export type Input = {
@@ -61,16 +64,19 @@ const target = (rid: string, os: string, extra: Partial<Target> = {}): Target =>
   keyring: false,
   sandbox: false,
   bun: false,
+  suites: false,
   ...extra,
 });
 
 // The full tier's other targets, natively. Besides Native AOT, each runs what only it can show:
 // bubblewrap's arm64 seccomp program (linux-arm64), gnome-keyring in Alpine and the pinned Bun's musl
-// builds with the bun-ts kernel on them (musl), the Keychain and Seatbelt on Intel (osx-x64).
+// builds with the bun-ts kernel on them (musl), the Keychain and Seatbelt on Intel (osx-x64). osx-x64
+// runs only their native scenarios: building the suites took ten minutes on the Intel runner, and
+// they run on osx-arm64 already.
 export const TARGETS: Target[] = [
-  target("linux-arm64", "ubuntu-24.04-arm", { sandbox: true }),
-  target("linux-musl-x64", "ubuntu-24.04", { alpine: true, keyring: true, bun: true }),
-  target("linux-musl-arm64", "ubuntu-24.04-arm", { alpine: true, bun: true }),
+  target("linux-arm64", "ubuntu-24.04-arm", { sandbox: true, suites: true }),
+  target("linux-musl-x64", "ubuntu-24.04", { alpine: true, keyring: true, bun: true, suites: true }),
+  target("linux-musl-arm64", "ubuntu-24.04-arm", { alpine: true, bun: true, suites: true }),
   target("osx-x64", "macos-26-intel", { keyring: true, sandbox: true }),
   target("win-arm64", "windows-11-arm"),
 ];

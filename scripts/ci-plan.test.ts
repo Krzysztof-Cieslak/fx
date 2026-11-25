@@ -100,7 +100,11 @@ describe("ci plan", () => {
     const all = ["linux-x64", "linux-arm64", "linux-musl-x64", "linux-musl-arm64", "osx-arm64", "osx-x64", "win-x64", "win-arm64"];
     const covered = [...rids(OS_JOBS), ...rids(TARGETS)];
     expect([...covered].sort()).toEqual([...all].sort());
-    for (const t of TARGETS) expect(t.alpine).toBe(t.rid.startsWith("linux-musl-"));
+    for (const t of TARGETS) {
+      expect(t.alpine).toBe(t.rid.startsWith("linux-musl-"));
+      // The Bun steps are test suites, and so is the Linux keyring's live run (keyring-live.sh).
+      if (t.bun || (t.keyring && t.rid.startsWith("linux-"))) expect(t.suites).toBe(true);
+    }
     // No cross-compilation: each target runs on a runner of its architecture.
     for (const t of [...OS_JOBS, ...TARGETS]) {
       const arm = t.rid.endsWith("-arm64");
