@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The grants log on the host (spec §13): the machine and its event schema, grant stores over the
+    host's event store (the built-in host-local store) and the actor over any store, the service that
+    agents check and request through (IGrants) and people answer, grant and revoke through, and the
+    `grants/*` client protocol's methods and handlers. Pure apart from the Eff capabilities it is
+    handed: the EFF analyzers apply to every file. Spec: docs/modules/grants.md.
+  -->
+  <ItemGroup>
+    <Compile Include="GrantMachine.fs" />
+    <Compile Include="GrantStoreLog.fs" />
+    <Compile Include="GrantsService.fs" />
+    <Compile Include="GrantsProtocol.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Grants\Fx.Grants.fsproj" />
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+    <ProjectReference Include="..\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Rpc\Fx.Rpc.fsproj" />
+  </ItemGroup>
+</Project>
