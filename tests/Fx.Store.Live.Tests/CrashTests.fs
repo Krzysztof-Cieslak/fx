@@ -150,9 +150,16 @@ let tests =
                     for writer in writers do
                         Expect.equal (nextLine writer) "ready" "ready"
 
-                    for writer in writers do
-                        writer.StandardInput.WriteLine "go"
-                        writer.StandardInput.Flush()
+                    // In rounds: both writers append one commit at once and meet at the head check.
+                    // Free-running, one could hold the write lock for many commits in a row, longer
+                    // than the other's busy timeout (SQLite polls for the lock; it has no queue).
+                    for i in 1..150 do
+                        for writer in writers do
+                            writer.StandardInput.WriteLine "go"
+                            writer.StandardInput.Flush()
+
+                        for writer in writers do
+                            Expect.equal (nextLine writer) $"committed {i}" "committed"
 
                     for writer in writers do
                         Expect.stringStarts (nextLine writer) "done " "done"

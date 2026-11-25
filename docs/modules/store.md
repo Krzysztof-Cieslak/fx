@@ -114,7 +114,9 @@ and `SnapshotsConformance`, the suites the in-memory interpreters pass.
 A store is meant to be owned by one process (the host). Two connections or processes writing one file
 stay correct (the head and key checks run inside the write lock, as the two-process test shows), but
 commits from another process wake no waiters here: they are seen only by the next read. Following
-another process's writes would need `PRAGMA data_version` polling.
+another process's writes would need `PRAGMA data_version` polling. Nor are they fair: SQLite's busy
+timeout polls for the write lock (sleeps of up to 100 ms, no queue), so a process that commits back to
+back can keep another waiting past `BusyTimeout`, whose commit then fails as `Busy`.
 
 ### Durability
 
@@ -142,7 +144,9 @@ four events in a loop, and kill it wherever it is, three times (with both durabi
 database in between. Every time, `PRAGMA integrity_check` passes, sequence numbers count from 1
 without gaps, every commit is whole and they follow each other, every commit the writer reported is
 there, and the last key is still known (`Duplicate`). A second test runs two writer processes against
-one stream at once: every commit lands once, whole, in each writer's order.
+one stream at once, in rounds of one commit each that start together (free-running, one writer could
+hold the lock past the other's busy timeout, as synced commits on Windows did): every commit lands
+once, whole, in each writer's order.
 
 ## Snapshots
 
