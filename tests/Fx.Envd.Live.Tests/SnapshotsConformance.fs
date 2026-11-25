@@ -144,6 +144,16 @@ let tests (name: string) (directory: unit -> string) (create: string -> Snapshot
                 Expect.isFalse (File.Exists(at [ "added"; "new.txt" ])) "added file gone"
                 Expect.equal (File.ReadAllText(at [ "ignored.txt" ])) "after" "ignored files untouched")
 
+            test "records and restores paths longer than 260 characters" (fun s at ->
+                let segments = [ for i in 1..6 -> String('d', 45) + string i ]
+                let file = at (segments @ [ String('f', 60) + ".txt" ])
+                Expect.isGreaterThan file.Length 300 "a long path"
+                write file "deep"
+                let snapshot = ok (wait (s.Take "deep" none))
+                File.Delete file
+                ok (wait (s.Restore snapshot None none))
+                Expect.equal (File.ReadAllText file) "deep" "restored")
+
             test "restores some paths only" (fun s at ->
                 write (at [ "a.txt" ]) "a"
                 write (at [ "b.txt" ]) "b"
