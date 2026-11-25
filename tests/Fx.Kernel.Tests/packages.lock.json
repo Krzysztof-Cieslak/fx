@@ -114,6 +114,7 @@
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
           "Fx.Kernel": "[0.0.0, )",
@@ -167,6 +168,13 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Effects": "[0.0.0, )"
+        }
+      },
+      "fx.ext.runtimebun": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.ext.sample": {
