@@ -1,0 +1,524 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "any"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "null"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "integer"
+        },
+        "minimum": {
+          "$ref": "#/$defs/SchemaBound"
+        },
+        "maximum": {
+          "$ref": "#/$defs/SchemaBound"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "number"
+        },
+        "minimum": {
+          "$ref": "#/$defs/SchemaBound"
+        },
+        "maximum": {
+          "$ref": "#/$defs/SchemaBound"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "string"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "const"
+        },
+        "value": {},
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "enum"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "array"
+        },
+        "items": {
+          "$ref": "#"
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "tuple"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "map"
+        },
+        "values": {
+          "$ref": "#"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "object"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SchemaField"
+          }
+        },
+        "unknownFields": {
+          "type": "string",
+          "enum": [
+            "ignore",
+            "reject"
+          ],
+          "description": "What a decoder does with members that are not fields: ignore them, or reject each one.",
+          "default": "ignore"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "union"
+        },
+        "discriminator": {
+          "type": "string"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SchemaCase"
+          }
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "discriminator",
+        "cases"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "anyOf"
+        },
+        "schemas": {
+          "type": "array",
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schemas"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "nullable"
+        },
+        "schema": {
+          "$ref": "#"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "ref"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "A type name: an identifier."
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "named"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "A type name: an identifier."
+        },
+        "body": {
+          "$ref": "#"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "description": "The JSON shape of a value (a codec's schema), tagged by kind; every node may carry a description.",
+  "$defs": {
+    "SchemaBound": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "inclusive"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "exclusive"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ],
+      "description": "A bound on a number: inclusive (minimum, maximum) or exclusive."
+    },
+    "SchemaCase": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SchemaField"
+          }
+        },
+        "unknownFields": {
+          "type": "string",
+          "enum": [
+            "ignore",
+            "reject"
+          ],
+          "description": "What a decoder does with members that are not fields: ignore them, or reject each one.",
+          "default": "ignore"
+        }
+      },
+      "required": [
+        "tag",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "A case of a union: its tag and the fields next to the tag."
+    },
+    "SchemaField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "$ref": "#"
+        },
+        "presence": {
+          "$ref": "#/$defs/SchemaPresence"
+        }
+      },
+      "required": [
+        "name",
+        "schema",
+        "presence"
+      ],
+      "additionalProperties": false,
+      "description": "A field of an object or of a union case."
+    },
+    "SchemaPresence": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "required"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "optional"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "defaulted"
+            },
+            "value": {}
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ],
+      "description": "Whether a field must be present: required; optional (absent means no value); or defaulted (absent means this value, and it is always written)."
+    }
+  }
+}

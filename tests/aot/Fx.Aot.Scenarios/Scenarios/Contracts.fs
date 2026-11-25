@@ -338,6 +338,25 @@ let schemas =
             kv "definitions" (String.Join(", ", Schema.definitions shape.Schema |> List.map string))
         ])
 
+/// The wire form of schemas (`Codecs.schema`): encoded, read back, previewed and rejected.
+let schemaJson =
+    Scenario.lines "contracts-schema-json" (fun () ->
+        let all = Codec.tuple3 shape item Codecs.schema
+        let encoded = Codecs.schema.Encode all.Schema
+
+        [
+            kv "encoded" (Json.serialize encoded)
+            kv "decoded" (result (Codecs.schema.Decode encoded) (fun s -> string (s = all.Schema)))
+            kv "preview" (Codec.preview Codecs.schema Limits.defaults shape.Schema).Text
+            kv
+                "invalid"
+                (result
+                    (Codec.decodeText
+                        Codecs.schema
+                        """{"kind": "map", "values": {"kind": "named", "name": "1x", "body": {"kind": "integer", "minimum": {"kind": "open", "value": 1}}}, "other": 2}""")
+                    string)
+        ])
+
 let previews =
     Scenario.lines "contracts-previews" (fun () ->
         let limits chars items depth strings =
@@ -384,4 +403,5 @@ let wideRecords =
             kv "schema" (Schema.render wide.Schema)
         ])
 
-let scenarios = [ jsonText; numbers; codecs; schemas; previews; wideRecords ]
+let scenarios =
+    [ jsonText; numbers; codecs; schemas; schemaJson; previews; wideRecords ]
