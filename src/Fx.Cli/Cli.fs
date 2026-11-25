@@ -63,6 +63,8 @@ type Command =
     | Auth of AuthCommand
     /// Run the host and serve the client protocol on its local listener; `Some port`: loopback TCP.
     | Serve of tcp: int option
+    /// Replay a recorded session exactly and report the first difference (`replay <session>`).
+    | Replay of Fx.Replay.ReplayArgs
 
     override this.ToString() =
         match this with
@@ -74,6 +76,7 @@ type Command =
         | Auth command -> "auth " + string command
         | Serve None -> "serve"
         | Serve(Some port) -> $"serve --tcp {port}"
+        | Replay args -> string args
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
@@ -97,6 +100,8 @@ let usage =
     + "      Stores a model provider's credential, removes it, lists them, or shows how each resolves.\n"
     + $"  {bin} serve [--tcp [<port>]]\n"
     + "      Runs the host for the current directory and serves clients on its local listener.\n"
+    + $"  {bin} replay <session> [--json] [--stall <seconds>]\n"
+    + "      Replays a recorded session exactly and reports the first difference from the recording.\n"
     + $"  {bin} --help | --version | --build-info\n"
     + "\nThe interactive interface is not there yet.\n"
 
@@ -245,6 +250,10 @@ let parse (args: string list) : Command =
         | true, n when n > 0 && n < 65536 -> Serve(Some n)
         | _ -> failure $"invalid port: {port}" usage
     | "serve" :: _ -> failure "serve takes --tcp [<port>]" usage
+    | "replay" :: rest ->
+        match Fx.Replay.ReplayCommand.parse rest with
+        | Ok args -> Replay args
+        | Error e -> failure e Fx.Replay.ReplayCommand.usage
     | other ->
         let given = String.concat " " other
         failure $"unknown arguments: {given}" usage

@@ -8,6 +8,7 @@ open Fx.Variants
 open Fx.Extensions
 open Fx.Components
 open Fx.Auth
+open Fx.Replay
 
 /// What `fx variants` shows.
 [<RequireQualifiedAccess>]
@@ -25,8 +26,8 @@ type VariantsView =
         | Explain -> "explain"
         | Schema -> "schema"
 
-/// The host's commands that need no running host: they read config and load the built-ins, but open
-/// no store and take no lock.
+/// The host's commands that need no running host: they read config and load the built-ins; `auth` and
+/// `replay` take the data directory's lock, and `replay` reads its stores.
 [<RequireQualifiedAccess>]
 module Commands =
     let private run (options: HostOptions) (effect: Eff<HostEnv, 'T>) : Task<'T> =
@@ -120,6 +121,97 @@ module Commands =
                            |> String.concat "")
             })
 
+    /// Runs `locked` under the data directory's lock: no host runs on it meanwhile.
+    let private underLock (options: HostOptions) (locked: Eff<HostEnv, Result<'T, string list>>) =
+        let paths = options.Paths
+
+        run
+            options
+            (effResult {
+                do!
+                    Fs.createDirectory paths.Data
+                    |> EffResult.mapError (fun e -> [ $"the data directory {paths.Data} could not be created: {e}" ])
+
+                let! held =
+                    InstallFiles.tryLock paths.Lock
+                    |> EffResult.mapError (fun e -> [ $"the host's lock {paths.Lock} could not be taken: {e}" ])
+
+                match held with
+                | None ->
+                    return!
+                        EffResult.error
+                            [
+                                $"a host is running on {paths.Data}: stop it first, or set {HostPaths.homeVariable} to another directory"
+                            ]
+                | Some held -> return! Eff.bracket (Eff.ret held) InstallFiles.release (fun _ -> locked)
+            })
+
+    /// `fx replay <session>` (replay.md): replays a recorded session of the data directory exactly, under
+    /// its lock (the stores are only read), with the interpreters and model catalog of the extensions in
+    /// effect. What to print and the exit code: 0 when replay matched the recording, 1 when it diverged.
+    let replay (options: HostOptions) (args: ReplayArgs) : Task<Result<ReplayOutput, string list>> =
+        let paths = options.Paths
+
+        let replayed (config: HostConfig) (extensions: Fx.Extensions.Host) =
+            effResult {
+                let! registry = Setup.registry extensions
+                let! resolution = Setup.resolve registry config
+                let durability = Setup.value HostSlots.durability (Variants.ofResolution resolution)
+                let! stores = options.OpenStores paths durability |> Result.mapError List.singleton
+                let providers = Setup.providers extensions
+
+                let settings: ReplaySettings =
+                    {
+                        // The host's kernels are its interpreters' (their launches are journaled).
+                        Interpreter =
+                            fun info ->
+                                {
+                                    Language = info.Language
+                                    Prompt = fun _ -> ""
+                                    Start =
+                                        fun _ ->
+                                            EffResult.error
+                                                $"the session's {info.Language} kernels are not an interpreter's: this host cannot start them"
+                                    Launches = None
+                                }
+                        Provider = Setup.interpreter extensions
+                        KernelOptions = Setup.kernelOptions
+                        Catalog =
+                            fun model ->
+                                providers
+                                |> List.tryPick (fun p -> p.Catalog.Models |> List.tryFind (fun m -> m.Ref = model))
+                        StallAfter = TimeSpan.FromSeconds(float args.StallSeconds)
+                    }
+
+                let recording: RecordedSession =
+                    {
+                        Log = stores.Log
+                        Blobs = stores.Blobs
+                    }
+
+                return!
+                    Eff.bracket (Eff.ret stores) (fun stores -> eff { stores.Close() }) (fun _ ->
+                        ReplayCommand.replay settings recording args |> Eff.map Ok)
+            }
+
+        underLock
+            options
+            (effResult {
+                // Replay opens no store a host has not made.
+                let! recorded = Fs.exists paths.Events |> EffResult.mapError (fun e -> [ string e ])
+
+                if not recorded then
+                    return! EffResult.error [ $"no session is recorded in {paths.Data}" ]
+                else
+                    let! config = Setup.readConfig options
+
+                    return!
+                        Eff.bracket
+                            (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
+                            ExtensionHost.stop
+                            (replayed config)
+            })
+
     /// `fx auth …` (auth.md): runs the command against the service credentials the host would start
     /// with, under the data directory's lock (one writer of the credential stores at a time). The exit
     /// code and the lines to print, which never hold a secret; `runFlow` runs a login's flow at the
@@ -129,8 +221,6 @@ module Commands =
         (runFlow: FlowRunner)
         (command: AuthCommand)
         : Task<Result<int * string list, string list>> =
-        let paths = options.Paths
-
         let withExtensions (config: HostConfig) (extensions: Fx.Extensions.Host) =
             effResult {
                 let! registry = Setup.registry extensions
@@ -162,23 +252,4 @@ module Commands =
                         (withExtensions config)
             }
 
-        run
-            options
-            (effResult {
-                do!
-                    Fs.createDirectory paths.Data
-                    |> EffResult.mapError (fun e -> [ $"the data directory {paths.Data} could not be created: {e}" ])
-
-                let! held =
-                    InstallFiles.tryLock paths.Lock
-                    |> EffResult.mapError (fun e -> [ $"the host's lock {paths.Lock} could not be taken: {e}" ])
-
-                match held with
-                | None ->
-                    return!
-                        EffResult.error
-                            [
-                                $"a host is running on {paths.Data}: stop it first, or set {HostPaths.homeVariable} to another directory"
-                            ]
-                | Some held -> return! Eff.bracket (Eff.ret held) InstallFiles.release (fun _ -> locked)
-            })
+        underLock options locked

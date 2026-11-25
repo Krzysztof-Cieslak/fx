@@ -2,7 +2,7 @@
 /// credential store, the start (lock, config, the built-ins, the variant registry, the SQLite stores,
 /// grants, service credentials, identity, environments, model access, sessions), signing in the OS
 /// user in process, a headless run in an embedded environment, a restart that continues the session,
-/// and the codecs of what `fx run --json` prints.
+/// `fx replay` of the recorded session, and the codecs of what `fx run --json` prints.
 /// The interpreter is disabled in host config, so turns end at their hands: no network, no Bun.
 module Fx.Aot.Scenarios.Host
 
@@ -213,6 +213,21 @@ let private embedded () : Task<string list> =
                             say $"second run: turn {outcome.Turn}, failed at its hands: {failed}"
                     finally
                         (Host.stop host).Wait(TimeSpan.FromSeconds 60.0) |> ignore
+
+                // `fx replay`: both host processes' turns, from the stores, exactly.
+                match!
+                    Commands.replay
+                        (options root [])
+                        {
+                            Session = session
+                            Json = false
+                            StallSeconds = 30
+                        }
+                with
+                | Error errors -> say ("replay failed: " + String.concat "; " errors)
+                | Ok output ->
+                    let matched = output.Stdout.Contains "replay matches the recording"
+                    say $"replay: exit {output.ExitCode}, matched {matched}"
         finally
             remove root
 

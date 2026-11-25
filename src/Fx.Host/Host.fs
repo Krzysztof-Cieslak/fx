@@ -25,6 +25,7 @@ open Fx.Sessions
 open Fx.Sessions.Host
 open Fx.Prompt
 open Fx.CodeAct
+open Fx.Replay
 open Fx.Auth
 
 /// A running host (spec §3, the "brain"): its stores, the extensions in effect, the variant registry
@@ -572,43 +573,22 @@ module Host =
                         | _ -> return invalidOp $"not a profile id: {id}"
                 }
 
-            let interpreters =
-                ExtensionHost.contributions InterpreterProviders.contributionType extensions
-
-            let runtimes = ExtensionHost.contributions RuntimeSpecs.contributionType extensions
             let launcher = HostEnvironment.scrub options.Variables
 
             let kernelPlan (variants: Variants) : Result<KernelPlan, string> =
-                let wanted = Setup.value HostSlots.interpreter variants
-
-                match interpreters |> List.tryFind (fun c -> c.Value.Id = wanted) with
-                | None -> Error $"no interpreter {Json.quote wanted} is in effect (agent.interpreter)"
-                | Some interpreter ->
-                    let provider = interpreter.Value
-
-                    match runtimes |> List.tryFind (fun c -> c.Id = provider.Launch.Runtime) with
-                    | None ->
-                        Error $"the interpreter {provider.Id} runs on {provider.Launch.Runtime}, which is not in effect"
-                    | Some runtime ->
-                        Ok
-                            {
-                                Provider = provider
-                                Runtime = runtime.Value
-                                Options =
-                                    { KernelOptions.defaults with
-                                        Peer =
-                                            {
-                                                Name = Product.binaryName
-                                                Version = Product.Version
-                                            }
-                                    }
-                                ProjectTrusted = config.ProjectTrusted
-                                Launcher = launcher
-                                // The grants log's checks come per turn (GrantGuard.attach, below).
-                                Guard = fun _ -> EffResult.ok ()
-                                // The session's agent's overrides come with agents (T213).
-                                Sandbox = SandboxOverrides.none
-                            }
+                Setup.interpreter extensions (Setup.value HostSlots.interpreter variants)
+                |> Result.map (fun (provider, runtime) ->
+                    {
+                        Provider = provider
+                        Runtime = runtime
+                        Options = Setup.kernelOptions
+                        ProjectTrusted = config.ProjectTrusted
+                        Launcher = launcher
+                        // The grants log's checks come per turn (GrantGuard.attach, below).
+                        Guard = fun _ -> EffResult.ok ()
+                        // The session's agent's overrides come with agents (T213).
+                        Sandbox = SandboxOverrides.none
+                    })
 
             let sessionLog = SessionLog.typed stores.Log
             let grantsCapability = GrantsService.grants grants
@@ -633,8 +613,38 @@ module Host =
                         GrantGuard.attach guarded (EnvHands.ofHandle options.Clock hostScope plan turn.Session handle)
                 }
 
+            // Sessions are recorded (session.record) for exact replay (`fx replay`, spec §15): every
+            // capability a turn reaches is journaled. A turn reaches the clock and the model of the host's
+            // environment (above ModelAccess: requests and responses, never credentials), and its hands'
+            // clock, files and shell (the sandboxed one); terminals are refused in recorded hands. The
+            // guard (grants included), snapshots and kernel launches are journaled by the strategy.
+            let wraps: Wraps<HostEnv, EnvHands> =
+                {
+                    Host =
+                        fun taps env ->
+                            { env with
+                                Clock = taps.Clock env.Clock
+                                Llm = taps.Llm env.Llm
+                            }
+                    Hands =
+                        fun taps env ->
+                            { env with
+                                Clock = taps.Clock env.Clock
+                                Client =
+                                    { env.Client with
+                                        FsRead = taps.FsRead env.Client.FsRead
+                                        Fs = taps.Fs env.Client.Fs
+                                        FsOps = taps.FsOps env.Client.FsOps
+                                        Shell = taps.Shell env.Client.Shell
+                                        Terminal = taps.Terminal env.Client.Terminal
+                                    }
+                            }
+                }
+
             let codeact =
-                CodeAct.create
+                Recording.codeact
+                    (Recording.recorder stores.Log stores.Blobs options.Clock)
+                    wraps
                     {
                         Sessions = sessionLog
                         Contexts = ContextLog.typed stores.Log
