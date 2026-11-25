@@ -8,6 +8,9 @@
   <ItemGroup>
     <Compile Include="..\Fx.Kernel.Tests\Repo.fs" Link="Bun\Repo.fs" />
     <Compile Include="..\Fx.Kernel.Tests\PinnedBun.fs" Link="Bun\PinnedBun.fs" />
+    <!-- fx.env.local as the composition root wires it (envd embedded). -->
+    <Compile Include="..\Fx.Environments.Tests\Conformance\ProviderConformance.fs" Link="Environments\ProviderConformance.fs" />
+    <Compile Include="..\Fx.Environments.Tests\Local.fs" Link="Environments\Local.fs" />
     <Compile Include="Support.fs" />
     <Compile Include="UnitTests.fs" />
     <Compile Include="TurnTests.fs" />
@@ -26,6 +29,7 @@
     <!-- The provider wires, on recorded-format streams. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
     <!-- The script kernel. -->
     <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
   </ItemGroup>

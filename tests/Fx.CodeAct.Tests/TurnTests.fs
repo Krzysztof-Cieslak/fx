@@ -393,9 +393,9 @@ let tests =
                                 let! _ = ended f "s1" 1
 
                                 // A crash, observed: the connection to the kernel has ended.
-                                match f.CodeAct.Kernel "s1" with
+                                match f.Kernel "s1" with
                                 | Some kernel ->
-                                    do! Eff.run f.Hands (Kernel.kill kernel)
+                                    do! Eff.run () (Kernel.kill kernel)
                                     let! _ = (Kernel.exited kernel).WaitAsync(TimeSpan.FromSeconds 10.0)
                                     ()
                                 | None -> failtest "no kernel"

@@ -20,11 +20,13 @@
     <Compile Include="Kernels.fs" />
     <Compile Include="Hybrid.fs" />
     <Compile Include="CodeAct.fs" />
+    <Compile Include="Environment.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Fx.Sessions.Host\Fx.Sessions.Host.fsproj" />
     <ProjectReference Include="..\Fx.Prompt\Fx.Prompt.fsproj" />
     <ProjectReference Include="..\Fx.Interpreters\Fx.Interpreters.fsproj" />
+    <ProjectReference Include="..\Fx.Environments\Fx.Environments.fsproj" />
   </ItemGroup>
 </Project>

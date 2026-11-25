@@ -90,6 +90,7 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.CodeAct": "[0.0.0, )",
           "Fx.Components.Live": "[0.0.0, )",
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Contracts.TypeScript": "[0.0.0, )",
@@ -124,6 +125,7 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.Environments": "[0.0.0, )",
           "Fx.Interpreters": "[0.0.0, )",
           "Fx.Prompt": "[0.0.0, )",
           "Fx.Sessions.Host": "[0.0.0, )"
