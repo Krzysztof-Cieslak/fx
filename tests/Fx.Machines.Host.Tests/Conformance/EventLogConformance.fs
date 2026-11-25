@@ -96,6 +96,26 @@ let tests (name: string) (create: unit -> EventLog<string>) : Test =
                     (Ok 1L)
                     "keys are per stream")
 
+            testCase "finding a key gives the commit it appended, in its own stream only" (fun () ->
+                let log = create ()
+
+                let find stream key =
+                    wait (log.FindCommit stream (IdempotencyKey key) CancellationToken.None)
+
+                Expect.isNone (find stream "k1") "an empty stream"
+
+                wait (log.Append stream 0L (meta "k1") [ "a"; "b" ] CancellationToken.None)
+                |> ignore
+
+                wait (log.Append stream 2L (meta "k2") [ "c" ] CancellationToken.None) |> ignore
+                Expect.equal (find stream "k1") (Some { After = 0L; Count = 2 }) "the first commit"
+                Expect.equal (find stream "k2") (Some { After = 2L; Count = 1 }) "the second commit"
+                Expect.isNone (find stream "k3") "a key never appended"
+                Expect.isNone (find other "k1") "keys are per stream"
+
+                wait (log.Append stream 3L (meta "k2") [ "d" ] CancellationToken.None) |> ignore
+                Expect.equal (find stream "k2") (Some { After = 2L; Count = 1 }) "a duplicate changes nothing")
+
             testCase "an empty commit is a defect" (fun () ->
                 let log = create ()
 

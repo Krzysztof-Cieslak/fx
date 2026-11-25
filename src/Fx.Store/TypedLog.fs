@@ -33,4 +33,5 @@ module EventLog =
                     }
             Head = log.Head
             WaitPast = log.WaitPast
+            FindCommit = log.FindCommit
         }

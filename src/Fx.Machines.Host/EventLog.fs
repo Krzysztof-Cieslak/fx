@@ -84,6 +84,9 @@ type EventLog<'Evt> =
         Head: StreamId -> CancellationToken -> Task<int64>
         /// Completes, with the head, once the head is past a sequence number: at once if it already is.
         WaitPast: StreamId -> int64 -> CancellationToken -> Task<int64>
+        /// The commit a key appended to a stream, if the stream has one: what `Append` would answer
+        /// with `Duplicate`. An actor that starts from a snapshot looks up the keys it has not seen.
+        FindCommit: StreamId -> IdempotencyKey -> CancellationToken -> Task<Appended option>
     }
 
     override _.ToString() = "EventLog"
@@ -115,6 +118,13 @@ module EventLog =
 
     let waitPast<'R, 'Evt when 'R :> IScope> (log: EventLog<'Evt>) (stream: StreamId) (after: int64) : Eff<'R, int64> =
         fun env -> log.WaitPast stream after env.Scope.Cancellation
+
+    let findCommit<'R, 'Evt when 'R :> IScope>
+        (log: EventLog<'Evt>)
+        (stream: StreamId)
+        (key: IdempotencyKey)
+        : Eff<'R, Appended option> =
+        fun env -> log.FindCommit stream key env.Scope.Cancellation
 
     /// The next events after a sequence number: at once if there are some, otherwise as soon as the
     /// next commit lands.

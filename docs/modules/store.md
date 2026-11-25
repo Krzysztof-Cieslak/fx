@@ -11,7 +11,7 @@ Tests: `tests/Fx.Store.Tests`, `tests/Fx.Store.Live.Tests` (with the child proce
 | Piece | Pure (`Fx.Store`) | Interpreters |
 |---|---|---|
 | Event log | `EventLog<'Evt>` (Fx.Machines.Host); `Payload`, `EventSchema`, `EventLog.typed` | `SqliteEventStore.Log`; `InMemoryEventLog` |
-| Snapshots | `SnapshotStore`, `SnapshotSchema`, `Snapshots`, `Projection` | `SqliteEventStore.Snapshots`; `InMemorySnapshots` |
+| Snapshots | `SnapshotStore`, `SnapshotSchema`, `Snapshots`, `Projection`, `ActorSnapshots` | `SqliteEventStore.Snapshots`; `InMemorySnapshots` |
 | Blobs | `Blobs`, `IBlobs`, `BlobHash`, `BlobRef`, `BlobWriter` | `FileBlobStore`; `InMemoryBlobs` |
 | Wire | `Codecs.recorded`, `payload`, `attribution`, `eventRef`, `blobRef`, `instant` | |
 
@@ -168,6 +168,10 @@ type SnapshotSchema<'S> = { Name: string; Version: int; Codec: Codec<'S> }
   - `subscribe … maxGap stream after handle`: spec §5's snapshot + tail. A subscriber more than
     `maxGap` events behind gets `Feed.Reset snapshot` (when a snapshot past its position exists), then
     `Feed.Next` for each event after it; otherwise just the events. Then it follows live.
+- `ActorSnapshots`: `latest` is the snapshot an actor starts from (the latest readable one at or below
+  the head), `start` starts the actor from it (`Actor.startFrom`, [machines.md](machines.md)), and `save`
+  stores `Actor.snapshot`, which is always at a commit boundary. Keys of commits before the snapshot are
+  looked up in the log (`EventLog.FindCommit`: the `commits` table's `(stream, key)` index).
 - In `SqliteEventStore`, snapshots live in the same database as the events they fold, and their saves
   go through the writer like appends.
 
@@ -312,10 +316,9 @@ What this decides:
 
 | What | Task |
 |---|---|
-| Actors starting from a snapshot instead of replaying from 1: needs the key index of the snapshotted prefix (a lookup by key in the log, or answering `Duplicate`, which the store already does) | T125, when sessions get long |
 | Blob garbage collection: references from events, sessions and values; a grace period from `created` | with T201 (values) or T131 |
 | Journaling capability calls by blob hash, `ReplayEnv` | T131 |
-| `ISessionLog` over this store, client subscriptions over JSON-RPC with snapshot + tail | T125, T129 |
+| Client subscriptions over JSON-RPC with snapshot + tail (`SessionHost.subscribe`, [sessions.md](sessions.md)) | T129 |
 | `Durability`, `MaxBatch`, page sizes and the subscribe gap as variant slots ([variants.md](variants.md)), read by the host when it opens the stores | T129 |
 | A data directory derived from `Fx.Product`; locking a store to one process | T129 |
 | Following another process's commits (`PRAGMA data_version`), if a deployment ever shares a store | when needed |

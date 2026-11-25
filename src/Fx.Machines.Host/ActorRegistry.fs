@@ -81,13 +81,19 @@ type ActorRegistry<'Cmd, 'Evt, 'S> internal (activate: StreamId -> Task<Actor<'C
     override _.ToString() = "ActorRegistry"
 
 module ActorRegistry =
+    /// A registry that starts actors with `start stream` (e.g. from a snapshot, `Actor.startFrom`), in
+    /// the environment it is created in: actors outlive the scopes of the calls that start them.
+    let createWith<'R, 'Cmd, 'Evt, 'S>
+        (start: StreamId -> Eff<'R, Actor<'Cmd, 'Evt, 'S>>)
+        : Eff<'R, ActorRegistry<'Cmd, 'Evt, 'S>> =
+        fun env -> Task.FromResult(ActorRegistry(fun stream -> Eff.run env (Eff.delay (fun () -> start stream))))
+
     /// A registry that starts actors from `spec stream`, in the environment it is created in: actors
     /// outlive the scopes of the calls that start them.
     let create<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> ITrace and 'R :> IScopeWith<'R>>
         (spec: StreamId -> ActorSpec<'R, 'Cmd, 'Evt, 'S, 'Intent>)
         : Eff<'R, ActorRegistry<'Cmd, 'Evt, 'S>> =
-        fun env ->
-            Task.FromResult(ActorRegistry(fun stream -> Eff.run env (Eff.delay (fun () -> Actor.start (spec stream)))))
+        createWith (fun stream -> Actor.start (spec stream))
 
     /// The stream's actor, started if needed; `None` once the registry is stopped.
     let get<'R, 'Cmd, 'Evt, 'S>
