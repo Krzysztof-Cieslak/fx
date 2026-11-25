@@ -644,15 +644,22 @@ function stringMap<V>(values: Codec<V>): Codec<Record<string, V>> {
   );
 }
 
-function keyValues<V>(values: Codec<V>): Codec<[string, V][]> {
-  return new CodecImpl<[string, V][]>(
+function keyValues<V>(values: Codec<V>): Codec<Record<string, V>> {
+  return new CodecImpl<Record<string, V>>(
     { kind: "map", values: values.schema },
-    (pairs) => {
+    (map) => {
       const out: Record<string, unknown> = {};
-      for (const [key, v] of pairs) setMember(out, key, values.encode(v));
+      for (const [key, v] of Object.entries(map)) setMember(out, key, values.encode(v));
       return out as Json;
     },
-    (json) => (isObject(json) ? decodeMembers(values, json) : Validation.fail([expected("object", json)])),
+    (json) => {
+      if (!isObject(json)) return Validation.fail([expected("object", json)]);
+      const decoded = decodeMembers(values, json);
+      if (!decoded.ok) return decoded;
+      const out: Record<string, V> = {};
+      for (const [key, v] of decoded.value) setMember(out, key, v);
+      return Validation.ok(out);
+    },
   );
 }
 
@@ -824,7 +831,7 @@ export const Codec = {
   nullable,
   /** An object with any keys, written in key order (F# `Codec.stringMap`). */
   stringMap,
-  /** An object with any keys, as key-value pairs in member order. */
+  /** An object with any keys, written in member order (F# `Codec.keyValues`). */
   keyValues,
   /** An array with exactly these items (F# `Codec.tuple2`, `tuple3`). */
   tuple,
