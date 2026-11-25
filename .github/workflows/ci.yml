@@ -93,6 +93,12 @@ jobs:
         run: dotnet build Fx.slnx --no-restore --configuration Release
       - name: Test
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
+      # Installs the pinned Bun from GitHub through the component installer and runs it. Its own step,
+      # so a network failure is told apart from a failing test.
+      - name: Install the pinned Bun (network)
+        env:
+          NETWORK_TESTS: "1"
+        run: dotnet test --project tests/Fx.Components.Live.Tests --no-build --configuration Release
 
   aot:
     # Native AOT publish of the CLI and the JIT-vs-native diff (spec §20), on every target natively:
