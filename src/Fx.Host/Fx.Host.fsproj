@@ -43,6 +43,9 @@
     <ProjectReference Include="..\Fx.Keyring\Fx.Keyring.fsproj" />
     <!-- The built-ins: a static list (spec §16.4), never loaded from assemblies. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxBubblewrap\Fx.Ext.SandboxBubblewrap.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxSeatbelt\Fx.Ext.SandboxSeatbelt.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxNone\Fx.Ext.SandboxNone.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />

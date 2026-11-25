@@ -64,6 +64,9 @@
     <Project Path="extensions/Fx.Ext.StoreKeyring/Fx.Ext.StoreKeyring.fsproj" />
     <Project Path="extensions/Fx.Ext.StoreFile/Fx.Ext.StoreFile.fsproj" />
     <Project Path="extensions/Fx.Ext.StoreEphemeral/Fx.Ext.StoreEphemeral.fsproj" />
+    <Project Path="extensions/Fx.Ext.SandboxNone/Fx.Ext.SandboxNone.fsproj" />
+    <Project Path="extensions/Fx.Ext.SandboxBubblewrap/Fx.Ext.SandboxBubblewrap.fsproj" />
+    <Project Path="extensions/Fx.Ext.SandboxSeatbelt/Fx.Ext.SandboxSeatbelt.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -125,6 +128,8 @@
     <Project Path="tests/Fx.Identity.Tests/Fx.Identity.Tests.fsproj" />
     <Project Path="tests/Fx.Identity.Host.Tests/Fx.Identity.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.IdentityLocalOsUser.Tests/Fx.Ext.IdentityLocalOsUser.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.SandboxBubblewrap.Tests/Fx.Ext.SandboxBubblewrap.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.SandboxSeatbelt.Tests/Fx.Ext.SandboxSeatbelt.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

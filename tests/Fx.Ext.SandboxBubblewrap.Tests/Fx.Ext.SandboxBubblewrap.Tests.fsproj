@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    fx.sandbox.bubblewrap's own behaviour: the seccomp program (run through a BPF interpreter on
+    both architectures), the bwrap command lines a policy becomes, and the probe's diagnosis over a
+    scripted shell. The live conformance suite runs in tests/Fx.Environments.Tests.
+  -->
+  <ItemGroup>
+    <Compile Include="SeccompTests.fs" />
+    <Compile Include="BubblewrapTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxBubblewrap\Fx.Ext.SandboxBubblewrap.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

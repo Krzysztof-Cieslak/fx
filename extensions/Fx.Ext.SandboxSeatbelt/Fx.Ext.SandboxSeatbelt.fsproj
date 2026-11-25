@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.sandbox.seatbelt package (spec §9.1, §16.4): the macOS sandbox driver. Wraps
+    every process the agent starts in /usr/bin/sandbox-exec with a Seatbelt profile built here from
+    the policy (deny by default, the policy's paths as read and write regions, the network only when
+    allowed). A native extension: like every package under extensions/, it references the public SDK
+    (src/Fx.Sdk) and nothing else. See README.md and docs/modules/sandbox.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Profile.fs" />
+    <Compile Include="Seatbelt.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

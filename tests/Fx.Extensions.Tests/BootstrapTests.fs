@@ -656,6 +656,58 @@ let tests =
                     "privileged"
             }
 
+            test "the sandbox drivers load natively; a project cannot contribute sandbox drivers" {
+                let builtIns =
+                    [
+                        Fx.Ext.SandboxBubblewrap.Bubblewrap.extension
+                        Fx.Ext.SandboxSeatbelt.Seatbelt.extension
+                        Fx.Ext.SandboxNone.SandboxNone.extension
+                    ]
+
+                let host = bootstrap (builtIns |> List.map builtin)
+
+                Expect.equal
+                    (report host)
+                    (builtIns |> List.map (fun e -> $"{e.Manifest.Id} [in-binary] activated"))
+                    "activated"
+
+                Expect.equal
+                    (ExtensionHost.contributions SandboxDrivers.contributionType host
+                     |> List.map (fun c -> c.Value.Id))
+                    [ "bubblewrap"; "seatbelt"; "none" ]
+                    "the drivers, by id"
+
+                for contributed in ExtensionHost.contributions SandboxDrivers.contributionType host do
+                    Expect.isEmpty (SandboxDrivers.validate contributed.Value) $"{contributed.Value.Id} is valid"
+
+                let bwrap = Fx.Ext.SandboxBubblewrap.Bubblewrap.extension
+
+                let fromProject =
+                    bootstrapWith
+                        { defaultSettings with
+                            Trust =
+                                { defaultSettings.Trust with
+                                    ProjectTrusted = true
+                                }
+                        }
+                        [
+                            Candidate.create
+                                Source.Project
+                                (Package.Native
+                                    { bwrap with
+                                        Manifest =
+                                            { bwrap.Manifest with
+                                                Id = "acme.sandbox"
+                                            }
+                                    })
+                        ]
+
+                Expect.stringStarts
+                    (List.head (report fromProject))
+                    "acme.sandbox [in-binary] rejected: trust.privileged"
+                    "privileged"
+            }
+
             test "a process that cannot start fails its extension" {
                 let manifest =
                     { SampleHost.processManifest () with
