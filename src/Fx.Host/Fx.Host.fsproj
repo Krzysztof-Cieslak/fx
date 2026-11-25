@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The host's composition root (spec §3, the "brain"; §16.1 bootstrap order; §16.4 built-ins): the
+    data directory and its lock, config, policy and project trust, the static list of built-in
+    extensions, the variant registry and resolution, the SQLite stores, the grants log, the component
+    installer, identity, environments, model access and the session host with the CodeAct strategy;
+    embedded mode and headless runs (`fx run -p`). Pure apart from the capabilities it is handed,
+    except Live.fs, which builds the live interpreters. Spec: docs/modules/host.md.
+  -->
+  <ItemGroup>
+    <Compile Include="HostPaths.fs" />
+    <Compile Include="HostSlots.fs" />
+    <Compile Include="Config.fs" />
+    <Compile Include="Trust.fs" />
+    <Compile Include="ModelAuth.fs" />
+    <Compile Include="Builtins.fs" />
+    <Compile Include="SessionIndex.fs" />
+    <Compile Include="HostEnv.fs" />
+    <Compile Include="Stores.fs" />
+    <Compile Include="Setup.fs" />
+    <Compile Include="Host.fs" />
+    <Compile Include="Activity.fs" />
+    <Compile Include="HostSessions.fs" />
+    <Compile Include="Headless.fs" />
+    <Compile Include="Commands.fs" />
+    <Compile Include="Live.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.CodeAct\Fx.CodeAct.fsproj" />
+    <ProjectReference Include="..\Fx.Extensions\Fx.Extensions.fsproj" />
+    <ProjectReference Include="..\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Identity.Host\Fx.Identity.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Store.Live\Fx.Store.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Components.Live\Fx.Components.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
+    <!-- The built-ins: a static list (spec §16.4), never loaded from assemblies. -->
+    <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+  </ItemGroup>
+</Project>
