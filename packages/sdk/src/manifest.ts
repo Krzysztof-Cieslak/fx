@@ -13,7 +13,7 @@ import type {
   MethodDecl,
   RpcContract,
 } from "./generated/contracts.d.ts";
-import { protocolVersion, sdkVersion } from "./generated/product.ts";
+import { injectionVectors, protocolVersion, sdkVersion } from "./generated/product.ts";
 import { type Json, quote, serializeCanonical } from "./json.ts";
 
 export type { ComponentRef, ContributionDecl, LaunchSpec, MethodDecl, RpcContract } from "./generated/contracts.d.ts";
@@ -68,10 +68,20 @@ const launchSpec = Codec.record({
   envSet: Codec.withDefault(Codec.keyValues(Codec.string), {}),
   envDeny: Codec.withDefault(Codec.array(envName), []),
   cwd: Codec.withDefault(Codec.enum(["owned", "workspace"]), "owned"),
+  untrustedOverrides: Codec.optional(
+    Codec.array(Codec.string).describe("Runtime flags (--name=value) added before the program while the project is not trusted."),
+  ),
 })
   .strict()
-  .describe("How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}.")
-  .named("LaunchSpec") as Codec<LaunchSpec>;
+  .describe(
+    "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}.",
+  )
+  .named("LaunchSpec")
+  // Overrides are written only when there are some, as the F# side does (adding the field changed no hash).
+  .map(
+    (spec) => spec,
+    ({ untrustedOverrides, ...spec }) => (untrustedOverrides === undefined || untrustedOverrides.length === 0 ? spec : { ...spec, untrustedOverrides }),
+  ) as Codec<LaunchSpec>;
 
 const contributionDecl: Codec<ContributionDecl> = Codec.record({
   type: named(Patterns.contributionType, 'A contribution type, e.g. "extension-runtime".'),
@@ -120,32 +130,9 @@ const manifestCodec = Codec.record({
 /**
  * Runtime injection vectors (spec §18): variables that make a runtime load code before the program
  * does. The host always removes them from an extension process's environment; a manifest may not set
- * them (`Manifest.deniedEnvironment`).
+ * them (`Manifest.deniedEnvironment`, generated from `InjectionVectors`).
  */
-export const deniedEnvironment: readonly string[] = [
-  "BUN_OPTIONS",
-  "BUN_INSPECT*",
-  "BUN_CONFIG_*",
-  "NODE_OPTIONS",
-  "NODE_INSPECT*",
-  "NPM_CONFIG_*",
-  "DOTNET_STARTUP_HOOKS",
-  "DOTNET_ADDITIONAL_DEPS",
-  "DOTNET_SHARED_STORE",
-  "DOTNET_ENABLE_PROFILING*",
-  "CORECLR_PROFILER*",
-  "CORECLR_ENABLE_PROFILING",
-  "COR_PROFILER*",
-  "COR_ENABLE_PROFILING",
-  "LD_PRELOAD",
-  "LD_AUDIT",
-  "DYLD_INSERT_LIBRARIES",
-  "PYTHONSTARTUP",
-  "PERL5OPT",
-  "RUBYOPT",
-  "JAVA_TOOL_OPTIONS",
-  "_JAVA_OPTIONS",
-];
+export const deniedEnvironment: readonly string[] = injectionVectors;
 
 /** Whether a variable name matches a deny pattern (exact, or a prefix ending in `*`). */
 export function matchesEnvPattern(ignoreCase: boolean, pattern: string, name: string): boolean {
@@ -207,6 +194,9 @@ function check(manifest: Manifest): Issue[] {
       const denied = [...deniedEnvironment, ...(launch.envDeny ?? [])].some((pattern) => matchesEnvPattern(true, pattern, name));
       if (denied) issues.push(issueAt(["launch", "envSet", i], `${name} is denied: it can inject code into the runtime`));
       if (name.includes("*")) issues.push(issueAt(["launch", "envSet", i], "a variable name cannot contain *"));
+    });
+    (launch.untrustedOverrides ?? []).forEach((flag, i) => {
+      if (!flag.startsWith("-")) issues.push(issueAt(["launch", "untrustedOverrides", i], "an override is a runtime flag, written --name=value"));
     });
   }
   if (manifest.hash !== undefined && manifest.hash !== hash(manifest)) {

@@ -154,8 +154,8 @@ let renderProduct () : string =
     String.concat
         "\n"
         [
-            "// Generated from Fx.Product and Fx.Sdk.Versions by tests/Fx.Sdk.Process.Tests. Do not edit: change the"
-            "// constants and run the tests with UPDATE_GOLDEN=1."
+            "// Generated from Fx.Product, Fx.Sdk.Versions and Fx.Sdk.InjectionVectors by tests/Fx.Sdk.Process.Tests."
+            "// Do not edit: change the constants and run the tests with UPDATE_GOLDEN=1."
             ""
             "/** The product name: the build-time constant every user-visible name derives from. */"
             $"export const productName = {quote Product.Name};"
@@ -176,5 +176,14 @@ let renderProduct () : string =
             "export function extensionId(localId: string): string {"
             $"  return {quote prefix} + localId;"
             "}"
+            ""
+            "/**"
+            " * The runtime injection vectors (spec §18): variable names, or prefixes ending in `*`, that make a"
+            " * runtime load code before the program does. The host removes them from every extension process;"
+            " * a manifest may not set them."
+            " */"
+            "export const injectionVectors: readonly string[] = ["
+            yield! InjectionVectors.patterns |> List.map (fun pattern -> $"  {quote pattern},")
+            "];"
             ""
         ]

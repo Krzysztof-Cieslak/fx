@@ -75,6 +75,7 @@ let child (root: string) (launch: LaunchSpec) : Connect =
                 Workspace = None
                 HostEnvironment = processSettings.HostEnvironment
                 IsWindows = OperatingSystem.IsWindows()
+                ProjectTrusted = trust.ProjectTrusted
             }
 
         task {

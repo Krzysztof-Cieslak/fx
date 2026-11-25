@@ -1,8 +1,8 @@
 /// The TypeScript sample extension (`packages/sample-extension`, written against `@fx/sdk`) as a process
-/// extension on the pinned Bun: bundled into one file with it, launched with the Bun kernel spike's
-/// hardened flags in an owned directory (T114 owns the real launch), and loaded by the host's `process`
-/// runtime from the F# sample's manifest. Without the pinned Bun (offline) its tests are skipped
-/// locally and fail in CI.
+/// extension on the pinned Bun: bundled into one file with it, launched with `fx.runtime.bun`'s hardened
+/// launch (its flags, untrusted overrides, files and environment, with the owned directories under the
+/// package directory) by the host's `process` runtime from the F# sample's manifest. T115 replaces this
+/// with the `bun` runtime. Without the pinned Bun (offline) its tests are skipped locally and fail in CI.
 module Fx.Extensions.Tests.TypeScriptSample
 
 open System
@@ -16,6 +16,7 @@ open Fx.Effects.Live
 open Fx.Extensions
 open Fx.Sdk
 open Fx.Ext.Sample
+open Fx.Ext.RuntimeBun
 open Fx.Kernel.Tests
 open Fx.Aot.Scenarios.Extensions
 open Fx.Aot.Scenarios.Extensions.SampleHost
@@ -95,83 +96,54 @@ let prepare () : Task<Prepared> =
 
 let private counter = ref 0
 
-/// The owned bunfig (docs/spikes/bun-kernel.md): the same switches as the flags.
-let private bunfig =
-    "telemetry = false\nenv = false\n\n[install]\nauto = \"disable\"\n\n[run]\nnoOrphans = true\n"
-
-/// What a process on Bun needs from the host's environment (Windows basics); nothing else.
-let private allowlist =
+/// `fx.runtime.bun`'s placeholders for a launch whose owned directories are under the package
+/// directory (`${root}`), its files in `${root}/config`.
+let private ownedPlaceholders =
     [
-        "PATH"
-        "SystemRoot"
-        "SystemDrive"
-        "windir"
-        "ComSpec"
-        "PATHEXT"
-        "NUMBER_OF_PROCESSORS"
-        "PROCESSOR_ARCHITECTURE"
-        "OS"
-        "LANG"
-        "TZ"
+        "${owned.root}", "${root}"
+        "${owned.cwd}", "${root}"
+        "${owned.home}", "${root}/home"
+        "${owned.config}", "${root}/config"
+        "${owned.cache}", "${root}/cache"
+        "${owned.temp}", "${root}/tmp"
+        yield!
+            RuntimeBun.runtime.Files
+            |> List.map (fun file -> "${file." + file.Name + "}", "${root}/config/" + file.Name)
     ]
 
-/// A package directory of its own for one process (`${root}`): the bundle, the bunfig, and the
-/// home, cache and temporary directories the launch points Bun at.
+let private owned (text: string) =
+    ownedPlaceholders
+    |> List.fold (fun (t: string) (placeholder, value) -> t.Replace(placeholder, value, StringComparison.Ordinal)) text
+
+/// A package directory of its own for one process (`${root}`): the bundle, `fx.runtime.bun`'s files,
+/// and the home, cache and temporary directories the launch points Bun at.
 let private ownedRoot (prepared: Prepared) : string =
     let n = Interlocked.Increment counter
 
     let root =
         Repo.path [ "artifacts"; "sample-extension"; "owned"; $"{Environment.ProcessId}-{n}" ]
 
-    for dir in [ "home"; "tmp"; "cache" ] do
+    for dir in [ "home"; "tmp"; "cache"; "config" ] do
         Directory.CreateDirectory(Path.Combine(root, dir)) |> ignore
 
     File.Copy(prepared.Bundle, Path.Combine(root, "sample.js"), true)
-    File.WriteAllText(Path.Combine(root, "bunfig.toml"), bunfig)
+
+    for file in RuntimeBun.runtime.Files do
+        File.WriteAllText(Path.Combine(root, "config", file.Name), file.Content)
+
     root
 
-/// How the process runtime starts the sample: the pinned Bun, hardened, running the bundle in its
-/// package directory.
+/// How the process runtime starts the sample: `fx.runtime.bun`'s hardened launch (data, T114) on the
+/// pinned Bun, running the bundle in its package directory. Its untrusted overrides apply: the tests'
+/// project is not trusted.
 let launch (prepared: Prepared) : LaunchSpec =
-    {
+    let bun = RuntimeBun.launch
+
+    { bun with
         Exe = prepared.Bun
-        Args =
-            [
-                "--config=${root}/bunfig.toml"
-                "--no-env-file"
-                "--no-install"
-                "--no-orphans"
-                "--no-macros"
-                "${root}/sample.js"
-            ]
-        EnvAllowlist = allowlist
-        EnvSet =
-            [
-                "DO_NOT_TRACK", "1"
-                "NO_COLOR", "1"
-                "HOME", "${root}/home"
-                "USERPROFILE", "${root}/home"
-                "XDG_CONFIG_HOME", "${root}/home/config"
-                "XDG_CACHE_HOME", "${root}/cache"
-                "TMPDIR", "${root}/tmp"
-                "TEMP", "${root}/tmp"
-                "TMP", "${root}/tmp"
-                "BUN_RUNTIME_TRANSPILER_CACHE_PATH", "${root}/cache/transpiler"
-                "BUN_INSTALL_CACHE_DIR", "${root}/cache/install"
-            ]
-        EnvDeny =
-            [
-                "BUN_INSPECT*"
-                "BUN_CONFIG_*"
-                "BUN_JSC_*"
-                "BUN_FEATURE_FLAG_*"
-                "BUN_DEBUG*"
-                "NODE_PATH"
-                "NODE_CHANNEL_*"
-                "LD_LIBRARY_PATH"
-                "DYLD_*"
-            ]
-        Cwd = LaunchCwd.Owned
+        Args = (bun.Args |> List.map owned) @ [ "${root}/sample.js" ]
+        UntrustedOverrides = bun.UntrustedOverrides |> List.map owned
+        EnvSet = bun.EnvSet |> List.map (fun (name, value) -> name, owned value)
     }
 
 let private remove (root: string) =

@@ -381,6 +381,9 @@ let manifests: string list =
         """{"id":"Acme","version":"1.0","sdk":"one","protocol":"","runtime":"process","extra":1,"contributions":[{"type":"x","id":"a"},{"type":"x","id":"a"}],"replaces":["Acme"]}"""
         """{"id":"acme.decl","version":"1.0.0","sdk":"0.1","protocol":"1","runtime":"declarative","contributions":[{"type":"x","id":"a"}],"rpc":{"methods":[{"name":"m"}]},"launch":{"exe":"x","envSet":{"NODE_OPTIONS":"--require x"}}}"""
         """{"id":"acme.tools","version":"1.2.0","sdk":"0.1","protocol":"1","runtime":"bun","hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000"}"""
+        """{"id":"acme.proc","version":"1.0.0","sdk":"0.1","protocol":"1","runtime":"process","launch":{"exe":"${root}/run","untrustedOverrides":["--tsconfig-override=${root}/tsconfig.json"],"envSet":{"HOME":"${root}/home"}}}"""
+        """{"id":"acme.proc","version":"1.0.0","sdk":"0.1","protocol":"1","runtime":"process","launch":{"exe":"${root}/run","untrustedOverrides":["tsconfig-override"],"envSet":{"NODE_PATH":"x","ok":"1","BUN_JSC_useJIT":"0"}}}"""
+        """{"id":"acme.proc","version":"1.0.0","sdk":"0.1","protocol":"1","runtime":"process","launch":{"exe":"${root}/run","untrustedOverrides":[]}}"""
     ]
 
 /// `protocol.json`.

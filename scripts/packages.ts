@@ -9,11 +9,13 @@
 //    other SDK packages and FSharp.Core.
 // 2. `bun pm pack` the TypeScript SDK (packages/sdk) into artifacts/packages; its name comes from the
 //    constant too (a test checks package.json).
-// 3. Build a consumer outside the solution (artifacts/package-consumer): an F# extension process made of
-//    the sample extension's source and a main that serves it with ExtensionProcess.run, referencing only
-//    <FxPascalName>.Sdk.Process, restored from artifacts/packages and nuget.org with nothing inherited
-//    from the repository's build. tests/Fx.Extensions.Tests runs the result through the parity and
-//    server conformance suites (required with PACKAGE_TESTS=1, as in CI).
+// 3. Build consumers outside the solution (artifacts/package-consumer), restored from artifacts/packages
+//    and nuget.org with nothing inherited from the repository's build:
+//    - every package under extensions/ from its sources, referencing only <FxPascalName>.Sdk: built-ins
+//      need nothing but the public SDK;
+//    - an F# extension process made of the sample extension's source and a main that serves it with
+//      ExtensionProcess.run, referencing only <FxPascalName>.Sdk.Process. tests/Fx.Extensions.Tests runs
+//      it through the parity and server conformance suites (required with PACKAGE_TESTS=1, as in CI).
 
 import { inflateRawSync } from "node:zlib";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -167,7 +169,40 @@ let main _ =
 `,
 );
 
-const project = join(CONSUMER, "PackagedSample.fsproj");
-run(["dotnet", "restore", project, "--configfile", join(CONSUMER, "nuget.config"), "--packages", join(CONSUMER, "nuget-packages")]);
-run(["dotnet", "build", project, "--no-restore", "--configuration", "Release", "--output", join(CONSUMER, "out")]);
-console.log(`${relative(ROOT, join(CONSUMER, "out"))}: the sample extension, built from the SDK packages`);
+const build = (project: string, output: string) => {
+  run(["dotnet", "restore", project, "--configfile", join(CONSUMER, "nuget.config"), "--packages", join(CONSUMER, "nuget-packages")]);
+  run(["dotnet", "build", project, "--no-restore", "--configuration", "Release", "--output", output]);
+};
+
+// Every extension package, from its own sources and the public SDK's package alone.
+for (const name of readdirSync(join(ROOT, "extensions")).sort()) {
+  const source = join(ROOT, "extensions", name, `${name}.fsproj`);
+  if (!existsSync(source)) continue;
+  const compiled = [...readFileSync(source, "utf8").matchAll(/<Compile Include="([^"]+)"/g)].map((m) => join(ROOT, "extensions", name, m[1]!.replaceAll("\\", "/")));
+  const directory = join(CONSUMER, "extensions", name);
+  mkdirSync(directory, { recursive: true });
+  const project = join(directory, `${name}.fsproj`);
+  writeFileSync(
+    project,
+    `<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <DisableImplicitLibraryPacksFolder>true</DisableImplicitLibraryPacksFolder>
+  </PropertyGroup>
+  <ItemGroup>
+${compiled.map((file) => `    <Compile Include="${file}" />`).join("\n")}
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="${pascal}.Sdk" Version="${version}" />
+  </ItemGroup>
+</Project>
+`,
+  );
+  build(project, join(directory, "out"));
+  console.log(`extensions/${name}: built from the SDK package alone`);
+}
+
+build(join(CONSUMER, "PackagedSample.fsproj"), join(CONSUMER, "out"));
+console.log(`${relative(ROOT, join(CONSUMER, "out"))}: the sample extension as a process, built from the SDK packages`);
