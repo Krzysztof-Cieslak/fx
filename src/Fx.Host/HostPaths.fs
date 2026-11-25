@@ -28,6 +28,12 @@ type HostPaths =
         Runtimes: string
         /// The owner-only directory of the file credential store (`LocalPrivateFiles`).
         Credentials: string
+        /// The local listener's token, in an owner-only file (`TokenFile`).
+        ListenerToken: string
+        /// Where a serving host listens, for clients to find (`ListenerInfo`).
+        ListenerInfo: string
+        /// The listener's Unix socket (Linux and macOS).
+        Socket: string
     }
 
     override this.ToString() = $"HostPaths({this.Data})"
@@ -52,6 +58,9 @@ module HostPaths =
             MachineId = Path.Combine(data, "machine-id")
             Runtimes = Path.Combine(data, "runtimes")
             Credentials = Path.Combine(data, "credentials")
+            ListenerToken = Path.Combine(data, "listener.token")
+            ListenerInfo = Path.Combine(data, "listener.json")
+            Socket = Path.Combine(data, "host.sock")
         }
 
     /// The per-user data directory from the process's variables: `FX_HOME` if set, else

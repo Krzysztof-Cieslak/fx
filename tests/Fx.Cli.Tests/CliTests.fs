@@ -182,4 +182,13 @@ let tests =
                 Expect.equal (printed [ "auth" ]).ExitCode 2 "no command"
                 Expect.stringContains (printed [ "--help" ]).Stdout "auth login <provider>" "in the usage"
             }
+
+            test "serve, on the local listener or loopback TCP" {
+                Expect.equal (string (Cli.parse [ "serve" ])) "serve" "the preferred listener"
+                Expect.equal (string (Cli.parse [ "serve"; "--tcp" ])) "serve --tcp 0" "any free port"
+                Expect.equal (string (Cli.parse [ "serve"; "--tcp"; "7357" ])) "serve --tcp 7357" "a port"
+                Expect.equal (printed [ "serve"; "--tcp"; "70000" ]).ExitCode 2 "not a port"
+                Expect.equal (printed [ "serve"; "--x" ]).ExitCode 2 "unknown"
+                Expect.stringContains Cli.usage "serve" "in the usage"
+            }
         ]

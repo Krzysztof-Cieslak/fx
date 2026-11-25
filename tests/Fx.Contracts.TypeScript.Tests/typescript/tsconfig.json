@@ -27,6 +27,7 @@
     "../golden/store.d.ts",
     "../golden/variants.d.ts",
     "../../Fx.Sessions.Host.Tests/golden/session.d.ts",
+    "../../Fx.Host.Tests/golden/client.d.ts",
     "../golden/fixtures.ts",
     "usage.ts"
   ]

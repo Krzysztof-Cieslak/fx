@@ -1,9 +1,10 @@
-# Module spec: the host (`src/Fx.Host`, `fx run`, `fx trust`, `fx variants`, `fx auth`)
+# Module spec: the host (`src/Fx.Host`, `fx run`, `fx serve`, `fx trust`, `fx variants`, `fx auth`)
 
 Spec: §3 (the host, embedded mode), §5 (sessions persist; reconnect; crash recovery), §11 (identity;
-service credentials, §11.3–11.5), §13 (grants), §15 (variants), §16.1 (bootstrap order), §16.4–16.5 (built-ins, trust), §18 (trust before execution;
-credentials on the host), §19.5 (`fx run -p … --json`). Task: T129a (T129b adds the client protocol and
-`fx serve`).
+service credentials, §11.3–11.5), §13 (grants), §15 (variants), §16.1 (bootstrap order), §16.4–16.5
+(built-ins, trust), §17 (the client protocol), §18 (trust before execution; credentials on the host),
+§19.5 (`fx run -p … --json`). Tasks: T129a (the composition, embedded mode, `fx run`, `fx auth`),
+T129b (the client protocol, `fx serve`).
 Code: [`src/Fx.Host`](../../src/Fx.Host) (the composition root: pure apart from the capabilities it is
 handed; `Live.fs` builds the live interpreters), [`src/Fx.Cli`](../../src/Fx.Cli) (`Cli.parse` is pure,
 `Program` is the entry point).
@@ -29,6 +30,9 @@ else references the live interpreters and the built-in extensions together.
 | Signing in, creating and prompting sessions (`HostSessions`) | `HostSessions.fs` |
 | `fx run -p` (`Headless`) | `Headless.fs` |
 | `fx trust`, `fx variants`, `fx auth` (`Commands`) | `Commands.fs` |
+| The client protocol's messages (`ClientProtocol`) | `ClientProtocol.fs` |
+| Its handlers and serving a connection (`ClientServer`) | `ClientServer.fs` |
+| The local listener (`Listening`, `Serve`) and clients (`HostClient`) | `Clients.fs` |
 | The live interpreters (`Live`, `ProcessFacts`) | `Live.fs` |
 
 ## The data directory
@@ -48,6 +52,9 @@ One per user: `FX_HOME` if set (absolute), else `~/.<product>` (Unix) or `%LOCAL
 | `runtimes/` | the component installer's root (the same `runtimes` environments on this machine use) |
 | `credentials/` | the file credential store's owner-only files (`LocalPrivateFiles`), when it is the store in use |
 | `environments/` | `fx.env.local`'s leases and envd's state |
+| `listener.token` | the local listener's token, owner-only (`TokenFile`), new each `fx serve` |
+| `listener.json` | where a serving host listens: `{"kind": "unix-socket" \| "named-pipe" \| "loopback", "address"}` |
+| `host.sock` | the listener's Unix socket (Linux, macOS) |
 
 ## Config, policy and trust
 
@@ -119,7 +126,7 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
 
 - The **session index** (`host/sessions`, version 1, kept forever: `golden/index-events-v1.jsonl`)
   records each session the host creates: its workspace and environment. Clients list sessions from it
-  (T129b); the host starts them at boot.
+  (`session/list`); the host starts them at boot.
 - A session's **hands** (`CodeActConfig.Hands`, per turn) are its environment opened through `IEnvs`
   (`EnvHands.ofHandle`, with envd's workspace snapshots for the step journal) and a `KernelPlan`: the interpreter named by `agent.interpreter` (default
   `bun-ts`) on the runtime it names, the project's trust, the host's variables scrubbed. Grants on
@@ -128,6 +135,63 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   config), on the project's directory unless it names another; otherwise `fx.env.local` on the
   project, envd in the host's process. One per workspace, created with the first session; one that
   failed is destroyed so the next try starts afresh.
+
+## The client protocol (spec §17)
+
+JSON-RPC 2.0 ([rpc.md](rpc.md)) on a WebSocket at `/rpc` of the local listener, or in process in
+embedded mode, with the same messages. Every method is a value with codecs in `ClientProtocol`; the
+host's handlers are `ClientServer.handlers`, and clients call the same values (`Rpc.call peer
+ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
+(`tests/Fx.Host.Tests/golden/client.d.ts`, type-checked by `bun scripts/declarations.ts`).
+
+**`initialize`** signs the client in (identity.md: `{"identity": {"kind": "provider", "provider":
+"local-os-user"}}`, or a session token) and says which request kinds it can answer: `{"answers":
+["confirm", "agent.question", …]}` (spec §5: requests are offered to capable clients). The result adds
+`session` (the client's session, with its token when issued) and `clientProtocol` (`"1"`).
+
+| Method | Params → result | Least role |
+|---|---|---|
+| `session/create` | `{session?, title?}` → `SessionEntry` (creates the workspace's environment on first use; the same id again is harmless) | collaborator |
+| `session/list` | → `SessionEntry[]` | viewer |
+| `session/get` | `{session}` → `{seq, state}` (`SessionState`) | viewer |
+| `session/prompt` | `{session, key, text, mode: steer \| queue}` → `{after, count}` | collaborator |
+| `session/interrupt` | `{session, key}` → `{after, count}` (the control path) | collaborator |
+| `session/answer` | `{session, key, request, answer}` → `{after, count}`; only a client that offered one of the request's capabilities (`cannotAnswer`) | collaborator |
+| `session/fork` | `{session, key, child?, upTo?}` → `{session}` (the child, indexed with its parent's workspace) | collaborator |
+| `session/overrides` | `{session, key, set: {slot: value}, unset: [slot]}` → `{after, count}` (`invalid` with the resolution's issues) | collaborator |
+| `session/close`, `session/reopen` | `{session, key}` → `{after, count}` (closing ends the session's grants) | collaborator |
+| `session/offers` | `{session}` → the open requests this client can answer | viewer |
+| `session/subscribe` | `{session, after}` → runs until cancelled, sending `session/event` `{session, item}` (`SessionFeed`: replay after `after`, a snapshot first if far behind, then live) | viewer |
+| `grants/*` | `GrantsProtocol` ([grants.md](grants.md)); answering, granting and revoking need an owner who is a person (`notAPerson` otherwise) | viewer / owner |
+| `identity/whoami` | → `SessionInfo` (no token) | viewer |
+| `identity/sessions` | → the live client sessions | owner |
+| `identity/revoke` | `{id}` → revoked (its connections end) | owner |
+| `identity/signOut` | → revokes this connection's token (and ends it) | viewer |
+| `env/list`, `env/get` | → `EnvSummary` (id, name, provider, phase, transport, workspace, reason, warnings) | viewer |
+| `env/destroy` | `{id}` → `EnvSummary` | owner |
+| `ext/<id>/<name>` | the method's JSON params → its JSON result; `ExtCallError` (`failed` with the `MethodFailure`) | collaborator |
+
+- **Keys** are the client's: the host keys a command `client/<client id>/<key>`, so a retry (also after
+  a reconnect with the same token) gets the first outcome, and no client can collide with another or
+  with the host's own keys.
+- **Errors** are `ClientError` (`forbidden` with the identity failure, `unknownSession`,
+  `unknownEnvironment`, `rejected` with the session's code, `cannotAnswer`, `invalid`, `unavailable`).
+- **Revocation** ends every connection the token opened (`SessionTokens.Revocation`).
+
+### The local listener and `fx serve`
+
+`fx serve [--tcp [<port>]]` starts the host for the current directory and serves until Ctrl+C:
+
+- on its Unix socket (`host.sock`; Linux and macOS) or a named pipe of its own (`<product>-<machine
+  id>`; Windows), where the OS reports the client's account (`local-os-user`'s proof), or on loopback
+  TCP (`--tcp`; port 0 picks one);
+- behind the listener's token (a new one each start, in the owner-only `listener.token`), `Origin` and
+  `Host` checks (spec §18); a session token the host issued is a valid bearer too, so a client resumes
+  its session on reconnect without signing in;
+- `listener.json` says where; `HostClient.locate` reads it and the token, `HostClient.connect` dials.
+
+Embedded mode is the same protocol in process: `HostClient.embedded host service answers` (the
+in-process transport, signed in as the OS user). The TUI (T130) uses it, or a serving host.
 
 ## Service credentials and `fx auth`
 
@@ -144,7 +208,7 @@ fx auth login <provider> [--method <kind>] | logout <provider> | list | status
 `Commands.auth` starts the service the host would (config, built-ins, resolution, `Setup.auth`) and
 runs `AuthCli.run`. It takes the data directory's lock, since the credential stores have one writer
 at a time: beside a running host it fails (`a host is running on …`; `auth/*` over the client protocol
-is T129b's). The entry point's `FlowRunner` runs a login's flow at the terminal: a paste prompt that
+is later). The entry point's `FlowRunner` runs a login's flow at the terminal: a paste prompt that
 does not echo (or a line of standard input when it is redirected), a device code to enter elsewhere;
 browser logins are not supported on the command line yet. Output never holds a secret.
 
@@ -179,12 +243,15 @@ or abandoned, 2 bad arguments.
 
 ## Native AOT
 
-`fx` now carries the whole host (Kestrel's assemblies come with `Fx.Transport.Http`, which T129b
-serves on). Scenarios: `host-composition` (paths, config, trust, the static list, parsing `auth`, the
-index's JSON, the host's slots) and `host-embedded` (on the JIT and natively: `fx auth` login, list
-and status on the file store, a host started with its lock, built-ins, SQLite stores and service
-credentials, the stored key resolving, `fx auth` refused beside it, sign-in, a headless run in an
-embedded environment, a restart that continues the session). The diff also runs `fx variants list` and `fx variants schema`. CI smoke-tests the
+`fx` carries the whole host, Kestrel included (`Fx.Transport.Http`). Scenarios: `host-composition`
+(paths, config, trust, the static list, parsing `auth`, the index's JSON, the host's slots),
+`host-embedded` (on the JIT and natively: `fx auth` login, list and status on the file store, a host
+started with its lock, built-ins, SQLite stores and service credentials, the stored key resolving,
+`fx auth` refused beside it, sign-in, a headless run in an embedded environment, a restart that
+continues the session), `host-protocol-codecs` (the protocol's JSON, least roles) and `host-protocol`
+(a client in process and over loopback with the token file: sign-in, a session created, prompted and
+followed, the typed errors, environments, a wrong token). The diff also runs `fx variants list` and
+`fx variants schema`. CI smoke-tests the
 published binary: `fx variants list` and `fx run -p` in an empty project, which stops at the first
 install's approval (no terminal).
 
@@ -195,6 +262,12 @@ install's approval (no terminal).
   `fx variants`; `fx auth` (a pasted key stored in the file store, listed, resolved by the host's
   model access, refused beside a running host, logged out); a session in an embedded environment whose turn fails at its hands (no interpreter),
   continued after a restart.
+- `ProtocolTests`: in process, create, prompt, subscribe, reconnect after a sequence number, a restart;
+  least roles with a viewer's identity provider, grants answered over the protocol; over a Unix socket
+  or named pipe and over loopback: the token file, a wrong token, a session token as the bearer, an
+  extension's method, revocation ending connections; with the bun-ts kernel (network): a client answers
+  the first install's grant request while `session/create` waits, then a turn finishes; the generated
+  types; the least roles.
 - `LiveTests` (the network for Bun; cached in `artifacts/host-tests/downloads`; skipped offline,
   required in CI): `fx run -p` with TypeScript cells on bun-ts, Bun installed by the host's installer
   after the person approves; a restart that continues the session without asking again; a turn the
@@ -206,11 +279,12 @@ install's approval (no terminal).
 
 | What | Task |
 |---|---|
-| The client protocol (`session/*`, `grants/*`, `identity/*`, `env/*`, `ext/<id>/*`) over WebSocket and in process, least roles per group, ending connections on revocation, the listener's token file, `fx serve`, generated TypeScript for clients | T129b |
-| `auth/*` over the client protocol (logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T129b, T509 |
+| `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T130, T509 |
 | Grants on host calls (`Hands.Guard`) | T127b |
 | The TUI (`fx` without arguments), the trust prompt, showing warnings | T130 |
 | Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase | T115, with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
 | Machine retry delays and store page sizes as slots | when tuned |
-| Choosing an environment per session (`env/*`, the picker) | T129b, T130 |
+| Choosing an environment per session (the picker) | T130 |
+| Epoch-fenced takeover and sharing with other people | T507 |
+| The HTTP/SSE offset-read mirror of the protocol (spec §17 fallbacks), binary channels for bulk data (`blobs/*`, `pty/*`) | with their method groups |

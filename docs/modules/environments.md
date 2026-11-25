@@ -255,7 +255,7 @@ reconciles, destroy; piped runs the scenarios program's own `envd --stdio` mode)
 | What | Task |
 |---|---|
 | Sandbox drivers and their contribution type; `network` policies; per-agent overrides | T113 |
-| `env/*` on the client protocol, an environment per session (the host's composition is [host.md](host.md)) | T129b |
+| Choosing an environment per session (the host's composition and `env/*` are [host.md](host.md)) | T130 |
 | Showing `Envs.warnings` (unsandboxed) persistently | T130 |
 | envd for other targets (upload), installing components over the environment protocol, `fx.env.ssh`, `Direct` over WebSocket | T501 |
 | `Dialback` through a relay; reconnecting transports | T504 |
