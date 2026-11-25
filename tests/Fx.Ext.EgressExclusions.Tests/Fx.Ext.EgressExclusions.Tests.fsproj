@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of the fx.egress.exclusions package and the SDK's content exclusions: settings from variant
+    layers under policy, the model-egress transform and gate (with other transforms by priority), the
+    package bootstrapped through the extension host with the Anthropic, OpenAI and canonical wires
+    (requests rendered from a session leave with placeholders only), and the hooks over the extension
+    protocol. The glob matcher's own tests are in tests/Fx.Models.Tests.
+  -->
+  <ItemGroup>
+    <Compile Include="HookTests.fs" />
+    <Compile Include="EndToEndTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
+  </ItemGroup>
+</Project>

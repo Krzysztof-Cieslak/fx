@@ -50,6 +50,7 @@
     <Project Path="extensions/Fx.Ext.ModelCanonical/Fx.Ext.ModelCanonical.fsproj" />
     <Project Path="extensions/Fx.Ext.InterpreterBunTs/Fx.Ext.InterpreterBunTs.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelAnthropic/Fx.Ext.ModelAnthropic.fsproj" />
+    <Project Path="extensions/Fx.Ext.EgressExclusions/Fx.Ext.EgressExclusions.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -102,6 +103,7 @@
     <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
     <Project Path="tests/Fx.Grants.Tests/Fx.Grants.Tests.fsproj" />
     <Project Path="tests/Fx.Grants.Host.Tests/Fx.Grants.Host.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.EgressExclusions.Tests/Fx.Ext.EgressExclusions.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

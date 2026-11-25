@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.egress.exclusions package (spec §16.4, §18): content exclusions on every model
+    request. A native extension contributing its variant slots (the patterns per origin, the
+    placeholder, the action) and a model-egress transform and gate built from the SDK's
+    ContentExclusions. Like every package under extensions/, it references the public SDK
+    (src/Fx.Sdk) and nothing else. See README.md and docs/modules/egress.md.
+  -->
+  <ItemGroup>
+    <Compile Include="EgressExclusions.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
