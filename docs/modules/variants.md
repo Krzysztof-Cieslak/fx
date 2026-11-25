@@ -23,7 +23,7 @@ replayable, and comparable across runs (spec §1, principle 7: measured, not ass
 | Test double | `FakeVariants` | `Fakes/FakeVariants.fs` |
 
 `Fx.Variants` references only `Fx.Contracts` and `Fx.Effects`, so the public SDK can expose it to extensions
-(T108/T109 widen the SDK surface with it).
+(it is on the SDK surface, [sdk.md](sdk.md)).
 
 ## Slots
 
@@ -260,8 +260,9 @@ Slots are values and `SlotInfo` is their erased form, as `Contribution` is for c
 an extension adds slots without changing the core:
 
 - **In process** (native and built-in extensions): the extension keeps its `Slot<'T>` values (the typed keys
-  it reads with) and contributes `Slot.info slot` under a `variant-slot` contribution type, which T108/T109
-  define with these types.
+  it reads with) and contributes `Slot.info slot` under the `variant-slot` contribution type
+  (`VariantSlots.contributionType` in `Fx.Sdk`, which exposes `Fx.Variants`); the host builds its registry
+  from `VariantSlots.slots`, which sets the owners.
 - **Declared** (declarative manifests, extension processes): the JSON form `SlotDecl`
   (`{"id", "description", "default", "choices", "privileged"}`, `SlotInfo.declCodec`) becomes a `SlotInfo`
   with `SlotInfo.ofDecl owner decl`. Declared slots are enumerated, since the host cannot run the
@@ -296,7 +297,7 @@ reflection; slots are generic records of closures, and SHA-256 comes from the ba
 
 | What | Task |
 |---|---|
-| The `variant-slot` contribution type, and widening the SDK surface with `Fx.Variants` | T108, T109 |
+| Reading an extension's slots from its code (`IVariants` in `IExtensionEnv`, and over the extension protocol) | T109b |
 | Reading config files, policy files and flags into layers; a data directory from `Fx.Product`; `fx variants` (list, explain, schema) | T129 |
 | The store's `Durability`, batch and page sizes, the subscribe gap, actor retry delays as slots, read by the host when it opens the stores | T129 |
 | Binding profiles in session and run streams | T125, T212 |

@@ -12,7 +12,7 @@ types for `@fx/sdk` and `fx.d.ts` come from the F# codecs, never by hand.
 
 | Consumer | Layout | What it declares |
 |---|---|---|
-| `@fx/sdk` (T109), clients, the workflow worker | `Layout.Module` | `export interface` / `export type` for contract types; `export declare` members for RPC surfaces |
+| `@fx/sdk` (`packages/sdk/src/generated/contracts.d.ts`, [sdk.md](sdk.md)), clients, the workflow worker | `Layout.Module` | `export interface` / `export type` for contract types; `export declare` members for RPC surfaces |
 | The bun-ts kernel's `<global>.d.ts` (T117) | `Layout.Global(Product.kernelGlobal, doc)` | The host bridge (`fx.shell.run`, `fx.finish`, …) and the types it uses, in `declare namespace fx` |
 | The kernel protocol's TypeScript side (T116) | `Layout.Module` | The protocol's message types, if T116 defines them as codecs |
 
@@ -170,9 +170,9 @@ is not a group. Check extension-contributed schemas and bindings when the contri
 - **Types only, no generated runtime codecs.** The F# codecs are the authority: the host decodes every
   value it receives with them and answers with model-readable issues, and the values it sends were encoded
   by them. TypeScript authors who define *their own* contracts use `@fx/sdk`'s hand-written codec
-  combinators, which produce the same `Schema` (spec §4.1); that is T109, with parity tests on the schema
-  JSON. If T109 wants TypeScript codec values for the F# types, it adds a second emitter next to this one,
-  reusing its names and ordering.
+  combinators, which produce the same `Schema` in its wire form (`Codecs.schema`); the few F# contracts
+  `@fx/sdk` decodes at run time (manifests, the extension protocol's messages) are hand-written mirrors
+  whose schemas are compared with the F# ones by cross-language fixtures ([sdk.md](sdk.md)).
 - **`unknown` for any JSON value**, not a recursive `JsonValue` type: interfaces lack implicit index
   signatures, so typed values would not be assignable to a `JsonValue` parameter.
 - **Self-contained files.** Every file declares every type it uses. Files that share types (several SDK

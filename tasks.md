@@ -26,7 +26,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
-- **Wave 6:** T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T129 Host server, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
+- **Wave 6:** T109b Extension host capabilities, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T129 Host server, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T130 Minimal TUI, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T507 Multi-client + inbox, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T606 ACP adapter, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T303 Decisions panel, T508 Web client, T510 First cloud env (E2B)
 - **Wave 9:** T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge, T609 Desktop
@@ -66,6 +66,7 @@ flowchart LR
     T107["T107 JSON-RPC"]
     T108["T108 Extension system"]
     T109["T109 Public SDKs"]
+    T109b["T109b Extension host capabilities"]
     T110["T110 Component installer"]
     T111["T111 envd core"]
     T112["T112 Env provider + local"]
@@ -177,6 +178,7 @@ flowchart LR
   T107 --> T108
   T102 --> T109
   T108 --> T109
+  T109 --> T109b
   T104 --> T110
   T105 --> T110
   T108 --> T110
@@ -383,6 +385,7 @@ flowchart LR
 | T107 | JSON-RPC | T004, T101 | §17 | done | Own JSON-RPC 2.0 over stdio, WebSocket and in-process; binary channels; capability negotiation; `_meta` and extension methods; backpressure. |
 | T108 | Extension system | T103, T107 | §16 | done | Manifest schema, contribution registry (replayed transforms), hook algebra (gate/transform/contribute/observe/interpret), declarative/native/process runtimes, bootstrap order, transport-parity harness, architecture test (built-ins use public SDK only). |
 | T109 | Public SDKs | T102, T108 | §16.1 | in-progress | `Fx.Sdk` (F#) and `@fx/sdk` (TS) packages generated from contracts; a sample extension in each passes parity tests. |
+| T109b | Extension host capabilities | T109 | §4.2, §16.1 | todo | `IExtensionEnv` capabilities beyond the clock, attenuated to the manifest's `capabilities` (unknown names rejected at admission); `host/*` requests from extension processes in both SDKs (`IVariants` reads of the extension's own slots first); `IPackages`; the parity and server conformance suites cover them. |
 | T110 | Component installer | T104, T105, T108 | §6.1 | done | `Component`/`InstallMethod` types, planner + `fx.components.lock`, installer machine with `Archive` method (verify, stage, atomic activate, probe, prune); installer conformance suite v1. |
 | T111 | envd core | T005, T104, T107 | §3, §9 | done | envd mode: exec/PTY with sequenced resumable output, fs ops (batch stat, read/write, apply-patch, search, watch), blob store, shadow-git snapshots, environment protocol. |
 | T112 | Env provider + local | T108, T111 | §9.1–9.2 | todo | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |

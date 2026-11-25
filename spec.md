@@ -920,7 +920,7 @@ type JudgmentPoint<'Input,'Outcome> =
 
 - **Manifest:** id/version, SDK and protocol versions, placement (`host | environment | client`), extension runtime, required components, capabilities, contributions, RPC contract, hash.
 - **Extension runtimes:** core `declarative`, `native`, `process`; `bun` from `fx.exthost.bun`.
-- **SDKs at launch:** `Fx.Sdk` (F#) and `@fx/sdk` (TypeScript); other languages via raw JSON-RPC.
+- **SDKs at launch:** `Fx.Sdk` (F#) and `@fx/sdk` (TypeScript); other languages via raw JSON-RPC. F# extensions that run as their own process add `Fx.Sdk.Process` (the protocol's server); built-ins see only `Fx.Sdk`. Schemas have one JSON wire form, so `@fx/sdk`'s codecs are compared with the F# ones exactly. Module spec: `docs/modules/sdk.md`.
 - **Bootstrap order:** native and declarative (in the binary; native first, so contribution types they define are known to the rest) → components (installed only for admitted extensions: trust comes before installation) → process extensions → extensions on contributed runtimes (bun). Every extension is admitted (trust, pins, versions, conflicts) before any of its code runs, and its activation must provide exactly what its manifest declares.
 - **Registry:** a machine whose state is a fold of its events (admitted, activated, failed, disabled); contributions are keyed by typed contribution types, which the core, host hook points and native extensions define. Module spec: `docs/modules/extensions.md`.
 

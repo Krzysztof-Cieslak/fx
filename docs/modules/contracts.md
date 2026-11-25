@@ -24,7 +24,7 @@ TypeScript (T102), kernel values (T116, T201) and model wire adapters (T118 and 
 | `Schema.fs` | The `Schema` ADT, `Schema.render`, `Schema.definitions`, `Schema.toJsonSchema` |
 | `Preview.fs` | `Limits`, `Preview` and the rendering combinators |
 | `Codec.fs` | `Codec<'T>`, `Field`, and the `Codec` combinators |
-| `Codecs.fs` | Codecs of the contract types themselves (`Issue`, `Limits`, `Preview`) |
+| `Codecs.fs` | Codecs of the contract types themselves (`Issue`, `Limits`, `Preview`, and `Schema`'s wire form) |
 
 ## JSON
 
@@ -127,6 +127,11 @@ is a `const`; nullable becomes `anyOf` with `{"type": "null"}`; strict objects g
 `"additionalProperties": false`; defaults become `default`. Provider-specific dialects (for example
 OpenAI strict mode, where every field is required and optional ones are nullable) are transformations
 for the model adapters (T118 and later).
+
+`Codecs.schema` is the wire form of `Schema` itself, so schemas cross processes and languages unchanged:
+tagged by `kind` (one case per `SchemaKind`, each with its facets and an optional `description`), strict.
+`@fx/sdk`'s TypeScript codecs build values of it, and cross-language fixtures compare them with the F#
+codecs' schemas ([sdk.md](sdk.md)).
 
 `Schema.render` gives a TypeScript-like expression (`{ path: string; line?: integer }`) and
 `Schema.typeName` a short name for messages and previews (`Match[]`, `string | null`).

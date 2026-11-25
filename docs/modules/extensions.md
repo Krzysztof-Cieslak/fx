@@ -1,10 +1,12 @@
 # Module spec: the extension system (`src/Fx.Sdk`, `src/Fx.Extensions`)
 
 Spec: §16 (with §1 principle 9, §3, §4.2–4.4, §11.5, §13, §15, §17, §18). Task: T108.
-Code: [`src/Fx.Sdk`](../../src/Fx.Sdk) (the public F# SDK), [`src/Fx.Extensions`](../../src/Fx.Extensions)
-(the core: registry, catalog, runtimes, protocol, bootstrap), [`extensions/`](../../extensions) (extension
-packages; [`Fx.Ext.Sample`](../../extensions/Fx.Ext.Sample) is the reference) and `ProcTransport` in
-`src/Fx.Rpc`.
+Code: [`src/Fx.Sdk`](../../src/Fx.Sdk) (the public F# SDK), [`src/Fx.Sdk.Process`](../../src/Fx.Sdk.Process)
+(the extension protocol and its F# server), [`src/Fx.Extensions`](../../src/Fx.Extensions) (the core:
+registry, catalog, runtimes, the host's side of the protocol, bootstrap), [`extensions/`](../../extensions)
+(extension packages; [`Fx.Ext.Sample`](../../extensions/Fx.Ext.Sample) is the reference) and
+`ProcTransport` in `src/Fx.Rpc`. The SDKs themselves (what is public, packages, versions, `@fx/sdk`) are
+[sdk.md](sdk.md).
 Tests: `tests/Fx.Sdk.Tests`, `tests/Fx.Extensions.Tests` (registry, bootstrap, launch, protocol,
 transport parity, architecture) and the `extensions-*` scenarios of the JIT-vs-native diff.
 
@@ -16,13 +18,14 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
 
 | Assembly | Who references it | Contents |
 |---|---|---|
-| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, the `RemotePeer` shape |
-| `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, `Eff` and capabilities |
-| `Fx.Extensions`, `Fx.Rpc`, `Fx.Machines(.Host)`, `Fx.Effects.Live`, … | the core and composition roots only | — |
+| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, `BasicExtensionEnv`, the `RemotePeer` shape, variant slots |
+| `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, `Eff` and capabilities, variant slots |
+| `Fx.Sdk.Process` (with `Fx.Rpc`, `Fx.Effects.Live`) | F# extension processes; the core, for the protocol's messages | `ExtensionProtocol`, `ExtensionServer`, `ExtensionProcess.run` |
+| `Fx.Extensions`, `Fx.Machines(.Host)`, … | the core and composition roots only | — |
 
 - **The rule:** a package under `extensions/` has exactly one project reference, `src/Fx.Sdk`, and no
   package references. Its compiled assembly references only the SDK surface (`Fx.Sdk`, `Fx.Prelude`,
-  `Fx.Contracts`, `Fx.Effects`, `FSharp.Core`) and the base class library (`System.*`).
+  `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `FSharp.Core`) and the base class library (`System.*`).
   `ArchitectureTests` checks both, from the `.fsproj` and from the assembly's metadata
   (`System.Reflection.Metadata`), proves the check fails on an assembly that uses the core, checks that
   `Fx.Sdk` exposes nothing else, and that the core references no extension package.
@@ -30,11 +33,8 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
   `Eff`.
 - Widening the surface (e.g. `Fx.Machines`, when machines become a contribution type) is a deliberate
   edit of `ArchitectureTests.sdkSurface` and of this table.
-- **T109** turns `Fx.Sdk` into the published package and generates `@fx/sdk` from the same codecs. It
-  may move types between files, but keeps this boundary: everything an extension needs is in `Fx.Sdk`,
-  nothing of the core is. An F# extension that runs as its own process (not a built-in) needs the
-  server side of the protocol (`ExtensionServer`, in `Fx.Extensions` today); T109 decides whether that
-  becomes a separate `Fx.Sdk.Process` package.
+- An F# extension that runs as its own process (not a built-in) references `Fx.Sdk.Process`, which adds
+  the protocol's server and what it runs on; the packages and the TypeScript SDK are [sdk.md](sdk.md).
 
 ## Manifests
 
@@ -67,7 +67,7 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
   scripts) is a component (`requires`), whose digests the component installer checks
   ([components.md](components.md)).
 - **Capabilities** are names; the host builds the extension's environment from them (below). Their
-  syntax is checked; which names exist grows with the SDK (T109).
+  syntax is checked; which names exist grows with the host capabilities (T109b).
 
 ## Contribution types and the registry
 
@@ -140,8 +140,9 @@ Hooks are contribution types whose values are code. `Hooks` runs them over the c
 `IExtensionEnv` is the environment of all extension code: its extension's id, the capabilities the
 host grants it (today a clock), and the caller's scope. The host builds one per extension
 (`HostSettings.EnvFor manifest`), attenuated to the manifest's `capabilities`: an extension's authority
-is that value, never the caller's environment. `BasicExtensionEnv` is the environment every extension
-gets today; T109 adds capabilities (each checked against the manifest).
+is that value, never the caller's environment. `BasicExtensionEnv` (in `Fx.Sdk`) is the environment
+every extension gets today; T109b adds capabilities (each checked against the manifest), also over the
+protocol for extension processes.
 
 ## Extensions, methods and activation
 
@@ -193,8 +194,9 @@ let extension = { Manifest = manifest
 
 ### The extension protocol
 
-The host is the JSON-RPC client; the extension process serves (`ExtensionServer` for F#; any language
-can implement it). `initialize` carries `"extensionProtocol": "1"` (refused otherwise); the result lists
+The host is the JSON-RPC client; the extension process serves (`ExtensionServer` in `Fx.Sdk.Process`
+for F#, `serveExtensions` in `@fx/sdk` for TypeScript; any language can implement it and pass the server
+conformance suite, `tests/Fx.Extensions.Tests/Parity/ServerConformance.fs`). `initialize` carries `"extensionProtocol": "1"` (refused otherwise); the result lists
 the ids the process serves (`"serves"`).
 
 | Method | Params | Result |
@@ -223,7 +225,7 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
   admitted manifest's and that it provides what the manifest declares.
 - Defects in the process are JSON-RPC `InternalError`s: a gate denies, a transform fails, a method is
   `Crashed`. A process that is gone makes its contributions `Unreachable`.
-- Calls from the extension to the host (host capabilities over RPC) come with T109.
+- Calls from the extension to the host (host capabilities over RPC) come with T109b.
 
 ## Bootstrap (spec §16.1)
 
@@ -269,7 +271,7 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
 | What | Task |
 |---|---|
 | The static list of built-ins in the host's composition root, bootstrap at startup, `ext/<id>/*` on the client protocol, recording the registry's events in the event store | T129 (T105 for the store) |
-| `Fx.Sdk` and `@fx/sdk` as published packages generated from the codecs; host capabilities in `IExtensionEnv` (and over the protocol, `host/*`); a TS sample passing the parity suite | T109, T115 |
+| Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
 | Wiring the installer into the host: planning the lockfile from the component definitions of builtin and host-config candidates before the bootstrap, `Components.installFor` as `InstallComponents` | T129 |
 | The `bun` runtime (`fx.exthost.bun`, a process extension contributing `ExtensionRuntime "bun"`) | T115 |
 | Model-egress hooks on every model-bound payload (`Hook.transform`/`Hook.gate` on a privileged point) | T124 |
@@ -281,9 +283,10 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
   the sample into a host to tests: one transcript of every hook and method
   (`SampleHost.transcript`), the registry's events and replay, contributions with their data, separate
   state per activation, and disabling.
-- It runs on the sample loaded natively, behind the process runtime over in-memory pipes, and in a
-  child process (`Fx.Aot.Scenarios ext-peer`, on the JIT in tests and natively in the diff). T109 and
-  T115 run it on their samples: link the file, supply a loader.
+- It runs on the sample loaded natively, behind the process runtime over in-memory pipes, in a child
+  process (`Fx.Aot.Scenarios ext-peer`, on the JIT in tests and natively in the diff), built from the SDK
+  packages, and on the TypeScript sample (`packages/sample-extension`) on the pinned Bun
+  ([sdk.md](sdk.md)). T115 runs it on the TypeScript sample under the `bun` runtime: supply a loader.
 - The JSON-RPC conformance suite also runs over `ProcTransport` on a child started with `LocalShell`.
 
 ## Native AOT
