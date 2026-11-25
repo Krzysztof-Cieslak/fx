@@ -1,0 +1,35 @@
+{
+  "model": "gpt-6.2-astra",
+  "input": [
+    {
+      "role": "developer",
+      "content": [{ "type": "input_text", "text": "You are a coding agent." }]
+    },
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "What's the weather in Kraków?" }]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "The current weather in a city.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" },
+          "unit": { "type": "string", "enum": ["celsius", "fahrenheit"] }
+        },
+        "required": ["location"]
+      },
+      "strict": false
+    }
+  ],
+  "reasoning": { "effort": "high", "summary": "auto" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 16000,
+  "prompt_cache_key": "weather-1",
+  "store": false,
+  "stream": true
+}

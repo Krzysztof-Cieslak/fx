@@ -1,0 +1,44 @@
+{
+  "model": "gpt-6.2-sol",
+  "input": [
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "Create README.md with a title." }]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "write_file",
+      "description": "Writes a file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Relative to the workspace." },
+          "text": { "type": "string" },
+          "create": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] }
+        },
+        "required": ["path", "text", "create"],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    {
+      "type": "function",
+      "name": "search",
+      "description": "Searches the workspace.",
+      "parameters": {
+        "type": "object",
+        "properties": { "query": { "type": "string", "minLength": 1 } },
+        "required": ["query"]
+      },
+      "strict": false
+    }
+  ],
+  "tool_choice": "required",
+  "reasoning": { "effort": "medium" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 4096,
+  "store": false,
+  "stream": true
+}

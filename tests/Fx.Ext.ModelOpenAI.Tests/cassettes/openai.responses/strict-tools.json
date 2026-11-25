@@ -1,0 +1,215 @@
+{
+  "name": "strict-tools",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-sol",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Create README.md with a title."
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "write_file",
+        "description": "Writes a file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Relative to the workspace."
+            },
+            "text": {
+              "type": "string"
+            },
+            "create": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "path",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "search",
+        "description": "Searches the workspace.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "strict": true
+      }
+    ],
+    "toolChoice": {
+      "kind": "required"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "medium",
+      "visible": false
+    },
+    "maxOutputTokens": 4096,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-sol",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Create README.md with a title."
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "type": "function",
+                "name": "write_file",
+                "description": "Writes a file.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Relative to the workspace."
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "create": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "text",
+                    "create"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": true
+              },
+              {
+                "type": "function",
+                "name": "search",
+                "description": "Searches the workspace.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "query"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "tool_choice": "required",
+            "reasoning": {
+              "effort": "medium"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 4096,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_aeb50f63eb6b601e40202f7ce69cd2fb6919d86b6b824f23\",\"object\":\"response\",\"created_at\":1764059600,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"rs_be3605cd5d9a6d23ecbbae34039dc5cfd65ee093660917a2\",\"type\":\"reasoning\",\"summary\":[]}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"rs_be3605cd5d9a6d23ecbbae34039dc5cfd65ee093660917a2\",\"type\":\"reasoning\",\"summary\":[],\"encrypted_content\":\"gAAAAABpY168RMblFdMSOpneY46CSZBVqJ7E6g+FqRF1arJ7bIPFYti57NozEBvr8m2v57+fnVvjol5sIxrUQnGPESKLZuHyHDhSNrpJFcdXs2HuA/bEY1g4ECpDxrfJl6h7A3iNoXhtfch8Z4UIXI2+hj34pWCk/zlTDvMy\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":3,\"output_index\":1,\"item\":{\"id\":\"fc_1fd2cc65d2297289fd7ab0380feb9df88ad31d4ee70fe28e\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_KBkYnvXufuKKP06JN6td9Wde\",\"name\":\"write_file\"}}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":4,\"item_id\":\"fc_1fd2cc65d2297289fd7ab0380feb9df88ad31d4ee70fe28e\",\"output_index\":1,\"delta\":\"{\\\"path\\\":\\\"README.md\\\",\\\"text\\\":\\\"# fx\\\\n\\\",\",\"obfuscation\":\"0\"}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":5,\"item_id\":\"fc_1fd2cc65d2297289fd7ab0380feb9df88ad31d4ee70fe28e\",\"output_index\":1,\"delta\":\"\\\"create\\\":null}\",\"obfuscation\":\"r9\"}\n\nevent: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"sequence_number\":6,\"item_id\":\"fc_1fd2cc65d2297289fd7ab0380feb9df88ad31d4ee70fe28e\",\"output_index\":1,\"arguments\":\"{\\\"path\\\":\\\"README.md\\\",\\\"text\\\":\\\"# fx\\\\n\\\",\\\"create\\\":null}\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":7,\"output_index\":1,\"item\":{\"id\":\"fc_1fd2cc65d2297289fd7ab0380feb9df88ad31d4ee70fe28e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"path\\\":\\\"README.md\\\",\\\"text\\\":\\\"# fx\\\\n\\\",\\\"create\\\":null}\",\"call_id\":\"call_KBkYnvXufuKKP06JN6td9Wde\",\"name\":\"write_file\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":8,\"response\":{\"id\":\"resp_aeb50f63eb6b601e40202f7ce69cd2fb6919d86b6b824f23\",\"object\":\"response\",\"created_at\":1764059600,\"status\":\"completed\",\"completed_at\":1764059602,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"tool_choice\":\"required\",\"usage\":{\"input_tokens\":302,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":75,\"output_tokens_details\":{\"reasoning_tokens\":48},\"total_tokens\":377}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_aeb50f63eb6b601e40202f7ce69cd2fb6919d86b6b824f23",
+      "model": "gpt-6.2-sol",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6.2-sol",
+            "kind": "reasoning",
+            "data": "{\"id\":\"rs_be3605cd5d9a6d23ecbbae34039dc5cfd65ee093660917a2\",\"type\":\"reasoning\",\"summary\":[],\"encrypted_content\":\"gAAAAABpY168RMblFdMSOpneY46CSZBVqJ7E6g+FqRF1arJ7bIPFYti57NozEBvr8m2v57+fnVvjol5sIxrUQnGPESKLZuHyHDhSNrpJFcdXs2HuA/bEY1g4ECpDxrfJl6h7A3iNoXhtfch8Z4UIXI2+hj34pWCk/zlTDvMy\"}"
+          }
+        },
+        {
+          "kind": "toolCall",
+          "id": "call_KBkYnvXufuKKP06JN6td9Wde",
+          "name": "write_file",
+          "arguments": "{\"path\":\"README.md\",\"text\":\"# fx\\n\",\"create\":null}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 302,
+        "output": 75,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 48
+      }
+    }
+  }
+}

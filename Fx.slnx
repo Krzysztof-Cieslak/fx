@@ -43,6 +43,7 @@
   <Folder Name="/extensions/">
     <Project Path="extensions/Fx.Ext.Sample/Fx.Ext.Sample.fsproj" />
     <Project Path="extensions/Fx.Ext.RuntimeBun/Fx.Ext.RuntimeBun.fsproj" />
+    <Project Path="extensions/Fx.Ext.ModelOpenAI/Fx.Ext.ModelOpenAI.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelCanonical/Fx.Ext.ModelCanonical.fsproj" />
     <Project Path="extensions/Fx.Ext.InterpreterBunTs/Fx.Ext.InterpreterBunTs.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelAnthropic/Fx.Ext.ModelAnthropic.fsproj" />
@@ -90,6 +91,7 @@
     <Project Path="tests/Fx.Components.Live.Tests/Fx.Components.Live.Tests.fsproj" />
     <Project Path="tests/Fx.Kernel.Tests/Fx.Kernel.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.RuntimeBun.Tests/Fx.Ext.RuntimeBun.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.ModelOpenAI.Tests/Fx.Ext.ModelOpenAI.Tests.fsproj" />
     <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />

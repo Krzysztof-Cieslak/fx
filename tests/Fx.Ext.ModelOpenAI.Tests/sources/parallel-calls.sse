@@ -1,0 +1,39 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_ffb78eed685d67b4836ccb75e31c59f8a8b07bc0c7b6cfb5","object":"response","created_at":1764059400,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6-luna","output":[],"store":false,"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"rs_8fed9bf0cf9e7a1340101356a0cb0cdba6c99cca247215d5","type":"reasoning","summary":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":2,"output_index":0,"item":{"id":"rs_8fed9bf0cf9e7a1340101356a0cb0cdba6c99cca247215d5","type":"reasoning","summary":[],"encrypted_content":"gAAAAABpeASklqZ1hfHHL7VOaFhP98VPKEqb+bvVpQWnGdyNSdXn+4cKrmDoidMFCJN8hS1RDdURPN2c4Z6gk/4RGqMk+8RoU7cW0yp+NUdDweHhk7rbvlByabqe7ZIARiW41zYpDG6QbB7wsEGtZ3CvKgHxt74m2pIM6HApcdktPFy8lN3JqahYUix5oUgS/GONINkG+T4IPD9bLJUdaoFBGee9Z4PO0xqnFpq67LhhJ+sT8GsVQfMDIkQv9QmaLOXUONJcnPc8KayklLj+on4JDVG4zO8aXmwD1EthEhpIYw=="}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":3,"output_index":1,"item":{"id":"fc_dfcdc2ff1daaed300212f791c8f7c3c679c8cd8d5fb636dd","type":"function_call","status":"in_progress","arguments":"","call_id":"call_rSQNDNOmvkTEMGxxxgd29GaV","name":"read_file"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":4,"item_id":"fc_dfcdc2ff1daaed300212f791c8f7c3c679c8cd8d5fb636dd","output_index":1,"delta":"{\"path\":","obfuscation":"rT0"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":5,"item_id":"fc_dfcdc2ff1daaed300212f791c8f7c3c679c8cd8d5fb636dd","output_index":1,"delta":"\"src/main.fs\"}","obfuscation":"m"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":6,"item_id":"fc_dfcdc2ff1daaed300212f791c8f7c3c679c8cd8d5fb636dd","output_index":1,"arguments":"{\"path\":\"src/main.fs\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":7,"output_index":1,"item":{"id":"fc_dfcdc2ff1daaed300212f791c8f7c3c679c8cd8d5fb636dd","type":"function_call","status":"completed","arguments":"{\"path\":\"src/main.fs\"}","call_id":"call_rSQNDNOmvkTEMGxxxgd29GaV","name":"read_file"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":8,"output_index":2,"item":{"id":"fc_acb11622b918a6d78df4fa711ab13540cf0d6ea07da23032","type":"function_call","status":"in_progress","arguments":"","call_id":"call_Nu1gxPLa6PVel9D51NRaewWY","name":"read_file"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":9,"item_id":"fc_acb11622b918a6d78df4fa711ab13540cf0d6ea07da23032","output_index":2,"delta":"{\"path\":\"tests/main.fs\"}","obfuscation":"Q2a"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":10,"item_id":"fc_acb11622b918a6d78df4fa711ab13540cf0d6ea07da23032","output_index":2,"arguments":"{\"path\":\"tests/main.fs\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":11,"output_index":2,"item":{"id":"fc_acb11622b918a6d78df4fa711ab13540cf0d6ea07da23032","type":"function_call","status":"completed","arguments":"{\"path\":\"tests/main.fs\"}","call_id":"call_Nu1gxPLa6PVel9D51NRaewWY","name":"read_file"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":12,"response":{"id":"resp_ffb78eed685d67b4836ccb75e31c59f8a8b07bc0c7b6cfb5","object":"response","created_at":1764059400,"status":"completed","completed_at":1764059402,"error":null,"incomplete_details":null,"model":"gpt-6-luna","output":[],"parallel_tool_calls":true,"store":false,"usage":{"input_tokens":1210,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":97,"output_tokens_details":{"reasoning_tokens":38},"total_tokens":1307}}}
+

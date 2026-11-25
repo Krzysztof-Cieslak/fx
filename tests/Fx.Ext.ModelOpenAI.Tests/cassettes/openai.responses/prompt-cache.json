@@ -1,0 +1,214 @@
+{
+  "name": "prompt-cache",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-5.5",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a coding agent."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "long"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Repository map: src/Program.fs, src/Library.fs, tests/Tests.fs."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Noted.",
+            "state": {
+              "family": "openai.responses",
+              "model": "openai/gpt-5.5",
+              "kind": "phase",
+              "data": "final_answer"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Which file defines main?"
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "long"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Reads a file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "medium",
+      "visible": false
+    },
+    "maxOutputTokens": 4096,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {
+      "key": "repo-fx",
+      "tools": "long"
+    },
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-5.5",
+            "input": [
+              {
+                "role": "developer",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "You are a coding agent."
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Repository map: src/Program.fs, src/Library.fs, tests/Tests.fs."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": "Noted.",
+                "phase": "final_answer"
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Which file defines main?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "type": "function",
+                "name": "read_file",
+                "description": "Reads a file.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 4096,
+            "prompt_cache_key": "repo-fx",
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_632683edd7c2b5fa8f40e1d3278847304800ed7dc92358db\",\"object\":\"response\",\"created_at\":1764059900,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-5.5\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":2,\"item_id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":3,\"item_id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"output_index\":0,\"content_index\":0,\"delta\":\"`src/Program.fs` defines\",\"logprobs\":[],\"obfuscation\":\"Mx\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":4,\"item_id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"output_index\":0,\"content_index\":0,\"delta\":\" `main`.\",\"logprobs\":[],\"obfuscation\":\"y2fC\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":5,\"item_id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"output_index\":0,\"content_index\":0,\"text\":\"`src/Program.fs` defines `main`.\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":6,\"item_id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"`src/Program.fs` defines `main`.\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":7,\"output_index\":0,\"item\":{\"id\":\"msg_04549afed2428608126a6f126a3e55274cc9f77f02236b0e\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"`src/Program.fs` defines `main`.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":8,\"response\":{\"id\":\"resp_632683edd7c2b5fa8f40e1d3278847304800ed7dc92358db\",\"object\":\"response\",\"created_at\":1764059900,\"status\":\"completed\",\"completed_at\":1764059901,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-5.5\",\"output\":[],\"store\":false,\"usage\":{\"input_tokens\":4212,\"input_tokens_details\":{\"cached_tokens\":3968,\"cache_write_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":4227}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_632683edd7c2b5fa8f40e1d3278847304800ed7dc92358db",
+      "model": "gpt-5.5",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "`src/Program.fs` defines `main`.",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-5.5",
+            "kind": "phase",
+            "data": "final_answer"
+          }
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 4212,
+        "output": 15,
+        "cacheRead": 3968,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

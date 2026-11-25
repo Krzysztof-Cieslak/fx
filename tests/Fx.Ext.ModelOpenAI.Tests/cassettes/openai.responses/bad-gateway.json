@@ -1,0 +1,81 @@
+{
+  "name": "bad-gateway",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-sol",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 256,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-sol",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 256,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 502,
+          "headers": {
+            "content-type": "text/html"
+          },
+          "body": "<html><body><h1>502 Bad Gateway</h1></body></html>\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "serverError",
+      "status": 502,
+      "message": "<html><body><h1>502 Bad Gateway</h1></body></html>"
+    }
+  }
+}

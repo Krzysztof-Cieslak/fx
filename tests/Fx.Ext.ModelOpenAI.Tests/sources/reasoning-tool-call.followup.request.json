@@ -1,0 +1,66 @@
+{
+  "model": "gpt-6.2-astra",
+  "input": [
+    {
+      "role": "developer",
+      "content": [{ "type": "input_text", "text": "You are a coding agent." }]
+    },
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "What's the weather in Kraków?" }]
+    },
+    {
+      "id": "rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2",
+      "type": "reasoning",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "**Checking the weather**\n\nThe user wants the current weather in Kraków."
+        },
+        {
+          "type": "summary_text",
+          "text": "**Calling get_weather**\n\nI'll ask for Kraków in celsius."
+        }
+      ],
+      "encrypted_content": "gAAAAABpfmDsLqFtcoCkv1I3oplBkJKVb2E72WpmDzAC5cTK38TCLAIPybeUbUfE16b1hLLaj4/CjbQYpXB5q6mXTikDrHkyfkTUHEnuK+4PN2VNuqhx92pKsVzKC9Ve8lKl5ZkH6uvKd60JAZwpw5ruSZVANFUaV34DRASvcj63xy0pTo/CguH9jZLOmt+qfG06xqirjFiOcJ8w3ESIAWEER3wShyvYy3z+2sqF4y3LCxYkHE2QE1nWb9MWL0Emk8oyxUAFavZIa+xUuwEZRyOgxY/+tnCvWPVk8+BsMu8MHmscVPbIQ91L44xK376wRFrklrn5PcJyFNOucylXhYQ6yyBTffjF+6w2V+r2kZ3EK+N6qnMpN6yUmwpQnQw2542/jLZCnN2vZq35NizWNfeP"
+    },
+    {
+      "role": "assistant",
+      "content": "Let me check the weather in Kraków.",
+      "phase": "commentary"
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_TKcqkXObC6C30KgIHKmel5kU",
+      "name": "get_weather",
+      "arguments": "{\"location\":\"Kraków\",\"unit\":\"celsius\"}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_TKcqkXObC6C30KgIHKmel5kU",
+      "output": "4 °C, light snow"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "The current weather in a city.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" },
+          "unit": { "type": "string", "enum": ["celsius", "fahrenheit"] }
+        },
+        "required": ["location"]
+      },
+      "strict": false
+    }
+  ],
+  "reasoning": { "effort": "high", "summary": "auto" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 16000,
+  "prompt_cache_key": "weather-1",
+  "store": false,
+  "stream": true
+}

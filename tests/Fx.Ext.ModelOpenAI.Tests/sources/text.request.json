@@ -1,0 +1,21 @@
+{
+  "model": "gpt-6-luna",
+  "input": [
+    {
+      "role": "developer",
+      "content": [{ "type": "input_text", "text": "Be brief." }]
+    },
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "Say hello in Polish." }]
+    }
+  ],
+  "reasoning": { "effort": "none" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 1024,
+  "prompt_cache_key": "conversation-1",
+  "safety_identifier": "user-7f3a",
+  "metadata": { "session": "s-1" },
+  "store": false,
+  "stream": true
+}

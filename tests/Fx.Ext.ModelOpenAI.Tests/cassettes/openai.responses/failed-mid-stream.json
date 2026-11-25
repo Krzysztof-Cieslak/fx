@@ -1,0 +1,82 @@
+{
+  "name": "failed-mid-stream",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-sol",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 256,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-sol",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 256,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e\",\"object\":\"response\",\"created_at\":1764060000,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e\",\"object\":\"response\",\"created_at\":1764060000,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":3,\"item_id\":\"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":4,\"item_id\":\"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8\",\"output_index\":0,\"content_index\":0,\"delta\":\"The answer\",\"logprobs\":[],\"obfuscation\":\"Fd3\"}\n\nevent: response.failed\ndata: {\"type\":\"response.failed\",\"sequence_number\":5,\"response\":{\"id\":\"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e\",\"object\":\"response\",\"created_at\":1764060000,\"status\":\"failed\",\"error\":{\"code\":\"server_error\",\"message\":\"The model failed to generate a response.\"},\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":null}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "serverError",
+      "status": 500,
+      "message": "The model failed to generate a response."
+    }
+  }
+}

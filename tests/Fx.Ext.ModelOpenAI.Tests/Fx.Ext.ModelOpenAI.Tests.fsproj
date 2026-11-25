@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of the fx.model.openai package: the wire-conformance suite on hand-written cassettes of
+    OpenAI's documented Responses API formats (sources/, kept as case files in
+    cassettes/openai.responses/), the request mapping per option, the strict-mode dialect, the stream
+    decoder, the error mapping, the provider's data and catalog, and (OPENAI_API_KEY set) a live smoke
+    test that records cassettes.
+  -->
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <!-- The wire-conformance suite, shared with every adapter. -->
+    <Compile Include="..\Fx.Models.Tests\Conformance\WireConformance.fs" Link="Conformance\WireConformance.fs" />
+    <Compile Include="Cases.fs" />
+    <Compile Include="ConformanceTests.fs" />
+    <Compile Include="RequestTests.fs" />
+    <Compile Include="StrictTests.fs" />
+    <Compile Include="DecoderTests.fs" />
+    <Compile Include="ErrorTests.fs" />
+    <Compile Include="ProviderTests.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>
