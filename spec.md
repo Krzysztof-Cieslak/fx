@@ -1110,7 +1110,7 @@ Action surface (`cells-only` / `hybrid`), TUI style, edit mode, plan mode, edit 
 | Protocols | Own JSON-RPC 2.0; WebSocket + SSE; kernel protocol over stdio |
 | Contracts / SDKs | F# contracts (Fable-compatible); **codec combinators first**; `Fx.Sdk` (F#), `@fx/sdk` (TypeScript) |
 | Models | Built-in F# wire adapters |
-| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI, tree-sitter, static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains, archive extraction |
+| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI, tree-sitter, static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains in our own `Fx.Keyring` (Security.framework, Credential Manager + DPAPI, Secret Service over our own minimal D-Bus client rather than libsecret; see `docs/spikes/keychains.md`), archive extraction |
 | CodeAct / workflows | `fx.runtime.bun` + `fx.interpreter.bun-ts`; host-side workflow worker |
 | Clients | Own Elm-style F# TUI (v1); Fable web; Tauri desktop; ACP |
 

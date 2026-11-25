@@ -150,7 +150,7 @@ module Clock =
 | `ILedger` | T301 |
 | `IJudge` | T402 |
 | `ISafeOutputs` | T405 |
-| Secret stores and sources for `ISecrets` | T121 |
+| Secret stores and sources for `ISecrets` (the OS keyrings' capability, `IKeyring`, and its interpreters are in `src/Fx.Keyring`, [`docs/spikes/keychains.md`](../spikes/keychains.md)) | T121 |
 
 ## Environments
 
