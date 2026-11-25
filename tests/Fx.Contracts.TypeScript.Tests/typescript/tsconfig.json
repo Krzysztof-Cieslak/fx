@@ -19,6 +19,7 @@
   },
   "files": [
     "../../Fx.Grants.Tests/golden/grants.d.ts",
+    "../../Fx.Identity.Tests/golden/identity.d.ts",
     "../golden/contracts.d.ts",
     "../golden/domain.d.ts",
     "../golden/kernel.d.ts",
