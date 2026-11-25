@@ -23,6 +23,7 @@ canonical model.
 | `Fx.Effects` (`Http.fs`) | `IHttp`: requests, streamed bodies, timeouts, typed failures; `InMemoryHttp` fake | adapters (through `WireCtx`), auth flows (T121), catalogs (T208) |
 | `Fx.Models` | model metadata, the canonical chat model and its codecs, the fold, `ChatStream`, `ILlm`, SSE/NDJSON parsers, provider definitions, cassettes, replay rules, fitting | everyone; exposed by `Fx.Sdk` |
 | `Fx.Sdk/Models` | `WireCtx`, `WireRequest`, `ChatWire`, `SseWire`, the contribution types, the model-egress hook points, `ModelAccess` | extensions (adapters, providers, egress hooks), the host's composition root |
+| `extensions/Fx.Ext.ModelOpenAI` | `fx.model.openai`: the `openai.responses` wire and the OpenAI API as a provider | the host (bundled) |
 | `extensions/Fx.Ext.ModelCanonical` | the `canonical` wire, written like any adapter | tests, a future fx-served model |
 | `extensions/Fx.Ext.ModelAnthropic` | `fx.model.anthropic`: the `anthropic.messages` wire and the Claude API as a provider | the host (bundled) |
 
@@ -313,6 +314,177 @@ suite).
 4. Unit-test the adapter's pure parts: the request JSON per option, the decoder over the example
    streams.
 
+## The OpenAI wire (`openai.responses`)
+
+`fx.model.openai` ([`extensions/Fx.Ext.ModelOpenAI`](../../extensions/Fx.Ext.ModelOpenAI), T120;
+tests in `tests/Fx.Ext.ModelOpenAI.Tests`) is a native extension on the public SDK, laid out like
+`fx.model.anthropic`: `Provider.fs` (the provider and catalog as data, `Settings.ofProvider`),
+`Strict.fs` (strict mode's schema dialect), `Request.fs`, `Decoder.fs`, `Errors.fs` (pure), and
+`OpenAI.fs` (the `SseAdapter`, the wire, the replay scope, the manifest and the extension).
+
+### The provider
+
+`openai`, endpoint `https://api.openai.com/v1`, discovery path `/models` (T208), auth methods
+`api_key` and `env` (`OPENAI_API_KEY`) sending `Authorization: Bearer` (T121 resolves them). The
+catalog lists GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Terra, GPT-6 Luna and GPT-5.5 with their limits
+(1,050,000 tokens of context, 128,000 of output), prices (for prompts up to 272,000 input tokens;
+cache writes at the 30-minute rate) and capabilities: reasoning with summaries and replay, the
+efforts each model takes (`none` only where accepted; `xhigh` is not reachable from the canonical
+efforts), strict tools, structured output, image and PDF input, no sampling parameters, cache keys,
+and explicit cache breakpoints (with the 12-hour lifetime) from GPT-5.6 on; GPT-5.5 caches
+implicitly only.
+
+Quirks a provider of the family may set: `organization` and `project` (the `OpenAI-Organization` and
+`OpenAI-Project` headers), `system` (`developer`, the default, or `instructions`), `cacheBreakpoints`
+(`true` or `false` for every model; otherwise the catalog decides). Other differences (service
+tiers, fields a compatible server refuses) are the provider's `Transform`.
+
+### Requests: stateless and cache-friendly
+
+`POST <endpoint>/responses` with `stream: true` and **`store: false`**: OpenAI keeps no
+conversation state, and every request carries the whole history (no `previous_response_id`, no
+conversations). The session's log is the source of truth (spec §1, §5), so replays and forks need
+nothing from the provider; nothing of a conversation stays at a provider outside the trust boundary
+(§18) beyond what its retention policy keeps; organizations with zero data retention work
+unchanged; and a conversation can move to another model or provider. Reasoning travels as encrypted
+items instead: `include: ["reasoning.encrypted_content"]` (unless the catalog says the model does not
+reason; current models return them by default when stateless, the field stays for older servers).
+
+| Canonical | Responses API |
+|---|---|
+| `System` text | a `developer` message first in `input` (`input_text` blocks), or `instructions` (texts joined by blank lines; quirk `system`); other parts: `unavailable` |
+| user `Text`, `Refusal` | `input_text` blocks of a `user` message (empty ones left out) |
+| `Media` image / PDF | `input_image` (`detail: auto`; a data URL for base64) / `input_file` (`file_data` as a data URL with a file name, or `file_url`); blob sources, other kinds and media from the assistant are `unavailable` |
+| `ToolResult` | a `function_call_output` before the user's content: `output` the text, or `input_text`/`input_image`/`input_file` blocks for media or a breakpoint; `isError` has no field (the content says it) |
+| assistant `Text` | an `assistant` message with string content and its `phase` (state `phase`) |
+| assistant `Reasoning` with `reasoning` state | the reasoning item exactly as it came (id, summary, `encrypted_content`) |
+| `Reasoning` without this family's state | left out: a stateless request cannot replay it |
+| `ToolCall` | a `function_call` item (`call_id`, `name`, the arguments as written); ids of messages and calls are never sent |
+| `Tools` | function tools: `name`, `description`, `parameters`, `strict` (always sent: the API makes tools strict when it is left out) |
+| `ToolChoice` | `auto` (left out), `none`, `required`, `{type: "function", name}`; `parallel_tool_calls`; nothing without tools |
+| `Reasoning` | `reasoning.effort` (`off` is `none`), `reasoning.summary: "auto"` when visible; budgets have no place |
+| `MaxOutputTokens` | `max_output_tokens` |
+| `Sampling` | `temperature`, `top_p` (top-k, seeds and stop sequences do not exist in the API) |
+| `Output = Json` | `text.format`: `json_schema` with a sanitized name, the schema (rewritten when strict) and `strict` |
+| `Cache.Key` | **`prompt_cache_key`** |
+| `CacheBreakpoint` | `prompt_cache_breakpoint: {mode: "explicit"}` (`ttl: "12h"` for `long`) on the block before it |
+| `Cache.Tools` | nothing: the API has no breakpoint after the tools (they precede the input in its prefix) |
+| `Metadata` | `user_id`/`userId` → `safety_identifier`; the rest → `metadata` (16 pairs, keys up to 64 characters, values up to 512) |
+
+**Cache layout** (spec §5): the stable prefix is tools, then the developer message, then the
+history, appended to and never rewritten. The system prompt is a developer message rather than
+`instructions` because models from GPT-6.2 place `instructions` after the input and never cache it.
+A breakpoint marks the last content block before it in canonical order (tool results of a user
+message move before its content, their marks with them); with no block before it, it is dropped; two
+on one block are one with the longer lifetime. Breakpoints are sent only to models whose catalog
+entry takes them (GPT-5.6 on) or with the quirk: earlier models do not take them, and a model the
+catalog does not know gets none (conformance cases, which run without the catalog, therefore show
+none; `RequestTests` replays a cassette with them through `ModelAccess` and the catalog). The API
+keeps its implicit breakpoint at the latest user message or tool output, and looks for matches at up
+to 80 explicit ones (the catalog's `maxBreakpoints`; `Fit` drops the earliest beyond). Prompt render
+(T126) must keep the prefix stable: on GPT-6.2 an edit before a reasoning item also drops that
+reasoning.
+
+**Strict mode** (`Strict.tryRewrite`): OpenAI's strict mode takes a JSON Schema subset in which every
+object is closed and every property required. A strict tool's parameters (or a strict output
+format) are rewritten into that dialect where the meaning survives: objects get
+`additionalProperties: false`; optional properties become required and nullable (`anyOf` with
+`{"type": "null"}`), and `default` is left out, which is safe because our codecs read `null` as
+absent or as the default (`Field.optional`, `Field.withDefault`), so `ToolSpec.ofCodec` tools decode
+the model's input unchanged. A schema with anything outside the subset (`minLength`, `prefixItems`,
+`allOf`, `oneOf`, an unsupported `format`, an open or property-less object, a root that is not an
+object) is sent as given with `strict: false`, never loosened.
+
+### Streams
+
+| Event | Canonical events |
+|---|---|
+| `response.created` | `started {id, model}` (once) |
+| `response.output_item.added` `reasoning`, `function_call` | `partStarted` reasoning, toolCall `{call_id, name}` |
+| `response.content_part.added` `output_text`, `refusal` (or the first delta) | `partStarted` text, refusal |
+| `response.output_text.delta`, `response.refusal.delta`, `response.function_call_arguments.delta` | `delta` |
+| `response.reasoning_summary_text.delta`, `response.reasoning_text.delta` | `delta` of the reasoning part; summary parts joined by a blank line |
+| `*.done` of texts and arguments | the whole text if none streamed |
+| `response.output_item.done` | the item's texts if none streamed; `partState`: a reasoning item with `encrypted_content` → `reasoning` (the item's JSON), an assistant message's `phase` → `phase` on its text parts; `partEnded` |
+| `response.completed` | open parts ended, `usage`, `finished`: `toolUse` with a function call, `refusal` with a refusal, else `endTurn` |
+| `response.incomplete` | open parts ended, `usage`, `finished`: `max_output_tokens` → `maxTokens`, `content_filter` → `contentFilter`, others → `other` |
+| `response.failed` | `usage` if reported, `failed` with the response's error |
+| `error` | `failed` (`Errors.ofEvent`) |
+| `response.in_progress`, `queued`, summary part events, annotations, hosted tools' items and events, unknown events | nothing |
+
+Parts are numbered in the order they start, so hosted tools' items leave no gap. An item added
+twice or done twice, a delta for an item that is not open, a function call without `call_id` or
+`name`, or data that is not JSON is `invalidResponse`. Usage comes with the terminal event:
+`input_tokens` already counts cached tokens and cache writes, as the canonical input does
+(`cacheRead` is `cached_tokens`, `cacheWrite` is `cache_write_tokens`), and `reasoning` is
+`reasoning_tokens` (at most the output).
+
+### Encrypted reasoning and model switches
+
+A reasoning part's state (`kind: reasoning`) is the reasoning item as `response.output_item.done`
+sent it, with its id, summary parts and `encrypted_content`, as JSON text; the next request sends that
+item back unchanged, so the encrypted content (and the summary, with its part boundaries) replays
+byte for byte, and the part's text (the summaries joined) is only for people. The conformance cases
+with follow-ups set `statesVerbatim: false` (the state is unpacked into the item) and the cassettes
+check the replay; `RequestTests` checks ordinal equality of 100,000-character content with control
+characters. Text parts carry their message's `phase` (`commentary`, `final_answer`), which OpenAI
+asks clients to send back.
+
+`OpenAI.withReplay` sets the family's scope to `sameProvider`: the OpenAI API itself withholds
+reasoning a model cannot use (another model family, a less capable model, another organization or
+end user, an edited prefix), reports it in `input_transformations` and does not fail; so within one
+provider the items go to every model and the API decides. Not across providers: another provider of
+the family (a gateway, a compatible server, another cloud) may refuse OpenAI's items. Reasoning
+whose state may not travel is dropped or kept as text by the policy; the phase is dropped with it.
+A safety identifier that changes between requests also makes GPT-6.2 drop reasoning: keep the
+`user_id` metadata stable within a conversation.
+
+### Errors
+
+The error's `code` first (OpenAI tells clients to read it: `insufficient_quota` is a 429 like a rate
+limit), then its `type`, then the status:
+
+| OpenAI | `ChatError` |
+|---|---|
+| `insufficient_quota`, `credit_balance_exhausted`, `organization_spend_limit_exceeded`, `project_spend_limit_exceeded`, `organization_usage_limit_exceeded`, `billing_*` codes; type `insufficient_quota` | `quotaExhausted` |
+| `context_length_exceeded`; an `invalid_request_error` 400 about the context window or length; 413 | `contextOverflow` (tokens and limit when the message names them) |
+| `rate_limit_exceeded`, `slow_down`; types `rate_limit_error`, `tokens`, `requests`; 429 | `rateLimited`: `retry-after-ms`, `retry-after`, else "try again in 1m6.24s" from the message (errors in a stream have no headers) |
+| `server_is_overloaded`; type `service_unavailable_error`; 503 | `overloaded` |
+| `invalid_prompt`, `content_policy_violation`, `bio_policy`, `cyber_policy`, `misalignment_policy_violation`, `image_content_policy_violation` | `refused` |
+| `invalid_api_key`, `unsupported_country_region_territory`, `model_not_found`; types `authentication_error`, `permission_error`, `not_found_error`; 401, 403, 404 | `authFailed`, `permissionDenied`, `notFound` |
+| image codes, `data_residency_mismatch`; other `invalid_request_error` (400) | `invalidRequest` |
+| `server_error`; types `server_error`, `api_error`; 5xx | `serverError` (500 in a stream) |
+| bodies without an error object | `ErrorMapping.ofStatus`, the body cut to 500 characters; an unknown code or type in a stream is `serverError 500` naming it |
+
+### Cassettes and scenarios
+
+`tests/Fx.Ext.ModelOpenAI.Tests` runs `WireConformance.tests` on 29 case files in
+`cassettes/openai.responses/`: text with a cache key, a safety identifier and metadata; encrypted
+reasoning with a two-part summary, a commentary and a tool call, and its follow-up; parallel calls
+after reasoning without a summary, and a follow-up with an error result and text; a history with
+phases and breakpoints (left out: the suite's provider has no catalog); strict tools (one from a
+codec, one that cannot be strict); structured output; media; a forced call whose arguments come
+only with the done events; max tokens; the content filter cutting an open part; a refusal; a failed response, a rate
+limit and a quota error mid-stream; and every error response above. They are written by hand from
+OpenAI's documentation (`sources/`: the request body each canonical request must become and the
+streams, never generated from the adapter); `UPDATE_GOLDEN=1` rewrites the case files from them.
+With `OPENAI_API_KEY` set, `LiveTests` calls the OpenAI API through `ModelAccess` and `SystemHttp`,
+records the exchanges with `CassetteRecorder` (the key redacted, credential headers dropped) into
+`artifacts/cassettes/openai.responses/live-*.json` and replays them through the conformance checks;
+reviewed recordings can be copied into the suite. The `models-openai-*` scenarios of the
+JIT-vs-native diff replay a cassette with its follow-up under cuts and check the byte-for-byte replay,
+decode, map errors, and build request bodies (strict mode, breakpoints per model, efforts, the system
+prompt's placement) on all eight targets.
+
+### Left to later
+
+| What | Task |
+|---|---|
+| Recorded OpenAI cassettes (the live test records them; needs a key) | T132 |
+| Options the canonical model cannot express yet: `xhigh` effort, `reasoning.mode: pro`, `reasoning.context`, `configuration_update` items (changing effort without rewriting the prefix), `text.verbosity`, `prompt_cache_options` (explicit-only mode, a request-wide lifetime, prewarming), service tiers, background mode, hosted tools, compaction items, the WebSocket transport | when a strategy needs them |
+| Sign in with ChatGPT on this wire, with its request constraints | T209 |
+| Other OpenAI platforms (Azure, Bedrock, Google Cloud) as providers of the family | later, as provider definitions |
+
 ## The canonical wire (`canonical`)
 
 The reference adapter speaks the canonical model itself: `POST <endpoint>/chat` with the
@@ -480,7 +652,7 @@ reviewed recordings can be copied into the suite.
 
 | What | Task |
 |---|---|
-| `openai.responses` (encrypted reasoning, `prompt_cache_key`), `openai.chat` adapters with real-format cassettes | T120, T207 |
+| `openai.chat` adapter with real-format cassettes | T207 |
 | Recorded Anthropic cassettes (the live test records them; needs a key) | T132 |
 | Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
