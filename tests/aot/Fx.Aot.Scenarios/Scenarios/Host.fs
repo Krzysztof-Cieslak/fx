@@ -536,6 +536,7 @@ let private protocolCodecs () : string list =
                 Workspace = Some "/w"
                 Reason = None
                 Warnings = [ "unsandboxed" ]
+                Sandbox = Some "none"
             }
 
         for name in [ "session/get"; "session/prompt"; "identity/revoke"; "ext/x/y" ] do

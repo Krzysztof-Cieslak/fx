@@ -60,7 +60,7 @@ to send, and a pure `view` that draws the model as a frame.
 ## A turn on the screen (spec §19.2)
 
 ```
- fx · …/src/billing · session 01JD2W7Z… · env: default (fx.env.local) · anthropic/claude-sonnet-5-5   ● idle
+ fx · …/src/billing · env: default (local) · sandbox: none · anthropic/claude-sonnet-5-5 · session …  ● idle
  ! runs unsandboxed: commands can read and change everything the user can
 › replace deprecated Http.retry with RetryPolicy in billing
   I'll look at the call sites first.
@@ -79,10 +79,12 @@ to send, and a pure `view` that draws the model as a frame.
 › _
 ```
 
-- **Header**: the product, the workspace, the session, its environment (name and provider), the main
-  model, and the session's state (idle, the running turn, held, needs input, closed).
+- **Header**: the product, the workspace, the environment (name and provider), the sandbox driver
+  that confines it (`env/get`'s `sandbox`: `bubblewrap`, `seatbelt`, `none`), the main model, the
+  session, and its state (idle, the running turn, held, needs input, closed).
 - **Banner**: the environment's warnings (`env/get`), every one on every screen while it exists:
-  "runs unsandboxed" on Windows (no sandbox in v1) and wherever no sandbox driver confines it.
+  "runs unsandboxed" on Windows (no sandbox in v1) and wherever no sandbox driver confines it
+  (`Envs.warnings`, T113).
 - **Transcript**: each turn's prompts (`›`), what the model wrote, one activity line per action
   (`◇` reads and runs, `◆` changes; `Cell` with its `// intent:` line, `Read`, `Edit`, `Run`), its
   status (a spinner and the time while it runs, `✓`/`✗` and how long it took), the first line of an
@@ -129,7 +131,7 @@ another client can answer are listed as waiting.
 
 | Card | Shows | Answers |
 |---|---|---|
-| Permission (`grants/pending`, this session's or the host's) | summary, action and resource, evidence | `[y]` once, `[s]` this session, `[r]` this repo, `[h]` always on this host (only the scopes the request offers), `[n]` deny once |
+| Permission (`grants/pending`, this session's or the host's: an install, T127b's shell commands, writes and connections) | summary, action and resource, evidence (up to six: which turn and call asked, the command line, …) | `[y]` once, `[s]` this session, `[r]` this repo, `[a]` always on this host (only the scopes the request offers; the keys `fx run` uses, `GrantPrompts`), `[n]` deny once |
 | Decision (`decision.outcomeUnknown`, crash recovery) | the question, the call (its code), the end of what it printed, the selected option's detail | `[c]`ompleted, `[f]`ailed, `[r]`erun, `[i]`nspect (an option's first letter, or its number) |
 | Confirm | the message | `[y]` `[n]` |
 | Choice | the question | `[1]`…`[n]` |
@@ -198,7 +200,6 @@ terminal check's P/Invoke without a terminal).
 
 | What | Task |
 |---|---|
-| The sandbox driver in the header (the environment's summary does not carry it yet) | after T113 |
 | Changes and `[d]iff [u]ndo [r]eview` on the result card, activity lines from cells' host calls (`Refs`, `Read` inside cells) | T205 |
 | `/` commands (`/context`, `/env`, `/model`, `/goal`), the environment picker | T206, T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |

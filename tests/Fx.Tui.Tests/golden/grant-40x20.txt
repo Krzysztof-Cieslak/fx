@@ -7,16 +7,16 @@
 
 
 
-
 › ship it
   ◇ Run      make deploy          ⠋ 0.0s
 
 ┃ Permission  (1 of 2)
 ┃ Run make deploy
 ┃ shell.exec  make deploy
-┃ cell: await fx.shell.run("make deploy…
+┃ asked by: turn 1, call toolu_1 (bash)
+┃ command: make deploy
 ┃ [y] once  [s] this session
-┃ [h] always on this host  [n] deny
+┃ [a] always on this host  [n] deny
 ● turn 1 · waiting for an answer
 ›
 ────────────────────────────────────────

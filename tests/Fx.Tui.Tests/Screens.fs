@@ -8,7 +8,7 @@ open Fx.Sessions
 open Fx.Tui
 open Fx.Tui.Tests.Script
 
-let private ready (s: Session) (width: int) (height: int) (msgs: Msg list) : Model =
+let private readyIn (environment: EnvInfo) (s: Session) (width: int) (height: int) (msgs: Msg list) : Model =
     let model = App.init setup width height start
 
     let info: SessionInfo =
@@ -19,7 +19,9 @@ let private ready (s: Session) (width: int) (height: int) (msgs: Msg list) : Mod
             Workspace = setup.Workspace
         }
 
-    fst (play model ([ Msg.Started info; Msg.Env env ] @ msgs @ [ Msg.Tick s.Now ]))
+    fst (play model ([ Msg.Started info; Msg.Env environment ] @ msgs @ [ Msg.Tick s.Now ]))
+
+let private ready = readyIn env
 
 /// Before the session exists: creating it (and its environment).
 let starting (width: int) (height: int) : Model =
@@ -29,6 +31,11 @@ let starting (width: int) (height: int) : Model =
 let finished (width: int) (height: int) : Model =
     let s, msgs = finishedTurn ()
     ready s width height msgs
+
+/// A finished turn in an environment a sandbox confines: its driver in the header, no banner.
+let sandboxed (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+    readyIn confined s width height msgs
 
 /// A turn in progress: a cell running, a steer waiting for the next step, a prompt queued.
 let running (width: int) (height: int) : Model =
@@ -134,6 +141,7 @@ let all: (string * (int -> int -> Model)) list =
     [
         "starting", starting
         "finished", finished
+        "sandboxed", sandboxed
         "running", running
         "question", question
         "grant", grant

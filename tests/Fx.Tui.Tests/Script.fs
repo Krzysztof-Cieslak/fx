@@ -241,15 +241,24 @@ let grantRequest (seq: int64) (id: string) (session: string option) (summary: st
                                 Extension = None
                             }
                         Summary = summary
+                        // As T127b's guard asks: which turn and call, and the command line.
                         Evidence =
                             [
                                 {
-                                    Label = "cell"
-                                    Text = "await fx.shell.run(\"make deploy\")"
+                                    Label = "asked by"
+                                    Text = "turn 1, call toolu_1 (bash)"
+                                }
+                                {
+                                    Label = "command"
+                                    Text = "make deploy"
                                 }
                             ]
                         Suggestions = []
-                        Offer = [ ScopeKind.Once; ScopeKind.Session; ScopeKind.Host ]
+                        // The grants log offers the session's scope only for a session's request.
+                        Offer =
+                            match session with
+                            | Some _ -> [ ScopeKind.Once; ScopeKind.Session; ScopeKind.Host ]
+                            | None -> [ ScopeKind.Once; ScopeKind.Host ]
                         At = start
                         Expires = None
                     }
@@ -266,13 +275,22 @@ let setup: Setup =
         Keys = "tui/run1"
     }
 
+/// An environment no sandbox confines (Windows, or no bubblewrap): its warning is the banner.
 let env: EnvInfo =
     {
         Id = "env-1"
         Name = "default"
-        Provider = "fx.env.local"
+        Provider = "local"
         Phase = "ready"
         Warnings = [ "runs unsandboxed: commands can read and change everything the user can" ]
+        Sandbox = Some "none"
+    }
+
+/// An environment bubblewrap confines: no banner.
+let confined: EnvInfo =
+    { env with
+        Warnings = []
+        Sandbox = Some "bubblewrap"
     }
 
 /// Folds messages into a model, keeping the commands it asked for.

@@ -182,7 +182,7 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 | `identity/sessions` | → the live client sessions | owner |
 | `identity/revoke` | `{id}` → revoked (its connections end) | owner |
 | `identity/signOut` | → revokes this connection's token (and ends it) | viewer |
-| `env/list`, `env/get` | → `EnvSummary` (id, name, provider, phase, transport, workspace, reason, warnings) | viewer |
+| `env/list`, `env/get` | → `EnvSummary` (id, name, provider, phase, transport, workspace, reason, warnings, the sandbox driver once ready) | viewer |
 | `env/destroy` | `{id}` → `EnvSummary` | owner |
 | `ext/<id>/<name>` | the method's JSON params → its JSON result; `ExtCallError` (`failed` with the `MethodFailure`) | collaborator |
 
@@ -326,6 +326,7 @@ install's approval (no terminal).
 | Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase | T115, with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
 | Machine retry delays and store page sizes as slots | when tuned |
-| Choosing an environment per session (the picker) | after T130 |
+| Choosing an environment per session (the picker) | later (after T130) |
+| An interactive trust prompt (trusting from the TUI, then reading the project's config without a restart); the TUI only says `fx trust` | later |
 | Epoch-fenced takeover and sharing with other people | T507 |
 | The HTTP/SSE offset-read mirror of the protocol (spec §17 fallbacks), binary channels for bulk data (`blobs/*`, `pty/*`) | with their method groups |

@@ -114,7 +114,7 @@ let tests =
                 try
                     let out = Output(pty, 100, 30)
                     out.WaitFor "env: default"
-                    out.WaitFor "runs unsandboxed"
+                    out.WaitFor "sandbox: "
                     write pty "hello"
                     out.WaitFor "› hello"
                     write pty "\r"

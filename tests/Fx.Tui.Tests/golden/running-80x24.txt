@@ -1,5 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (fx.env.local) · anthropic/claude-… ● turn 2
+ fx · …/src/billing · env: default (local) · sandbox: none · anthropi… ● turn 2
  ! runs unsandboxed: commands can read and change everything the user can
   I'll look at the call sites first.
   ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s

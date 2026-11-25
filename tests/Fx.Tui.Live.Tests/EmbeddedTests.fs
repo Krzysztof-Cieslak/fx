@@ -119,7 +119,17 @@ let tests =
                     let t = tui host (SessionChoice.New(Some "first"))
                     t.WaitFor "session "
                     t.WaitFor "env: default"
-                    t.WaitFor "! runs unsandboxed"
+                    // The sandbox's driver in the header, and the environment's warnings (unsandboxed:
+                    // Windows, or no bubblewrap here) as the banner.
+                    t.WaitFor "sandbox: "
+                    let environment = (HostSessions.entries host |> List.exactlyOne).Environment
+
+                    let record =
+                        wait ((Fx.Environments.EnvsHost.envs host.Environments).Get environment CancellationToken.None)
+
+                    for warning in record |> Option.map Fx.Environments.Envs.warnings |> Option.defaultValue [] do
+                        t.WaitFor("! " + warning.Substring(0, min 40 warning.Length))
+
                     t.Type "Hello there\r"
                     t.WaitFor "› Hello there"
                     t.WaitFor "✗ Failed"
@@ -197,6 +207,7 @@ let tests =
                 model.AddAll
                     [
                         $"// intent: read the notes\nconst notes = await {g}.fs.read(\"notes.md\")\nnotes.text"
+                        $"// intent: make the release directory\nconst made = await {g}.shell.run(\"mkdir release\")\nmade.exitCode"
                         $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"Read the notes\", evidence: [{{ kind: \"file\", summary: \"notes.md says ship on Friday\" }}] }})"
                     ]
 
@@ -207,13 +218,19 @@ let tests =
                     // Creating the session creates the environment, which installs Bun: a permission.
                     t.WaitFor("Permission", 120.0)
                     t.WaitFor "component.install"
-                    t.Type "h"
+                    t.Type "a"
                     t.WaitFor("env: default", 300.0)
                     t.Type "Read the notes\r"
                     t.WaitFor "Cell     read the notes"
+                    // The cell's command asks the grants log (T127b): its card, answered for the session.
+                    t.WaitFor("shell.exec  mkdir release", 120.0)
+                    t.WaitFor "asked by: "
+                    t.WaitFor "[s] this session"
+                    t.Type "s"
                     t.WaitFor("✓ Done  Read the notes", 120.0)
                     t.WaitFor "Evidence  notes.md says ship on Friday"
-                    t.WaitFor "▸ 2 cells"
+                    t.WaitFor "▸ 3 cells"
+                    Expect.isTrue (Directory.Exists(p.File "release")) "the command ran once allowed"
                     t.Quit() |> ignore
                 finally
                     stop host

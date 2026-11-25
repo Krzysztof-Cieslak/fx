@@ -50,6 +50,8 @@ type EnvInfo =
         Phase: string
         /// What a person must be told while it exists: that it runs unsandboxed, …
         Warnings: string list
+        /// The sandbox driver that confines its processes, once it is ready.
+        Sandbox: string option
     }
 
     override this.ToString() = $"{this.Name} ({this.Provider})"
@@ -381,18 +383,18 @@ module App =
 
         match card with
         | Card.Grant request ->
-            let offered (kind: ScopeKind) =
-                request.Offer.IsEmpty || List.contains kind request.Offer
+            // What the request offers (always once; the grants log narrowed the rest to its action
+            // and context), with the keys `fx run` uses at the terminal (`GrantPrompts`).
+            let offered (kind: ScopeKind) = List.contains kind request.Offer
 
             [
-                if offered ScopeKind.Once then
-                    "y", "once", CardAnswer.Allow ScopeChoice.Once
-                if offered ScopeKind.Session && request.Context.Session.IsSome then
+                "y", "once", CardAnswer.Allow ScopeChoice.Once
+                if offered ScopeKind.Session then
                     "s", "this session", CardAnswer.Allow ScopeChoice.Session
-                if offered ScopeKind.Repo && request.Context.Repo.IsSome then
+                if offered ScopeKind.Repo then
                     "r", "this repo", CardAnswer.Allow(ScopeChoice.Repo None)
                 if offered ScopeKind.Host then
-                    "h", "always on this host", CardAnswer.Allow ScopeChoice.Host
+                    "a", "always on this host", CardAnswer.Allow ScopeChoice.Host
                 "n", "deny", CardAnswer.Deny
             ]
         | Card.Decision(_, _, _, _, options) ->

@@ -126,6 +126,7 @@ export interface EnvSummary {
   workspace?: string;
   reason?: string;
   warnings: string[];
+  sandbox?: string;
 }
 
 export interface EventRef {

@@ -1,5 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (fx.env.local) · anthropic/cl… ● needs input
+ fx · …/src/billing · env: default (local) · sandbox: none · ant… ● needs input
  ! runs unsandboxed: commands can read and change everything the user can
 
 
