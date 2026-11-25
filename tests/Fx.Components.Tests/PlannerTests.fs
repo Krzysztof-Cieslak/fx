@@ -224,7 +224,7 @@ let tests =
                 let text = Lockfile.render lockfile
                 Expect.isTrue (text.EndsWith "}\n") "a final newline"
                 Expect.equal (Lockfile.parse text) (Ok lockfile) "round trip"
-                Golden.expect Lockfile.fileName text
+                Golden.expect "lockfile.json" text
                 Expect.equal Lockfile.fileName (Product.Name + ".components.lock") "named after the product"
             }
 

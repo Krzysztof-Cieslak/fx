@@ -496,8 +496,31 @@ module Pipeline =
             return report
         }
 
+    /// Renames a directory, trying again a few times when it fails: on Windows a virus scanner or the
+    /// search indexer may hold a file it has just seen being written (often a new executable), and
+    /// the rename fails until it lets go.
+    let private rename<'R when 'R :> IFs and 'R :> IClock and 'R :> IScope>
+        (source: string)
+        (destination: string)
+        : Eff<'R, Result<unit, InstallFailure>> =
+        eff {
+            let mutable attempt = 0
+            let mutable outcome = None
+
+            while outcome.IsNone do
+                attempt <- attempt + 1
+
+                match! Fs.move source destination with
+                | Ok() -> outcome <- Some(Ok())
+                | Error(AccessDenied _ | FsError.IoFailed _) when attempt < 6 ->
+                    do! Clock.sleep (TimeSpan.FromMilliseconds(50.0 * Math.Pow(2.0, float attempt)))
+                | Error e -> outcome <- Some(Error(InstallFailure.IoFailed(string e)))
+
+            return Option.get outcome
+        }
+
     /// Moves a directory out of the way and deletes it.
-    let private discard<'R when 'R :> IInstallFiles and 'R :> IFs and 'R :> IScope>
+    let private discard<'R when 'R :> IInstallFiles and 'R :> IFs and 'R :> IClock and 'R :> IScope>
         (settings: InstallerSettings<'R>)
         (dir: string)
         (name: string)
@@ -507,7 +530,7 @@ module Pipeline =
             do! directory trash
             let target = Path.Combine(trash, name)
             do! io (InstallFiles.deleteTree target)
-            do! io (Fs.move dir target)
+            do! rename dir target
             do! io (InstallFiles.deleteTree target)
         }
 
@@ -539,7 +562,7 @@ module Pipeline =
                     if broken then
                         do! discard settings final ("broken-" + spec.Key.Name)
 
-                    do! io (Fs.move staging final)
+                    do! rename staging final
 
                     return
                         {
