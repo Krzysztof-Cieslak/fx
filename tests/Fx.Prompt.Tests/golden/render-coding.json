@@ -1,0 +1,227 @@
+{
+  "request": {
+    "model": "anthropic/claude-test",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a careful coding agent."
+      },
+      {
+        "kind": "text",
+        "text": "Write TypeScript cells."
+      },
+      {
+        "kind": "text",
+        "text": "Agents you can call:\n- fx.agents.explorer: Finds code.\n- fx.agents.reviewer: Reviews a change."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "short"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Make retries exponential."
+          },
+          {
+            "kind": "text",
+            "text": "Pinned retry:\nsrc/billing/Retry.fs:14-31 (sha256:fad44d063264)\ntype RetryConfig = { Attempts: int }"
+          },
+          {
+            "kind": "text",
+            "text": "Status:\nbudget: $0.12 of $2.00"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "reasoning",
+            "text": "Read the config first.",
+            "state": {
+              "family": "anthropic.messages",
+              "model": "anthropic/claude-test",
+              "kind": "signature",
+              "data": "sig-a"
+            }
+          },
+          {
+            "kind": "toolCall",
+            "id": "toolu_1",
+            "name": "cell",
+            "arguments": "{\"code\":\"read('src/billing/Retry.fs')\"}"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "toolu_1",
+            "name": "cell",
+            "content": [
+              {
+                "kind": "text",
+                "text": "FileText(lines=412)\nsrc/billing/Retry.fs:14-31 (sha256:fad44d063264)\ntype RetryConfig = { Attempts: int }"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "reasoning",
+            "text": "Edit and test.",
+            "state": {
+              "family": "anthropic.messages",
+              "model": "anthropic/claude-test",
+              "kind": "signature",
+              "data": "sig-b"
+            }
+          },
+          {
+            "kind": "toolCall",
+            "id": "toolu_2",
+            "name": "cell",
+            "arguments": "{\"code\":\"edit\"}"
+          },
+          {
+            "kind": "toolCall",
+            "id": "toolu_3",
+            "name": "cell",
+            "arguments": "{\"code\":\"test\"}"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "toolu_2",
+            "name": "cell",
+            "content": [
+              {
+                "kind": "text",
+                "text": "edited 1 range\n[.env: withheld by content exclusions]"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "kind": "toolResult",
+            "callId": "toolu_3",
+            "name": "cell",
+            "content": [
+              {
+                "kind": "text",
+                "text": "ok ok ok ok ok ok ok \n… 72 characters omitted …\nLED: 1 test"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "kind": "text",
+            "text": "Keep the old API too."
+          },
+          {
+            "kind": "text",
+            "text": "Pinned plan:\n1. config 2. call sites 3. docs"
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Done: exponential retries, old API kept."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Then update the docs."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Docs updated."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "cell",
+        "description": "Runs a TypeScript cell.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            }
+          }
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "seen": {
+    "src/billing/Retry.fs": {
+      "sha256:fad44d06326440ee687266ba14ce9cb6ae57c5ff8a730f2852cbce4af92e99ff": {
+        "whole": false,
+        "lines": [
+          {
+            "first": 14,
+            "last": 31
+          }
+        ]
+      }
+    }
+  },
+  "withheld": [
+    ".env"
+  ],
+  "stale": 0,
+  "issues": []
+}

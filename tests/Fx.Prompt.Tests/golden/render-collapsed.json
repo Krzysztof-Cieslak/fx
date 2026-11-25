@@ -1,0 +1,121 @@
+{
+  "request": {
+    "model": "anthropic/claude-test",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a careful coding agent."
+      },
+      {
+        "kind": "text",
+        "text": "Write TypeScript cells."
+      },
+      {
+        "kind": "text",
+        "text": "Agents you can call:\n- fx.agents.explorer: Finds code.\n- fx.agents.reviewer: Reviews a change."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "short"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "[Summary of an earlier part of this conversation:]\nFound a division by zero at src/a.fs:7."
+          },
+          {
+            "kind": "text",
+            "text": "Fix it."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Fixed."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Add a test."
+          },
+          {
+            "kind": "text",
+            "text": "[Context update: these sections changed since the conversation began.]\n[instructions]\nYou are a careful coding agent. Prefer small diffs."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "reasoning",
+            "text": "Test.",
+            "state": {
+              "family": "anthropic.messages",
+              "model": "anthropic/claude-test",
+              "kind": "signature",
+              "data": "sig-3"
+            }
+          },
+          {
+            "kind": "text",
+            "text": "Added."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "cell",
+        "description": "Runs a TypeScript cell.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            }
+          }
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "seen": {},
+  "withheld": [],
+  "stale": 1,
+  "issues": []
+}
