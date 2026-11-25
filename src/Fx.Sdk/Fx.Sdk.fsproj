@@ -36,6 +36,8 @@
     <Compile Include="Grants.fs" />
     <Compile Include="Environment.fs" />
     <Compile Include="Identity.fs" />
+    <Compile Include="Credentials.fs" />
+    <Compile Include="Auth.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
