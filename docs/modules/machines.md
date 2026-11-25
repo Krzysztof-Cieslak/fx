@@ -236,7 +236,7 @@ How it works:
 | The session machine on this host: steer/queue, durable pending requests, the client protocol | T125 |
 | Principals behind `Attribution.Principal` | T122 |
 | `OutcomeUnknown` through `Recover` | T128 |
-| Retry delays and page sizes as variants | T106 |
+| Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | T125, T129 |
 | Journaling intents for exact replay of a session | T131 |
 | Epoch-fenced takeover leases; the actor already stops on a conflicting append | T507 |
 | Bounding the key index; evicting idle actors from a registry | when a long-lived stream needs it |
