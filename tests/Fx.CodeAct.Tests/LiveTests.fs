@@ -15,6 +15,8 @@ open Fx.Interpreters
 open Fx.Sdk
 open Fx.Sessions
 open Fx.Prompt
+open Fx.Environments
+open Fx.Machines.Host
 open Fx.CodeAct
 open Fx.CodeAct.Tests.Support
 
@@ -81,6 +83,79 @@ let private live (name: string) (selections: (string * Json) list) (body: Fixtur
         task {
             let! exe = bun.Force()
             use f = createWith name selections (bunTs exe)
+            do! body(f).WaitAsync(TimeSpan.FromSeconds 180.0)
+        }
+
+/// The pinned Bun as the component an environment installed.
+let private bunComponent (exe: string) : InstalledComponent =
+    {
+        Id = "bun"
+        Version = Fx.Ext.RuntimeBun.RuntimeBun.bunComponent.Version
+        Dir = Path.GetDirectoryName exe |> nonNull
+        Bin = [ "bun", exe ]
+        Env = []
+    }
+
+/// Hands in an environment of `fx.env.local` with envd embedded in this process, created on the
+/// fixture's workspace and opened through the host's `IEnvs`, as the composition root does.
+let private localEnvironment (exe: string) (root: string) (workspace: string) (cleanup: ResizeArray<unit -> Task>) =
+    let wait (task: Task<'T>) =
+        task.WaitAsync(TimeSpan.FromSeconds 120.0).GetAwaiter().GetResult()
+
+    let dataDir = Path.Combine(root, "data")
+    Directory.CreateDirectory dataDir |> ignore
+    let log = InMemoryEventLog<EnvEvent>()
+
+    let host =
+        Fx.Environments.Tests.Local.start (Fx.Environments.Tests.Local.settings dataDir) log.Log
+
+    cleanup.Add(fun () -> EnvsHost.stop host)
+    let envs = EnvsHost.envs host
+
+    let spec =
+        { (EnvSpec.create "dev" Fx.Ext.EnvLocal.EnvLocal.Kind
+           |> EnvSpec.withWorkspace workspace) with
+            Transport = Some TransportKind.InProcess
+        }
+
+    let record =
+        match wait (envs.Create spec Threading.CancellationToken.None) with
+        | Ok record -> record
+        | Error e -> failtest $"the environment was not created: {e}"
+
+    let handle =
+        match wait (envs.Open record.Id Threading.CancellationToken.None) with
+        | Ok handle -> handle
+        | Error e -> failtest $"the environment did not open: {e}"
+
+    let plan: KernelPlan =
+        {
+            Provider = Fx.Ext.InterpreterBunTs.BunTs.provider
+            Runtime = Fx.Ext.RuntimeBun.RuntimeBun.runtime
+            Options =
+                { KernelOptions.defaults with
+                    ExitGrace = TimeSpan.FromSeconds 3.0
+                }
+            ProjectTrusted = false
+            Launcher = HostEnvironment.scrub (hostEnvironment ())
+            Guard = fun _ -> EffResult.ok ()
+        }
+
+    EnvHands.ofHandle
+        Fx.Effects.Live.SystemClock.clock
+        Scope.root
+        plan
+        "s1"
+        { handle with
+            Installed = [ bunComponent exe ]
+        }
+
+/// Runs a test on a fixture whose hands are an environment of the local provider, and disposes it.
+let private inEnvironment (name: string) (body: Fixture -> Task<unit>) : unit -> Task =
+    fun () ->
+        task {
+            let! exe = bun.Force()
+            use f = createOn name [] (localEnvironment exe) None (fun _ -> None)
             do! body(f).WaitAsync(TimeSpan.FromSeconds 180.0)
         }
 
@@ -187,6 +262,10 @@ let tests =
 
             testTask "hybrid: read, edit and bash, then a TypeScript cell finishes" {
                 do! live "live-hybrid" [ "agent.actionSurface", Json.String "hybrid" ] hybrid ()
+            }
+
+            testTask "cells-only, in an environment of the local provider opened through IEnvs" {
+                do! inEnvironment "live-env" cellsOnly ()
             }
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {

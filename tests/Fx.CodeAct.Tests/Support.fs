@@ -277,12 +277,14 @@ type Fixture =
         Env: HostEnv
         Store: InMemoryEventLog<Payload>
         Host: SessionHost<HostEnv>
-        CodeAct: CodeAct<HostEnv, HandsEnv>
+        /// The kernel of a session, if it has one.
+        Kernel: string -> Kernel option
         Model: Model
         Root: string
         Workspace: string
-        Hands: HandsEnv
         Variants: Variants
+        /// What disposing does first (closing kernels, stopping hosts), in order.
+        Cleanup: ResizeArray<unit -> Task>
     }
 
     member this.File(name: string) = Path.Combine(this.Workspace, name)
@@ -296,7 +298,11 @@ type Fixture =
 
     interface IDisposable with
         member this.Dispose() =
-            (this.CodeAct.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+            for clean in this.Cleanup do
+                try
+                    (clean ()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                with _ ->
+                    ()
 
             (Eff.run this.Env (SessionHost.stop this.Host)).Wait(TimeSpan.FromSeconds 30.0)
             |> ignore
@@ -322,35 +328,26 @@ let baseSelections: (string * Json) list =
 
 /// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
 /// for the fixture's root directory.
-let createOver
+let createOn<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IClock and 'K :> IScopeWith<'K>>
     (name: string)
     (selections: (string * Json) list)
-    (make: string -> Interpreter<HandsEnv>)
+    (handsOf: string -> string -> ResizeArray<unit -> Task> -> Hands<'K>)
     (llm: Llm option)
     (catalog: ModelRef -> ModelInfo option)
     : Fixture =
     let root = scratch name
-    let interpreter = make root
     let workspace = Path.Combine(root, "workspace")
     Directory.CreateDirectory workspace |> ignore
     let clock = SystemClock.clock
     let model = Model()
+    let cleanup = ResizeArray<unit -> Task>()
+    let hands = handsOf root workspace cleanup
 
     let env: HostEnv =
         {
             Clock = clock
             Trace = Trace.none
             Llm = llm |> Option.defaultValue model.Llm
-            Scope = Scope.root
-        }
-
-    let hands: HandsEnv =
-        {
-            Clock = clock
-            FsRead = LocalFs.read
-            Fs = LocalFs.write
-            FsOps = LocalFsOps.create clock (SystemIds.create clock)
-            Shell = LocalShell.create (LocalShell.defaultShell ()) workspace
             Scope = Scope.root
         }
 
@@ -370,19 +367,7 @@ let createOver
                 Sessions = sessions
                 Contexts = ContextLog.typed store.Log
                 Profile = fun _ -> Eff.ret variants
-                Hands =
-                    fun _ ->
-                        Eff.ret (
-                            Ok
-                                {
-                                    Env = hands
-                                    Workspace = workspace
-                                    Os = os
-                                    CommandEnv = Inherit []
-                                    Interpreter = interpreter
-                                    Guard = fun _ -> EffResult.ok ()
-                                }
-                        )
+                Hands = fun _ -> Eff.ret (Ok hands)
                 Catalog = catalog
             }
 
@@ -396,17 +381,56 @@ let createOver
             .GetAwaiter()
             .GetResult()
 
+    // Kernels close before their environments stop.
+    cleanup.Insert(0, (fun () -> codeact.Close()))
+
     {
         Env = env
         Store = store
         Host = host
-        CodeAct = codeact
+        Kernel = codeact.Kernel
         Model = model
         Root = root
         Workspace = workspace
-        Hands = hands
         Variants = variants
+        Cleanup = cleanup
     }
+
+/// Hands on the local filesystem and shell, with the interpreter `make` gives for the fixture's root.
+let localHands
+    (make: string -> Interpreter<HandsEnv>)
+    (root: string)
+    (workspace: string)
+    (_: ResizeArray<unit -> Task>)
+    : Hands<HandsEnv> =
+    let clock = SystemClock.clock
+
+    {
+        Env =
+            {
+                Clock = clock
+                FsRead = LocalFs.read
+                Fs = LocalFs.write
+                FsOps = LocalFsOps.create clock (SystemIds.create clock)
+                Shell = LocalShell.create (LocalShell.defaultShell ()) workspace
+                Scope = Scope.root
+            }
+        Workspace = workspace
+        Os = os
+        CommandEnv = Inherit []
+        Interpreter = make root
+        Guard = fun _ -> EffResult.ok ()
+    }
+
+/// A fixture on local hands, with the interpreter `make` gives for its root.
+let createOver
+    (name: string)
+    (selections: (string * Json) list)
+    (make: string -> Interpreter<HandsEnv>)
+    (llm: Llm option)
+    (catalog: ModelRef -> ModelInfo option)
+    : Fixture =
+    createOn name selections (localHands make) llm catalog
 
 /// A fixture with the scripted model, no catalog, and the interpreter `make` gives for its root.
 let createWith (name: string) (selections: (string * Json) list) (make: string -> Interpreter<HandsEnv>) : Fixture =
