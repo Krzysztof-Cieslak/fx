@@ -201,6 +201,24 @@ let private linux () =
             test "a locked collection fails without prompting, and the probe says so" {
                 expectLockedThenUnlock SecretServiceHelpers.lock (SecretServiceHelpers.unlock password)
             }
+
+            if not (Headless.session facts).Display then
+                // The unlock prompt goes through the Prompt object and its Completed signal; without a
+                // display gnome-keyring's prompter cannot show it, and the prompt completes dismissed.
+                test "with prompts allowed, the unlock prompt runs and, with no display, is dismissed" {
+                    let prompting =
+                        SecretServiceKeyring.create (SecretServiceKeyring.defaults bus Prompts.Allow)
+
+                    let k = key (KeyringConformance.uniqueService ()) "prompted"
+                    SecretServiceHelpers.lock ()
+
+                    try
+                        Expect.equal (sync (prompting.Read k none)) (Error KeyringError.Dismissed) "read"
+                    finally
+                        SecretServiceHelpers.unlock password ()
+
+                    Expect.equal (sync (prompting.Read k none)) (Ok None) "read after unlocking"
+                }
         | None -> ()
     ]
 
