@@ -188,6 +188,19 @@ let render (request: SandboxRequest) : Rendered =
         |> List.filter (fun r -> r.Access = PathAccess.ReadWrite)
         |> List.map (fun r -> $"(allow file-write* {region r.Root})")
 
+    // The denied directories above a readable root inside them (the data directory above an
+    // environment's owned directories): their own metadata, not their content, so that programs
+    // that look at each directory on the way (`mkdir -p`, `realpath`) reach the root, as they do
+    // under bubblewrap, where those directories are empty mounts.
+    let lookups =
+        rules
+        |> List.filter (fun r -> r.Access <> PathAccess.NoAccess)
+        |> List.collect (fun r ->
+            SandboxPath.between "/" r.Root
+            |> List.filter (fun dir -> dir <> r.Root && SandboxPolicy.access policy dir = PathAccess.NoAccess))
+        |> List.distinct
+        |> List.map (fun dir -> $"(allow file-read-metadata {anyOf (literals dir)})")
+
     let keptInPlace =
         let readOnlyInside =
             rules
@@ -221,6 +234,7 @@ let render (request: SandboxRequest) : Rendered =
     let rendered =
         baseRules
         @ reads
+        @ lookups
         @ writes
         @ (if policy.Network = NetworkAccess.Allowed then
                networkRules

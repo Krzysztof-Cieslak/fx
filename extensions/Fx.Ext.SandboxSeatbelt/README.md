@@ -14,7 +14,9 @@ spec is [docs/modules/sandbox.md](../../docs/modules/sandbox.md).
    information within its own sandbox, a list of system information (`sysctl`) reads, user lookups,
    POSIX semaphores, terminals (`/dev/ptmx`, `/dev/ttys*`, `/dev/tty`) and the devices everyone writes
    (`/dev/null`, `/dev/stdout`, …).
-2. **Reads**: every path but the denied ones; readable and writable paths inside denied ones again.
+2. **Reads**: every path but the denied ones; readable and writable paths inside denied ones again,
+   and the metadata (not the content) of the denied directories above them, so that programs that
+   look at each directory on the way (`mkdir -p`, `realpath`) reach them, as under bubblewrap.
    **Writes**: the writable roots (the workspace unless read-only, the launches' owned directories,
    the environment's temporary directory, which is also `TMPDIR`). Each root's region is its subpath
    minus the roots inside it, so the longest root decides, as `SandboxPolicy.access` says.
