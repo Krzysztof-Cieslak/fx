@@ -112,6 +112,13 @@
           "Fx.Effects": "[0.0.0, )"
         }
       },
+      "fx.ext.sample": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.prelude": {
         "type": "Project",
         "dependencies": {

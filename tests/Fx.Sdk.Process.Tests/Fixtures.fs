@@ -12,6 +12,7 @@ open Fx.Contracts
 open Fx.Variants
 open Fx.Sdk
 open Fx.Sdk.Process
+open Fx.Ext.Sample
 
 type Span = { Start: int; End: int }
 
@@ -408,6 +409,20 @@ let renderProtocol () : string =
     )
     + "\n"
 
+/// `packages/sample-extension/test/fixtures/manifest.json`: the F# sample's manifest as the TypeScript
+/// sample declares it (on the `bun` runtime, T115), and its hash.
+let renderSampleManifest () : string =
+    let manifest = { Sample.manifest with Runtime = "bun" }
+
+    Json.serializeIndented (
+        Json.Object
+            [
+                "manifest", Manifest.codec.Encode manifest
+                "hash", Json.String(Manifest.hash manifest)
+            ]
+    )
+    + "\n"
+
 [<Tests>]
 let tests =
     testList
@@ -419,5 +434,11 @@ let tests =
 
             test "protocol.json is what the F# contracts do" {
                 Repo.expectGenerated [ "packages"; "sdk"; "test"; "fixtures"; "protocol.json" ] (renderProtocol ())
+            }
+
+            test "the TypeScript sample declares the F# sample's manifest" {
+                Repo.expectGenerated
+                    [ "packages"; "sample-extension"; "test"; "fixtures"; "manifest.json" ]
+                    (renderSampleManifest ())
             }
         ]

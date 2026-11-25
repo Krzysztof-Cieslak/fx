@@ -120,12 +120,12 @@ let private install () : Task<string> =
         let exe = Path.Combine(dir, exeName target)
         let record = Path.Combine(dir, "archive.sha256")
 
-        let installed =
+        let installed () =
             File.Exists exe
             && File.Exists record
             && File.ReadAllText(record).Trim() = digest
 
-        if not installed then
+        if not (installed ()) then
             let! archive = download $"{releaseUrl}/{target}.zip"
             let actual = sha256 archive
 
@@ -160,11 +160,21 @@ let private install () : Task<string> =
 
             File.WriteAllText(Path.Combine(staging, "archive.sha256"), digest)
 
-            if Directory.Exists dir then
-                Directory.Delete(dir, true)
+            // Other test processes (the kernel and the extension tests) may install it at the same
+            // time: whoever moves first wins, and a complete install is never deleted.
+            if not (installed ()) then
+                if Directory.Exists dir then
+                    Directory.Delete(dir, true)
 
-            Directory.CreateDirectory(Path.GetDirectoryName dir |> nonNull) |> ignore
-            Directory.Move(staging, dir)
+                Directory.CreateDirectory(Path.GetDirectoryName dir |> nonNull) |> ignore
+
+                try
+                    Directory.Move(staging, dir)
+                with :? IOException when installed () ->
+                    ()
+
+            if Directory.Exists staging then
+                Directory.Delete(staging, true)
 
         let! code, probe = run exe [ "--revision" ] dir
 
@@ -172,6 +182,19 @@ let private install () : Task<string> =
             failwith $"pinned Bun probe failed: expected {revision}, got {probe.Trim()} (exit {code})"
 
         return exe
+    }
+
+let private installed = lazy (install ())
+
+/// The pinned Bun's executable, installed on first use, or why it is not available. The transport-parity
+/// tests (tests/Fx.Extensions.Tests, which link this file) run the TypeScript sample extension on it.
+let executable () : Task<Result<string, string>> =
+    task {
+        try
+            let! bun = installed.Force()
+            return Ok bun
+        with e ->
+            return Error(e.GetType().Name + ": " + e.Message)
     }
 
 /// The reference kernel bundled into one file with the pinned Bun, as a release build would.
@@ -202,7 +225,7 @@ let private bundle (bun: string) : Task<string> =
 let private prepared =
     lazy
         (task {
-            let! bun = install ()
+            let! bun = installed.Force()
             let! kernel = bundle bun
             return { Bun = bun; Kernel = kernel }
         })

@@ -1,5 +1,6 @@
-/// The extension protocol's server side and the host's `RemotePeer` over it: the errors of each
-/// method, and a runtime contributed by an extension process (as `fx.exthost.bun` will).
+/// The extension protocol's server side and the host's `RemotePeer` over it, beyond the server
+/// conformance suite (Parity/ServerConformance.fs): several extensions in one process, interpreter
+/// middleware, and a runtime contributed by an extension process (as `fx.exthost.bun` will).
 module Fx.Extensions.Tests.ServerTests
 
 open System
@@ -78,30 +79,12 @@ let private activate (peer: RemotePeer) (id: string) =
             CancellationToken.None
     )
 
-let private invoke (peer: RemotePeer) (kind: string) (id: string) (input: Json) =
-    wait (
-        peer.Invoke
-            {
-                Extension = Sample.id
-                Type = kind
-                Id = id
-            }
-            input
-            CancellationToken.None
-    )
-
 [<Tests>]
 let tests =
     testList
         "Extension protocol"
         [
-            test "a host that does not speak the extension protocol is refused" {
-                match (connect [] [ Sample.extension ]).GetAwaiter().GetResult() with
-                | Error(ConnectError.Refused e) -> Expect.stringContains e.Message "extension protocol" "refused"
-                | other -> failtest $"expected a refusal, got {Result.map ignore other}"
-            }
-
-            test "the process says which extensions it serves" {
+            test "the process serves several extensions; code that cannot leave its process is not servable" {
                 match (connect RpcRemote.initializeMembers [ Sample.extension; local ]).GetAwaiter().GetResult() with
                 | Ok(_, peer) ->
                     Expect.equal
@@ -109,59 +92,8 @@ let tests =
                         (Some(Json.Array [ Json.String Sample.id; Json.String "test.local" ]))
                         "serves"
                 | Error e -> failtest (string e)
-            }
 
-            test "activation: unknown extensions, and activating twice answers the same" {
-                let peer = remote [ Sample.extension ]
-
-                match activate peer "nope" with
-                | Error(RemoteFailure.Unknown what) -> Expect.equal what "extension nope" "unknown"
-                | other -> failtest (string other)
-
-                match activate peer Sample.id, activate peer Sample.id with
-                | Ok first, Ok second ->
-                    Expect.equal second first "idempotent"
-                    Expect.equal first.Manifest Sample.manifest "the manifest"
-
-                    Expect.equal
-                        (first.Contributions |> List.map string)
-                        (Sample.manifest.Contributions |> List.map string)
-                        "what it provides"
-                | other -> failtest (string other)
-            }
-
-            test "invocation errors: not active, unknown, invalid input, not servable" {
                 let peer = remote [ Sample.extension; local ]
-                let gate = Sample.Points.greeting.Name
-
-                match invoke peer gate "polite" (Json.Object []) with
-                | Error(RemoteFailure.Failed reason) -> Expect.stringContains reason "is not active" "not active"
-                | other -> failtest (string other)
-
-                activate peer Sample.id |> ignore
-
-                match invoke peer gate "nope" (Json.Object []) with
-                | Error(RemoteFailure.Unknown what) ->
-                    Expect.equal what $"contribution {Sample.id}/{gate}/nope" "unknown"
-                | other -> failtest (string other)
-
-                match invoke peer gate "polite" (Json.Object [ "name", Json.int 1 ]) with
-                | Error(RemoteFailure.InvalidInput issues) ->
-                    Expect.equal
-                        (issues |> List.map string)
-                        [
-                            "$.name: expected string, got number 1"
-                            "$.language: missing required field"
-                        ]
-                        "issues"
-                | other -> failtest (string other)
-
-                match
-                    invoke peer gate "polite" (Json.Object [ "name", Json.String "Ada"; "language", Json.String "en" ])
-                with
-                | Ok output -> Expect.equal output (Json.Object [ "decision", Json.String "allow" ]) "allowed"
-                | other -> failtest (string other)
-
                 activate peer "test.local" |> ignore
 
                 match
@@ -178,20 +110,6 @@ let tests =
                 with
                 | Error(RemoteFailure.Failed reason) ->
                     Expect.stringContains reason "runs only in its process" "not servable"
-                | other -> failtest (string other)
-            }
-
-            test "deactivation ends the extension's activation in the process" {
-                let peer = remote [ Sample.extension ]
-                activate peer Sample.id |> ignore
-                Expect.equal (wait (peer.Deactivate Sample.id CancellationToken.None)) (Ok()) "deactivated"
-
-                match invoke peer Sample.Points.words.Name "alpha" Json.Null with
-                | Error(RemoteFailure.Failed reason) -> Expect.stringContains reason "is not active" "gone"
-                | other -> failtest (string other)
-
-                match wait (peer.Deactivate Sample.id CancellationToken.None) with
-                | Error(RemoteFailure.Failed _) -> ()
                 | other -> failtest (string other)
             }
 

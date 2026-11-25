@@ -10,5 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.Sdk.Process\Fx.Sdk.Process.fsproj" />
     <ProjectReference Include="..\..\src\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
+    <!-- The F# sample, whose manifest the TypeScript sample must declare. -->
+    <ProjectReference Include="..\..\extensions\Fx.Ext.Sample\Fx.Ext.Sample.fsproj" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,11 @@
     <Compile Include="BootstrapTests.fs" />
     <Compile Include="ServerTests.fs" />
     <Compile Include="Parity\ParitySuite.fs" />
+    <Compile Include="Parity\ServerConformance.fs" />
+    <!-- The pinned Bun, shared with the kernel tests. -->
+    <Compile Include="..\Fx.Kernel.Tests\Repo.fs" Link="Bun\Repo.fs" />
+    <Compile Include="..\Fx.Kernel.Tests\PinnedBun.fs" Link="Bun\PinnedBun.fs" />
+    <Compile Include="TypeScriptSample.fs" />
     <Compile Include="ParityTests.fs" />
     <Compile Include="ArchitectureTests.fs" />
   </ItemGroup>
