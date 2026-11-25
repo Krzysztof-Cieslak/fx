@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The component planner and installer (spec §6.1): the lockfile and the planner that writes it
+    (host side), safe archive unpacking, the installer machine and its pipeline (environment side),
+    the fetch and install-file capabilities with their fakes, and the IComponents capability. The
+    component model itself (Component, InstallMethod, versions, targets) is in Fx.Sdk, so that
+    extensions can contribute components. Pure apart from the Eff capabilities it is handed: the
+    EFF analyzers apply to every file. Spec: docs/modules/components.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Archive.fs" />
+    <Compile Include="Capabilities.fs" />
+    <Compile Include="Fakes.fs" />
+    <Compile Include="Lockfile.fs" />
+    <Compile Include="Planner.fs" />
+    <Compile Include="Installer.fs" />
+    <Compile Include="Pipeline.fs" />
+    <Compile Include="Components.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+    <ProjectReference Include="..\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+  </ItemGroup>
+</Project>

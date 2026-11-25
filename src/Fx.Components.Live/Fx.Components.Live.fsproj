@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The real interpreters of the installer's capabilities (the imperative shell, spec §1): downloads
+    over HTTP (HttpFetch) and the installer's file operations on the local disk (LocalInstallFiles).
+    Each file has its own reviewed entry in analyzers.json. Only composition roots (the host, envd,
+    tests) reference this project. Spec: docs/modules/components.md.
+  -->
+  <ItemGroup>
+    <Compile Include="HttpFetch.fs" />
+    <Compile Include="LocalInstallFiles.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Components\Fx.Components.fsproj" />
+  </ItemGroup>
+</Project>
