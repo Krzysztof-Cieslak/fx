@@ -12,6 +12,7 @@
     <Compile Include="UnitTests.fs" />
     <Compile Include="SessionTests.fs" />
     <Compile Include="SecretTests.fs" />
+    <Compile Include="GrantTests.fs" />
     <Compile Include="GoldenTests.fs" />
     <Compile Include="CommandTests.fs" />
     <Compile Include="MeasureTests.fs" />
