@@ -35,6 +35,7 @@ let all: Scenario list =
             Kernel.Kernel.scenarios
             Runtimes.scenarios
             Envd.scenarios
+            ModelsOpenAI.scenarios
             Models.scenarios
             Interpreters.scenarios
             Sessions.scenarios
