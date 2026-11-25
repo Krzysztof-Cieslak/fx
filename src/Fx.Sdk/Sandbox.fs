@@ -654,18 +654,26 @@ module Sandbox =
         | Inherit changes -> Inherit(changes @ [ name, Some value ])
         | Exactly vars -> Exactly((vars |> List.filter (fun (n, _) -> n <> name)) @ [ name, value ])
 
+    /// Whether a process sets a variable itself (an inherited one does not count).
+    let setsVariable (name: string) (env: EnvVars) : bool =
+        match env with
+        | Inherit changes -> changes |> List.exists (fun (n, value) -> n = name && value.IsSome)
+        | Exactly vars -> vars |> List.exists (fun (n, _) -> n = name)
+
+    /// The variables with `name` set to `value` unless the process sets it itself.
+    let withDefault (name: string) (value: string) (env: EnvVars) : EnvVars =
+        if setsVariable name env then
+            env
+        else
+            setVariable name value env
+
     /// The process's variables with `TMPDIR` at the policy's temporary directory, if it has one,
     /// unless the process sets its own (a runtime's launch points it at its owned directory, which
     /// is writable too). An inherited `TMPDIR` is replaced: the host's is not writable in the sandbox.
     let withTemp (policy: SandboxPolicy) (env: EnvVars) : EnvVars =
-        let own =
-            match env with
-            | Inherit changes -> changes |> List.exists (fun (name, value) -> name = "TMPDIR" && value.IsSome)
-            | Exactly vars -> vars |> List.exists (fun (name, _) -> name = "TMPDIR")
-
         match policy.Temp with
-        | Some temp when not own -> setVariable "TMPDIR" temp env
-        | _ -> env
+        | Some temp -> withDefault "TMPDIR" temp env
+        | None -> env
 
     /// The real path of a path, by the probe's aliases (the longest alias that contains it).
     let realPath (ready: SandboxReady) (path: string) : string =

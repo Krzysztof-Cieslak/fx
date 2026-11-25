@@ -751,6 +751,11 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                             Confines = contributed.Value.Confines
                             Notes = notes @ ready.Notes
                         }
+                    Defaults =
+                        if contributed.Value.Confines then
+                            EnvSandbox.caches layout
+                        else
+                            []
                     Unsandboxed = client
                 }
 
@@ -776,8 +781,9 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                 fun (env: 'R) ->
                     task {
                         let! temp = client.Fs.CreateDirectory layout.Temp env.Scope.Cancellation
+                        let! cache = client.Fs.CreateDirectory layout.Cache env.Scope.Cancellation
                         let! own = client.Fs.CreateDirectory layout.Sandbox env.Scope.Cancellation
-                        return temp |> Result.bind (fun () -> own)
+                        return temp |> Result.bind (fun () -> cache) |> Result.bind (fun () -> own)
                     }
 
             match made with
