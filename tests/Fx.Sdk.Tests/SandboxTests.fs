@@ -219,9 +219,14 @@ let tests =
                     "inherited"
 
                 Expect.equal
-                    (string (Sandbox.withTemp policy (Exactly [ "TMPDIR", "/tmp"; "A", "b" ])))
+                    (string (Sandbox.withTemp policy (Exactly [ "A", "b" ])))
                     (string (Exactly [ "A", "b"; "TMPDIR", "/home/u/.fx/environments/e1/tmp" ]))
-                    "replaced"
+                    "added"
+
+                Expect.equal
+                    (string (Sandbox.withTemp policy (Exactly [ "TMPDIR", "/owned/tmp" ])))
+                    (string (Exactly [ "TMPDIR", "/owned/tmp" ]))
+                    "a process's own TMPDIR is kept"
             }
 
             test "a symbolic link the probe did not resolve cannot be a target" {
