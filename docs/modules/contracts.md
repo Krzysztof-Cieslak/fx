@@ -8,7 +8,8 @@ TypeScript (T102), kernel values (T116, T201) and model wire adapters (T118 and 
 - **Dependencies:** FSharp.Core only (Fx.Prelude may be added). No System.Text.Json, spans or reflection,
   so the code stays Fable-compatible (spec §20) and Native AOT-safe.
 - **Tests:** `tests/Fx.Contracts.Tests` (Expecto + FsCheck properties and golden files) and the
-  `contracts-*` scenarios of the JIT-vs-native diff (`tests/aot/Fx.Aot.Scenarios/Scenarios/Contracts.fs`).
+  `contracts-*` scenarios of the JIT-vs-native diff (`Contracts.fs` and `ContractsLarge.fs` in
+  `tests/aot/Fx.Aot.Scenarios/Scenarios/`).
 
 ## Files
 
@@ -144,7 +145,7 @@ type Codec<'T> = { Schema: Schema; Encode: 'T -> Json
 | Scalars | `unit` (`null`), `bool`, `string`, `int`, `int64`, `float`, `decimal`, `number` (exact `JsonNumber`), `json` (any value), `literal`, `enum` |
 | Collections | `list`, `array`, `option` (nullable), `stringMap`, `keyValues` (ordered), `tuple2`, `tuple3` |
 | Records | `record { let! … and! … return … }` with `field`, `optionalField`, `defaultField`, `fieldOf` |
-| Unions | `union`, `case0` … `case4`, `caseOf`, `buildUnion`, `describeCase` |
+| Unions | `union "kind" { let! … and! … return … }` with `case0` … `case4`, `caseOf`; `describeCase` |
 | Refinements | `refine`, `minLength`, `maxLength`, `nonEmpty`, `pattern`, `format`, `between`, `atLeast`, `atMost`, `minItems`, `maxItems` |
 | Shape | `map`, `tryMap`, `named`, `describe`, `recursive`, `strict`, `withPreview`, `create` |
 | Use | `encode`, `decode`, `preview`, `encodeText`, `decodeText` |
@@ -159,14 +160,17 @@ let span =
     |> Codec.named "Span"
 
 let turnResult =
-    Codec.union "kind" (fun finished waiting value ->
-        match value with
-        | Finished summary -> finished summary
-        | Waiting(jobs, note) -> waiting jobs note)
-    |> Codec.case1 "finished" Finished (Field.required "summary" Codec.string)
-    |> Codec.case2 "waiting" (fun jobs note -> Waiting(jobs, note))
-        (Field.required "jobs" (Codec.list Codec.string)) (Field.required "note" Codec.string)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! finished = Codec.case1 "finished" Finished (Field.required "summary" Codec.string)
+        and! waiting =
+            Codec.case2 "waiting" (fun jobs note -> Waiting(jobs, note))
+                (Field.required "jobs" (Codec.list Codec.string)) (Field.required "note" Codec.string)
+        and! cancelled = Codec.case0 "cancelled" Cancelled
+        return fun value ->
+            match value with
+            | Finished summary -> finished summary
+            | Waiting(jobs, note) -> waiting jobs note
+            | Cancelled -> cancelled }
 ```
 
 Rules and choices:
@@ -176,19 +180,15 @@ Rules and choices:
   compatible with newer writers. `Codec.strict` reports unknown members instead (model input, where a
   misspelt optional field must not pass silently); apply it before `named`, and inside `recursive` to the
   body.
-- **Native AOT:** `Codec.record` merges up to 12 fields into one flat tuple (`MergeSources3` …
-  `MergeSources12`) and passes decoded values between fields in type-erased slots. A plain applicative
-  builder nests one tuple per field, and ILC rejects generic instantiations nested deeper than 4 levels
-  inside FSharp.Core closures (IL3054): the AOT publish failed at 7 fields.
-- **Native AOT, unions:** the match function given to `Codec.union` is curried over one encoder per
-  case, and ILC aborts it with IL3054 beyond four cases (a nine-case union failed in T108). Keep unions
-  to four cases or group them, until `union` takes its encoders without currying.
 - **Optional fields** are left out when `None`; reading accepts absent or `null`. Defaulted fields are
   always written. Do not nest `option`s, or combine `Field.optional` with `Codec.option`.
 - **Unions** are objects tagged by a discriminator field (`kind`), with each case's fields next to the
-  tag. The match function given to `Codec.union` gets one encoder per case, in the order the cases are
-  added, which keeps encoding exhaustive. Cases with identical payload types can be swapped by mistake:
-  round-trip tests catch it. `caseOf` flattens a record codec's fields into the case.
+  tag. Each `let!`/`and!` binds a case to its encoder (a function of the case's fields, or the
+  `CaseValue` itself for `case0`), and `return` gives the function that encodes a union value with
+  them. Matching on the value keeps encoding exhaustive, and a case that is never used is an unused
+  value (FS1182, an error here). The schema lists the cases in binding order. `caseOf` flattens a record
+  codec's fields into the case.
+- **Size:** records and unions have no limit on fields or cases under Native AOT (see below).
 - **String enums** (`Codec.enum`) are for unions without payloads that should read as plain strings.
 - **Numbers:** `int` and `int64` accept any number with an integral value in range (`3.0`, `1e3`), and
   are exact. JavaScript numbers are exact only up to 2^53. `float` writes the shortest round-trip text;
@@ -227,6 +227,65 @@ Rendering, type-aware through the codecs:
 Containers deeper than `MaxDepth` collapse. When the text would exceed `MaxChars`, whole elements are
 dropped first (with a `…+N` count), then strings are cut. `Codec.withPreview` replaces a codec's
 preview with a domain summary such as `Match[](len=37, files=14, …)` (spec §6.10) and clamps it.
+
+## Native AOT: no limit on fields or cases
+
+ILC (the Native AOT compiler) sees a generic cycle in FSharp.Core's function machinery: `FSharpFunc`,
+the `OptimizedClosures.FSharpFunc` classes that curried lambdas derive from, and the closures that
+their partial applications create. It aborts every instantiation of that machinery whose type
+arguments contain 10 or more instances of it in total (`--maxgenericcyclebreadth`, the closure itself
+included) or one generic type nested more than 4 deep (`--maxgenericcycle`, e.g. `'A * ('B * ('C * …))`).
+The publish fails with IL3054 ("generic recursion"); without that check the binary would throw
+`TypeLoadException` when it reached the code. Curried lambdas with two or more parameters, partial
+applications and curried calls of function values (`f a b`) instantiate it over every parameter and
+result type, and what they reference (such as a `Codec<'T>`) is aborted with them; single-parameter
+lambdas do not.
+
+The first union API took a match function curried over one encoder per case
+(`fun finished waiting value -> …`). Its closure derives from `OptimizedClosures.FSharpFunc` and is
+applied one encoder at a time, so the publish failed from 7 one-field cases (5 encoders + the rest of
+the curried chain + the closure = 11 function types), fewer with multi-field cases. So:
+
+- `Codec.union { }` binds the encoders with `and!` and passes them to `return`'s function as one tuple:
+  a single-parameter lambda, which then builds the match function. Each case is a `UnionCases` value
+  with its schema and decoder already erased to the union type.
+- `Codec.record { }` merges fields into one tuple per 12 (`MergeSources3` … `MergeSources12`, chained
+  beyond, so 48 fields nest the tuple 5 deep) that only `return`'s single-parameter lambda sees, and
+  passes decoded values between fields in type-erased slots.
+- What remains is the depth rule on the value types themselves: every codec's `Preview` is curried
+  over its type, so a codec of a type that nests one generic type 5 deep (`int list list list list
+  list`, five nested `Map`s) fails the publish. Wrap a level in a record: `Row list list list` with
+  `Row = { Cells: int list list }` is fine. Field types of many functions in one case would hit the
+  breadth rule the same way; codecs do not carry functions.
+
+`contracts-large-union` (24 cases with records, nested and recursive unions, and the 48-field record
+as a payload) and `contracts-large-record` (48 fields) in the JIT-vs-native diff prove it on every
+target.
+
+## Performance
+
+`tools/Fx.Contracts.Bench` measures encoding, decoding (from a `Json` value) and previewing a 4-case
+union, a 24-case union and a 48-field record (median of 7 runs per value; command in AGENTS.md). The
+`Contracts benchmark` workflow runs it on an idle runner when the contracts change.
+
+The union redesign (T101b) changed only how a codec is built: per value, `Codec.union { }` runs the
+same code as the curried API did. Measured against the old API on the same machine, interleaved, best
+of four runs (the development VM had a load average of 5 from other builds, so only the ratios count):
+
+| Codec | Operation | Before | After | Allocated |
+|---|---|---|---|---|
+| union, 4 cases | encode | 187 ns | 185 ns | 832 B |
+| union, 4 cases | decode | 234 ns | 230 ns | 656 B |
+| union, 4 cases | preview | 863 ns | 855 ns | 3226 B |
+| union, 24 cases | encode | 168 ns | 165 ns | 668 B |
+| union, 24 cases | decode | 151 ns | 145 ns | 308 B |
+| union, 24 cases | preview | 495 ns | 473 ns | 1764 B |
+| record, 48 fields | encode | 4527 ns | 4459 ns | 12976 B |
+| record, 48 fields | decode | 7010 ns | 7143 ns | 9432 B |
+| record, 48 fields | preview | 12730 ns | 12535 ns | 40264 B |
+
+Allocations are the same before and after (previews vary by a few bytes between runs, from background
+JIT compilation).
 
 ## Fable
 

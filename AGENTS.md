@@ -179,8 +179,9 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Code that touches the AOT surface is only done once the AOT publish succeeds **and** the JIT-vs-native diff passes. Cover it with a scenario (see "JIT-vs-native diff" below).
 - The AOT publish fails on any trim or AOT warning (IL2xxx, IL3xxx), including the single IL2104 that summarizes a library's warnings. Known cases:
   - `Seq.init` and `Seq.initInfinite` trigger IL2091 inside FSharp.Core. Use `Seq.unfold` or a `seq { }` expression.
-  - ILC aborts generic instantiations nested deeper than 4 levels inside FSharp.Core's closure machinery (IL3054, "generic recursion"), e.g. a curried call or a generic closure over `'A * ('B * ('C * …))`. Applicative `and!` builders nest one tuple per binding: give them `MergeSources3`, `MergeSources4`, … as `Codec.record` does.
-  - The same limit holds for `Codec.union`: its match function takes one encoder per case, and with more than four cases the curried closure nests too deep (IL3054, found with a nine-case union). Keep a union codec to four cases or fewer; group cases (e.g. one `unknown` case with a description) until `Codec.union` is restructured.
+  - IL3054 ("generic recursion"): ILC sees a generic cycle in FSharp.Core's function machinery (`FSharpFunc`, the `OptimizedClosures` classes that curried lambdas derive from, the closures of partial applications). It aborts any instantiation of it whose type arguments hold 10 or more of its types in total, or one generic type nested more than 4 deep. Curried lambdas, partial applications and curried calls of function values (`f a b`) instantiate it over all their parameter and result types; single-parameter lambdas do not. Details in [`docs/modules/contracts.md`](docs/modules/contracts.md#native-aot-no-limit-on-fields-or-cases).
+    - Never write a curried function over one function per case or item, such as a match function taking one encoder per union case (7 cases failed). Pass them as one tuple to a single-parameter function, as `Codec.union "kind" { let! … and! … return … }` does.
+    - Never let a curried function see a type that nests one generic type 5 deep (`int list list list list list`, `'A * ('B * ('C * ('D * ('E * 'F))))`); every codec's preview is curried over its type. Wrap a level in a record. Applicative `and!` builders get `MergeSources3` … `MergeSources12`, as `Codec.record` does, and must hand the tuple only to `return`'s single-parameter function.
 - Behaviour that differs under Native AOT, found by the diff:
   - `InvalidCastException` messages lose the type names ("Specified cast is not valid."). Never show or match on runtime exception messages; use the exception type.
   - On linux-musl, the main thread of a Native AOT binary does not know its stack size: `RuntimeHelpers.TryEnsureSufficientExecutionStack()` is false there, so task continuations never run inline on it. Code that relies on inline continuations, such as driving a `FakeClock`, must run on a thread-pool thread (`FakeClock.Advance` throws otherwise).
@@ -259,6 +260,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | JIT-vs-native diff | `dotnet run --project tests/aot/Fx.Aot.Diff -c Release`: publishes for this machine's RID, then diffs. `-- --no-publish` reuses `artifacts/`, `-- --self-test` runs the canaries, `-- --rid <rid>` picks the RID |
 | Eff benchmark | `dotnet run -c Release --project tools/Fx.Effects.Bench` (results in `docs/modules/eff.md`) |
 | Store benchmark | `dotnet run -c Release --project tools/Fx.Store.Bench` (results in `docs/modules/store.md`) |
+| Codec benchmark | `dotnet run -c Release --project tools/Fx.Contracts.Bench` (results in `docs/modules/contracts.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
@@ -312,6 +314,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `tools/Fx.Analyzers` | Our F# analyzers ([Analyzers](#analyzers)) |
 | `tools/Fx.Effects.Bench` | Micro-benchmark of the `eff` builder (a measurement, so no test project) |
 | `tools/Fx.Store.Bench` | Throughput and latency of the event and blob stores (a measurement, so no test project) |
+| `tools/Fx.Contracts.Bench` | Encode, decode and preview throughput of codecs (a measurement, so no test project) |
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
