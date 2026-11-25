@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The kernel protocol (spec §6.4–6.6): the language-neutral JSON-RPC protocol between the host and
+    CodeAct kernels, its codecs and TypeScript declarations, the `Value` wire type and session-scoped
+    handles, the kernel framing and transport, and the host's `Kernel` client. No I/O of its own:
+    kernel processes start through the shell capability. Spec: docs/modules/kernel-protocol.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Values.fs" />
+    <Compile Include="Handles.fs" />
+    <Compile Include="Protocol.fs" />
+    <Compile Include="KernelProtocol.fs" />
+    <Compile Include="KernelDeclarations.fs" />
+    <Compile Include="Framing.fs" />
+    <Compile Include="KernelTransport.fs" />
+    <Compile Include="Kernel.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Rpc\Fx.Rpc.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
