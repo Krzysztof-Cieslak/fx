@@ -149,6 +149,17 @@ module GrantsService =
             return List.fold (fun s (r: Recorded<GrantEvent>) -> GrantLog.evolve s r.Event) state page, page.Length
         }
 
+    /// The state as of the log's head. The actor's snapshot can lag the log for a moment after an
+    /// append, and a waiter that read an answer from the log must not then be judged without it.
+    let private latest<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
+        (service: GrantsService<'R>)
+        : Eff<'R, GrantsState> =
+        eff {
+            let started = snapshot service
+            let! state, _ = current service started.Seq started.State
+            return state
+        }
+
     /// The effective rules and the policy gates on a query: the maximum of their decisions.
     let private decide<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
         (service: GrantsService<'R>)
@@ -196,7 +207,8 @@ module GrantsService =
             match valid service.Settings query with
             | Error e -> return Error e
             | Ok() ->
-                let! decision = decide service (snapshot service).State query
+                let! state = latest service
+                let! decision = decide service state query
                 return Ok decision
         }
 
@@ -253,7 +265,7 @@ module GrantsService =
         : Eff<'R, Result<AskOutcome, GrantError>> =
         eff {
             let settings = service.Settings
-            let state = (snapshot service).State
+            let! state = latest service
             let! at = now
 
             match state.Keys.TryFind ask.Key with
