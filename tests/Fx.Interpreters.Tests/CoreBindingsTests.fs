@@ -302,7 +302,16 @@ let tests =
                                         Args = [ str path ]
                                     })
 
-                        for path in [ ".env"; "./secrets/k.txt"; @"secrets\k.txt"; inWorkspace "secrets/k.txt" ] do
+                        let workspaceName = System.IO.Path.GetFileName(workspace.TrimEnd([| '/'; '\\' |]))
+
+                        for path in
+                            [
+                                ".env"
+                                "./secrets/k.txt"
+                                @"secrets\k.txt"
+                                inWorkspace "secrets/k.txt"
+                                "../" + workspaceName + "/secrets/k.txt"
+                            ] do
                             match read path with
                             | Error(HostCallError.Failed("excluded", message, Some data)) ->
                                 Expect.isFalse (message.Contains "SECRET") $"{path}: no content"
@@ -310,6 +319,13 @@ let tests =
                             | other -> failtest $"{path}: {other}"
 
                         Expect.equal (read "readme.md" |> json |> field "text" |> text) "hello" "other files"
+
+                        Expect.equal
+                            (CoreBindings.exclusionPath excluding (inWorkspace "a/../b/c.txt"))
+                            "b/c.txt"
+                            "relative"
+
+                        Expect.equal (CoreBindings.exclusionPath excluding workspace) "" "the workspace"
 
                         Expect.equal
                             (call f "fs.read" [ str ".env" ] |> json |> field "text" |> text)
