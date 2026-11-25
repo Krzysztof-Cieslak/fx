@@ -248,12 +248,12 @@ environment, a missing runtime).
 
 | What | Task |
 |---|---|
-| A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores the journal | T127, T128 |
+| A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels (done: [codeact.md](codeact.md)); restoring the journal | T128 |
 | Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, `recall`, …) | their tasks (T201, T301, T213, …) |
 | `repo.*` bindings, anchored edits (`fs.edit`), smart previews | T202, T204, T203 |
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
-| `CoreSettings.Exclusions` from the session's variants; provenance of cell results for the egress hooks | T127, T205 |
-| Installing `Requires` in the environment; launching over a remote envd (the same capability records through `EnvClient`); killing stale kernels when envd starts (a pid file in the owned directory). Where assets and owned directories live per environment is `EnvLayout` (T112) | T127, T129 |
+| Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |
+| Installing `Requires` in the environment; killing stale kernels when envd starts (a pid file in the owned directory). Launching over envd's capability records with assets and owned directories at `EnvLayout` is `EnvHands.ofHandle` (T127) | T129 |
 | Per-session packages through the egress proxy (`caps.packages`), `process`/`Bun` as globals (a variant), cells on a `Worker` so busy loops can be stopped without a kill | later |
 | A data form of `InterpreterProvider` for declarative interpreters | T602 |

@@ -68,8 +68,8 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 | Producer | Sources it sets | Task |
 |---|---|---|
 | Prompt render (`Fx.Prompt`): every text part and tool result made from pieces that show a file (`Piece.File`: sections, pinned files, receipts, summaries, views) | each file and its lines (`Piece.sources`) | T126 (done), T203 |
-| The CodeAct loop: a cell's result as a tool result or message | every file the cell read through the bridge (its `Read` activity) | T127, T205 |
-| Hybrid tools (`read`, `edit` diffs) | the file read or edited | T127 |
+| The CodeAct loop: a cell's result as a tool result or message | every file the cell read through the bridge (`fs.read` calls of its cell), as a `Piece.Quote` | T127 (done), T205 |
+| Hybrid tools (`read`, `edit` diffs) | the file read or edited (`Piece.File`) | T127 (done) |
 | Per-cell diffs shown to the model | the files changed | T205 |
 | Summaries (compaction) | the union of the sources summarized | T206 |
 | `fx.llm` from cells | the files the cell read through the bridge before the call (its `Read` activity) | T213 |
@@ -252,7 +252,7 @@ what reaches each provider; the deny action; invalid settings), on all eight tar
 
 | What | Task |
 |---|---|
-| Receipts that show what a cell read as `Piece.File` (or `Sources` from its `Read` activity), so cell output gets provenance; `RenderConfig.Exclusions` and `CoreSettings.Exclusions` from `ContentExclusions.compile` over the session's settings | T127, T205 |
+| `Sources` from a cell's `Read` activity (kernel-side reads the bridge does not see) | T205 |
 | Building `ModelAccess` from the contributions in effect; `EgressExclusions.create (ContentExclusions.ofVariants …)` in the static list of built-ins | T129 |
 | Extensions reading their own slots (`ContentExclusions.read` in `IExtensionEnv`) | T109b |
 | Copilot organisation exclusions as a provider's own egress hooks | T210 |

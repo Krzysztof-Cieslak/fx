@@ -195,7 +195,7 @@ type TurnResult =
 ```
 
 - A turn ends **only** with a valid `TurnResult`; inside goals, `Done` is a *proposal* verified by the harness (§8).
-- Explicit policies for text-only, length-cut and empty replies; loop guard fingerprints repeated actions.
+- Explicit policies for text-only, length-cut and empty replies; loop guard fingerprints repeated actions. When the strategy itself stops a turn (a reply in plain text taken as a question, the loop guard, a budget), it ends `NeedInput` on a question request it opened, whose answer is the next turn's input; failures that no retry fixes (a context overflow before compaction exists, a refused request) fail the turn (`docs/modules/codeact.md`).
 
 ---
 
@@ -347,9 +347,10 @@ FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=
 
 ### 6.9 Action surface (variants)
 
-- **`cells-only`**: one cell tool + `finish` (NOOA-style).
-- **`hybrid`**: cells + direct `read` / `edit` / `bash` tools mapped onto the same `fx.*` capabilities (identical activity, grants, exclusions, edit guard).
-- **Both ship from phase 1 with no baseline preference**; evals decide.
+- **`cells-only`**: one cell tool + `finish` (NOOA-style). `finish` is the bridge's `fx.finish`, called from a cell, so evidence is built from the values cells hold (§6.5) rather than retyped into a tool call.
+- **`hybrid`**: cells + direct `read` / `edit` / `bash` tools mapped onto the same `fx.*` capabilities (identical activity, grants, exclusions, edit guard): they are host calls of the bridge's own bindings.
+- **Both ship from phase 1 with no baseline preference**; evals decide. A conversation keeps the surface its first frame recorded: tools precede the prompt prefix that providers cache and check, so a new surface applies to new sessions.
+- Module spec: `docs/modules/codeact.md` (the CodeAct strategy: steps, receipts, kernels per session, policies, loop guard, budgets).
 
 ### 6.10 Example cells
 

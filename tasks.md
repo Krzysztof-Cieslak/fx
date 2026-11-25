@@ -29,13 +29,13 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 6:** T109b Extension host capabilities, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T129 Host server, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T130 Minimal TUI, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T507 Multi-client + inbox, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T606 ACP adapter, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T303 Decisions panel, T508 Web client, T510 First cloud env (E2B)
-- **Wave 9:** T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge, T609 Desktop
+- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge, T609 Desktop
 - **Wave 10:** T132 Milestone: fx builds fx, T212 Run kernel, T217 Eval harness, T608 Agent teams
 - **Wave 11:** T214 Goals, T215 Runs panel (timeline), T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
 - **Wave 12:** T305 Markdown workflows, T306 Wait gates, T307 Runs panel (graph), T403 TS workflow worker, T404 Triggers, T405 Safe outputs
 - **Wave 13:** T406 Templates
 
-**Critical path to dogfooding (T132):** T001 → T003 → T004 → T107 → T108 → T110 → T114 → T117 → T127 → T128 → T132
+**Critical path to dogfooding (T132):** T001 → T003 → T004 → T107 → T108 → T110 → T114 → T117 → T127 → T127b → T132
 
 ## Graph
 
@@ -85,6 +85,7 @@ flowchart LR
     T125["T125 Session machine"]
     T126["T126 Prompt render"]
     T127["T127 CodeAct strategy"]
+    T127b["T127b CodeAct grants"]
     T128["T128 Crash recovery"]
     T129["T129 Host server"]
     T130["T130 Minimal TUI"]
@@ -225,6 +226,7 @@ flowchart LR
   T123 --> T127
   T124 --> T127
   T126 --> T127
+  T127 --> T127b
   T125 --> T128
   T127 --> T128
   T112 --> T129
@@ -236,6 +238,7 @@ flowchart LR
   T127 --> T131
   T113 --> T132
   T121 --> T132
+  T127b --> T132
   T128 --> T132
   T130 --> T132
   T131 --> T132
@@ -404,11 +407,12 @@ flowchart LR
 | T125 | Session machine | T101b, T104, T105, T107 | §5 | done | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
 | T126 | Prompt render | T118, T125 | §5 | done | Pure render (prefix/history/suffix), stable receipts, cache-breakpoint mapping, `SeenRanges`, content-exclusion filtering; prefix-stability property tests. |
 | T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | in-progress | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
+| T127b | CodeAct grants | T127 | §6.9, §13, §18 | todo | Sensitive host calls of cells and the hybrid tools ask `IGrants` through `Hands.Guard` with keys from the tool call (`shell.exec` with compound commands split for sh and PowerShell, `fs.write`/`fs.patch` outside the workspace, `net.connect`); a pending grant request is shown in the turn and withdrawn by an interrupt; denials come back as `denied` errors; tests for both surfaces. |
 | T128 | Crash recovery | T125, T127 | §5 | todo | Journaled steps; in-flight tool calls become `OutcomeUnknown`, run pauses and opens a session decision with evidence; `fx.recall`. |
 | T129 | Host server | T112, T122, T125 | §3, §17 | todo | Host process + embedded mode wiring; `session/*` client protocol over WebSocket; `fx` CLI entry points. |
 | T130 | Minimal TUI | T129 | §19.2 | todo | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
 | T131 | Record + replay | T105, T106, T127 | §15 | todo | Journal by blob hash, `ReplayEnv`, exact replay of recorded sessions; replay test harness. |
-| T132 | Milestone: fx builds fx | T113, T121, T128, T130, T131 | §21 | todo | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
+| T132 | Milestone: fx builds fx | T113, T121, T127b, T128, T130, T131 | §21 | todo | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
