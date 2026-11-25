@@ -1,0 +1,134 @@
+{
+  "manifest": {
+    "id": "fx.sample",
+    "version": "1.0.0",
+    "description": "The sample extension: one of each hook kind, data and methods.",
+    "sdk": "0.1",
+    "protocol": "1",
+    "placement": "host",
+    "runtime": "bun",
+    "requires": [],
+    "capabilities": [
+      "clock"
+    ],
+    "contributions": [
+      {
+        "type": "gate:sample.greeting",
+        "id": "polite"
+      },
+      {
+        "type": "gate:sample.greeting",
+        "id": "fragile"
+      },
+      {
+        "type": "transform:sample.text",
+        "id": "trim"
+      },
+      {
+        "type": "transform:sample.text",
+        "id": "shout"
+      },
+      {
+        "type": "transform:sample.text",
+        "id": "bracket"
+      },
+      {
+        "type": "transform:sample.text",
+        "id": "guard"
+      },
+      {
+        "type": "sample.word",
+        "id": "alpha"
+      },
+      {
+        "type": "sample.word",
+        "id": "beta"
+      },
+      {
+        "type": "observe:sample.note",
+        "id": "recorder"
+      },
+      {
+        "type": "observe:sample.note",
+        "id": "flaky"
+      }
+    ],
+    "rpc": {
+      "methods": [
+        {
+          "name": "echo",
+          "description": "Returns the note it is given.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        {
+          "name": "divide",
+          "description": "Integer division; dividing by zero is a typed error.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "dividend": {
+                "type": "integer"
+              },
+              "divisor": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "dividend",
+              "divisor"
+            ]
+          },
+          "result": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "observed",
+          "description": "The notes the recorder has seen, in order.",
+          "params": {
+            "type": "null"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "name": "fail",
+          "description": "Throws: a defect.",
+          "params": {
+            "type": "null"
+          },
+          "result": {
+            "type": "null"
+          }
+        }
+      ]
+    },
+    "replaces": []
+  },
+  "hash": "sha256:7cb00eef20b9d13e680f48e521d96b3cfc59139aa6bfbbdd2d3e0ca755421398"
+}
