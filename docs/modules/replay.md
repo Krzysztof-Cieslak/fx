@@ -7,7 +7,9 @@ Spec: §15 (variants recorded, profiles, eval modes: exact replay; `fx replay`),
 [models.md](models.md) and [kernel-protocol.md](kernel-protocol.md).
 Code: [`src/Fx.Replay`](../../src/Fx.Replay) (pure apart from the capabilities it is handed: the EFF
 analyzers apply to every file).
-Tests: `tests/Fx.Replay.Tests` and the `replay-session` scenario of the JIT-vs-native diff.
+Tests: `tests/Fx.Replay.Tests`, the host's live test of `fx run -p` and `fx replay`
+(`tests/Fx.Host.Tests/LiveTests.fs`), and the `replay-session` and `host-embedded` scenarios of the
+JIT-vs-native diff.
 
 A recorded session can be run again exactly: every turn runs again on the CodeAct strategy with an
 environment that answers from a journal of what the world answered the first time (the model's
@@ -20,12 +22,14 @@ recording. The first difference is the report.
 | The journal: entries, outcomes, segments, their JSON (version 1), digests | `Journal.fs` (`JournalEntry`, `Outcome`, `Stored`, `JournalEvent`, `JournalCodecs`, `JournalLog`, `Digest`) |
 | The JSON of journaled values and the inputs whose digests are kept | `Values.fs` |
 | A session's journal in a host process; the recorder | `Recorder.fs` (`SessionJournal`, `Recorder`, `RecorderSettings`) |
-| Recording interpreters | `Record.fs` (`Record.clock`, `ids`, `llm`, `shell`, `fsRead`, `fs`, `fsOps`, `snapshots`, `secrets`, `variants`, `log`; `Ops`, `Inputs`, `Lanes`, `Pull`) |
-| The recorded strategy, `session.record` | `Recording.fs` (`Recording.recorder`, `Recording.codeact`, `RecordedCodeAct`, `Wraps`, `HostTaps`, `HandsTaps`, `HandsInfo`, `Markers`, `RecordingSlots`) |
+| Recording interpreters | `Record.fs` (`Record.clock`, `ids`, `llm`, `shell`, `fsRead`, `fs`, `fsOps`, `snapshots`, `secrets`, `variants`, `log`, `terminal` (refuses); `Ops`, `Inputs`, `Lanes`, `Pull`) |
+| The recorded strategy, `session.record` | `Recording.fs` (`Recording.recorder`, `Recording.codeact`, `RecordedCodeAct`, `Wraps`, `HostTaps`, `HandsTaps`, `HandsInfo`, `LaunchInfo`, `Markers`, `RecordingSlots`) |
+| Which structured child made a call | `src/Fx.Effects/Flow.fs` (`Flow.child`, `Flow.root`, `Flow.path`), `Digest.inFlow` |
 | Replaying a segment: matching, gates, divergences | `Replayer.fs` (`ReplaySegment`, `ReplayEntry`, `Gate`, `Found`, `Divergence`, `ReplayedFailure`) |
 | `ReplayEnv` and the replay interpreters | `Replay.fs` (`ReplayTurnEnv`, `ReplayHandsEnv`, `Replay.clock`, `ids`, `llm`, `shell`, `fsRead`, `fs`, `fsOps`, `snapshots`, `secrets`, `variants`, `store`) |
 | Exact replay of a session, the report | `SessionReplay.fs` (`SessionReplay.run`, `segments`; `RecordedSession`, `ReplaySettings`, `ReplayReport`) |
-| `fx replay <session>` | `ReplayCommand.fs` (`ReplayCommand.parse`, `run`, `output`, `reportCodec`) |
+| `fx replay <session>` | `ReplayCommand.fs` (`ReplayCommand.parse`, `replay`, `run`, `output`, `reportCodec`); in the binary `Commands.replay` (`src/Fx.Host`) |
+| Recording in the host | `Host.start` (`src/Fx.Host/Host.fs`), `HostSlots.core` |
 
 ## The journal
 
@@ -41,17 +45,25 @@ An entry is one capability call, or a marker:
 | `seq` | its place in the segment's order: when it **completed** for calls that bring something from the world (reads, elapsed delays, answers), when it **started** for calls that act on the world (`Proc.Write`, `CloseStdin`, `Kill`), since the world may react before the call is seen to complete |
 | `lane`, `index` | which capability instance it called, and in which order calls of that lane started |
 | `op` | the operation (`Ops`: `Clock.Now`, `Llm.Stream`, `Proc.Read`, `Log.Append`, `Turn.Boundary`, …) |
-| `input` | a digest of its arguments (the first 128 bits of the SHA-256 of their canonical JSON), never the arguments |
+| `input` | a digest of its arguments (the first 128 bits of the SHA-256 of their canonical JSON), never the arguments; in a structured child (below), paired with the child's flow |
 | `summary` | what the call was, bounded (160 characters), for reports |
 | `outcome` | `value` (inline JSON up to 1 KiB) or `blob` (a `BlobRef`: larger values go to the blob store, so equal values are stored once), `threw` (the exception's type, never its message), `cancelled`, `pending` (running when the host closed) |
 
 Lanes of a session: `turn/<n>` (the turn's clock and model, and its calls to the session:
 `Turn.Boundary`, `Turn.Open`, `Turn.Await`), `turn/<n>/stream/<i>` (a model response's pulls, one entry:
 `Stream.Pulls`), `hands` (the environment's clock, files, envd's file operations, commands, spawns,
-snapshots, `Hands.Guard`), `hands/proc/<i>` (each spawned process: writes, reads, wait, kill), `store`
+snapshots, `Hands.Guard`, `Kernel.Launch`), `hands/proc/<i>` (each spawned process: writes, reads, wait, kill), `store`
 (the event store as the strategy uses it), `variants` (`Profile`, each slot's first read under each
 profile), `hands.open` (the hands each turn got), `strategy`, `turns` (`Turn.Began`, `Turn.Cancelled`,
 `Turn.Ended`) and `host` (`Host.Closing`, `Host.Closed`).
+
+**Flows.** `Eff.all`, `both` and `race` (so `timeout`) start each child in a flow of its own
+(`Flow.child`: the parent's path and the child's index, an `AsyncLocal` that follows the child's awaits),
+and recorded turns, the host's closing and replay's driver start at the root (`Flow.root`). The journal
+keys every input by the flow it was made in (`Digest.inFlow`), so two children that read the clock (no
+input) or make the same call get their own answers back, whichever resumes first: the order children
+resume in is the scheduler's, which child asks is the program's. Flows are a function of the program's
+structure; code reads them only to key what is recorded, never to branch.
 
 The recorder buffers entries and appends them in batches of at most 256 entries (events stay well under
 1 MiB): at the end of every turn, before a call once the buffer holds 2048 entries or 8 MiB, and when
@@ -59,22 +71,32 @@ the host closes. A crash loses what was not flushed: that turn replays up to the
 
 ## Recording
 
-The composition root (T129) builds the strategy with `Recording.codeact` instead of `CodeAct.create`:
+`Host.start` (`src/Fx.Host`, the composition root) builds the strategy with `Recording.codeact` instead of
+`CodeAct.create`, over the host's event and blob stores:
 
 ```fsharp
-let recorder = Recording.recorder store.Log blobs.Blobs SystemClock.clock    // journals, flushes
+let recorder = Recording.recorder stores.Log stores.Blobs options.Clock      // journals, flushes
 let strategy =
     Recording.codeact recorder
         { Host  = fun taps env -> { env with Clock = taps.Clock env.Clock; Llm = taps.Llm env.Llm }
-          Hands = fun taps env -> { env with Clock = taps.Clock env.Clock; FsRead = taps.FsRead env.FsRead
-                                             Fs = taps.Fs env.Fs; FsOps = taps.FsOps env.FsOps
-                                             Shell = taps.Shell env.Shell } }
-        codeActConfig                                  // as for CodeAct.create
+          Hands = fun taps env ->                      // EnvHands: envd's capabilities, sandboxed
+              { env with Clock = taps.Clock env.Clock
+                         Client = { env.Client with FsRead = taps.FsRead env.Client.FsRead
+                                                    Fs = taps.Fs env.Client.Fs; FsOps = taps.FsOps env.Client.FsOps
+                                                    Shell = taps.Shell env.Client.Shell
+                                                    Terminal = taps.Terminal env.Client.Terminal } } }
+        codeActConfig                                  // as for CodeAct.create; hands pass GrantGuard.attach
 let! host = SessionHost.create sessions snapshots strategy.Runner settings
 …
 do! SessionHost.stop host                              // turns end (their cancellation is journaled)
 do! strategy.Close()                                   // kernels close, journals end their segments
 ```
+
+A turn's environment (`HostEnv`) reaches only its clock and model through the strategy (CodeAct's
+constraints), so those are its taps: the model is `ModelAccess`'s `ILlm`, and the recorder sits above it.
+Its hands reach the environment's clock, files, envd's file operations and the shell (the sandboxed one
+`EnvHandle.Client` gives, so the journal has what the agent asked, not the sandbox's wrapper); recorded
+hands refuse terminals.
 
 - `Wraps` puts the recording interpreters (`HostTaps`, `HandsTaps`) into the composition root's own
   environment types: **every capability the strategy's environments have must be replaced**, or replay
@@ -83,8 +105,16 @@ do! strategy.Close()                                   // kernels close, journal
 - Each session gets its own CodeAct instance, with the session's journal in its configuration: the
   store's logs (`Record.log`: appends by the digest of what they wrote, reads by how much they saw),
   `Profile` (each slot's first read), `Hands` (the hands' description, `HandsInfo`: workspace, OS,
-  language, whether there are snapshots, the commands' variables by name; their environment, guard and
-  snapshots wrapped).
+  language, whether there are snapshots, the commands' variables by name, the interpreter provider; their
+  environment, guard, snapshots and kernel launches wrapped).
+- **Grants.** The hands' guard (`Hands.Guard`) is journaled as one call with its decision: the sandbox's
+  path checks and T127b's grants guard (`GrantGuard.attach`), which checks the grants log, opens requests
+  and waits for people's answers inside it. Replay answers the decision without a grants log or a person,
+  in the recorded order (`Gate.Ordered`: it ended when people answered).
+- **Kernel launches.** An interpreter from a provider (`Interpreter.ofProvider`) exposes what each launch
+  starts from (`Interpreter.Launches`, the `InterpreterSession`); before each launch the recorder journals
+  it (`Kernel.Launch`, a `LaunchInfo`: the provider's id, the installed components, the assets root, the
+  target, the launch's owned directories, the workspace, trust, and the launcher's variables by name).
 - The runner journals each turn: `Turn.Began` with its `TurnStart`, its host environment (lane
   `turn/<n>`), its calls to the session, **its cancellation before the turn sees it** (an interrupt or
   the host stopping: `Turn.Cancelled`, then the turn's own token is cancelled), and how it ended
@@ -120,11 +150,14 @@ Protect journals like the logs they sit next to.
 CodeAct instance (`CodeAct<ReplayTurnEnv, ReplayHandsEnv>`) whose configuration answers from the segment:
 
 - **`ReplayEnv`**: `ReplayTurnEnv` (clock, model) and `ReplayHandsEnv` (clock, files, envd's file
-  operations, shell) implement the capabilities from the journal (`Replay.*`). Kernels start as they did
-  (`ReplaySettings.Interpreter`, by the recorded language), through the replayed shell: the replayed
-  process gives back what the kernel wrote, so no kernel runs.
+  operations, shell) implement the capabilities from the journal (`Replay.*`). Kernels start as they did,
+  through the replayed shell: the replayed process gives back what the kernel wrote, so no kernel runs. A
+  launch journaled with `Kernel.Launch` starts from what it journaled, with the provider and runtime of
+  that id (`ReplaySettings.Provider`, the host's) and the host's kernel options (the launcher's variables
+  get empty values); other interpreters come from `ReplaySettings.Interpreter`, by the hands' info.
 - **Matching.** A call matches the first entry of its lane, in start order, with the same operation and
-  input digest, so concurrent calls of a lane (host calls of one cell) replay whatever their order. A
+  input digest (in the same flow), so concurrent calls of a lane (host calls of one cell, children of an
+  `Eff.all`) replay whatever their order. A
   call the journal does not have is a **divergence**: the report names the lane, the entry the recording
   has there and the call replay made. A segment that did not end cleanly is cut where the host stopped:
   calls past its end wait until replay of the segment ends.
@@ -175,14 +208,14 @@ capabilities answered, not on timing:
 - A crash loses the journal's unflushed tail; that turn replays up to the last flush, and the logs it
   wrote after it then show as a divergence.
 - `FsOps.Watch` and terminals (`ITerminal`) are not recorded: no session uses them yet (a recorded
-  `Watch` refuses).
-- Two concurrent calls of one lane with the same input and different outcomes may swap: two delays of
-  the same length, one elapsed and one cancelled, or two callers that resume at the same moment and read
-  the clock (`Clock.Now` has no input). Replay keeps the order calls completed in, not which caller made
-  them.
-- Replaying elsewhere needs the same launches: a kernel's launch spec (its program, directory and
-  variables' names) is part of the spawn's input. The script kernel's (`ScriptProc`) is the same on every
-  machine; a Bun kernel's names its install root.
+  `Watch` or terminal refuses).
+- Concurrency is told apart by structured children (flows): two concurrent calls of one lane with the
+  same input and different outcomes made in **one** flow outside `Eff.all`/`both`/`race` (tasks started
+  by hand) may still swap. Code starts concurrent work only through those combinators (AGENTS.md).
+- Replay needs the binary's own interpreters and kernel options: a kernel's launch (its program,
+  directories, variables' names and the `initialize` it sends, with the binary's version) is part of the
+  spawn's and writes' inputs, so a session replays with the binary that recorded it, or one that starts
+  kernels the same way.
 
 ## The replay test harness
 
@@ -201,12 +234,13 @@ capabilities answered, not on timing:
 
 ## `fx replay <session>`
 
-`ReplayCommand.run settings recording args` parses `replay <session> [--json] [--stall <seconds>]`,
-replays, and gives what to print and the exit code: 0 matched, 1 diverged (or not recorded), 2 invalid
-arguments; `--json` writes the report with `ReplayCommand.reportCodec`. The host's entry point (T129)
-dispatches `replay`, opens the host's stores read-only (`SqliteEventStore`, `FileBlobStore`), builds
-`ReplaySettings` (the interpreters by language from the extension registry, the model catalog) and prints
-the output.
+`fx replay <session> [--json] [--stall <seconds>]`: `Cli.parse` reads the arguments
+(`ReplayCommand.parse`; invalid ones exit 2), `Commands.replay` takes the data directory's lock (as
+`fx auth` does: no host may run on it meanwhile), opens its stores (`HostOptions.OpenStores`; replay only
+reads them, its writes go to in-memory layers), loads the built-ins and builds `ReplaySettings` from them
+(the interpreter providers and runtimes by id, `Setup.kernelOptions`, the model catalog), and
+`ReplayCommand.replay` replays: exit code 0 matched, 1 diverged (or not recorded), with the report on
+standard output (`--json`: `ReplayCommand.reportCodec`). A data directory with no event store says so.
 
 ## Partial replay and counterfactual forks (design)
 
@@ -243,7 +277,9 @@ in-memory stores): three turns of twenty cells, each reading a 4 KiB file and pr
 
 `replay-session` records a CodeAct turn (the script kernel as a process of the shell), replays it
 exactly, replays it with a changed prompt (it diverges) and reads the report back through its JSON, on
-the JIT and as a native binary on every target. The module uses no reflection.
+the JIT and as a native binary on every target; `host-embedded` replays the session two host processes
+recorded with `Commands.replay`, and the diff runs `fx replay`'s usage error. The module uses no
+reflection.
 
 ## Left for later
 
@@ -251,6 +287,5 @@ the JIT and as a native binary on every target. The module uses no reflection.
 |---|---|
 | Partial replay, counterfactual forks, eval runs over recorded sessions | T217 |
 | Re-running the session machine with its inputs re-delivered (full-host replay) | T217 |
-| `fx replay` in the binary (stores, interpreters, catalog) | T129 |
 | Recording terminals and watches | when sessions use them |
 | Replaying a run (goals, workflows) from its journal | T212 |
