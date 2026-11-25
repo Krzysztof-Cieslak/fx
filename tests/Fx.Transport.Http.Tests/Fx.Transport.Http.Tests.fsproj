@@ -4,6 +4,7 @@
     <Compile Include="SseTests.fs" />
     <Compile Include="WebSocketMessagesTests.fs" />
     <Compile Include="LocalServerTests.fs" />
+    <Compile Include="PeerCredentialsTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

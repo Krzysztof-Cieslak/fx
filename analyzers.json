@@ -113,6 +113,16 @@
       "reason": "envd's composition root: the workspace (current directory), the per-user state directory (HOME or LOCALAPPDATA) and its layout."
     },
     {
+      "codes": ["EFF007", "EFF008"],
+      "files": ["src/Fx.Transport.Http/PeerCredentials.fs"],
+      "reason": "The OS account of a local listener's peer and of this process: socket options (SO_PEERCRED, LOCAL_PEERCRED, SIO_AF_UNIX_GETPEERPID) and named-pipe and process-token calls (P/Invoke on Windows, geteuid on Unix)."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Transport.Http/TokenFile.fs"],
+      "reason": "Writes and reads the listener's token in an owner-only file (mode 0600, or an ACL with only the user on Windows)."
+    },
+    {
       "codes": ["EFF007"],
       "files": ["src/Fx.Transport.Http/LocalClient.fs"],
       "reason": "Dials local listeners (loopback, Unix socket, named pipe) for WebSocket clients: the only outgoing connection code."

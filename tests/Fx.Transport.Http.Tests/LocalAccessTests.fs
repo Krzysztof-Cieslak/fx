@@ -21,7 +21,25 @@ let private request =
         WebSocketProtocols = []
     }
 
-let private granted protocols = Ok { Protocols = protocols }
+let private granted protocols =
+    Ok
+        {
+            Protocols = protocols
+            Bearer = Bearer.Listener
+        }
+
+/// A session token the host issued, by its id.
+let private sessionToken = "S3ss10n-t0ken-0123456789abcdefghijklmnopq"
+
+let private withSessions =
+    { policy with
+        Sessions =
+            fun presented ->
+                if presented = sessionToken then
+                    Some "01JDB8Z3M4X2Q9V7K5N6R8T0WA"
+                else
+                    None
+    }
 
 [<Tests>]
 let tests =
@@ -179,6 +197,49 @@ let tests =
                             }
 
                         Expect.equal (decide policy mixed) (Error InvalidToken) "header right, protocol wrong"
+                    }
+
+                    test "a session token the host issued is a bearer too" {
+                        let viaSession =
+                            { request with
+                                Authorization = [ "Bearer " + sessionToken ]
+                            }
+
+                        Expect.equal
+                            (decide withSessions viaSession)
+                            (Ok
+                                {
+                                    Protocols = []
+                                    Bearer = Bearer.Session "01JDB8Z3M4X2Q9V7K5N6R8T0WA"
+                                })
+                            "by its id"
+
+                        Expect.equal (decide policy viaSession) (Error InvalidToken) "a listener without sessions"
+
+                        Expect.equal
+                            (decide
+                                withSessions
+                                { viaSession with
+                                    WebSocketProtocols = [ "jsonrpc"; tokenProtocolPrefix + sessionToken ]
+                                })
+                            (Ok
+                                {
+                                    Protocols = [ "jsonrpc" ]
+                                    Bearer = Bearer.Session "01JDB8Z3M4X2Q9V7K5N6R8T0WA"
+                                })
+                            "the same token twice"
+
+                        Expect.equal (decide withSessions request) (granted []) "the listener's token still works"
+                    }
+
+                    test "two different tokens are refused, even if both are good" {
+                        let both =
+                            { request with
+                                Authorization = [ "Bearer " + sessionToken ]
+                                WebSocketProtocols = [ tokenProtocolPrefix + token ]
+                            }
+
+                        Expect.equal (decide withSessions both) (Error InvalidToken) "ambiguous"
                     }
 
                     test "the host and origin are checked before the token" {
