@@ -349,6 +349,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T114,T116,T117,T118,T119,T120,T122,T123,T124,T125,T126 done
+  class T127 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -402,7 +403,7 @@ flowchart LR
 | T124 | Egress hooks | T108, T118 | §18 | done | Model-egress hook kind (transform + gate) on every model-bound payload; built-in `fx.egress.exclusions` (path/glob content exclusions). |
 | T125 | Session machine | T101b, T104, T105, T107 | §5 | done | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
 | T126 | Prompt render | T118, T125 | §5 | done | Pure render (prefix/history/suffix), stable receipts, cache-breakpoint mapping, `SeenRanges`, content-exclusion filtering; prefix-stability property tests. |
-| T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | todo | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
+| T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | in-progress | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
 | T128 | Crash recovery | T125, T127 | §5 | todo | Journaled steps; in-flight tool calls become `OutcomeUnknown`, run pauses and opens a session decision with evidence; `fx.recall`. |
 | T129 | Host server | T112, T122, T125 | §3, §17 | todo | Host process + embedded mode wiring; `session/*` client protocol over WebSocket; `fx` CLI entry points. |
 | T130 | Minimal TUI | T129 | §19.2 | todo | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
