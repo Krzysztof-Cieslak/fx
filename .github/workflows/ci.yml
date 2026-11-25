@@ -271,6 +271,32 @@ jobs:
           echo "$reply"
           grep -q '"environmentProtocol":"1"' <<< "$reply"
           grep -q '"platform":{' <<< "$reply"
+      - name: Smoke test the embedded host
+        run: |
+          bin="$PWD/artifacts/publish/Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}"
+          dir="$PWD/artifacts/host-smoke"
+          rm -rf "$dir" && mkdir -p "$dir/home" "$dir/project"
+          home="$dir/home"
+          [[ "$RID" == win-* ]] && home="$(cygpath -w "$home")"
+          # The product's home variable (FX_HOME for the product name fx).
+          variable="$(tr '[:lower:]' '[:upper:]' <<< "${{ steps.smoke.outputs.name }}")_HOME"
+          if [[ -n "$IN" ]]; then
+            run=(docker exec -i -w "$dir/project" -e "$variable=$home" alpine)
+          else
+            run=(env "$variable=$home")
+          fi
+          cd "$dir/project"
+          "${run[@]}" "$bin" variants list > "$dir/list.txt"
+          grep -q '^agent.interpreter = "bun-ts"' "$dir/list.txt"
+          # A headless run starts the whole host (stores, grants, identity, an embedded environment);
+          # without a terminal the first install of Bun is denied, so the run stops there.
+          set +e
+          "${run[@]}" "$bin" run -p hello < /dev/null > "$dir/run.txt" 2>&1
+          code=$?
+          set -e
+          cat "$dir/run.txt"
+          [[ "$code" == 1 ]]
+          grep -q "needs a person's approval" "$dir/run.txt"
       - name: SQLite is linked into the binary
         run: |
           dir="artifacts/publish/Fx.Cli/release_$RID"

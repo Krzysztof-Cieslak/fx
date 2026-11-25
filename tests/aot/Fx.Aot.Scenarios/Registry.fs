@@ -48,6 +48,7 @@ let all: Scenario list =
             Keyring.scenarios
             Auth.scenarios
             CodeAct.scenarios
+            Host.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff

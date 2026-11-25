@@ -63,6 +63,12 @@ let cli: Subject =
                     case "--help" [ "--help" ]
                     case "--build-info" [ "--build-info" ]
                     case "(no arguments)" []
+                    // The built-ins loaded and the variant registry built (no store, no lock).
+                    case "variants list" [ "variants"; "list" ]
+                    case "variants schema" [ "variants"; "schema" ]
+                    { case "run without a prompt" [ "run" ] with
+                        MustSucceed = false
+                    }
                     { case "unknown arguments" [ "--bogus"; "x" ] with
                         MustSucceed = false
                     }

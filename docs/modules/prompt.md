@@ -290,5 +290,4 @@ kept JSON of version 1's context events.
 | The repo map's content | T202 |
 | The agent list from the agents registry | T213 |
 | Copilot organization exclusions (a provider's own egress hooks) | T210 |
-| Registering `PromptSlots.all` in the host's registry | T129 |
 | A per-message render for clients (`/context` with cost, the prompt and seen-range viewer) | T130, T205 |

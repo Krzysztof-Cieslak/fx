@@ -260,9 +260,9 @@ bytes may differ between zlib builds.
 | What | Task |
 |---|---|
 | The other install methods (`ReleaseIndex` with vendor-index trust, sandboxed `Script`, `Package`, read-only `System`, `Custom`); placement `host-push` and `prebaked`, mirrors, `fx runtime bundle\|import` | T211, T503 |
-| Passing `Approvals.viaGrants` as `Approve` in the host's composition, and forwarding the request from an environment's installer to the host's grants log | T129 |
-| Persisting the installer's stream in `SqliteEventStore` (an `EventSchema` for `InstallerEvent`; easiest with T101b's `Codec.union { }`), serving `IComponents` to the host over the environment protocol, envd's composition | T111, T129 |
-| Planning at startup, writing the lockfile next to the project (`.fx/`), the frozen-lockfile check, the profile's lockfile hash | T129 |
+| Forwarding the approval request of an installer on another machine to the host's grants log (the host's own installer uses `Approvals.viaGrants`: [host.md](host.md)) | T501 |
+| Persisting the installer's stream in `SqliteEventStore` (an `EventSchema` for `InstallerEvent`; easiest with T101b's `Codec.union { }`), serving `IComponents` to the host over the environment protocol, envd's composition | T111, T211 |
+| Writing the lockfile next to the project (`.fx/`), the frozen-lockfile check (the host plans at startup and records the hash in profiles) | T211 |
 | Symbolic links on Windows (Developer Mode, or copies) | when a component needs them |
 | `tar.xz` / `tar.zst` | when a component needs them |
 | Resumable downloads; showing download progress | when large components arrive |
