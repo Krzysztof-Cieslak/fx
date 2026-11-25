@@ -130,11 +130,13 @@ let tests =
                             {
                                 Text = "Whole."
                                 State = Some(state sol Request.PhaseKind "final_answer")
+                                Sources = []
                             }
                         Part.Text
                             {
                                 Text = " More."
                                 State = Some(state sol Request.PhaseKind "final_answer")
+                                Sources = []
                             }
                     ]
                     "two parts, each once, with the item's phase"

@@ -43,7 +43,9 @@ module ModelEgress =
     /// No hooks: what a host without egress extensions runs (the pipeline still runs).
     let none: EgressHooks = { Transforms = []; Gates = [] }
 
-    /// Runs the hooks: the request a wire may get, or why it may not leave.
+    /// Runs the hooks: the request a wire may get, or why it may not leave. The only place a
+    /// `WireRequest` is made (the architecture tests check the compiled SDK). Provenance (`sources`)
+    /// is for the hooks: it is dropped once they cleared the request.
     let internal clear<'R when 'R :> IScopeWith<'R>>
         (hooks: EgressHooks)
         (request: ChatRequest)
@@ -60,7 +62,7 @@ module ModelEgress =
             | Error e -> return raise e
             | Ok request ->
                 match! Hooks.decide hooks.Gates request with
-                | Verdict.Allow -> return Ok(WireRequest request)
+                | Verdict.Allow -> return Ok(WireRequest(ChatRequest.withoutSources request))
                 | Verdict.Ask reasons ->
                     return
                         Error(

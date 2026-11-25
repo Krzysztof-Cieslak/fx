@@ -41,7 +41,7 @@ let private resplit (cuts: int list) (events: ChatEvent list) : ChatEvent list =
             |> List.map (fun (a, b) -> ChatEvent.Delta(index, text.Substring(a, b - a)))
         | event -> [ event ])
 
-let private textPart (text: string) = Part.Text { Text = text; State = None }
+let private textPart (text: string) = Part.text text
 
 [<Tests>]
 let tests =

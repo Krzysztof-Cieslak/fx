@@ -50,6 +50,31 @@ type MediaSource =
         | Url url -> url
         | Blob digest -> digest
 
+/// Lines of a file, 1-based and inclusive.
+type LineRange =
+    {
+        First: int
+        Last: int
+    }
+
+    override this.ToString() = $"{this.First}-{this.Last}"
+
+/// Where content in a part came from (spec §18 content exclusions, §5 `SeenRanges`): a file, as the
+/// code that put its content in the part saw it. The model-egress hooks match these against the
+/// content exclusions; they never leave for a model (`ModelAccess` drops them after the hooks).
+type ContentSource =
+    {
+        /// The file: relative to the workspace, with `/`, when inside it; otherwise absolute.
+        Path: string
+        /// The lines quoted, if not the whole file.
+        Lines: LineRange option
+    }
+
+    override this.ToString() =
+        match this.Lines with
+        | Some lines -> $"{this.Path}:{lines}"
+        | None -> this.Path
+
 /// An image, document or other media input.
 type MediaPart =
     {
@@ -59,6 +84,8 @@ type MediaPart =
         Source: MediaSource
         /// A file name, for documents.
         Name: string option
+        /// The files its bytes came from (provenance; never sent).
+        Sources: ContentSource list
     }
 
     override this.ToString() =
@@ -68,6 +95,8 @@ type TextPart =
     {
         Text: string
         State: ProviderState option
+        /// The files its text quotes (provenance; never sent).
+        Sources: ContentSource list
     }
 
     override this.ToString() = $"text({this.Text.Length} chars)"
@@ -115,6 +144,8 @@ type ToolResult =
         Content: ToolContent list
         /// The tool failed; the content says why.
         IsError: bool
+        /// The files its content quotes (provenance; never sent).
+        Sources: ContentSource list
     }
 
     override this.ToString() =
@@ -302,6 +333,49 @@ module CacheTtl =
         Codec.enum [ CacheTtl.Short, "short"; CacheTtl.Long, "long" ]
         |> Codec.named "CacheTtl"
 
+module LineRange =
+    let codec: Codec<LineRange> =
+        Codec.record {
+            let! first =
+                Codec.field "first" (fun (r: LineRange) -> r.First) (Codec.int |> Codec.atLeast 1)
+
+            and! last = Codec.field "last" (fun r -> r.Last) (Codec.int |> Codec.atLeast 1)
+            return { First = first; Last = last }
+        }
+        |> Codec.refine (fun r ->
+            if r.Last >= r.First then
+                Ok()
+            else
+                Error $"expected last ({r.Last}) at least first ({r.First})")
+        |> Codec.describe "Lines of a file, 1-based and inclusive."
+        |> Codec.named "LineRange"
+
+module ContentSource =
+    let codec: Codec<ContentSource> =
+        Codec.record {
+            let! path =
+                Codec.field "path" (fun (s: ContentSource) -> s.Path) (Codec.string |> Codec.nonEmpty)
+
+            and! lines = Codec.optionalField "lines" (fun s -> s.Lines) LineRange.codec
+            return { Path = path; Lines = lines }
+        }
+        |> Codec.describe "A file whose content a part quotes, relative to the workspace (with /) when inside it."
+        |> Codec.named "ContentSource"
+
+    /// A whole file.
+    let file (path: string) : ContentSource = { Path = path; Lines = None }
+
+    /// The `sources` field of parts: left out when empty, so parts without provenance keep their JSON.
+    let field (get: 'T -> ContentSource list) : RecordFields<'T, ContentSource list option> =
+        Codec.optionalField
+            "sources"
+            (fun value ->
+                match get value with
+                | [] -> None
+                | sources -> Some sources)
+            (Codec.list codec
+             |> Codec.describe "The files its content quotes (provenance for content exclusions; never sent).")
+
 module MediaPart =
     let source: Codec<MediaSource> =
         Codec.union "kind" {
@@ -328,6 +402,7 @@ module MediaPart =
             and! mediaType = Codec.field "mediaType" (fun m -> m.MediaType) Codec.string
             and! source = Codec.field "source" (fun m -> m.Source) source
             and! name = Codec.optionalField "name" (fun m -> m.Name) Codec.string
+            and! sources = ContentSource.field (fun m -> m.Sources)
 
             return
                 {
@@ -335,6 +410,7 @@ module MediaPart =
                     MediaType = mediaType
                     Source = source
                     Name = name
+                    Sources = defaultArg sources []
                 }
         }
         |> Codec.named "MediaPart"
@@ -358,7 +434,14 @@ module Part =
         Codec.record {
             let! text = Codec.field "text" (fun (t: TextPart) -> t.Text) Codec.string
             and! state = Codec.optionalField "state" (fun t -> t.State) ProviderState.codec
-            return { Text = text; State = state }
+            and! sources = ContentSource.field (fun t -> t.Sources)
+
+            return
+                {
+                    Text = text
+                    State = state
+                    Sources = defaultArg sources []
+                }
         }
 
     let private reasoningPart: Codec<ReasoningPart> =
@@ -394,6 +477,7 @@ module Part =
                 Codec.field "content" (fun r -> r.Content) (Codec.list ToolContent.codec)
 
             and! isError = Codec.defaultField "isError" (fun r -> r.IsError) false Codec.bool
+            and! sources = ContentSource.field (fun r -> r.Sources)
 
             return
                 {
@@ -401,6 +485,7 @@ module Part =
                     Name = name
                     Content = content
                     IsError = isError
+                    Sources = defaultArg sources []
                 }
         }
         |> Codec.named "ToolResult"
@@ -436,7 +521,57 @@ module Part =
         |> Codec.describe "A typed part of a message."
         |> Codec.named "Part"
 
-    let text (text: string) : Part = Part.Text { Text = text; State = None }
+    let text (text: string) : Part =
+        Part.Text
+            {
+                Text = text
+                State = None
+                Sources = []
+            }
+
+    /// Text that quotes files: content exclusions match the part by its sources.
+    let quoting (sources: ContentSource list) (text: string) : Part =
+        Part.Text
+            {
+                Text = text
+                State = None
+                Sources = sources
+            }
+
+    /// Every source of a part, its tool result's media included.
+    let sources (part: Part) : ContentSource list =
+        match part with
+        | Part.Text t -> t.Sources
+        | Part.Media m -> m.Sources
+        | Part.ToolResult r ->
+            r.Sources
+            @ (r.Content
+               |> List.collect (fun c ->
+                   match c with
+                   | ToolContent.Media m -> m.Sources
+                   | ToolContent.Text _ -> []))
+        | Part.Reasoning _
+        | Part.ToolCall _
+        | Part.Refusal _
+        | Part.CacheBreakpoint _ -> []
+
+    /// The part without provenance: what leaves for a model.
+    let withoutSources (part: Part) : Part =
+        match part with
+        | Part.Text t when not t.Sources.IsEmpty -> Part.Text { t with Sources = [] }
+        | Part.Media m when not m.Sources.IsEmpty -> Part.Media { m with Sources = [] }
+        | Part.ToolResult r when not (sources part).IsEmpty ->
+            Part.ToolResult
+                { r with
+                    Sources = []
+                    Content =
+                        r.Content
+                        |> List.map (fun c ->
+                            match c with
+                            | ToolContent.Media m -> ToolContent.Media { m with Sources = [] }
+                            | ToolContent.Text _ -> c)
+                }
+        | _ -> part
 
     /// The state a part carries, if any.
     let state (part: Part) : ProviderState option =
@@ -679,3 +814,23 @@ module ChatRequest =
     /// Every provider state in the request's messages.
     let states (request: ChatRequest) : ProviderState list =
         request.Messages |> List.collect (fun m -> m.Parts |> List.choose Part.state)
+
+    /// Every source of the request's parts (system and messages), in order, with duplicates.
+    let sources (request: ChatRequest) : ContentSource list =
+        (request.System |> List.collect Part.sources)
+        @ (request.Messages |> List.collect (fun m -> m.Parts |> List.collect Part.sources))
+
+    /// The request without provenance: what a wire gets (`ModelAccess` drops it after the hooks).
+    let withoutSources (request: ChatRequest) : ChatRequest =
+        if (sources request).IsEmpty then
+            request
+        else
+            { request with
+                System = request.System |> List.map Part.withoutSources
+                Messages =
+                    request.Messages
+                    |> List.map (fun m ->
+                        { m with
+                            Parts = m.Parts |> List.map Part.withoutSources
+                        })
+            }

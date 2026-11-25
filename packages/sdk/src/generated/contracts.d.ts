@@ -240,6 +240,13 @@ export interface ComponentRef {
   version: string;
 }
 
+/** A file whose content a part quotes, relative to the workspace (with /) when inside it. */
+export interface ContentSource {
+  /** Non-empty. */
+  path: string;
+  lines?: LineRange;
+}
+
 /** A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate. */
 export interface ContributionDecl {
   /**
@@ -390,6 +397,14 @@ export interface LaunchSpec {
   untrustedOverrides?: string[];
 }
 
+/** Lines of a file, 1-based and inclusive. */
+export interface LineRange {
+  /** Integer, at least 1. */
+  first: number;
+  /** Integer, at least 1. */
+  last: number;
+}
+
 /** An extension package's manifest. */
 export interface Manifest {
   /**
@@ -531,13 +546,21 @@ export type OutputFormat =
 
 /** A typed part of a message. */
 export type Part =
-  | { kind: "text"; text: string; state?: ProviderState }
+  | {
+      kind: "text";
+      text: string;
+      state?: ProviderState;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    }
   | {
       kind: "media";
       media: MediaKind;
       mediaType: string;
       source: MediaSource;
       name?: string;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
     }
   | { kind: "reasoning"; text: string; state?: ProviderState }
   | {
@@ -554,6 +577,8 @@ export type Part =
       content: ToolContent[];
       /** @default false */
       isError?: boolean;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
     }
   | { kind: "refusal"; text: string }
   | {
@@ -833,6 +858,8 @@ export type ToolContent =
       mediaType: string;
       source: MediaSource;
       name?: string;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
     };
 
 /** A tool the model may call, with the JSON Schema of its input. */

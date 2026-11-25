@@ -198,6 +198,7 @@ let private toolResults (response: ChatResponse) : Message list option =
                                     Name = call.Name
                                     Content = [ ToolContent.Text "4 °C, light snow" ]
                                     IsError = false
+                                    Sources = []
                                 }
                     ]
             ]

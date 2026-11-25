@@ -210,6 +210,7 @@ let private result (id: string) (name: string) (text: string) (isError: bool) : 
             Name = name
             Content = [ ToolContent.Text text ]
             IsError = isError
+            Sources = []
         }
 
 /// A reasoning item as the API sends it in `response.output_item.done`, as JSON text.
@@ -242,6 +243,7 @@ let private phased (model: ModelRef) (phase: string) (text: string) : Part =
         {
             Text = text
             State = Some(state model Request.PhaseKind phase)
+            Sources = []
         }
 
 let private reason (effort: Effort) (visible: bool) =
@@ -491,6 +493,7 @@ let all: WireCase list =
                                   {
                                       Kind = MediaKind.Image
                                       MediaType = "image/png"
+                                      Sources = []
                                       Source =
                                           MediaSource.Base64
                                               "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
@@ -500,6 +503,7 @@ let all: WireCase list =
                                   {
                                       Kind = MediaKind.Pdf
                                       MediaType = "application/pdf"
+                                      Sources = []
                                       Source = MediaSource.Url "https://example.com/invoice.pdf"
                                       Name = Some "invoice.pdf"
                                   }

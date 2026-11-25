@@ -248,6 +248,7 @@ let replay =
                                                 Name = "get_weather"
                                                 Content = [ ToolContent.Text "4 °C" ]
                                                 IsError = false
+                                                Sources = []
                                             }
                                     ]
                             ]
