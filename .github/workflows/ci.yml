@@ -107,12 +107,13 @@ jobs:
         run: dotnet build Fx.slnx --no-restore --configuration Release
       - name: Test
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
-      # Installs the pinned Bun from GitHub through the component installer and runs it. Its own step,
-      # so a network failure is told apart from a failing test.
-      - name: Install the pinned Bun (network)
+      # Installs the pinned Bun (fx.runtime.bun) from GitHub through the planner and the component
+      # installer, launches it hardened, and runs the positive controls. Its own step, so a network
+      # failure is told apart from a failing test.
+      - name: Install and launch the pinned Bun (network)
         env:
           NETWORK_TESTS: "1"
-        run: dotnet test --project tests/Fx.Components.Live.Tests --no-build --configuration Release
+        run: dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-build --configuration Release
 
   aot:
     # Native AOT publish of the CLI and the JIT-vs-native diff (spec §20), on every target natively:
@@ -222,6 +223,41 @@ jobs:
           name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
           path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
           if-no-files-found: error
+  bun-musl:
+    # fx.runtime.bun on musl (the build job covers glibc, macOS and Windows): installs the pinned Bun's
+    # musl build from GitHub through the component installer, launches it hardened and runs the
+    # positive controls, in the Alpine container the musl AOT jobs use.
+    name: Pinned Bun on musl (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-bun-musl-${{ matrix.arch }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-bun-musl-${{ matrix.arch }}-
+      - name: Start the Alpine container
+        run: >-
+          docker run --detach --name alpine
+          --user "$(id -u):$(id -g)" --env HOME=/tmp
+          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES
+          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+          --env NETWORK_TESTS=1
+          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
+          "$ALPINE_SDK_IMAGE" sleep infinity
+      - name: Restore (locked)
+        run: docker exec alpine dotnet restore tests/Fx.Ext.RuntimeBun.Tests --locked-mode
+      - name: Install and launch the pinned Bun (network)
+        run: docker exec alpine dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-restore --configuration Release
+
   bun-kernel-spike:
     name: Bun kernel spike (${{ matrix.os }})
     timeout-minutes: 20

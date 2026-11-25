@@ -7,7 +7,6 @@
     <Compile Include="LiveConformanceTests.fs" />
     <Compile Include="LocalInstallFilesTests.fs" />
     <Compile Include="HttpFetchTests.fs" />
-    <Compile Include="BunTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

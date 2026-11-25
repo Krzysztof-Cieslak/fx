@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of the fx.runtime.bun package: the runtime conformance suite on its RuntimeSpec, its pins
+    and data, plan → lockfile → install → launch offline, and (NETWORK_TESTS=1) the real Bun installed
+    from GitHub and launched hardened, with a positive control for each hardening measure.
+  -->
+  <ItemGroup>
+    <!-- Archives, installer environments and temporary directories, shared with the installer's tests. -->
+    <Compile Include="..\Fx.Components.Tests\Support.fs" Link="Support.fs" />
+    <Compile Include="..\Fx.Components.Live.Tests\LiveEnv.fs" Link="LiveEnv.fs" />
+    <Compile Include="RuntimeConformance.fs" />
+    <Compile Include="BunTests.fs" />
+    <Compile Include="InstallTests.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Components.Live\Fx.Components.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>
