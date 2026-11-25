@@ -1,5 +1,5 @@
-// The reference kernel of the kernel protocol (docs/modules/kernel-protocol.md), for TypeScript on
-// the pinned Bun. Cells are transpiled with `Bun.Transpiler({ loader: "tsx", replMode: true })` and
+// The bun-ts kernel (`fx.interpreter.bun-ts`, docs/modules/interpreters.md), the reference kernel of
+// the kernel protocol (docs/modules/kernel-protocol.md): TypeScript cells on the pinned Bun. Cells are transpiled with `Bun.Transpiler({ loader: "tsx", replMode: true })` and
 // evaluated in one persistent `node:vm` context: replMode hoists top-level declarations to `var`s on
 // the context (they persist across cells) and wraps the cell in an async IIFE returning `{ value }`
 // (top-level await works). See docs/spikes/bun-kernel.md for the semantics.
@@ -7,18 +7,28 @@
 // Each cell runs in its own `Bun.ModuleGraph` when Bun has it: the timers, sockets and processes it
 // starts belong to the cell, errors from its background work are attributed to it, and interrupting
 // the cell disposes them without touching the values it stored.
+//
+// Cells are type-checked on request (`cell/check`, `cell/run` with `check`) with `bun check` against
+// the host bridge's declarations, which the host generates from the bindings' codecs (checker.ts).
 
+import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
+import { Checker, untypedBridge } from "./checker.ts";
+import { contextGlobals } from "./globals.ts";
 import { OutputBuffer, OutputStream } from "./output.ts";
 import { type CellSource, hoistedNames, rewriteStack } from "./positions.ts";
 import type {
   Activity,
   CellOutcome,
+  CellCheck,
   CellRef,
   CellResult,
   CellRun,
+  Checked,
   DecodeParams,
+  Diagnostic,
   EncodeParams,
   HostCallError,
   KernelError,
@@ -48,6 +58,14 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const CELL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 /** Names of the global that are the kernel's own, not host bindings. */
 const RESERVED = new Set(["finish", "activity"]);
+
+/** How the kernel process was started (its command line). */
+export interface KernelOptions {
+  /** The directory with the host bridge's declarations (`<global>.d.ts`), if the host wrote them. */
+  bindingsDir?: string;
+  /** Where the checker keeps its files (an owned directory). */
+  checkDir?: string;
+}
 
 function failure(error: KernelError, message: string): RpcError {
   return RpcError.typed(error, message);
@@ -100,33 +118,13 @@ export class Kernel {
   private setup: KernelSetup | undefined;
   private limits: KernelLimits = { outputChars: 16_000, preview: { maxChars: 1000, maxItems: 10, maxDepth: 3, maxStringChars: 120 }, inlineBytes: 65_536 };
   private moduleBase = process.cwd();
+  private checker: Checker | string | undefined;
 
-  constructor(private readonly peer: RpcPeer) {
-    this.context = vm.createContext({
-      console: this.makeConsole(),
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      queueMicrotask,
-      structuredClone,
-      TextEncoder,
-      TextDecoder,
-      URL,
-      URLSearchParams,
-      AbortController,
-      AbortSignal,
-      atob,
-      btoa,
-      fetch,
-      Request,
-      Response,
-      Headers,
-      Blob,
-      FormData,
-      performance,
-      crypto,
-    });
+  constructor(
+    private readonly peer: RpcPeer,
+    private readonly options: KernelOptions = {},
+  ) {
+    this.context = vm.createContext(contextGlobals(this.makeConsole()));
     const fromJson = vm.runInContext("JSON.parse", this.context) as (text: string) => unknown;
     const ContextObject = vm.runInContext("Object", this.context) as ObjectConstructor;
     this.realm = { fromJson, object: () => new ContextObject() as Record<string, unknown> };
@@ -147,6 +145,7 @@ export class Kernel {
     this.limits = setup.limits;
     if (setup.moduleBase) this.moduleBase = setup.moduleBase;
     this.context[setup.global] = this.makeGlobal(setup.bindings);
+    this.checker = this.makeChecker(setup.global);
     return {
       version,
       language: "typescript",
@@ -157,6 +156,17 @@ export class Kernel {
         moduleGraph: ModuleGraph !== undefined,
       },
     };
+  }
+
+  /** The checker, or why there is none (reported as a diagnostic of every check). */
+  private makeChecker(globalName: string): Checker | string {
+    try {
+      let bridge = untypedBridge(globalName);
+      if (this.options.bindingsDir) bridge = readFileSync(join(this.options.bindingsDir, `${globalName}.d.ts`), "utf8");
+      return new Checker(process.execPath, this.options.checkDir ?? join(tmpdir(), `check-${process.pid}`), globalName, bridge);
+    } catch (e) {
+      return `the checker is not available: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   /** The global: `shell.run` becomes `<global>.shell.run(...args)`, plus `finish` and `activity`. */
@@ -227,9 +237,12 @@ export class Kernel {
 
   private async hostCall(binding: string, args: unknown[]): Promise<unknown> {
     const cell = this.currentCell();
+    // Trailing undefined arguments were not given.
+    let given = args.length;
+    while (given > 0 && args[given - 1] === undefined) given--;
     let encoded: Value[];
     try {
-      encoded = args.map((arg) => values.encode(arg, this.limits.inlineBytes));
+      encoded = args.slice(0, given).map((arg) => values.encode(arg, this.limits.inlineBytes, true));
     } catch (e) {
       throw this.contextError(`cannot pass an argument of ${binding}: ${e instanceof Error ? e.message : String(e)}`, { code: "invalidArguments" });
     }
@@ -250,7 +263,7 @@ export class Kernel {
     const cell = this.currentCell();
     let encoded: Value;
     try {
-      encoded = values.encode(result ?? null, this.limits.inlineBytes);
+      encoded = values.encode(result ?? null, this.limits.inlineBytes, true);
     } catch (e) {
       throw this.contextError(`cannot finish with this result: ${e instanceof Error ? e.message : String(e)}`, { code: "finishRejected" });
     }
@@ -336,6 +349,13 @@ export class Kernel {
     if ("error" in transpiled) return result(transpiled.error, []);
     const { js } = transpiled;
     const declared = hoistedNames(js);
+    if (params.check) {
+      const diagnostics = await this.diagnostics(cellId, params.code, declared);
+      if (diagnostics.length > 0) return result({ kind: "typeError", diagnostics }, []);
+      // Cancelled while it was being checked.
+      if (cell.calls.signal.aborted) return result({ kind: "cancelled" }, []);
+    }
+    if (this.checker instanceof Checker) this.checker.record(cellId, params.code, declared);
     const filename = join(this.moduleBase, `cell-${cellId}.ts`);
     this.sources.set(filename, { cellId, source: params.code, js });
     if (ModuleGraph) {
@@ -380,6 +400,24 @@ export class Kernel {
       this.byGraph.delete(cell.graph);
       cell.graph = undefined;
     }
+  }
+
+  private async diagnostics(cellId: string, code: string, declared: string[]): Promise<Diagnostic[]> {
+    if (!(this.checker instanceof Checker)) return [{ line: 0, column: 0, code: "check", message: this.checker ?? "not initialized" }];
+    return this.checker.check(cellId, code, declared);
+  }
+
+  /** `cell/check`: what does not parse, and type errors against the bridge and earlier cells. */
+  async checkCell(params: CellCheck): Promise<Checked> {
+    const cellId = params.cellId;
+    if (typeof cellId !== "string" || !CELL_ID.test(cellId)) throw failure({ kind: "invalidCellId", cellId: String(cellId) }, `invalid cell id ${cellId}`);
+    const transpiled = this.transpile(params.code);
+    if ("error" in transpiled) {
+      const e = transpiled.error;
+      const at = e.kind === "syntaxError" ? { line: e.line ?? 0, column: e.column ?? 0, message: e.message } : { line: 0, column: 0, message: e.kind };
+      return { diagnostics: [{ line: at.line, column: at.column, code: "syntax", message: at.message }] };
+    }
+    return { diagnostics: await this.diagnostics(cellId, params.code, hoistedNames(transpiled.js)) };
   }
 
   cancelCell(params: CellRef): { wasRunning: boolean } {
