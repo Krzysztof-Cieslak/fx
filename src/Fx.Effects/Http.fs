@@ -53,6 +53,7 @@ type HttpPhase =
 
 /// Why a request got no (complete) response: an expected failure. Reasons name the kind of failure,
 /// never an exception's message (those differ between runtimes).
+[<RequireQualifiedAccess>]
 type HttpError =
     /// The request is malformed, e.g. its URL is not an absolute `http` or `https` URL.
     | InvalidRequest of reason: string

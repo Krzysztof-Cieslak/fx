@@ -105,16 +105,16 @@ type private Loopback(routes: HttpConformance.Routes) =
             for step in reply.Body do
                 if not broken then
                     match step with
-                    | Chunk bytes ->
+                    | BodyStep.Chunk bytes ->
                         do! write (latin1.GetBytes $"{bytes.Length:x}\r\n")
                         do! write bytes
                         do! write (latin1.GetBytes "\r\n")
-                    | Pause duration -> do! Task.Delay(duration, stop.Token)
-                    | Hang ->
+                    | BodyStep.Pause duration -> do! Task.Delay(duration, stop.Token)
+                    | BodyStep.Hang ->
                         // Until the client goes away (or the server stops).
                         let! _ = stream.ReadAsync(Array.zeroCreate<byte> 1, 0, 1, stop.Token)
                         broken <- true
-                    | Break -> broken <- true
+                    | BodyStep.Break -> broken <- true
 
             if not broken then
                 do! write (latin1.GetBytes "0\r\n\r\n")
@@ -180,7 +180,7 @@ let tests =
                         .GetResult()
 
                 match outcome with
-                | Error(InvalidRequest _) -> ()
+                | Error(HttpError.InvalidRequest _) -> ()
                 | other -> failtest $"expected an invalid request, got {other}"
             }
 

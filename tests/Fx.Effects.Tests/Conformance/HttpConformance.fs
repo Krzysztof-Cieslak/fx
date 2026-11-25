@@ -46,7 +46,7 @@ let private readText (body: HttpBody) : string =
     | Ok bytes -> utf8.GetString bytes
     | Error e -> failtest $"reading the body failed: {e}"
 
-let private text (s: string) = Chunk(utf8.GetBytes s)
+let private text (s: string) = BodyStep.Chunk(utf8.GetBytes s)
 
 let private short = TimeSpan.FromMilliseconds 300.0
 
@@ -123,7 +123,9 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                 moved.Body.Close() |> bounded)
 
             testCase "the body streams before it is complete" (fun () ->
-                use server = serve (route (fun _ -> HttpReply.create 200 [ text "first"; Hang ]))
+                use server =
+                    serve (route (fun _ -> HttpReply.create 200 [ text "first"; BodyStep.Hang ]))
+
                 let response = send server (HttpRequest.get (server.Url "/stream")) |> ok
 
                 match bounded (response.Body.Read CancellationToken.None) with
@@ -135,7 +137,8 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                 response.Body.Close() |> bounded)
 
             testCase "a body that stalls times out" (fun () ->
-                use server = serve (route (fun _ -> HttpReply.create 200 [ text "a"; Hang ]))
+                use server =
+                    serve (route (fun _ -> HttpReply.create 200 [ text "a"; BodyStep.Hang ]))
 
                 let request =
                     HttpRequest.get (server.Url "/stall")
@@ -152,7 +155,7 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                        | _ -> false) do
                     outcome <- bounded (response.Body.Read CancellationToken.None)
 
-                Expect.equal outcome (Error(TimedOut HttpPhase.Body)) "timed out"
+                Expect.equal outcome (Error(HttpError.TimedOut HttpPhase.Body)) "timed out"
                 response.Body.Close() |> bounded)
 
             testCase "a slow response times out" (fun () ->
@@ -167,7 +170,7 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                         }
 
                 match send server request with
-                | Error(TimedOut HttpPhase.Response) -> ()
+                | Error(HttpError.TimedOut HttpPhase.Response) -> ()
                 | other -> failtest $"expected a response timeout, got {other}")
 
             testCase "cancelling while waiting for the headers" (fun () ->
@@ -178,7 +181,9 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                 expectCancelled (server.Http.Send (HttpRequest.get (server.Url "/slow")) cancel.Token))
 
             testCase "a connection that breaks off is a reset" (fun () ->
-                use server = serve (route (fun _ -> HttpReply.create 200 [ text "partial"; Break ]))
+                use server =
+                    serve (route (fun _ -> HttpReply.create 200 [ text "partial"; BodyStep.Break ]))
+
                 let response = send server (HttpRequest.get (server.Url "/broken")) |> ok
                 let received = StringBuilder()
                 let mutable outcome = bounded (response.Body.Read CancellationToken.None)
@@ -191,7 +196,7 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                     outcome <- bounded (response.Body.Read CancellationToken.None)
 
                 match outcome with
-                | Error(Reset _) -> ()
+                | Error(HttpError.Reset _) -> ()
                 | other -> failtest $"expected a reset, got {other}"
 
                 Expect.isTrue ("partial".StartsWith(received.ToString(), StringComparison.Ordinal)) "a prefix"
@@ -201,7 +206,7 @@ let tests (name: string) (serve: Routes -> Server) : Test =
                 use server = serve (route (fun _ -> HttpReply.text 200 "unused"))
 
                 match send server (HttpRequest.get server.Unreachable) with
-                | Error(ConnectFailed _) -> ()
+                | Error(HttpError.ConnectFailed _) -> ()
                 | other -> failtest $"expected a connection failure, got {other}")
 
             testCase "a URL that is not absolute http(s) is an invalid request" (fun () ->
@@ -209,11 +214,13 @@ let tests (name: string) (serve: Routes -> Server) : Test =
 
                 for url in [ "/relative"; "ftp://example.com/x"; "not a url" ] do
                     match send server (HttpRequest.get url) with
-                    | Error(InvalidRequest _) -> ()
+                    | Error(HttpError.InvalidRequest _) -> ()
                     | other -> failtest $"{url}: expected an invalid request, got {other}")
 
             testCase "a closed body reads as ended" (fun () ->
-                use server = serve (route (fun _ -> HttpReply.create 200 [ text "a"; Hang ]))
+                use server =
+                    serve (route (fun _ -> HttpReply.create 200 [ text "a"; BodyStep.Hang ]))
+
                 let response = send server (HttpRequest.get (server.Url "/close")) |> ok
                 response.Body.Close() |> bounded
                 response.Body.Close() |> bounded
