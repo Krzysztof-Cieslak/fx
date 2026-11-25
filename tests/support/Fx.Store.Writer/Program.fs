@@ -2,9 +2,12 @@
 ///
 /// - `append <db> <stream> <full|normal> <last|forever>`: appends commits `c<n>` after the last one in
 ///   the stream, until commit `last` (or until killed), and prints `committed <n> <head>` after each.
-/// - `contend <db> <stream> <name> <count>`: prints `ready`, waits for a line on standard input, then
-///   appends `count` commits `<name>-<i>`, retrying after each conflict with a fresh head, and prints
-///   `done <conflicts>`.
+/// - `contend <db> <stream> <name> <count>`: prints `ready`; then, `count` times, waits for a line on
+///   standard input, appends commit `<name>-<i>` (retrying after each conflict with a fresh head) and
+///   prints `committed <i>`; then prints `done <conflicts>`. The test starts each round in both writers
+///   at once, so they meet at the head check, and neither holds the write lock for more than one
+///   commit while the other waits: SQLite's busy timeout polls, without a queue, and a writer that
+///   commits back to back can keep the lock longer than the timeout (Windows, synced commits).
 module Fx.Store.Writer.Program
 
 open System
@@ -78,10 +81,10 @@ let private contend (path: string) (stream: StreamId) (name: string) (count: int
     let store, log = openLog path Durability.Full
     use _ = store
     say "ready"
-    stdin.ReadLine() |> ignore
     let mutable conflicts = 0
 
     for i in 1..count do
+        stdin.ReadLine() |> ignore
         let mutable written = false
 
         while not written do
@@ -91,6 +94,8 @@ let private contend (path: string) (stream: StreamId) (name: string) (count: int
             | Ok _ -> written <- true
             | Error(Conflict _) -> conflicts <- conflicts + 1
             | Error(Duplicate _ as error) -> failwith (string error)
+
+        say $"committed {i}"
 
     say $"done {conflicts}"
     0
