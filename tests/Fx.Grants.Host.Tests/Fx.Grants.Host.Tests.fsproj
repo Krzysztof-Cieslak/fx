@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="Conformance\GrantStoreConformance.fs" />
+    <Compile Include="StoreTests.fs" />
+    <Compile Include="ServiceTests.fs" />
+    <Compile Include="ProtocolTests.fs" />
+    <Compile Include="ReplayTests.fs" />
+    <Compile Include="SqliteTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
+  </ItemGroup>
+</Project>
