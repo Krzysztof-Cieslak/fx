@@ -14,6 +14,22 @@
         "resolved": "11.0.0",
         "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
+      "fx.components": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.components.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Components": "[0.0.0, )"
+        }
+      },
       "fx.contracts": {
         "type": "Project",
         "dependencies": {
