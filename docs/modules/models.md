@@ -1,6 +1,6 @@
 # Module spec: models (`src/Fx.Models`, `src/Fx.Sdk/Models`)
 
-Spec: §10.1–10.3 (with §4.5, §5, §6.9, §10.4, §11.3, §15, §16.2, §18). Tasks: T118, T119.
+Spec: §10.1–10.3 (with §4.5, §5, §6.9, §10.4, §11.3, §15, §16.2, §18). Tasks: T118, T119, T120, T124.
 Code: [`src/Fx.Models`](../../src/Fx.Models) (the canonical model, pure),
 [`src/Fx.Sdk/Models`](../../src/Fx.Sdk/Models) (the wire contract, the model-egress hooks and
 `ModelAccess`), the `IHttp` capability in [`src/Fx.Effects/Http.fs`](../../src/Fx.Effects/Http.fs)
@@ -73,14 +73,18 @@ Reasoning; MaxOutputTokens; Output; Cache; Metadata }`.
 
   | Part | Fields | Notes |
   |---|---|---|
-  | `text` | `text`, `state?` | |
-  | `media` | `media` (image, pdf, audio, video), `mediaType`, `source` (`base64`, `url`, `blob`), `name?` | a `blob` source is a blob-store digest, resolved before the request leaves (T201) |
+  | `text` | `text`, `state?`, `sources?` | |
+  | `media` | `media` (image, pdf, audio, video), `mediaType`, `source` (`base64`, `url`, `blob`), `name?`, `sources?` | a `blob` source is a blob-store digest, resolved before the request leaves (T201) |
   | `reasoning` | `text` (thinking or summary, may be empty), `state?` | |
   | `toolCall` | `id`, `name`, `arguments` (the JSON text as the model wrote it, possibly invalid), `state?` | |
-  | `toolResult` | `callId`, `name`, `content` (text and media), `isError` | error results carry `isError` |
+  | `toolResult` | `callId`, `name`, `content` (text and media), `isError`, `sources?` | error results carry `isError` |
   | `refusal` | `text` | |
   | `cacheBreakpoint` | `ttl` (`short`, `long`) | everything before it is a cacheable prefix |
 
+- **Provenance** (`sources`, T124): the files a text, media or tool-result part quotes
+  (`ContentSource {path, lines?}`), set by whoever put a file's content in the part. The model-egress
+  hooks match it against the content exclusions, and `ModelAccess` drops it once they cleared the
+  request: no wire sends it. Left out of the JSON when empty. See [egress.md](egress.md).
 - **`ProviderState`** `{ family, model, kind, data }` is opaque: a thinking signature, redacted
   thinking, an encrypted reasoning item, a thought signature. `data` is a string replayed byte for
   byte (ordinal equality through the codecs, tested with control characters, lone surrogates and
@@ -230,9 +234,10 @@ provides `Auth`; `ModelAccess.noAuth` sends none). `ModelAccess.stream`, and the
 `WireRequest`'s constructor is internal to `Fx.Sdk` and only step 3 makes one: a wire cannot be
 handed a request that skipped the hooks, and code that has only an `Llm` cannot reach a wire at all.
 Sessions, agents, the summarizer and judgments get the `Llm`; extensions will get it through
-`IExtensionEnv` (T109). The hook points are `ModelEgress.transforms` and `ModelEgress.gates`
-(privileged); T124 contributes the built-in content exclusions. Failures before the wire are a
-stream with one `failed` event, like failures inside it.
+`IExtensionEnv` (T109b). The hook points are `ModelEgress.transforms` and `ModelEgress.gates`
+(privileged); `fx.egress.exclusions` contributes the built-in content exclusions, and the
+architecture tests check the compiled SDK for any other way to a wire ([egress.md](egress.md)).
+Failures before the wire are a stream with one `failed` event, like failures inside it.
 
 ## HTTP (`IHttp`)
 
@@ -658,7 +663,6 @@ prompt's placement) on all eight targets.
 | Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
 | Auth methods resolving `ResolvedAuth` from stored credentials | T121 |
-| The built-in content exclusions on the egress hook points | T124 |
 | Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
 | The CodeAct loop and the action surfaces on `ILlm` | T127 |
 | Building `ModelAccess` from the host's contributions (with the adapters' replay scopes, `Anthropic.withReplay`), `ILlm` in session environments | T129 |

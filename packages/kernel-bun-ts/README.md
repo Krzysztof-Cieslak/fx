@@ -39,4 +39,5 @@ a Bun from `PATH`. Keep the files flat, without dependencies (only `node:*` and 
 - `Out[cellId]` holds each cell's completion value; `recall` restores entries after a restart.
 - Cells can report activity with `<global>.activity(kind, title, detail?)`; wrappers that report it for
   the bindings are T205's.
-- Not here yet: content exclusions (T124), packages, snapshots (interpreters.md, "Left to later tasks").
+- Content exclusions are the host's: `fs.read` refuses excluded files (docs/modules/egress.md).
+- Not here yet: packages, snapshots (interpreters.md, "Left to later tasks").

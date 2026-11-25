@@ -991,6 +991,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 ## 18. Security
 
 - **Trust boundary:** model providers are **outside**. Every model-bound payload (main loop, `fx.llm`, agents, summarizer, judgments) passes **model-egress hooks**: **content exclusions** built in (paths/globs + Copilot org exclusions); **secret redaction** is a policy extension point.
+  - Request parts carry their **provenance** (the files their content quotes); exclusions match it, so whoever puts a file's content into a request names the file. Provenance never leaves; content without it (a command's output) is caught upstream (bindings, render), not at egress. Exclusion lists from different origins combine by union, so policy and host lists cannot be undone by a project. Details: `docs/modules/egress.md`.
 - **Credentials:** host-only; environments get scoped per-session tokens; secrets always referenced.
 - **Sandbox drivers** are the process boundary. **Windows v1 runs unsandboxed with a persistent warning**; type-level attenuation and grants still apply.
 - **Egress proxy:** deny-by-default, resolved-address allowlists, method/path rules, credential injection, git push checks, per-tool-call attribution, install source allowlists.

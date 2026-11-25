@@ -275,7 +275,6 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
 | Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
 | Wiring the installer into the host: planning the lockfile from the component definitions of builtin and host-config candidates before the bootstrap, `Components.installFor` as `InstallComponents` | T129 |
 | The `bun` runtime (`fx.exthost.bun`, a process extension contributing `ExtensionRuntime "bun"`) | T115 |
-| The built-in content exclusions on the model-egress hook points (`ModelEgress.transforms`/`gates`, defined and run by T118's `ModelAccess`) | T124 |
 | Disabling and pinning from host config and policy; variants selecting extensions (`IVariants`) and profiles recording extension versions (spec §15) | T106 |
 
 ## Transport parity
