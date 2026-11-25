@@ -32,6 +32,7 @@ let all: Scenario list =
             Extensions.Extensions.scenarios
             TypeScript.scenarios
             Components.scenarios
+            Kernel.Kernel.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
