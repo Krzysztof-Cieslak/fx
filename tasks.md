@@ -348,8 +348,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T114,T116,T117,T118,T119,T120,T123,T124,T125,T126 done
-  class T112 inprogress
+  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T114,T116,T117,T118,T119,T120,T123,T124,T125,T126 done
 ```
 
 <!-- /tasks:generated -->
@@ -388,7 +387,7 @@ flowchart LR
 | T109b | Extension host capabilities | T109 | §4.2, §16.1 | todo | `IExtensionEnv` capabilities beyond the clock, attenuated to the manifest's `capabilities` (unknown names rejected at admission); `host/*` requests from extension processes in both SDKs (`IVariants` reads of the extension's own slots first); `IPackages`; the parity and server conformance suites cover them. |
 | T110 | Component installer | T104, T105, T108 | §6.1 | done | `Component`/`InstallMethod` types, planner + `fx.components.lock`, installer machine with `Archive` method (verify, stage, atomic activate, probe, prune); installer conformance suite v1. |
 | T111 | envd core | T005, T104, T107 | §3, §9 | done | envd mode: exec/PTY with sequenced resumable output, fs ops (batch stat, read/write, apply-patch, search, watch), blob store, shadow-git snapshots, environment protocol. |
-| T112 | Env provider + local | T108, T111 | §9.1–9.2 | in-progress | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |
+| T112 | Env provider + local | T108, T111 | §9.1–9.2 | done | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |
 | T113 | Sandbox drivers | T108, T111 | §9.1 | todo | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
