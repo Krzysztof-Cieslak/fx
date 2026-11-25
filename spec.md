@@ -148,7 +148,7 @@ let fixTest test = eff {
 // Eff<'R, Patch> when 'R :> IShell and 'R :> ILedger and 'R :> ILlm
 ```
 
-- **Core capabilities:** `IClock`, `IIds`, `IVariants`, `ILlm`, `IJudge`, `ISessionLog`, `IContext`, `IInterpreter`, `IShell`, `IFs`/`IFsRead`, `IRepo`, `IBlobs`, `ISnapshots`, `ILedger`, `IGrants`, `IUser`, `IAgents`, `IRuns`, `ISafeOutputs`, `IPackages`, `IEnvs`, `ISecrets`, `IComponents`, `ITrace` (local traces only; named so because "telemetry" suggests data leaving the machine).
+- **Core capabilities:** `IClock`, `IIds`, `IVariants`, `ILlm`, `IJudge`, `ISessionLog`, `IContext`, `IInterpreter`, `IShell`, `ITerminal`, `IFs`/`IFsRead`, `IFsOps` (envd's batch stat, ranged reads, atomic writes, patches, search, watch), `IRepo`, `IBlobs`, `ISnapshots`, `ILedger`, `IGrants`, `IUser`, `IAgents`, `IRuns`, `ISafeOutputs`, `IPackages`, `IEnvs`, `ISecrets`, `IComponents`, `ITrace` (local traces only; named so because "telemetry" suggests data leaving the machine).
 - Concrete environments are assembled per session/agent/run from interpreters (`SessionEnv`, `ReplayEnv`, attenuated agent envs).
 - **Scope:** every environment carries a `Scope` (cancellation + current trace span). Capability functions take its cancellation token; structured combinators (`Eff.all`, `race`, `timeout`, `bracket`) run children in a narrower scope and wait for all of them. Capability calls are data in, data out (no streams or callbacks), so they can be journaled and replayed (§15). Details: `docs/modules/eff.md`.
 - **No I/O outside `Eff`** (lint + replay tests). Types are not a security boundary.
@@ -967,7 +967,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 - **Method groups:** `session/*`; creation `goal/set`, `workflow/validate|run`, `agent/invoke`; `run/*` (get, subscribe, pause, resume, cancel, extendBudget, answer, attach, fork, relaunch); `trigger/*`; `ledger/*`; `grants/*`; `judgment/*`; `env/*`; `components/*`; `models/*`; `auth/*`; `blobs/*`; `pty/*`; `ext/<id>/*`; `eval/*`.
 - **Events:** `session.*`, `run.*`, `step.*`, `decision.*`, `grant.*`, …
 - **Fallbacks:** HTTP/SSE offset-read mirror; ACP adapter.
-- **Environment protocol:** multiplexed streams with credit backpressure, sequenced output, blobs, installer operations, lease survival, transports `Piped | Direct | Dialback`.
+- **Environment protocol:** multiplexed streams with credit backpressure, sequenced output, blobs, installer operations, lease survival, transports `Piped | Direct | Dialback`. Output is numbered by byte offset per stream and resumable from any offset (processes outlive connections; overflow spills to a greppable file); apply-patch takes a structured edit list (line ranges plus the file's digest), the base of anchored edits (§6.8). Module spec: `docs/modules/envd.md`.
 - **Kernel protocol:** §6.4.
 - **Extension protocol:** the host starts an extension process and speaks JSON-RPC over its stdio: `extension/activate|invoke|call|deactivate`, every request naming the extension, so one process (e.g. `fx.exthost.bun`) serves many (§16.1).
 - **Wire (all of the above):** own JSON-RPC 2.0; on byte streams (stdio) newline-delimited JSON plus zero-prefixed binary channel frames, so plain NDJSON peers interoperate; on WebSocket text messages for JSON and binary messages for channels; in-process for embedded mode, with the same serialization. `$/cancelRequest`; `initialize` announces message size, requests in flight, channel windows and the methods each side handles. Module spec: `docs/modules/rpc.md`.

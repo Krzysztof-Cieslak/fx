@@ -207,7 +207,8 @@ Multiplexed, ordered, bidirectional byte streams for PTY output, blobs and port 
 | close | 4 | — |
 | reset | 5 | code (uint32), reason (UTF-8, at most 256 bytes) |
 
-Sequence numbers and resumable output are the environment protocol's (T111), above channels.
+Sequence numbers and resumable output are the environment protocol's, above channels
+([envd.md](envd.md)).
 
 ## Transports
 
