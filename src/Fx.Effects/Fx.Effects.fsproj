@@ -5,6 +5,11 @@
     The real interpreters live in Fx.Effects.Live. Spec: docs/modules/eff.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Effects with typed environments: Eff, the eff and effResult builders, the core capabilities and their fakes.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Core.fs" />
     <Compile Include="Builders.fs" />

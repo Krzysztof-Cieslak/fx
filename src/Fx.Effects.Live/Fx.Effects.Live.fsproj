@@ -5,6 +5,11 @@
     composition roots (the host, envd, tests) reference this project. Spec: docs/modules/eff.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The real interpreters of the core capabilities, for composition roots.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="SystemClock.fs" />
     <Compile Include="SystemIds.fs" />

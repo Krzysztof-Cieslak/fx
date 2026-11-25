@@ -2,6 +2,7 @@
 /// product name.
 module Fx.Sdk.Process.Tests.GeneratedTests
 
+open System.Diagnostics
 open System.IO
 open Expecto
 open Fx
@@ -33,5 +34,27 @@ let tests =
                 let json = packageJson "sdk"
                 Expect.equal (Json.tryField "name" json) (Some(Json.String(Product.npmPackage "sdk"))) "name"
                 Expect.equal (Json.tryField "version" json) (Some(Json.String Product.Version)) "version"
+            }
+
+            test "the F# SDK's packages are named from the naming constant" {
+                for name in [ "Sdk"; "Sdk.Process" ] do
+                    let project = Repo.path [ "src"; "Fx." + name; "Fx." + name + ".fsproj" ]
+
+                    let info =
+                        ProcessStartInfo("dotnet", [ "msbuild"; project; "-getProperty:PackageId" ])
+
+                    info.RedirectStandardOutput <- true
+                    info.RedirectStandardError <- true
+                    info.Environment["DOTNET_NOLOGO"] <- "1"
+
+                    use proc =
+                        match Process.Start info with
+                        | null -> failtest "dotnet did not start"
+                        | p -> p
+
+                    let output = proc.StandardOutput.ReadToEnd()
+                    proc.WaitForExit()
+                    Expect.equal proc.ExitCode 0 $"dotnet msbuild {name}: {proc.StandardError.ReadToEnd()}"
+                    Expect.equal (output.Trim()) (Product.nugetPackage name) name
             }
         ]

@@ -7,6 +7,11 @@
     machine host, the live interpreters). Pure: the EFF analyzers apply to every file.
     Spec: docs/modules/extensions.md.
   -->
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The public SDK for extensions: manifests, contribution types, the hook algebra, methods and activation.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Versions.fs" />
     <Compile Include="ExtensionEnv.fs" />

@@ -50,6 +50,20 @@ jobs:
           bun install --frozen-lockfile
           bun check --no-script
           bun test
+      # The TypeScript SDK and its sample: types, codecs against the F# fixtures, the server. The
+      # sample's parity suites run in the build job (tests/Fx.Extensions.Tests), on the pinned Bun.
+      - name: TypeScript SDK type-checks and its unit tests pass
+        working-directory: packages/sdk
+        run: |
+          bun install --frozen-lockfile
+          bun check --no-script
+          bun test
+      - name: TypeScript sample extension type-checks and its unit tests pass
+        working-directory: packages/sample-extension
+        run: |
+          bun install --frozen-lockfile
+          bun check --no-script
+          bun test
 
   analyzers:
     name: Analyzers
@@ -101,12 +115,28 @@ jobs:
         with:
           path: artifacts/kernel-bun-ts/runtimes
           key: pinned-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/Fx.Kernel.Tests/PinnedBun.fs') }}
+      # Runs scripts/packages.ts; the extensions themselves run on the pinned Bun the tests download.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
       - name: Restore (locked)
         run: dotnet restore Fx.slnx --locked-mode
       - name: Build
         run: dotnet build Fx.slnx --no-restore --configuration Release
+      # Packs the SDKs and builds the sample extension from the packages alone; the tests run it.
+      - name: Pack the SDKs and build an extension from the packages
+        run: bun scripts/packages.ts
       - name: Test
+        env:
+          PACKAGE_TESTS: "1"
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
+      - name: Upload the SDK packages
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdk-packages
+          path: artifacts/packages/
+          if-no-files-found: error
       # Installs the pinned Bun (fx.runtime.bun) from GitHub through the planner and the component
       # installer, launches it hardened, and runs the positive controls. Its own step, so a network
       # failure is told apart from a failing test.

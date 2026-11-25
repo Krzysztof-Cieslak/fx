@@ -7,6 +7,11 @@
     Spec: docs/modules/variants.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Variant slots, their resolution, profiles and the IVariants capability.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Slot.fs" />
     <Compile Include="Registry.fs" />
