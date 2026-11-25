@@ -1,14 +1,15 @@
 # Module spec: models (`src/Fx.Models`, `src/Fx.Sdk/Models`)
 
-Spec: §10.1–10.3 (with §4.5, §5, §6.9, §10.4, §11.3, §15, §16.2, §18). Task: T118.
+Spec: §10.1–10.3 (with §4.5, §5, §6.9, §10.4, §11.3, §15, §16.2, §18). Tasks: T118, T119.
 Code: [`src/Fx.Models`](../../src/Fx.Models) (the canonical model, pure),
 [`src/Fx.Sdk/Models`](../../src/Fx.Sdk/Models) (the wire contract, the model-egress hooks and
 `ModelAccess`), the `IHttp` capability in [`src/Fx.Effects/Http.fs`](../../src/Fx.Effects/Http.fs)
-with its live interpreter `SystemHttp` (`src/Fx.Effects.Live`), and the reference wire
-[`extensions/Fx.Ext.ModelCanonical`](../../extensions/Fx.Ext.ModelCanonical).
+with its live interpreter `SystemHttp` (`src/Fx.Effects.Live`), the reference wire
+[`extensions/Fx.Ext.ModelCanonical`](../../extensions/Fx.Ext.ModelCanonical), and the Anthropic wire
+[`extensions/Fx.Ext.ModelAnthropic`](../../extensions/Fx.Ext.ModelAnthropic).
 Tests: `tests/Fx.Models.Tests` (with the wire-conformance suite in `Conformance/WireConformance.fs`),
-the HTTP conformance suite in `tests/Fx.Effects.Tests` and `tests/Fx.Effects.Live.Tests`, and the
-`models-*` scenarios of the JIT-vs-native diff.
+`tests/Fx.Ext.ModelAnthropic.Tests`, the HTTP conformance suite in `tests/Fx.Effects.Tests` and
+`tests/Fx.Effects.Live.Tests`, and the `models-*` scenarios of the JIT-vs-native diff.
 
 Every model call goes through one provider-neutral model. Wire adapters (one per provider API
 family: `anthropic.messages` T119, `openai.responses` T120, `openai.chat` T207, …) translate it to
@@ -23,6 +24,7 @@ canonical model.
 | `Fx.Models` | model metadata, the canonical chat model and its codecs, the fold, `ChatStream`, `ILlm`, SSE/NDJSON parsers, provider definitions, cassettes, replay rules, fitting | everyone; exposed by `Fx.Sdk` |
 | `Fx.Sdk/Models` | `WireCtx`, `WireRequest`, `ChatWire`, `SseWire`, the contribution types, the model-egress hook points, `ModelAccess` | extensions (adapters, providers, egress hooks), the host's composition root |
 | `extensions/Fx.Ext.ModelCanonical` | the `canonical` wire, written like any adapter | tests, a future fx-served model |
+| `extensions/Fx.Ext.ModelAnthropic` | `fx.model.anthropic`: the `anthropic.messages` wire and the Claude API as a provider | the host (bundled) |
 
 `Fx.Models` references only `Fx.Prelude`, `Fx.Contracts` and `Fx.Effects`, so `Fx.Sdk` exposes it
 (the architecture tests' SDK surface includes it). The EFF analyzers apply to all of it. It is packed
@@ -156,7 +158,8 @@ error (spec §4.2).
   (`sameModel` by default; `sameProvider`; `sameFamily`). Text and tool calls keep their content
   without the state; reasoning whose state may not travel is dropped (default) or kept as text.
   `Replay.prepare` returns what it changed. Adapters that know their family's signatures hold across
-  models (T119, T120) widen their family's scope in the policy the host uses.
+  models widen their family's scope in the policy the host uses: `Anthropic.withReplay` sets
+  `anthropic.messages` to `sameProvider` (see below); T120 does the same for `openai.responses`.
 - **Fitting** (`Fit.request`): a request is fitted to its model's `ModelInfo`: sampling parameters
   the model does not take are dropped, the output limit clamped, efforts mapped to the nearest the
   model has, budgets clamped, media it does not take replaced by a note in text, cache breakpoints
@@ -318,6 +321,148 @@ event's `kind`), and error bodies `{"error": <ChatError>}` (with `Retry-After` f
 has no wait). It is about 60 lines of pure functions over `SseWire`. `Canonical.echo` is a toy server
 for tests and scenarios.
 
+## The Anthropic wire (`anthropic.messages`)
+
+`fx.model.anthropic` ([`extensions/Fx.Ext.ModelAnthropic`](../../extensions/Fx.Ext.ModelAnthropic),
+T119) is a native extension on the public SDK: `SseWire.create` over pure parts, and a provider as
+data. Later adapters (T120, T207) mirror its layout:
+
+| File | What |
+|---|---|
+| `Provider.fs` | the family, the API version, the quirks the wire reads (`Settings.ofProvider`), the bundled catalog, `Provider.def` |
+| `Request.fs` | canonical request → Messages API body and HTTP request |
+| `Decoder.fs` | server-sent events → canonical events (a fold over `Decoder.State`) |
+| `Errors.fs` | error bodies and `error` events → `ChatError` |
+| `Anthropic.fs` | the `SseAdapter`, the wire, the replay scope, the manifest and the extension |
+
+### The provider
+
+`anthropic`, endpoint `https://api.anthropic.com/v1`, discovery path `/models` (T208), auth methods
+`api_key` and `env` (`ANTHROPIC_API_KEY`) sending `x-api-key` (T121 resolves them; the Claude API also
+takes `Authorization: Bearer`). The catalog lists current Claude models (Fable 5.2, Opus 5.5, Sonnet
+5.5, Haiku 5.5, Opus 5, Sonnet 5, Sonnet 4.6, Haiku 4.5) with their limits, prices (cache writes at the
+5-minute rate) and capabilities as data: adaptive thinking with the efforts each model takes (`off`
+only where `thinking: {type: "disabled"}` is accepted), a budget range for the extended-thinking-only
+Haiku 4.5, forced tool choice only where the model takes it, four breakpoints with the 1-hour
+lifetime, image and PDF input, and stop sequences as the only sampling parameter.
+
+The wire speaks API version `2026-10-21` (the `anthropic-version` header). Quirks a provider of the
+family may set: `anthropicVersion` (versions before `2026-10-21` also get `temperature`, `top_p`,
+`top_k`), `betas` (sent as `anthropic-beta`), `maxCacheBreakpoints` (4), `defaultMaxTokens` (16384).
+Beta features are only ever data in these quirks.
+
+### Requests
+
+`POST <endpoint>/messages` with `stream: true`.
+
+| Canonical | Messages API |
+|---|---|
+| `System` text | `system` text blocks (other parts: `unavailable`) |
+| `Text`, `Refusal` | `text` blocks (empty ones left out: the API refuses them) |
+| `Media` image / PDF | `image` / `document` (`title` from the name) with a `base64` or `url` source; blob sources and other kinds are `unavailable` |
+| `Reasoning` with `signature` state | `thinking` with the text and the signature, exactly as they came |
+| `Reasoning` with `redacted` state | `redacted_thinking` with its data |
+| `Reasoning` without this family's state | left out (and a message left empty is left out) |
+| `ToolCall` | `tool_use`; the arguments parsed back into the `input` object (`{}` if they are not an object) |
+| `ToolResult` | `tool_result` (`is_error`), its text and media as content; results go first in their user message |
+| `Tools` | `name`, `description`, `input_schema` (the JSON Schema as given), `strict` |
+| `ToolChoice` | `auto` (sent only to turn parallel calls off), `none`, `any`, `tool`; `disable_parallel_tool_use` for `ParallelToolCalls = false`; nothing without tools |
+| `MaxOutputTokens` | `max_tokens` (required): the request's, else the catalog's output limit, else `defaultMaxTokens` |
+| `Sampling.Stop` | `stop_sequences`; seeds never |
+| `Output = Json` | `output_config.format` (`json_schema`; the schema as given) |
+| `Metadata` | `metadata.user_id` from `user_id` or `userId`; the rest is left out |
+| `Cache.Key` | nothing (the API has no cache key; `Fit` drops it for catalog models) |
+
+**Thinking** (`Request.thinking`): no reasoning request sends nothing (the model's default; thinking
+is on by default from Claude 5). `Off` is `{type: "disabled"}`. A model whose catalog entry has a
+budget range (extended thinking only) gets `{type: "enabled", budget_tokens}`: the budget asked for,
+else the effort's (`minimal` 1024, `low` 4096, `medium` 8192, `high` 16384, `max` 32768), clamped to
+the range and below `max_tokens` (thinking is left off when that leaves less than 1024). A model the
+catalog does not know gets the same for an explicit budget. Otherwise it is adaptive thinking,
+`{type: "adaptive"}`, with `output_config.effort` (`minimal` is `low`). `Visible` asks for
+`display: "summarized"`; otherwise the model's default (`omitted` from Claude 5: thinking blocks
+carry only a signature). Not reachable from the canonical efforts yet: `xhigh`, Sonnet 5.5's
+`between_tools`, per-message effort.
+
+**Cache breakpoints** (`Part.CacheBreakpoint`, `Cache.Tools`) become `cache_control` (`{type:
+"ephemeral"}`, `ttl: "1h"` for `long`):
+
+1. A breakpoint marks the last block before it, in prompt order (tools, system, messages), that can
+   carry one: not thinking blocks, not empty text. With none before it, it is dropped. `Cache.Tools`
+   marks the last tool.
+2. Two breakpoints on one block are one, with the longer lifetime.
+3. At most `maxCacheBreakpoints` (4): the earliest are dropped, as `Fit.request` does for catalog
+   models, so the breakpoints nearest the end of the conversation (which make the next request's
+   prefix hit) stay. T126 should place no more than four, putting the stable system prefix first.
+4. A 1-hour breakpoint may not follow a 5-minute one (the API refuses it): later ones become 5-minute
+   ones.
+
+### Streams
+
+| Event | Canonical events |
+|---|---|
+| `message_start` | `started {id, model}`, `usage` |
+| `content_block_start` `text`, `thinking`, `redacted_thinking`, `tool_use` | `partStarted` text, reasoning, reasoning, toolCall (and a delta for any initial text) |
+| `text_delta`, `thinking_delta`, `input_json_delta` | `delta` (empty ones dropped) |
+| `signature_delta` | gathered; `partState {kind: "signature"}` before `partEnded` |
+| a redacted block's `data` | `partState {kind: "redacted"}` before `partEnded` |
+| `content_block_stop` | `partEnded` (a call whose input never streamed gets its start `input` as arguments, `{}` for none) |
+| `message_delta` | `usage`; the stop reason is kept |
+| `message_stop` | `finished` with the stop reason (none: `invalidResponse`) |
+| `error` | `failed` (`Errors.ofEvent`) |
+| `ping`, other events, blocks (server tools, fallback markers) and deltas (citations) | nothing |
+
+Parts are numbered as they start, so skipped blocks leave no gap. A block started twice, a delta or
+stop for a block that is not open, or data that is not JSON is `invalidResponse`. Usage is
+cumulative: counts a report leaves out keep their values, none decreases; `input` is
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`, `reasoning` is
+`output_tokens_details.thinking_tokens`. Stop reasons: `end_turn`, `tool_use`, `max_tokens`,
+`stop_sequence` (with the sequence), `refusal` (a streaming classifier's: a normal stop, parts kept),
+`pause_turn` → `pause`, `model_context_window_exceeded` → `contextWindow`, others → `other`.
+
+### Errors
+
+The error's `details.error_code` first, then its `type`, then the status:
+
+| Anthropic | `ChatError` |
+|---|---|
+| `enforced_spend_limit_reached`, `contract_spend_limit_reached`, `linked_organization_*` codes; `billing_error`; `invalid_request_error` about the credit balance or usage limits | `quotaExhausted` |
+| `invalid_request_error` "prompt is too long: N tokens > M maximum" or "exceed context limit: a + b > M"; `request_too_large`, 413 | `contextOverflow` (tokens and limit when the message says) |
+| `invalid_request_error` "content filtering policy" | `refused` |
+| other `invalid_request_error` (400) | `invalidRequest` |
+| `authentication_error`, `permission_error`, `not_found_error` | `authFailed`, `permissionDenied`, `notFound` |
+| `rate_limit_error`, `ramp_limit_exceeded` | `rateLimited` (`retry-after-ms`, `retry-after`) |
+| `overloaded_error` (529) | `overloaded` |
+| `api_error`, `timeout_error` | `serverError` (the status; 500 and 504 in a stream) |
+| unknown types, bodies without an error object | `ErrorMapping.ofStatus` (413: `contextOverflow`), the body cut to 500 characters; an unknown type in a stream is `serverError 500` |
+
+### Model switches
+
+Thinking signatures and redacted data go back only to `anthropic.messages`. `Anthropic.withReplay`
+widens the family's scope to `sameProvider`: Anthropic's API reads thinking blocks from the models
+that can read them and drops the others without an error ("keep passing thinking blocks back
+unchanged when you switch models"), so within one provider they may go to any model. Not across
+providers: another provider of the family may be a gateway or a third party's Messages-compatible
+API that does not check Claude signatures, and some models' thinking is bound to the account that
+produced it. A host whose providers of the family are all Anthropic platforms may set `sameFamily`.
+Editing what came before a thinking block (system, tools, earlier messages) fails Anthropic's prefix
+check (400): prompt render (T126) must keep the history stable.
+
+### Cassettes
+
+`tests/Fx.Ext.ModelAnthropic.Tests` runs `WireConformance.tests` on the case files in
+`cassettes/anthropic.messages/`: text, thinking with a tool call and its follow-up, redacted and
+omitted thinking, interleaved thinking with parallel calls and an error result, cache usage with five
+breakpoints, media, structured output, a forced call without arguments, stop sequences, max tokens,
+the context window, a refusal, an overload mid-stream, and every error response above. They are
+written by hand from Anthropic's documentation: `sources/` holds the request body each canonical
+request must become and the event streams (never generated from the adapter), and `Cases.fs` the
+canonical requests and outcomes; `UPDATE_GOLDEN=1` rewrites the case files. With `ANTHROPIC_API_KEY`
+set, `LiveTests` calls the Claude API through `ModelAccess` and `SystemHttp`, records the exchanges with
+`CassetteRecorder` (the key redacted and the credential headers dropped) into
+`artifacts/cassettes/anthropic.messages/live-*.json`, and replays them through the conformance checks;
+reviewed recordings can be copied into the suite.
+
 ## Native AOT
 
 - No reflection: codecs are hand-written; `Codec.union` handles the 15-case `ChatError`.
@@ -327,18 +472,23 @@ for tests and scenarios.
   violations, fitting, replay), `models-sse` (parsers under cuts), `models-cassette` (the canonical
   wire on cassettes under cuts, egress gates, mismatches) and `models-live-http` (`SystemHttp`
   streaming from a loopback canonical server through `ModelAccess`, confinement, a refused
-  connection), on all eight targets.
+  connection), and `models-anthropic-*` (a hand-written Anthropic cassette replayed through the wire
+  under cuts with its follow-up, decoding, error mapping, request bodies per thinking mode and the
+  breakpoint policy), on all eight targets.
 
 ## Left to later tasks
 
 | What | Task |
 |---|---|
-| `anthropic.messages` (thinking signatures, `cache_control` mapping), `openai.responses` (encrypted reasoning, `prompt_cache_key`), `openai.chat` adapters with real-format cassettes | T119, T120, T207 |
+| `openai.responses` (encrypted reasoning, `prompt_cache_key`), `openai.chat` adapters with real-format cassettes | T120, T207 |
+| Recorded Anthropic cassettes (the live test records them; needs a key) | T132 |
+| Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
+| Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
 | Auth methods resolving `ResolvedAuth` from stored credentials | T121 |
 | The built-in content exclusions on the egress hook points | T124 |
 | Mapping stable receipts to cache breakpoints, compaction on `contextOverflow` | T126, T206 |
 | The CodeAct loop and the action surfaces on `ILlm` | T127 |
-| Building `ModelAccess` from the host's contributions, `ILlm` in session environments | T129 |
+| Building `ModelAccess` from the host's contributions (with the adapters' replay scopes, `Anthropic.withReplay`), `ILlm` in session environments | T129 |
 | Journaling streams for exact replay | T131 |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |
 | Decision and embedding wires (`DecisionWire`, `EmbedWire`) | T401 and later |
