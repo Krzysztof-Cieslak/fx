@@ -174,7 +174,9 @@ let private concurrent: Eff<Env, (Instant * Instant) list> =
             return first, second
         }
 
-    Eff.all [ child 60; child 5; child 30 ]
+    // Far apart: replay keeps the order calls completed in, but two callers that resume at the same
+    // moment may read the clock in either order (replay.md, "Limits").
+    Eff.all [ child 400; child 10; child 200 ]
 
 [<Tests>]
 let tests =

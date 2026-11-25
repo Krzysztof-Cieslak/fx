@@ -224,7 +224,20 @@ Not built yet (T217); the journal supports both:
 Measured with `REPLAY_MEASURE=<file> dotnet test --project tests/Fx.Replay.Tests` (2-core Linux x64 VM,
 in-memory stores): three turns of twenty cells, each reading a 4 KiB file and printing 2 KiB.
 
-COST-TABLE
+| | `session.record` off | on |
+|---|---|---|
+| Recording the session (after warm-up) | 145 ms | 350–385 ms |
+| The session's logs (session, context, step events) | 697 KB | 697 KB |
+| Journal events | — | 395 KB, about 2,230 entries (37 a cell) |
+| Journal blobs | — | 894 KB in about 235 blobs |
+| Exact replay | — | 345 ms, matched |
+
+- About 4 ms and 20 KB a cell here, against in-memory stores and a kernel in the process: nothing next to a
+  model call (seconds) and a real kernel's work. So **`session.record` is on by default**; switch it off
+  per session or in host config where journals are not wanted.
+- The journal is about twice the session's logs: mostly model responses and process output over 1 KiB,
+  stored by hash, so equal values are kept once (the sixty reads of the same file are one blob). Model
+  requests cost a digest each: they are rendered from the logs (prompt.md).
 
 ## Native AOT
 
