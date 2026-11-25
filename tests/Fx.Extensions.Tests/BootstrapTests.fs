@@ -501,6 +501,76 @@ let tests =
                     "stopped last first"
             }
 
+            test "fx.runtime.bun loads as data: its component and its runtime; a project cannot contribute runtimes" {
+                let manifest = Fx.Ext.RuntimeBun.RuntimeBun.manifest
+                let host = bootstrap [ fromManifest Source.Builtin manifest ]
+                Expect.equal (report host) [ $"{manifest.Id} [in-binary] activated" ] "activated"
+
+                let runtimes = ExtensionHost.contributions RuntimeSpecs.contributionType host
+
+                let components =
+                    ExtensionHost.contributions ComponentDefinitions.contributionType host
+
+                Expect.equal
+                    (runtimes |> List.map (fun c -> c.By, c.Value))
+                    [ $"{manifest.Id}/bun", Fx.Ext.RuntimeBun.RuntimeBun.runtime ]
+                    "the runtime"
+
+                Expect.equal
+                    (components |> List.map (fun c -> c.By, c.Value))
+                    [ $"{manifest.Id}/bun-1.4.5", Fx.Ext.RuntimeBun.RuntimeBun.bunComponent ]
+                    "the component"
+
+                // Runtimes are privileged (spec §16.5): a trusted project still cannot contribute one.
+                let fromProject =
+                    bootstrapWith
+                        { defaultSettings with
+                            Trust =
+                                { defaultSettings.Trust with
+                                    ProjectTrusted = true
+                                }
+                        }
+                        [
+                            fromManifest
+                                Source.Project
+                                { manifest with
+                                    Id = "acme.bun"
+                                    Contributions = [ List.last manifest.Contributions ]
+                                }
+                        ]
+
+                Expect.stringStarts
+                    (List.head (report fromProject))
+                    "acme.bun [in-binary] rejected: trust.privileged"
+                    "privileged"
+
+                // A runtime whose launch lets an injection vector through does not load.
+                let lax =
+                    { manifest with
+                        Id = "acme.lax"
+                        Contributions =
+                            [
+                                { List.last manifest.Contributions with
+                                    Value =
+                                        Some(
+                                            RuntimeSpec.codec.Encode
+                                                { Fx.Ext.RuntimeBun.RuntimeBun.runtime with
+                                                    Launch =
+                                                        { Fx.Ext.RuntimeBun.RuntimeBun.launch with
+                                                            EnvDeny = [ "BUN_OPTIONS" ]
+                                                        }
+                                                }
+                                        )
+                                }
+                            ]
+                    }
+
+                Expect.stringStarts
+                    (List.head (report (bootstrap [ fromManifest Source.HostConfig lax ])))
+                    "acme.lax [in-binary] failed: its contributions do not load:\n$.contributions[0].value.launch.envDeny: does not deny"
+                    "refused with a clear issue"
+            }
+
             test "a process that cannot start fails its extension" {
                 let manifest =
                     { SampleHost.processManifest () with

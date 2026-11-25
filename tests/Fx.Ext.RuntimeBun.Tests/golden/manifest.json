@@ -1,0 +1,383 @@
+{
+  "id": "fx.runtime.bun",
+  "version": "1.0.0",
+  "description": "The pinned Bun runtime: its component (one archive per target, digests pinned) and its hardened launch.",
+  "sdk": "0.1",
+  "protocol": "1",
+  "placement": "host",
+  "runtime": "declarative",
+  "requires": [],
+  "capabilities": [],
+  "contributions": [
+    {
+      "type": "component",
+      "id": "bun-1.4.5",
+      "value": {
+        "id": "bun",
+        "version": "1.4.5",
+        "methods": [
+          {
+            "platforms": [
+              "linux-arm64-glibc"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64.zip",
+              "digest": "sha256:18656a3bf0ea5641f5796ae4213b75255579a70a0fded2f337933785568cdf84",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "linux-arm64-musl"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64-musl.zip",
+              "digest": "sha256:d655765d3a0c0fdf707e27c7aa1a4f2c84f1bbc1f759db7e6e3d3c5be414396c",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "linux-x64-glibc"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64-baseline.zip",
+              "digest": "sha256:dcb23a18a1c2fff12d57bcef696dbbb42eb67fde29f43816ecb595459a24c463",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "linux-x64-musl"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64-musl-baseline.zip",
+              "digest": "sha256:96fb94108eed872ff623ed39007d6b5699a83a5d0086fcfba84921c18145e3e6",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "macos-arm64"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-aarch64.zip",
+              "digest": "sha256:b5d6bc2e13caf14e57c89661e89efd073ff16165b41bfe43882616410609cd10",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "macos-x64"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-x64-baseline.zip",
+              "digest": "sha256:fb0121739a7e80e7511b6bfe4d2116422b48ba18a013acadef0c425348e95891",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "windows-arm64"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-windows-aarch64.zip",
+              "digest": "sha256:41f57d49c3c6811888d9633c569e40b4eb1f7e92b5e5336e3abd3af03187d77a",
+              "format": "zip",
+              "strip": 1
+            }
+          },
+          {
+            "platforms": [
+              "windows-x64"
+            ],
+            "method": {
+              "kind": "archive",
+              "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-windows-x64-baseline.zip",
+              "digest": "sha256:3c081c73865e7a3453a9d514cc2ba3d699880621bcf67bb17241ff5194cb1d4b",
+              "format": "zip",
+              "strip": 1
+            }
+          }
+        ],
+        "dependsOn": [],
+        "layout": {
+          "executables": [
+            "bun${exeSuffix}"
+          ]
+        },
+        "exports": {
+          "bin": {
+            "bun": "bun${exeSuffix}"
+          },
+          "env": {}
+        },
+        "probe": {
+          "argv": [
+            "bun${exeSuffix}",
+            "--revision"
+          ],
+          "expect": "1.4.5+a7733435c"
+        },
+        "platforms": [
+          "linux-arm64-glibc",
+          "linux-arm64-musl",
+          "linux-x64-glibc",
+          "linux-x64-musl",
+          "macos-arm64",
+          "macos-x64",
+          "windows-arm64",
+          "windows-x64"
+        ],
+        "size": {
+          "download": 54438042,
+          "installed": 115378776
+        }
+      }
+    },
+    {
+      "type": "runtime",
+      "id": "bun",
+      "value": {
+        "component": {
+          "id": "bun",
+          "version": "1.4.5",
+          "methods": [
+            {
+              "platforms": [
+                "linux-arm64-glibc"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64.zip",
+                "digest": "sha256:18656a3bf0ea5641f5796ae4213b75255579a70a0fded2f337933785568cdf84",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "linux-arm64-musl"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64-musl.zip",
+                "digest": "sha256:d655765d3a0c0fdf707e27c7aa1a4f2c84f1bbc1f759db7e6e3d3c5be414396c",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "linux-x64-glibc"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64-baseline.zip",
+                "digest": "sha256:dcb23a18a1c2fff12d57bcef696dbbb42eb67fde29f43816ecb595459a24c463",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "linux-x64-musl"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64-musl-baseline.zip",
+                "digest": "sha256:96fb94108eed872ff623ed39007d6b5699a83a5d0086fcfba84921c18145e3e6",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "macos-arm64"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-aarch64.zip",
+                "digest": "sha256:b5d6bc2e13caf14e57c89661e89efd073ff16165b41bfe43882616410609cd10",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "macos-x64"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-x64-baseline.zip",
+                "digest": "sha256:fb0121739a7e80e7511b6bfe4d2116422b48ba18a013acadef0c425348e95891",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "windows-arm64"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-windows-aarch64.zip",
+                "digest": "sha256:41f57d49c3c6811888d9633c569e40b4eb1f7e92b5e5336e3abd3af03187d77a",
+                "format": "zip",
+                "strip": 1
+              }
+            },
+            {
+              "platforms": [
+                "windows-x64"
+              ],
+              "method": {
+                "kind": "archive",
+                "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-windows-x64-baseline.zip",
+                "digest": "sha256:3c081c73865e7a3453a9d514cc2ba3d699880621bcf67bb17241ff5194cb1d4b",
+                "format": "zip",
+                "strip": 1
+              }
+            }
+          ],
+          "dependsOn": [],
+          "layout": {
+            "executables": [
+              "bun${exeSuffix}"
+            ]
+          },
+          "exports": {
+            "bin": {
+              "bun": "bun${exeSuffix}"
+            },
+            "env": {}
+          },
+          "probe": {
+            "argv": [
+              "bun${exeSuffix}",
+              "--revision"
+            ],
+            "expect": "1.4.5+a7733435c"
+          },
+          "platforms": [
+            "linux-arm64-glibc",
+            "linux-arm64-musl",
+            "linux-x64-glibc",
+            "linux-x64-musl",
+            "macos-arm64",
+            "macos-x64",
+            "windows-arm64",
+            "windows-x64"
+          ],
+          "size": {
+            "download": 54438042,
+            "installed": 115378776
+          }
+        },
+        "launch": {
+          "exe": "${bin.bun}",
+          "args": [
+            "--config=${file.bunfig.toml}",
+            "--no-env-file",
+            "--no-install",
+            "--no-orphans",
+            "--no-macros"
+          ],
+          "envAllowlist": [
+            "PATH",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "TZ",
+            "SystemRoot",
+            "windir",
+            "SystemDrive",
+            "ComSpec",
+            "PATHEXT",
+            "NUMBER_OF_PROCESSORS",
+            "PROCESSOR_ARCHITECTURE",
+            "OS"
+          ],
+          "envSet": {
+            "DO_NOT_TRACK": "1",
+            "BUN_ENABLE_CRASH_REPORTING": "0",
+            "NO_COLOR": "1",
+            "HOME": "${owned.home}",
+            "USERPROFILE": "${owned.home}",
+            "XDG_CONFIG_HOME": "${owned.home}",
+            "XDG_CACHE_HOME": "${owned.cache}",
+            "BUN_RUNTIME_TRANSPILER_CACHE_PATH": "${owned.cache}",
+            "BUN_INSTALL_CACHE_DIR": "${owned.cache}",
+            "TMPDIR": "${owned.temp}",
+            "TEMP": "${owned.temp}",
+            "TMP": "${owned.temp}"
+          },
+          "envDeny": [
+            "BUN_OPTIONS",
+            "BUN_INSPECT*",
+            "BUN_CONFIG_*",
+            "BUN_JSC_*",
+            "BUN_FEATURE_FLAG_*",
+            "BUN_DEBUG*",
+            "NODE_OPTIONS",
+            "NODE_INSPECT*",
+            "NODE_PATH",
+            "NODE_CHANNEL_*",
+            "NODE_REPL_EXTERNAL_MODULE",
+            "NODE_TLS_REJECT_UNAUTHORIZED",
+            "NPM_CONFIG_*",
+            "DOTNET_STARTUP_HOOKS",
+            "DOTNET_ADDITIONAL_DEPS",
+            "DOTNET_SHARED_STORE",
+            "DOTNET_ENABLE_PROFILING*",
+            "CORECLR_PROFILER*",
+            "CORECLR_ENABLE_PROFILING",
+            "COR_PROFILER*",
+            "COR_ENABLE_PROFILING",
+            "LD_PRELOAD",
+            "LD_AUDIT",
+            "LD_LIBRARY_PATH",
+            "DYLD_*",
+            "PYTHONSTARTUP",
+            "PERL5OPT",
+            "RUBYOPT",
+            "JAVA_TOOL_OPTIONS",
+            "_JAVA_OPTIONS"
+          ],
+          "cwd": "owned",
+          "untrustedOverrides": [
+            "--tsconfig-override=${file.tsconfig.json}"
+          ]
+        },
+        "files": [
+          {
+            "name": "bunfig.toml",
+            "content": "# Written by the launcher before every launch: project and global bunfig.toml files are not read.\ntelemetry = false\nenv = false\n\n[install]\nauto = \"disable\"\n\n[run]\nnoOrphans = true\n"
+          },
+          {
+            "name": "tsconfig.json",
+            "content": "{ \"compilerOptions\": {} }\n"
+          }
+        ]
+      }
+    }
+  ],
+  "rpc": {
+    "methods": []
+  },
+  "replaces": [],
+  "hash": "sha256:d738cc806f4eb86c277cba8faa52f1b8b475d7c5f3a498a7fc3a5592a7ace43e"
+}

@@ -1,0 +1,106 @@
+{
+  "components": [
+    {
+      "dependsOn": [],
+      "exports": {
+        "bin": {
+          "bun": "bun${exeSuffix}"
+        },
+        "env": {}
+      },
+      "id": "bun",
+      "install": {
+        "linux-arm64-glibc": {
+          "digest": "sha256:18656a3bf0ea5641f5796ae4213b75255579a70a0fded2f337933785568cdf84",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-linux-aarch64.zip"
+        },
+        "linux-arm64-musl": {
+          "digest": "sha256:d655765d3a0c0fdf707e27c7aa1a4f2c84f1bbc1f759db7e6e3d3c5be414396c",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-linux-aarch64-musl.zip"
+        },
+        "linux-x64-glibc": {
+          "digest": "sha256:dcb23a18a1c2fff12d57bcef696dbbb42eb67fde29f43816ecb595459a24c463",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-linux-x64-baseline.zip"
+        },
+        "linux-x64-musl": {
+          "digest": "sha256:96fb94108eed872ff623ed39007d6b5699a83a5d0086fcfba84921c18145e3e6",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-linux-x64-musl-baseline.zip"
+        },
+        "macos-arm64": {
+          "digest": "sha256:b5d6bc2e13caf14e57c89661e89efd073ff16165b41bfe43882616410609cd10",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-darwin-aarch64.zip"
+        },
+        "macos-x64": {
+          "digest": "sha256:fb0121739a7e80e7511b6bfe4d2116422b48ba18a013acadef0c425348e95891",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-darwin-x64-baseline.zip"
+        },
+        "windows-arm64": {
+          "digest": "sha256:41f57d49c3c6811888d9633c569e40b4eb1f7e92b5e5336e3abd3af03187d77a",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-windows-aarch64.zip"
+        },
+        "windows-x64": {
+          "digest": "sha256:3c081c73865e7a3453a9d514cc2ba3d699880621bcf67bb17241ff5194cb1d4b",
+          "format": "zip",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.5/bun-windows-x64-baseline.zip"
+        }
+      },
+      "layout": {
+        "executables": [
+          "bun${exeSuffix}"
+        ]
+      },
+      "probe": {
+        "argv": [
+          "bun${exeSuffix}",
+          "--revision"
+        ],
+        "expect": "1.4.5+a7733435c"
+      },
+      "size": {
+        "download": 54438042,
+        "installed": 115378776
+      },
+      "version": "1.4.5"
+    }
+  ],
+  "lockfileVersion": 1,
+  "requires": [
+    {
+      "id": "bun",
+      "version": "^1.4"
+    }
+  ],
+  "targets": [
+    "linux-arm64-glibc",
+    "linux-arm64-musl",
+    "linux-x64-glibc",
+    "linux-x64-musl",
+    "macos-arm64",
+    "macos-x64",
+    "windows-arm64",
+    "windows-x64"
+  ]
+}

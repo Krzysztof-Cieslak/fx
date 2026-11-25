@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.runtime.bun package (spec §6.3): the pinned Bun as a component (one archive per
+    target, digests pinned) and its hardened launch as a runtime, contributed as data by a declarative
+    manifest. Like every package under extensions/, it references the public SDK (src/Fx.Sdk) and
+    nothing else; the architecture tests check the compiled assembly. See README.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Pins.fs" />
+    <Compile Include="RuntimeBun.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
