@@ -32,6 +32,25 @@ EnvSandbox.policy (layout, home, sandbox.writable/denied, network) ─▶ Sandbo
 process (ProcSpec) ──stat the policy's paths (one fs/stat)──▶ driver.Wrap (pure) ──▶ ProcSpec ──▶ envd
 ```
 
+## In the host
+
+The host ([host.md](host.md)) lists the three drivers among its built-ins (bubblewrap and Seatbelt
+before none, so `auto` takes the OS's driver), registers `SandboxSlots.all` in its slot registry
+(`HostSlots.core`), and gives `EnvsHost` the drivers in effect: every session's environment is
+sandboxed by the host's choice, and its kernel and commands run in it. `fx run` prints the
+environment's warnings once at the start (`warning: runs unsandboxed: …`), so an unsandboxed run (on
+Windows, with `sandbox.driver = none`, or where bubblewrap cannot run) says so and why.
+
+**Tools' caches.** The user's home is read-only in the sandbox, and writing into the user's own
+caches would let an agent reach what runs outside it later, so a confining sandbox gives every
+process a cache directory of its environment (`<home>/cache`, writable) and points tools at it unless
+the process sets the variable itself (`EnvSandbox.caches`): `XDG_CACHE_HOME`,
+`BUN_INSTALL_CACHE_DIR`, `npm_config_cache`, `YARN_CACHE_FOLDER`, `PIP_CACHE_DIR`, `GOMODCACHE`. Tools
+download again into it the first time. NuGet's global packages and Cargo's registry have no such
+variable that is safe to move (it would also move their configuration or toolchains): a host that
+wants them writable lists them in `sandbox.writable`, knowing the risk. git needs nothing writable
+outside the workspace, and the pinned Bun's kernel writes only its owned directories.
+
 ## Where the sandbox applies
 
 **The host wraps each process it starts for an agent; envd itself is not sandboxed.**
@@ -102,7 +121,7 @@ type SandboxDriver =
 |---|---|
 | the workspace | read-write |
 | `.git/hooks`, `.git/config`, `.<product>` in the workspace (`SandboxPolicy.protectedInWorkspace`) | read-only: they run code later, outside the sandbox (the next `git` a person runs; the project's agents and extensions once it is trusted) |
-| the launches' owned directories (`<home>/owned`), the temporary directory (`<home>/tmp`, `TMPDIR`) | read-write |
+| the launches' owned directories (`<home>/owned`), the temporary directory (`<home>/tmp`, `TMPDIR`), the tools' caches (`<home>/cache`, `XDG_CACHE_HOME` and others, below) | read-write |
 | the components' install root (`<data dir>/runtimes`), interpreters' assets (`<home>/assets`) | read-only |
 | the product's data directory (credentials, envd's state, other environments, the host's files) | none |
 | credential locations (`SandboxPolicy.secrets`): `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/.git-credentials`, `~/.config/git/credentials`, `~/.config/gh`, `~/.config/hub`, `~/.config/glab-cli`, `~/.npmrc`, `~/.yarnrc.yml`, `~/.pypirc`, `~/.config/pip/pip.conf`, `~/.cargo/credentials[.toml]`, `~/.gem/credentials`, `~/.nuget/NuGet/NuGet.Config`, `~/.m2/settings.xml`, `~/.gradle/gradle.properties`, `~/.terraform.d/credentials.tfrc.json`, `~/.vault-token`, `~/.config/containers/auth.json`, `~/.password-store`, `~/.config/op`, `~/.local/share/keyrings`, `~/Library/Keychains`; on Linux `/run/user` (the session bus, which serves the Secret Service, and agents' sockets), `/run/docker.sock`, `/run/podman`, `/run/containerd`; on macOS `/var/run/docker.sock` | none |
@@ -220,6 +239,7 @@ natively (`--only sandbox-`).
 | Protected paths from goals (`protect: ["tests/**"]`): globs that name a directory become its path; others need a check of the diff | T212 |
 | envd resolving the bindings' paths beneath their roots (`openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`), closing the link race of `SandboxGuard` | follow-up (T113b) |
 | The user's home on other machines (home-relative denied paths there), drivers probing over the environment protocol | T501 |
+| Choosing a sandbox per environment in the TUI; `sandbox.writable` entries for NuGet and Cargo caches (no variable moves them) | T130; when people ask |
 | Showing `Envs.warnings` persistently (the Windows banner) | T130 |
 | Sandboxed `Script` installs; sandboxing extension processes | T211; with the extension host |
 | Plugins: nsjail, gVisor | — |

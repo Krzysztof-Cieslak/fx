@@ -275,6 +275,18 @@ module Headless =
                     | Error e -> return Error e
                     | Ok entry ->
                         let id = entry.Session
+
+                        // What a person must know about the session's environment, once: e.g. that it
+                        // runs unsandboxed (spec §9.1, §19.5).
+                        let! environment =
+                            (Fx.Environments.EnvsHost.envs host.Environments).Get entry.Environment cancellation
+
+                        for warning in
+                            environment
+                            |> Option.map Fx.Environments.Envs.warnings
+                            |> Option.defaultValue [] do
+                            io.Show $"warning: {warning}"
+
                         let follow = following host id io watching.Token
                         let! before = HostSessions.state host id cancellation
                         let key = $"{id}/prompt/{before.Seq}"
