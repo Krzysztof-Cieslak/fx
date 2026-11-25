@@ -186,7 +186,8 @@ type Profile =
 
 - `Profile.ofResolution core resolution`, then `withExtension`, `withConformance` and `withLockfile`. The
   host fills extensions from the extension registry (T108), conformance results from the suites the selected
-  subjects passed (kernels, wire adapters, providers), and the lockfile from the component planner (T110).
+  subjects passed (kernels, wire adapters, providers), and the lockfile from the component planner
+  (`Lockfile.hash`, [components.md](components.md)).
 - **Id**: `ProfileId` is the SHA-256 of the UTF-8 bytes of the canonical JSON (`Json.serializeCanonical` of
   `Profile.codec`), written `sha256:<64 lowercase hex>`; `Short` is the first 12 hex digits for display.
   Maps and canonical JSON make it independent of the order anything was added in and of number notation

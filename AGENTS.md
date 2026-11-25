@@ -153,6 +153,17 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Failures carry no exception messages: a failing gate denies, a failing transform fails the pipeline, a failing observer is reported, a throwing method is `MethodFailure.Crashed`.
 - Behaviour must be identical in process and out: the parity suite (`ParitySuite.tests`) runs the sample natively and as a child process (`Fx.Aot.Scenarios ext-peer`). Add cases there when you add a hook kind or a protocol method.
 
+**Components** (module spec: [`docs/modules/components.md`](docs/modules/components.md))
+- fx installs the programs it runs (the pinned Bun first) as components, in its own install root, never through `PATH` or user-global installs. The model (`Component`, `InstallMethod`, `SemVer`, `VersionRange`, `TargetTriple`, `Digest`) is in `Fx.Sdk`; extensions contribute definitions under `ComponentDefinitions.contributionType` (privileged).
+  - A definition is one exact version. Paths in it are relative to the install directory, `/`-separated (`Component.isRelativePath`), and may use `${exeSuffix}`; URLs are `https://` and may use `${version}`.
+  - Only the `Archive` method is implemented; the others are typed, and the planner and installer refuse them with an error naming T211.
+- Plan with `Planner.plan` (pure, host side) into a `Lockfile`. Render it only with `Lockfile.render` (canonical, byte-identical for the same inputs in any order) and hash it only with `Lockfile.hash` (what `Profile.withLockfile` records).
+- Install with the installer machine (`ComponentInstaller.start`, one actor per install root and process) and serve `IComponents` from it (`ComponentInstaller.components`); in the extension bootstrap, `Components.installFor` is `HostSettings.InstallComponents`.
+  - Every step must stay safe to run again, and an install directory must only ever appear whole: unpack and probe in staging, then activate with one rename under the root lock. Never write into an install directory after activation.
+  - Unpack archives only through `Archive.extract`, which holds every safety check (traversal, links, devices, Windows names, case collisions, limits). An interpreter writes what it is told and nothing else.
+  - The first install of a component is a grant: `InstallerSettings.Approve`, never skipped.
+- Test an installer environment with `InstallerConformance.tests` (in-memory: `FakeFetch`, `InMemoryInstallFiles`; live: `HttpFetch`, `LocalInstallFiles`). Build test archives with `Support.tar`, `tarGz` and `zip` (fixed times, so digests can be pinned), and never pin the digest of compressed bytes in golden files or scenarios: zlib builds compress differently.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -265,6 +276,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
+| Install the pinned Bun over the network | `NETWORK_TESTS=1 dotnet test --project tests/Fx.Components.Live.Tests`: downloads Bun for this machine through the planner and installer and runs it (skipped without the variable; CI runs it as its own step) |
 | Type-check the generated TypeScript | `bun scripts/declarations.ts`: the golden declarations in `tests/Fx.Contracts.TypeScript.Tests/golden` with the shared fixtures, and the misuses that must fail (needs Bun 1.4.5, as CI) |
 | Native libraries | Built by `dotnet build` and `dotnet publish` (no separate step) into `artifacts/native/`. Needs a C compiler, as Native AOT does: clang or gcc on Linux and macOS (`FxSqliteCC` overrides), Visual Studio or the Build Tools with the C++ workload on Windows. The first build downloads the pinned sources; offline, pass `-p:FxSqliteArchive=<zip>` |
 | PTY probe | `dotnet build src/Fx.Pty -c Release`, then `dotnet fsi docs/spikes/pty-probe/probe.fsx`; CI runs it on every target when `src/Fx.Pty` or the probe changes (`pty-probe.yml`) |
@@ -302,6 +314,8 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Variants` | Variant slots, the slot registry, resolution of config layers under policies, profiles and their ids, the `IVariants` capability with recording and replay, eval matrices, the core's slots and `FakeVariants` (pure; references only Contracts and Effects, so the SDK can expose it; spec in [`docs/modules/variants.md`](docs/modules/variants.md)) |
 | `src/Fx.Sdk` | The public F# SDK for extensions (spec §16): manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`. Extensions see this and nothing else of the host (spec in [`docs/modules/extensions.md`](docs/modules/extensions.md)) |
 | `src/Fx.Extensions` | The extension system's core: the registry machine, trust checks, the catalog, the declarative, native and process runtimes, the extension protocol and its F# server (`ExtensionServer`), and the bootstrap (`ExtensionHost`) |
+| `src/Fx.Components` | The component planner and lockfile, safe archive unpacking, the installer machine and its pipeline, the `IFetch`/`IInstallFiles`/`IComponents` capabilities and their fakes (pure; the model is in `Fx.Sdk`; spec in [`docs/modules/components.md`](docs/modules/components.md)) |
+| `src/Fx.Components.Live` | The installer's real interpreters: `HttpFetch` (downloads) and `LocalInstallFiles` (the disk); referenced only by composition roots |
 | `extensions/` | Extension packages, one per directory, using only `src/Fx.Sdk`: `Fx.Ext.Sample` is the reference and the subject of the transport-parity tests (not bundled) |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
@@ -318,7 +332,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
-| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md) |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md), [`components.md`](docs/modules/components.md) |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`. Extension packages go under `extensions/`; their tests are the conformance and parity suites in `tests/Fx.Extensions.Tests`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.

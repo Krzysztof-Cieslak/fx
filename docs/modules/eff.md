@@ -104,7 +104,7 @@ module Clock =
 
 `IFs` inherits `IFsRead`. An environment that implements only `IFsRead` is the read-only attenuation of one that implements `IFs`.
 
-The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)), and `IVariants` with the variant registry in `Fx.Variants` ([variants.md](variants.md)).
+The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)), `IVariants` with the variant registry in `Fx.Variants` ([variants.md](variants.md)), and `IComponents` (with the installer's `IFetch` and `IInstallFiles`) with the component installer in `Fx.Components` ([components.md](components.md)).
 
 ### Decisions
 
@@ -136,7 +136,6 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 | Capability | Task |
 |---|---|
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
-| `IComponents` | T110 |
 | `IPackages`; reading extension contributions from `IExtensionEnv` (the host reads them with `ExtensionHost.contributions`, T108) | T109 |
 | `IEnvs` | T112 |
 | `IInterpreter` | T116, T117 |
