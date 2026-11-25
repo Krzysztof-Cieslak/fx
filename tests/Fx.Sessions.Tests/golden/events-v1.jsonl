@@ -1,0 +1,49 @@
+{"at":1767225601000000,"by":{"principal":"user:alice","via":"tui"},"kind":"started","session":{"id":"s1","overrides":{},"profile":"sha256:base","title":"test"}}
+{"input":{"at":1767225602000000,"by":{"principal":"user:alice","via":"tui"},"content":{"kind":"text","text":"one"},"id":2},"kind":"promptSteered"}
+{"at":1767225602000000,"inputs":[2],"kind":"turnStarted","profile":"sha256:base","turn":1}
+{"by":{"principal":"user:bob","via":"web"},"changed":["edit.guard"],"kind":"profileSelected","overrides":{"edit.guard":"require"},"profile":"sha256:edited"}
+{"input":{"at":1767225604000000,"by":{"principal":"user:bob","via":"web"},"content":{"kind":"text","text":"two"},"id":5},"kind":"promptQueued"}
+{"input":{"at":1767225605000000,"by":{"principal":"user:bob","via":"web"},"content":{"kind":"text","text":"three"},"id":6},"kind":"promptQueued"}
+{"by":{"principal":"user:bob","via":"web"},"input":6,"kind":"promptWithdrawn"}
+{"input":{"at":1767225607000000,"by":{"principal":"user:alice","via":"tui"},"content":{"kind":"text","text":"four"},"id":8},"kind":"promptSteered"}
+{"inputs":[8],"kind":"inputsDelivered","step":1,"turn":1}
+{"kind":"requestOpened","pending":{"at":1767225609000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["choice"],"request":{"expiry":{"at":1767229200000000,"then":{"kind":"answer","response":"a"}},"id":"d1","kind":"choice","lifetime":"session","origin":{"kind":"turn","turn":1},"payload":{"options":["a","b"],"question":"Which?"},"reply":"asInput","title":"choose d1"},"seq":10}}
+{"at":1767225610000000,"by":{"principal":"user:alice","via":"tui"},"input":11,"kind":"requestResolved","request":"d1","resolution":{"kind":"answered","response":"b"}}
+{"kind":"requestOpened","pending":{"at":1767225611000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["confirm"],"request":{"id":"d2","kind":"confirm","lifetime":"session","origin":{"kind":"turn","turn":1},"payload":{"message":"Go on?"},"reply":"asInput","title":"confirm d2"},"seq":12}}
+{"kind":"requestOpened","pending":{"at":1767225612000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["confirm"],"request":{"id":"t1","kind":"confirm","lifetime":"turn","origin":{"kind":"turn","turn":1},"payload":{"message":"Go on?"},"reply":"toOpener","title":"confirm t1"},"seq":13}}
+{"kind":"requestOpened","pending":{"at":1767225613000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["confirm"],"request":{"expiry":{"at":1767225620000000,"then":{"kind":"cancel"}},"id":"g1","kind":"confirm","lifetime":"session","origin":{"kind":"session"},"payload":{"message":"Go on?"},"reply":"toOpener","title":"confirm g1"},"seq":14}}
+{"kind":"requestOpened","pending":{"at":1767225614000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["confirm"],"request":{"expiry":{"at":1767225640000000,"then":{"kind":"answer","response":true}},"id":"g2","kind":"confirm","lifetime":"session","origin":{"event":{"seq":12,"stream":"run/7"},"kind":"stream"},"payload":{"message":"Go on?"},"reply":"toOpener","title":"confirm g2"},"seq":15}}
+{"at":1767225615000000,"by":{"principal":"system","via":"interpreter"},"kind":"requestResolved","request":"t1","resolution":{"kind":"cancelled","reason":"turn ended"}}
+{"at":1767225615000000,"end":{"kind":"completed","result":{"kind":"needInput","requests":["d2"]}},"kind":"turnEnded","turn":1}
+{"at":1767225646000000,"by":{"principal":"system","via":"interpreter"},"kind":"requestResolved","request":"g1","resolution":{"kind":"expired"}}
+{"at":1767225677000000,"by":{"principal":"system","via":"interpreter"},"kind":"requestResolved","request":"g2","resolution":{"kind":"expiredWithAnswer","response":true}}
+{"at":1767225678000000,"by":{"principal":"user:bob","via":"web"},"input":20,"kind":"requestResolved","request":"d2","resolution":{"kind":"answered","response":true}}
+{"at":1767225678000000,"inputs":[11,20],"kind":"turnStarted","profile":"sha256:edited","turn":2}
+{"at":1767225679000000,"end":{"kind":"completed","result":{"jobs":["j1"],"kind":"waiting","note":"building"}},"kind":"turnEnded","turn":2}
+{"input":{"at":1767225680000000,"by":{"principal":"system","via":"interpreter"},"content":{"job":"j1","kind":"jobFinished","note":"built"},"id":23},"kind":"jobNotified"}
+{"at":1767225680000000,"inputs":[23],"kind":"turnStarted","profile":"sha256:edited","turn":3}
+{"by":{"principal":"user:bob","via":"web"},"kind":"interrupted","turn":3}
+{"at":1767225681000000,"end":{"kind":"interrupted"},"kind":"turnEnded","turn":3}
+{"by":{"principal":"user:alice","via":"tui"},"child":"c1","kind":"forked","upTo":26}
+{"child":"c1","kind":"forkReady"}
+{"by":{"principal":"user:alice","via":"tui"},"child":"c2","kind":"forked","upTo":2}
+{"child":"c2","kind":"forkFailed","reason":"it exists"}
+{"input":{"at":1767225686000000,"by":{"principal":"user:alice","via":"tui"},"content":{"kind":"text","text":"five"},"id":31},"kind":"promptSteered"}
+{"at":1767225686000000,"inputs":[31],"kind":"turnStarted","profile":"sha256:edited","turn":4}
+{"at":1767225687000000,"end":{"kind":"failed","reason":"model unreachable"},"kind":"turnEnded","turn":4}
+{"input":{"at":1767225688000000,"by":{"principal":"user:alice","via":"tui"},"content":{"kind":"text","text":"six"},"id":34},"kind":"promptSteered"}
+{"at":1767225688000000,"inputs":[34],"kind":"turnStarted","profile":"sha256:edited","turn":5}
+{"at":1767225689000000,"end":{"kind":"abandoned","reason":"the host stopped during the turn"},"kind":"turnEnded","turn":5}
+{"input":{"at":1767225690000000,"by":{"principal":"user:alice","via":"tui"},"content":{"kind":"text","text":"seven"},"id":37},"kind":"promptSteered"}
+{"at":1767225690000000,"inputs":[37],"kind":"turnStarted","profile":"sha256:edited","turn":6}
+{"kind":"requestOpened","pending":{"at":1767225691000000,"by":{"principal":"system","via":"interpreter"},"capabilities":["choice"],"request":{"id":"d3","kind":"choice","lifetime":"session","origin":{"kind":"turn","turn":6},"payload":{"options":["a","b"],"question":"Which?"},"reply":"asInput","title":"choose d3"},"seq":39}}
+{"at":1767225692000000,"by":{"principal":"user:bob","via":"web"},"input":40,"kind":"requestResolved","request":"d3","resolution":{"kind":"cancelled","reason":"not needed"}}
+{"at":1767225693000000,"end":{"kind":"completed","result":{"evidence":[{"detail":{"exitCode":0},"kind":"command","summary":"dotnet test → 214 passed"}],"kind":"done","summary":"all done","verify":"dotnet test"}},"kind":"turnEnded","turn":6}
+{"at":1767225693000000,"inputs":[40],"kind":"turnStarted","profile":"sha256:edited","turn":7}
+{"at":1767225694000000,"end":{"kind":"completed","result":{"evidence":[],"kind":"done","summary":"the cancellation, read"}},"kind":"turnEnded","turn":7}
+{"at":1767225694000000,"inputs":[5],"kind":"turnStarted","profile":"sha256:edited","turn":8}
+{"at":1767225695000000,"end":{"kind":"completed","result":{"evidence":[],"kind":"done","summary":"two, at last"}},"kind":"turnEnded","turn":8}
+{"by":{"principal":"user:alice","via":"tui"},"kind":"closed"}
+{"by":{"principal":"user:bob","via":"web"},"kind":"reopened"}
+{"by":{"principal":"user:alice","via":"tui"},"kind":"closed"}
+{"by":{"principal":"user:alice","via":"tui"},"kind":"archived"}

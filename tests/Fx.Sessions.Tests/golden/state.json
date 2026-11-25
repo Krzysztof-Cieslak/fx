@@ -1,0 +1,56 @@
+{
+  "id": "s1",
+  "seq": 49,
+  "status": "archived",
+  "title": "test",
+  "profile": "sha256:edited",
+  "overrides": {
+    "edit.guard": "require"
+  },
+  "forks": [
+    {
+      "child": "c1",
+      "upTo": 26,
+      "seq": 27,
+      "profile": "sha256:edited",
+      "overrides": {
+        "edit.guard": "require"
+      },
+      "status": {
+        "kind": "ready"
+      }
+    },
+    {
+      "child": "c2",
+      "upTo": 2,
+      "seq": 29,
+      "profile": "sha256:edited",
+      "overrides": {
+        "edit.guard": "require"
+      },
+      "status": {
+        "kind": "failed",
+        "reason": "it exists"
+      }
+    }
+  ],
+  "turns": 8,
+  "last": {
+    "turn": 8,
+    "end": {
+      "kind": "completed",
+      "result": {
+        "kind": "done",
+        "summary": "two, at last",
+        "evidence": []
+      }
+    },
+    "at": 1767225695000000
+  },
+  "held": false,
+  "queue": [],
+  "inbox": [],
+  "awaitingRequests": [],
+  "awaitingJobs": [],
+  "requests": []
+}
