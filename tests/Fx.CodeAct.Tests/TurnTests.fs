@@ -24,6 +24,18 @@ let private kickoff (f: Fixture) (text: string) : Task =
         do! prompt f "s1" "p1" text
     }
 
+/// Waits until the running cell wrote `started.txt`: it is past its first statements.
+let private started (f: Fixture) : Task =
+    task {
+        let deadline = DateTime.UtcNow.AddSeconds 30.0
+
+        while not (IO.File.Exists(f.File "started.txt")) do
+            if DateTime.UtcNow > deadline then
+                failtest "the cell did not start"
+
+            do! Task.Delay 10
+    }
+
 let private toolNames (request: ChatRequest) =
     request.Tools |> List.map (fun t -> t.Name)
 
@@ -333,10 +345,15 @@ let tests =
                         []
                         (fun f ->
                             task {
-                                f.Model.AddAll [ Say.cell "// intent: wait\nlet x = 1\nsleep" ]
+                                f.Model.AddAll
+                                    [
+                                        Say.cell
+                                            "// intent: wait\nlet x = 1\ncall w = fs.write [\"started.txt\", \"\"]\nsleep"
+                                    ]
+
                                 do! kickoff f "Wait"
                                 do! f.Model.Asked(1).WaitAsync(TimeSpan.FromSeconds 30.0)
-                                do! Task.Delay 300
+                                do! started f
                                 let! _ = send f "s1" "stop" Command.Interrupt
                                 let! ending = ended f "s1" 1
                                 Expect.equal ending TurnEnd.Interrupted "interrupted"
@@ -360,10 +377,15 @@ let tests =
                         []
                         (fun f ->
                             task {
-                                f.Model.AddAll [ Say.cell "// intent: spin\nlet y = 2\nspin" ]
+                                f.Model.AddAll
+                                    [
+                                        Say.cell
+                                            "// intent: spin\nlet y = 2\ncall w = fs.write [\"started.txt\", \"\"]\nspin"
+                                    ]
+
                                 do! kickoff f "Spin"
                                 do! f.Model.Asked(1).WaitAsync(TimeSpan.FromSeconds 30.0)
-                                do! Task.Delay 300
+                                do! started f
                                 let! _ = send f "s1" "stop" Command.Interrupt
                                 let! ending = ended f "s1" 1
                                 Expect.equal ending TurnEnd.Interrupted "interrupted"
