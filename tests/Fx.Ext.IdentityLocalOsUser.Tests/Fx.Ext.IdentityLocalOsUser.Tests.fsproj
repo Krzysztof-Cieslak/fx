@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The identity-provider conformance suite, shared with the core's tests. -->
+    <Compile Include="..\Fx.Identity.Host.Tests\Conformance\IdentityProviderConformance.fs" Link="Conformance\IdentityProviderConformance.fs" />
+    <Compile Include="ProviderTests.fs" />
+    <Compile Include="EndToEndTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Identity.Host\Fx.Identity.Host.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Extensions\Fx.Extensions.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>
