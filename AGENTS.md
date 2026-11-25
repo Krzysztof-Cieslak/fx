@@ -172,6 +172,12 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - The first install of a component is a grant: `InstallerSettings.Approve`, never skipped.
 - Test an installer environment with `InstallerConformance.tests` (in-memory: `FakeFetch`, `InMemoryInstallFiles`; live: `HttpFetch`, `LocalInstallFiles`). Build test archives with `Support.tar`, `tarGz` and `zip` (fixed times, so digests can be pinned), and never pin the digest of compressed bytes in golden files or scenarios: zlib builds compress differently.
 
+**Runtimes** (module spec: [`docs/modules/runtimes.md`](docs/modules/runtimes.md))
+- Start a runtime (Bun, …) only through its `RuntimeSpec` (contributed under `RuntimeSpecs.contributionType`, privileged): install the component with `IComponents`, run `RuntimeSpec.prepare` on fresh owned directories (`OwnedDirs.under`, never inside the workspace), then start the `ProcSpec` that `RuntimeSpec.launch` gives. Never start a `bun` from `PATH` or with an environment you built yourself; append the program and its arguments, never edit the spec's flags.
+- `RuntimeSpec.launch` is pure and must stay so: the launcher's environment, the target and trust come in the `LaunchSession`.
+- A runtime's `EnvDeny` covers every pattern in `InjectionVectors` (validated). A newly found vector goes into that table, and the built-ins' deny lists in the same change.
+- Bun ignores unknown command-line flags silently: a hardening flag must appear in the pinned `bun --help` and have a positive control (`tests/Fx.Ext.RuntimeBun.Tests/LiveTests.fs`). Bumping Bun follows `extensions/Fx.Ext.RuntimeBun/README.md`.
+
 **Native AOT (failures are often silent, so follow these strictly)**
 - No `%A`, and no printf format specifiers (`sprintf "%d"`, `failwithf "%s"`, …). Use string interpolation without format specifiers.
 - Override `ToString` on every union and on any record that contains unions, tuples or maps.
@@ -285,7 +291,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Reference kernel | In `packages/kernel-bun-ts`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`. Its conformance runs in `dotnet test` (tests/Fx.Kernel.Tests), which downloads the pinned Bun into `artifacts/kernel-bun-ts/` (required in CI, skipped offline) |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
-| Install the pinned Bun over the network | `NETWORK_TESTS=1 dotnet test --project tests/Fx.Components.Live.Tests`: downloads Bun for this machine through the planner and installer and runs it (skipped without the variable; CI runs it as its own step) |
+| Install and launch the pinned Bun over the network | `NETWORK_TESTS=1 dotnet test --project tests/Fx.Ext.RuntimeBun.Tests`: downloads Bun for this machine through the planner and installer, launches it hardened and runs the positive controls (skipped without the variable; CI runs it as its own step, and in an Alpine job for musl) |
 | Type-check the generated TypeScript | `bun scripts/declarations.ts`: the golden declarations in `tests/Fx.Contracts.TypeScript.Tests/golden` with the shared fixtures, and the misuses that must fail (needs Bun 1.4.5, as CI) |
 | Native libraries | Built by `dotnet build` and `dotnet publish` (no separate step) into `artifacts/native/`. Needs a C compiler, as Native AOT does: clang or gcc on Linux and macOS (`FxSqliteCC` overrides), Visual Studio or the Build Tools with the C++ workload on Windows. The first build downloads the pinned sources; offline, pass `-p:FxSqliteArchive=<zip>` |
 | PTY probe | `dotnet build src/Fx.Pty -c Release`, then `dotnet fsi docs/spikes/pty-probe/probe.fsx`; CI runs it on every target when `src/Fx.Pty` or the probe changes (`pty-probe.yml`) |
@@ -326,7 +332,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Components` | The component planner and lockfile, safe archive unpacking, the installer machine and its pipeline, the `IFetch`/`IInstallFiles`/`IComponents` capabilities and their fakes (pure; the model is in `Fx.Sdk`; spec in [`docs/modules/components.md`](docs/modules/components.md)) |
 | `src/Fx.Components.Live` | The installer's real interpreters: `HttpFetch` (downloads) and `LocalInstallFiles` (the disk); referenced only by composition roots |
 | `src/Fx.Kernel` | The kernel protocol (spec §6.4–6.6): messages and codecs, the `Value` wire type and session-scoped handles, the generated TypeScript declarations, the kernel framing and transport, and the host's `Kernel` client (spec in [`docs/modules/kernel-protocol.md`](docs/modules/kernel-protocol.md)) |
-| `extensions/` | Extension packages, one per directory, using only `src/Fx.Sdk`: `Fx.Ext.Sample` is the reference and the subject of the transport-parity tests (not bundled) |
+| `extensions/` | Extension packages, one per directory, using only `src/Fx.Sdk`: `Fx.Ext.Sample` is the reference and the subject of the transport-parity tests (not bundled); `Fx.Ext.RuntimeBun` is `fx.runtime.bun`, the pinned Bun and its hardened launch (declarative) |
 | `packages/` | TypeScript packages: `kernel-bun-ts`, the reference kernel of the kernel protocol (TypeScript cells on the pinned Bun), which T117 grows into `fx.interpreter.bun-ts` |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
@@ -343,9 +349,9 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
-| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md), [`components.md`](docs/modules/components.md), [`kernel-protocol.md`](docs/modules/kernel-protocol.md) |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md), [`components.md`](docs/modules/components.md), [`kernel-protocol.md`](docs/modules/kernel-protocol.md), [`runtimes.md`](docs/modules/runtimes.md) |
 
-- Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`. Extension packages go under `extensions/`; their tests are the conformance and parity suites in `tests/Fx.Extensions.Tests`.
+- Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`. Extension packages go under `extensions/`; their tests are the conformance and parity suites in `tests/Fx.Extensions.Tests`, plus `tests/Fx.Ext.<Name>.Tests` for a package with data or behaviour of its own (e.g. `Fx.Ext.RuntimeBun`).
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.
 
 ## Analyzers

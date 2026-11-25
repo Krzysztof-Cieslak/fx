@@ -171,12 +171,18 @@ let extension = { Manifest = manifest
 | `process` | process | a child process in any language, speaking the extension protocol over JSON-RPC on stdio |
 | contributed (`bun`, …) | hosted | an `ExtensionRuntime` contribution (privileged) loads the package; the contributor may itself be a process extension |
 
-- **Process runtime:** `LaunchSpec` (data) becomes the process to start (`Launch.procSpec`): `${root}`
-  and `${exeSuffix}` expand, the environment is exactly the allowlisted host variables plus `envSet`,
-  minus `envDeny` and the host's deny list of runtime injection vectors (`Manifest.deniedEnvironment`:
-  `NODE_OPTIONS`, `BUN_OPTIONS`, `DOTNET_STARTUP_HOOKS`, `LD_PRELOAD`, …), compared case-insensitively
-  on Windows. The process starts through the shell capability (`Shell.spawn`), so a test can hand it a
-  fake process, and `ProcTransport` (in `Fx.Rpc`) turns the `Proc` into a JSON-RPC transport; standard
+- **Process runtime:** `LaunchSpec` (data, the type runtimes use too: [runtimes.md](runtimes.md))
+  becomes the process to start (`Launch.procSpec`):
+  - `${root}` and `${exeSuffix}` expand;
+  - the environment is exactly the allowlisted host variables plus `envSet`, minus `envDeny` and the
+    host's deny list of runtime injection vectors (`Manifest.deniedEnvironment`, which is
+    `InjectionVectors.patterns`: `NODE_OPTIONS`, `BUN_OPTIONS`, `DOTNET_STARTUP_HOOKS`, `LD_PRELOAD`,
+    …), compared case-insensitively on Windows;
+  - while the project is not trusted, the launch's `untrustedOverrides` go before the first argument
+    that is not a flag.
+
+  The process starts through the shell capability (`Shell.spawn`), so a test can hand it a fake
+  process, and `ProcTransport` (in `Fx.Rpc`) turns the `Proc` into a JSON-RPC transport; standard
   error is kept (bounded) for diagnostics. Stopping closes the connection (the child's stdin), waits
   `StopTimeout`, then kills it. The connection lives in the bootstrap's scope.
 - **Contributed runtimes:** the host passes the package's manifest and directory and its catalog's
@@ -249,11 +255,13 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 | Privileged contributions only from host config, policy or the binary | `ContributionType.Privileged` comes from the catalog, never from the manifest; project extensions may not contribute such types (`trust.privileged`) |
 | Policy extensions are unremovable | they cannot be disabled (in config or by command) or replaced (`trust.policy`, `trust.replace`) |
 | An extension replaces only extensions from a source trusted as much (project < builtin < host config < policy) | `trust.replace` |
-| Runtime launch specs deny injection vectors | `Manifest.check` refuses them in `envSet`; `Launch.environment` always removes them |
+| Runtime launch specs deny injection vectors | `Manifest.check` refuses them in `envSet`; `Launch.environment` always removes them (`InjectionVectors`); a runtime's spec must list them all (`LaunchSpec.validate`, [runtimes.md](runtimes.md)) |
+| Project files do not configure a runtime before trust | a launch's `untrustedOverrides` apply until the project is trusted (`LaunchContext.ProjectTrusted`, `RuntimeSpec.launch`) |
 | Code cannot add undeclared contributions | activation must match the manifest (`extension.mismatch`) |
 
 Left to later tasks: deciding project trust and reading pins from host config (T106/T129), bundled
-packages extracted with hash checks (T114, T115), sandboxing extension
+packages extracted with hash checks (T115; `fx.runtime.bun` is declarative, so its package is its
+manifest, a value in the binary, with nothing to extract), sandboxing extension
 processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension processes.
 
 ## Left to later tasks
