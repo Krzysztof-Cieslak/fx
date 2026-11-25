@@ -13,6 +13,7 @@
     <Compile Include="SessionTests.fs" />
     <Compile Include="SecretTests.fs" />
     <Compile Include="GoldenTests.fs" />
+    <Compile Include="CommandTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
