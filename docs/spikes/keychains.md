@@ -247,9 +247,10 @@ Recommendations:
 
 ## CI
 
-- **Windows:** nothing to prepare. The build job runs the live tests (the Credential Manager and DPAPI)
-  on `windows-latest`; the AOT jobs run `keyring-roundtrip` and `keyring-dpapi` on `win-x64` and
-  `win-arm64`.
+- **Windows:** nothing to prepare: the runners' sessions have a credential set. The build job runs the
+  live tests (the Credential Manager and DPAPI) on `windows-latest`; the AOT jobs run
+  `keyring-roundtrip` and `keyring-dpapi` on `win-x64` (`windows-2025`) and `win-arm64`
+  (`windows-11-arm`).
 - **The keyring job** (`linux-x64`, `linux-musl-x64`, `osx-arm64`, `osx-x64`) publishes the scenarios
   natively, then:
   - **Linux:** installs `dbus`, `gnome-keyring` and `libsecret-tools` (Ubuntu) or `dbus` and
@@ -264,7 +265,8 @@ Recommendations:
   - **macOS:** creates a temporary keychain with a throwaway password, removes its auto-lock, puts it
     first in the search list and makes it the default; runs the live tests and the diff; the probe must
     say `ready`, then `locked` after `security lock-keychain`; finally restores the login keychain as
-    the default and deletes the temporary one.
+    the default and deletes the temporary one. (The runners' own login keychain is unlocked: the probe
+    says `ready` before the temporary keychain exists. The job still never writes to it.)
 - **musl:** the D-Bus client is managed code, so musl needs nothing special; Alpine's gnome-keyring
   works under `dbus-run-session` once the user is in `/etc/passwd`.
 
