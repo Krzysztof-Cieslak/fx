@@ -3,9 +3,10 @@ id: 01M87MD58ZKF3M6CZBBZFW7ZB1
 anchor: '@file'
 created: 2026-11-24T20:36:53Z
 norm: '1'
-sig: b51efc2b8aefac44
-body_hash: 907054f50965458c
-raw_hash: a2ea956f556a56c6
+sig: f399ae225e0a02a9
+body_hash: 5071c95bad3eb851
+raw_hash: d7c0cc75cfe51468
+vouched: 2026-11-25T11:06:40Z
 lines: 1-225
 ---
 
