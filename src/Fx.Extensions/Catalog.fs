@@ -19,7 +19,8 @@ module Catalog =
     /// The extension system's own types; component definitions (spec §6.1) and runtimes (spec §6.2),
     /// which declarative extensions such as `fx.runtime.bun` contribute; interpreters (spec §6.2),
     /// which native ones such as `fx.interpreter.bun-ts` contribute; environment providers (spec §9),
-    /// which native ones such as `fx.env.local` contribute; and variant slots (spec §15), which every
+    /// which native ones such as `fx.env.local` contribute; sandbox drivers (spec §9.1), which native ones
+    /// such as `fx.sandbox.bubblewrap` contribute; and variant slots (spec §15), which every
     /// kind of extension may contribute.
     let core: ContributionTypeInfo list =
         [
@@ -30,6 +31,7 @@ module Catalog =
             ContributionType.info RuntimeSpecs.contributionType
             ContributionType.info InterpreterProviders.contributionType
             ContributionType.info EnvProviders.contributionType
+            ContributionType.info SandboxDrivers.contributionType
         ]
 
     /// Adds a type; `Error` if another type has its name.

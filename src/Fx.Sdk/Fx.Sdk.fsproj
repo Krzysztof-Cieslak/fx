@@ -35,6 +35,7 @@
     <Compile Include="Interpreter.fs" />
     <Compile Include="Grants.fs" />
     <Compile Include="Environment.fs" />
+    <Compile Include="Sandbox.fs" />
     <Compile Include="Identity.fs" />
     <Compile Include="Credentials.fs" />
     <Compile Include="Auth.fs" />
