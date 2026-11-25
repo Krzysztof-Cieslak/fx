@@ -336,41 +336,67 @@ jobs:
         run: $IN dotnet build tests/Fx.Keyring.Tests --no-restore --configuration Release
       - name: Publish the AOT scenarios
         run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
-      # The probe never starts a service (no D-Bus activation), so each state below is what the
-      # machine is, told apart by the native binary.
-      - name: Headless detection, natively (Linux)
+      # gnome-keyring-daemon returns before it owns org.freedesktop.secrets, so every script waits
+      # for the name; each session gets its own XDG_RUNTIME_DIR, so no other daemon's control socket
+      # (or systemd's socket unit) is found.
+      - name: Write the Secret Service scripts (Linux)
         if: ${{ runner.os == 'Linux' }}
         run: |
+          cat > artifacts/keyring-wait.sh <<'EOF'
+          for i in $(seq 1 100); do
+            if dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+                org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets 2>/dev/null | grep -q 'boolean true'; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          echo "org.freedesktop.secrets has no owner" >&2
+          exit 1
+          EOF
           cat > artifacts/keyring-detect.sh <<'EOF'
           set -eu
           bin="artifacts/publish/Fx.Aot.Scenarios/release_$1/Fx.Aot.Scenarios"
           env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR KEYRING_EXPECT="unavailable: no-session-bus" "$bin" run keyring-detect
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
           dbus-run-session -- env KEYRING_EXPECT="unavailable: no-secret-service" "$bin" run keyring-detect
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
           dbus-run-session -- sh -c '
             set -eu
             gnome-keyring-daemon --start --components=secrets >/dev/null
+            sh artifacts/keyring-wait.sh
             KEYRING_EXPECT="unavailable: no-default-collection" "$0" run keyring-detect
           ' "$bin"
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
           dbus-run-session -- sh -c '
             set -eu
             printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            sh artifacts/keyring-wait.sh
             KEYRING_EXPECT=ready "$0" run keyring-detect
             dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
               org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null
             KEYRING_EXPECT=locked "$0" run keyring-detect
           ' "$bin"
           EOF
-          $IN sh artifacts/keyring-detect.sh "$RID"
-      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          $IN dbus-run-session -- sh -c '
+          cat > artifacts/keyring-live.sh <<'EOF'
+          set -eu
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          exec dbus-run-session -- sh -c '
             set -eu
             printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            sh artifacts/keyring-wait.sh
             export KEYRING_TESTS=1
             dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
             dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$0" --no-publish --only keyring-
-          ' "$RID"
+          ' "$1"
+          EOF
+      # The probe never starts a service (no D-Bus activation), so each state below is what the
+      # machine is, told apart by the native binary.
+      - name: Headless detection, natively (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: $IN sh artifacts/keyring-detect.sh "$RID"
+      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: $IN sh artifacts/keyring-live.sh "$RID"
       - name: Create a temporary keychain (macOS)
         if: ${{ runner.os == 'macOS' }}
         run: |
