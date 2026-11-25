@@ -392,8 +392,295 @@ let private hybrid () : Task<string list> =
 let private textOnly () : Task<string list> =
     session "text-only" [] [ text "Which notes?"; text "Which notes should I change?" ]
 
+/// Crash recovery (T128): a cell whose `deploy` hangs is in flight when the host process stops; a new
+/// host recovers the turn, which pauses on a decision; restarting again opens nothing new; the answer
+/// (`rerun`) runs the cell again and the turn goes on to finish; a later turn reads the value an
+/// earlier cell returned back from the journal. The output is the decision card, the journal, the
+/// receipts, the session's events and the replay of the logs into the requests sent.
+let private recovery () : Task<string list> =
+    task {
+        let lines = ResizeArray<string>()
+        let fsClock = FakeClock(Instant.ofUnixMicroseconds 1_700_000_000_000_000L)
+
+        let fs =
+            InMemoryFs(fsClock.Clock, OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+
+        fs.AddDirectory workspace
+
+        let deploying =
+            TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+        let deploys = ref 0
+
+        let shell: Shell =
+            {
+                Run =
+                    fun command token ->
+                        task {
+                            let first =
+                                lock deploying (fun () ->
+                                    deploys.Value <- deploys.Value + 1
+                                    deploys.Value = 1)
+
+                            if first then
+                                deploying.TrySetResult() |> ignore
+                                do! Task.Delay(Threading.Timeout.Infinite, token)
+
+                            let script =
+                                match command.Spec.Program with
+                                | Program.Script script -> script
+                                | Exec(file, _) -> file
+
+                            return Ok(ScriptedShell.output 0 $"ran {script}\n" "")
+                        }
+                Spawn = fun _ _ -> Task.FromResult(Error(NotStarted("spawn", "not scripted")))
+            }
+
+        let queue =
+            Collections.Generic.Queue<ChatEvent list>(
+                [
+                    cell
+                        1
+                        "// intent: deploy\ncall w = fs.write [\"site.txt\", \"v2\"]\ncall r = shell.run [\"deploy\"]\nr"
+                    cell 2 "// intent: finish\nfinish {\"kind\":\"done\",\"summary\":\"Deployed\"}"
+                    cell 3 "// intent: read it back\ncall v = recall [\"call-1\"]\nv"
+                    cell 4 "// intent: finish\nfinish {\"kind\":\"done\",\"summary\":\"Read\"}"
+                ]
+            )
+
+        let script =
+            ScriptedLlm(fun _ -> lock queue (fun () -> if queue.Count > 0 then Some(queue.Dequeue()) else None))
+
+        let env: HostEnv =
+            {
+                Clock = SystemClock.clock
+                Trace = Trace.none
+                Llm = script.Llm
+                Scope = Scope.root
+            }
+
+        let hands: HandsEnv =
+            {
+                Clock = SystemClock.clock
+                FsRead = fs.FsRead
+                Fs = fs.Fs
+                FsOps = FsOpsOver.create fs.FsRead fs.Fs
+                Shell = shell
+                Scope = Scope.root
+            }
+
+        let variants =
+            FakeVariants.create CodeActSlots.read [ "model.role.main", Json.String "test/model" ]
+
+        let store = InMemoryEventLog<Payload>()
+        let blobs = InMemoryBlobs()
+        let snapshots = InMemorySnapshots()
+        let sessions = SessionLog.typed store.Log
+        let contexts = ContextLog.typed store.Log
+
+        let settings =
+            { SessionSettings.defaults with
+                Kinds = Questions.kinds
+            }
+
+        let start () =
+            task {
+                let codeact =
+                    CodeAct.create
+                        {
+                            Sessions = sessions
+                            Contexts = contexts
+                            Steps = StepJournal.typed store.Log
+                            Blobs = Some blobs.Blobs
+                            Profile = fun _ -> Eff.ret variants
+                            Hands =
+                                fun _ ->
+                                    Eff.ret (
+                                        Ok
+                                            {
+                                                Env = hands
+                                                Workspace = workspace
+                                                Os = os
+                                                CommandEnv = Inherit []
+                                                Interpreter = kernel
+                                                Guard = fun _ -> EffResult.ok ()
+                                                Snapshots = None
+                                            }
+                                    )
+                            Catalog = fun _ -> None
+                        }
+
+                let! host =
+                    Eff.run env (SessionHost.create sessions snapshots.Store codeact.Runner settings)
+
+                return codeact, host
+            }
+
+        let alice = Attribution.create "user:alice" "scenario"
+
+        let send host key command =
+            Eff.run env (SessionHost.send host "s1" (IdempotencyKey key) alice command)
+            |> within
+
+        let events () =
+            store.Events(Session.stream "s1")
+            |> List.map (EventLog.decode SessionLog.schema)
+
+        let waitFor (what: string) (condition: unit -> bool) =
+            task {
+                let deadline = DateTime.UtcNow.AddSeconds 60.0
+
+                while not (condition ()) && DateTime.UtcNow < deadline do
+                    do! Task.Delay 10
+
+                if not (condition ()) then
+                    lines.Add $"timed out: {what}"
+            }
+
+        let ended (turn: int) () =
+            events ()
+            |> List.exists (fun r ->
+                match r.Event with
+                | Event.TurnEnded(n, _, _) -> n = turn
+                | _ -> false)
+
+        let stopHost (codeact: CodeAct<HostEnv, HandsEnv>) host =
+            task {
+                do! Eff.run env (SessionHost.stop host) |> within
+                do! codeact.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
+            }
+
+        let! codeact, host = start ()
+
+        let! _ =
+            Eff.run env (SessionHost.start host "s1" (IdempotencyKey "start") alice "p1" None)
+            |> within
+
+        let! _ = send host "p1" (Command.Prompt("Deploy", PromptMode.Steer))
+        do! deploying.Task.WaitAsync(TimeSpan.FromSeconds 60.0)
+        do! stopHost codeact host
+
+        let requestOf (host: SessionHost<HostEnv>) =
+            task {
+                let mutable found = None
+                let deadline = DateTime.UtcNow.AddSeconds 60.0
+
+                while found.IsNone && DateTime.UtcNow < deadline do
+                    let! state = Eff.run env (SessionHost.state host "s1") |> within
+                    found <- state.State.Requests |> List.tryHead
+
+                    if found.IsNone then
+                        do! Task.Delay 10
+
+                return found
+            }
+
+        // Recovery: twice, as after two crashes in a row.
+        let! codeact, host = start ()
+        let! first = requestOf host
+        do! stopHost codeact host
+        let! codeact, host = start ()
+        let! second = requestOf host
+
+        match first, second with
+        | Some first, Some second ->
+            lines.Add(
+                kv $"decision {first.Request.Id} ({first.Request.Kind})" (Json.serializeCanonical first.Request.Payload)
+            )
+
+            lines.Add $"recovered again: the same request {first.Seq = second.Seq}"
+        | _ -> lines.Add "no decision"
+
+        let opened =
+            events ()
+            |> List.filter (fun r ->
+                match r.Event with
+                | Event.RequestOpened _ -> true
+                | _ -> false)
+
+        lines.Add $"decisions opened: {opened.Length}; model calls before the answer: {script.Requests.Length}"
+
+        let! answered =
+            send
+                host
+                "a1"
+                (Command.Answer(
+                    "unknown-t1-s1-1",
+                    RequestKind.answer
+                        Recovery.kind
+                        {
+                            Option = "rerun"
+                            Note = Some "try again"
+                        }
+                ))
+
+        lines.Add $"answered: {answered}"
+        do! waitFor "turn 1" (ended 1)
+        let! _ = send host "p2" (Command.Prompt("Read it back", PromptMode.Steer))
+        do! waitFor "turn 2" (ended 2)
+        lines.Add $"deploy ran {deploys.Value} times"
+
+        for recorded in events () do
+            lines.Add $"session {recorded.Seq}: {recorded.Event}"
+
+        for recorded in
+            store.Events(StepJournal.stream "s1")
+            |> List.map (EventLog.decode StepJournal.schema) do
+            lines.Add(kv $"journal {recorded.Seq}" (Json.serializeCanonical (StepCodecs.event.Encode recorded.Event)))
+
+        let context =
+            store.Events(ContextLog.stream "s1")
+            |> List.map (EventLog.decode ContextLog.schema)
+
+        for recorded in context do
+            match recorded.Event with
+            | ContextEvent.Returned receipt ->
+                let shown = receipt.Pieces |> List.map Piece.render |> String.concat "\n"
+                lines.Add(kv $"receipt {receipt.Turn}.{receipt.Step} {receipt.Name} error={receipt.IsError}" shown)
+            | other -> lines.Add $"context {recorded.Seq}: {other}"
+
+        // The logs replay into the requests sent.
+        let! history = Eff.run env (ContextLog.load sessions contexts "s1") |> within
+
+        let cfg =
+            PromptSettings.config PromptSettings.defaults [] Exclusions.none ModelCaps.minimal.Caching
+
+        let replies =
+            history.Items
+            |> List.indexed
+            |> List.choose (fun (i, item) ->
+                match item with
+                | LogItem.Context(_, ContextEvent.Replied reply) -> Some(i, reply)
+                | _ -> None)
+
+        for (index, reply), sent in List.zip replies script.Requests do
+            let rendered =
+                Render.render cfg (Transcript.ofItems (List.take index history.Items)) Live.none
+
+            let replayed =
+                Render.request
+                    cfg
+                    { sent with
+                        System = []
+                        Messages = []
+                        Cache = { sent.Cache with Key = None }
+                    }
+                    { rendered with
+                        Prompt =
+                            { rendered.Prompt with
+                                Suffix = reply.Shown
+                            }
+                    }
+
+            lines.Add $"request {reply.Turn}.{reply.Step}: replays: {hash replayed = hash sent}"
+
+        do! stopHost codeact host
+        return List.ofSeq lines
+    }
+
 let scenarios: Scenario list =
     [
         Scenario.task "codeact-hybrid" hybrid
         Scenario.task "codeact-text-only" textOnly
+        Scenario.task "codeact-recovery" recovery
     ]
