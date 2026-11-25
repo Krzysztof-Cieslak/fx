@@ -13,7 +13,7 @@ types for `@fx/sdk` and `fx.d.ts` come from the F# codecs, never by hand.
 | Consumer | Layout | What it declares |
 |---|---|---|
 | `@fx/sdk` (`packages/sdk/src/generated/contracts.d.ts`, [sdk.md](sdk.md)), clients, the workflow worker | `Layout.Module` | `export interface` / `export type` for contract types; `export declare` members for RPC surfaces |
-| The bun-ts kernel's `<global>.d.ts` (T117) | `Layout.Global(Product.kernelGlobal, doc)` | The host bridge (`fx.shell.run`, `fx.finish`, …) and the types it uses, in `declare namespace fx` |
+| The bun-ts kernel's `<global>.d.ts` (`fx.interpreter.bun-ts`, [interpreters.md](interpreters.md)) | `Layout.Global(Product.kernelGlobal, doc)` | The host bridge (`fx.shell.run`, `fx.finish`, …) and the types it uses, in `declare namespace fx` |
 | The kernel protocol's TypeScript side (T116) | `Layout.Module` | The protocol's message types, if T116 defines them as codecs |
 
 The host generates a kernel's declarations at run time (bindings are generated host-side, spec §6.2), so the

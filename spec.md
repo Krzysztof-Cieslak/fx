@@ -267,8 +267,10 @@ and LaunchSpec =
 
 type InterpreterProvider =
   { Id: string; Language: string
-    Requires: ComponentRef list; Launch: LaunchSpec
-    Bindings: Schema list -> BindingFiles
+    Requires: ComponentRef list
+    Launch: InterpreterLaunch                       // a runtime (its RuntimeSpec's hardened launch) + the program
+    Assets: RuntimeFile list                        // the kernel's files, embedded; extracted with hash checks
+    Bindings: BindingSurface -> BindingFiles        // bindings' schemas → e.g. <global>.d.ts, prompt declarations
     PromptPack: PromptPack; Check: CheckSpec option
     Caps: InterpreterCaps }
 and InterpreterCaps =
@@ -277,7 +279,7 @@ and InterpreterCaps =
 ```
 
 - **Launch:** a pure function of the spec, the installed component and the session (target, owned dirs, trust, the launcher's environment) gives the process: the runtime's flags, the untrusted overrides, then the program; a fresh environment (allowlist, exports, `EnvSet`; denied names removed); an absolute program from the install directory. `EnvDeny` must cover every known injection vector (one list for all runtimes). Details: `docs/modules/runtimes.md`.
-- Bindings/prompt packs generated host-side; kernels run in the environment as **separate processes**.
+- Bindings/prompt packs generated host-side; kernels run in the environment as **separate processes**. An interpreter launches on a runtime, so its process always gets the runtime's hardened launch; its `Bindings` is a function, so interpreters are contributed by native extensions (a data form for declarative ones later). Details: `docs/modules/interpreters.md`.
 - **Interpreter is a variant slot.** Plugin candidates: `python`, `monty`, `deno-ts`, `node-ts`, `fsi`, `fsharp-subset`, `luau`.
 
 ### 6.3 Built-in Bun stack (bundled extension packages)
@@ -286,7 +288,7 @@ and InterpreterCaps =
 |---|---|---|
 | `fx.runtime.bun` | declarative | `Component` + `RuntimeSpec` (pinned digests, all targets incl. Windows x64/arm64; x64 takes the `-baseline` builds, the same executable as the default ones in 1.4.5) + `bun` package method (with T211's `Package`) |
 | `fx.exthost.bun` | process | `ExtensionRuntime "bun"` + **deterministic workflow worker** |
-| `fx.interpreter.bun-ts` | bun | TypeScript `InterpreterProvider` (kernel, `fx.d.ts`, prompt pack, `bun check`) |
+| `fx.interpreter.bun-ts` | native | TypeScript `InterpreterProvider` (kernel sources embedded, `fx.d.ts`, prompt pack, `bun check`); the kernel itself is TypeScript on `fx.runtime.bun` |
 
 - **Hardened launch (data):** `--config=<fx bunfig> --no-env-file --no-install --no-orphans --no-macros` (+ `--tsconfig-override` until trusted); owned cwd; env allowlist (fx-owned cache/temp/npm config, `DO_NOT_TRACK=1`, crash reports off), injection vectors denied (`BUN_OPTIONS`, `NODE_OPTIONS`, `BUN_INSPECT*`, `BUN_CONFIG_*`, `NPM_CONFIG_*`, …).
 - **Two Buns:** fx's Bun runs kernels, extensions and the workflow worker; shell commands use the **user's toolchain** from `PATH`.

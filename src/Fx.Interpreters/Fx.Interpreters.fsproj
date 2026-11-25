@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Interpreters on the host's side (spec §6.2–6.6): the host bridge (bindings as data with codecs,
+    their dispatch, `finish` validated by codecs and checks), the core bindings over the environment's
+    capabilities (shell, files, envd's file operations), interpreters' assets extracted with hash
+    checks, and launching a kernel through its runtime. Pure: no I/O of its own, everything through
+    capabilities. Interpreters themselves are extensions (`InterpreterProvider` in Fx.Sdk).
+    Spec: docs/modules/interpreters.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="HostBinding.fs" />
+    <Compile Include="Bridge.fs" />
+    <Compile Include="CoreBindings.fs" />
+    <Compile Include="Assets.fs" />
+    <Compile Include="Interpreter.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Kernel\Fx.Kernel.fsproj" />
+    <ProjectReference Include="..\Fx.Envd\Fx.Envd.fsproj" />
+  </ItemGroup>
+</Project>

@@ -3,8 +3,10 @@
     The public F# SDK for extensions (spec §16.1): what an extension may see of the host. Built-in
     extensions (extensions/) reference this project and nothing else; the architecture tests in
     Fx.Extensions.Tests enforce it from the compiled metadata. It may expose only the projects it
-    references here (Prelude, Contracts, Effects, Variants, Models): never the core (Fx.Extensions,
-    Fx.Rpc, the machine host, the live interpreters). Pure: the EFF analyzers apply to every file.
+    references here (Prelude, Contracts, Contracts.TypeScript, Effects, Variants, Models): never the
+    core (Fx.Extensions, Fx.Rpc, the machine host, the live interpreters). Contracts.TypeScript is there
+    for interpreters, which generate their kernels' declarations from the bindings' schemas
+    (docs/modules/interpreters.md). Pure: the EFF analyzers apply to every file.
     Spec: docs/modules/extensions.md.
   -->
   <PropertyGroup Label="Package">
@@ -29,10 +31,12 @@
     <Compile Include="Runtime.fs" />
     <Compile Include="Models\Wire.fs" />
     <Compile Include="Models\Access.fs" />
+    <Compile Include="Interpreter.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
     <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
     <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
     <ProjectReference Include="..\Fx.Variants\Fx.Variants.fsproj" />
     <ProjectReference Include="..\Fx.Models\Fx.Models.fsproj" />

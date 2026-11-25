@@ -1,50 +1,7 @@
 namespace Fx.Kernel
 
 open Fx.Contracts
-
-/// How a kernel's language exposes host calls (spec §6.2).
-[<RequireQualifiedAccess>]
-type AsyncHostCalls =
-    /// Cells await host calls (`await fx.shell.run(…)`).
-    | Await
-    /// Host calls look synchronous to cells; the kernel suspends the cell while the host answers.
-    | Transparent
-
-    override this.ToString() =
-        match this with
-        | Await -> "await"
-        | Transparent -> "transparent"
-
-/// How a kernel installs packages for a session (spec §6.3), if it does.
-type PackageSupport =
-    {
-        /// The package manager, e.g. `bun` or `nuget`.
-        Manager: string
-    }
-
-    override this.ToString() = this.Manager
-
-/// What an interpreter's kernels can do (spec §6.2 `InterpreterCaps`). The interpreter declares
-/// them; its kernels announce them in `initialize`, and the conformance suite checks that they hold.
-type InterpreterCaps =
-    {
-        /// The kernel serializes its state (`snapshot`) and restores it in a fresh process (`restore`).
-        Snapshot: bool
-        AsyncHostCalls: AsyncHostCalls
-        Packages: PackageSupport option
-        /// The same cells with the same host answers give the same results (no clock, randomness or
-        /// I/O of its own).
-        Deterministic: bool
-    }
-
-    override this.ToString() =
-        let packages =
-            match this.Packages with
-            | Some p -> " packages " + p.Manager
-            | None -> ""
-
-        let yes (flag: bool) = if flag then "yes" else "no"
-        $"snapshot {yes this.Snapshot}, host calls {this.AsyncHostCalls}, deterministic {yes this.Deterministic}{packages}"
+open Fx.Sdk
 
 /// The bounds a host sets for a kernel's output and previews. Their values are variants.
 type KernelLimits =

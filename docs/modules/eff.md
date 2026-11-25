@@ -140,7 +140,7 @@ module Clock =
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
 | `IPackages`; reading extension contributions from `IExtensionEnv` (the host reads them with `ExtensionHost.contributions`, T108) | T109b |
 | `IEnvs` | T112 |
-| `IInterpreter` | T116, T117 |
+| `IInterpreter` (kernels are started and driven with `Kernel` and `Interpreter`, [interpreters.md](interpreters.md); a capability for strategies comes with them) | T127 |
 | `IGrants` | T123 |
 | `IContext` | T126 |
 | `ISnapshots`: per-step snapshots, retention, two-phase undo (the capability and `GitSnapshots` are in `src/Fx.Envd`, [envd.md](envd.md)) | T205 |

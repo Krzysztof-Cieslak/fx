@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of the fx.interpreter.bun-ts package: the kernel's files generated into KernelFiles.fs, the
+    interpreter provider conformance suite, the manifest and activation, the core bridge's
+    declarations and prompt (golden/), and the interpreter end to end on the pinned Bun (embedded
+    mode: local files and shell). Its kernel conformance runs in tests/Fx.Kernel.Tests.
+  -->
+  <ItemGroup>
+    <!-- The pinned Bun, shared with the kernel tests. -->
+    <Compile Include="..\Fx.Kernel.Tests\Repo.fs" Link="Bun\Repo.fs" />
+    <Compile Include="..\Fx.Kernel.Tests\PinnedBun.fs" Link="Bun\PinnedBun.fs" />
+    <!-- Test environments, the result type and the provider conformance suite. -->
+    <Compile Include="..\Fx.Interpreters.Tests\Support.fs" Link="Interpreters\Support.fs" />
+    <Compile Include="..\Fx.Interpreters.Tests\Conformance\InterpreterConformance.fs" Link="Interpreters\InterpreterConformance.fs" />
+    <Compile Include="KernelFilesTests.fs" />
+    <Compile Include="BunTsTests.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Interpreters\Fx.Interpreters.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

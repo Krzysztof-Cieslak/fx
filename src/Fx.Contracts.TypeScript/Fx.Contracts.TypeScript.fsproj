@@ -6,6 +6,12 @@
     Spec: docs/modules/typescript.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>TypeScript declarations generated from contract schemas: for SDKs, clients and kernels' host bridges.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Names.fs" />
     <Compile Include="Declarations.fs" />
