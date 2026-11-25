@@ -127,6 +127,7 @@ let private kernel: Interpreter<HandsEnv> =
                         | Ok k -> return Ok k
                         | Error e -> return Error(string e)
                     }
+        Launches = None
     }
 
 let private call (n: int) (name: string) (arguments: (string * Json) list) : ChatEvent list =

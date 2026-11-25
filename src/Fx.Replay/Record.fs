@@ -578,6 +578,21 @@ module Record =
                     Task.FromResult(Error(InvalidPath(spec.Root, "watching is not recorded (docs/modules/replay.md)")))
         }
 
+    /// Terminals are not recordable (no session uses them yet): a recorded `Spawn` refuses.
+    let terminal (_: Fx.Pty.Terminal) : Fx.Pty.Terminal =
+        {
+            Spawn =
+                fun spec _ ->
+                    Task.FromResult(
+                        Error(
+                            Fx.Pty.NotStarted(
+                                string spec.Program,
+                                "terminals are not recorded (docs/modules/replay.md)"
+                            )
+                        )
+                    )
+        }
+
     let snapshots (journal: SessionJournal) (lane: string) (snapshots: Snapshots) : Snapshots =
         let refResult = Values.result EnvCodecs.snapshotRef EnvCodecs.snapshotError
 

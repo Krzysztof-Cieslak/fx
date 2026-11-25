@@ -573,6 +573,8 @@ let driver: DriverEnv =
 let settings: ReplaySettings =
     {
         Interpreter = fun _ -> ScriptProc.interpreter kernelOptions
+        Provider = fun id -> Error $"no interpreter provider {id} here"
+        KernelOptions = kernelOptions
         Catalog = fun _ -> None
         StallAfter = TimeSpan.FromSeconds 10.0
     }
