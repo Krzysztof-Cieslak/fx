@@ -1,0 +1,270 @@
+{
+  "kind": "named",
+  "name": "TurnResult",
+  "body": {
+    "kind": "union",
+    "discriminator": "kind",
+    "cases": [
+      {
+        "tag": "done",
+        "description": "The work is complete.",
+        "fields": [
+          {
+            "name": "summary",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "evidence",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "Match",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "path",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "line",
+                      "schema": {
+                        "kind": "integer"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "text",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "note",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "optional"
+                      }
+                    },
+                    {
+                      "name": "tags",
+                      "schema": {
+                        "kind": "array",
+                        "items": {
+                          "kind": "string"
+                        }
+                      },
+                      "presence": {
+                        "kind": "defaulted",
+                        "value": []
+                      }
+                    },
+                    {
+                      "name": "score",
+                      "schema": {
+                        "kind": "number"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "weight",
+                      "schema": {
+                        "kind": "number"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "sequence",
+                      "schema": {
+                        "kind": "integer"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "span",
+                      "schema": {
+                        "kind": "nullable",
+                        "schema": {
+                          "kind": "named",
+                          "name": "Span",
+                          "body": {
+                            "kind": "object",
+                            "fields": [
+                              {
+                                "name": "start",
+                                "schema": {
+                                  "kind": "integer"
+                                },
+                                "presence": {
+                                  "kind": "required"
+                                }
+                              },
+                              {
+                                "name": "end",
+                                "schema": {
+                                  "kind": "integer"
+                                },
+                                "presence": {
+                                  "kind": "required"
+                                }
+                              }
+                            ],
+                            "unknownFields": "ignore",
+                            "description": "A range of lines, end exclusive."
+                          }
+                        }
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "priority",
+                      "schema": {
+                        "kind": "enum",
+                        "values": [
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "counts",
+                      "schema": {
+                        "kind": "map",
+                        "values": {
+                          "kind": "integer"
+                        }
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "ignore"
+                }
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": []
+            }
+          },
+          {
+            "name": "verify",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      },
+      {
+        "tag": "needInput",
+        "fields": [
+          {
+            "name": "decisions",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string"
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      },
+      {
+        "tag": "waiting",
+        "fields": [
+          {
+            "name": "on",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string"
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "note",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      },
+      {
+        "tag": "moved",
+        "description": "A range of lines, end exclusive.",
+        "fields": [
+          {
+            "name": "start",
+            "schema": {
+              "kind": "integer"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "end",
+            "schema": {
+              "kind": "integer"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      },
+      {
+        "tag": "cancelled",
+        "fields": [],
+        "unknownFields": "ignore"
+      }
+    ]
+  }
+}
