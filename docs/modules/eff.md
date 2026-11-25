@@ -101,10 +101,11 @@ module Clock =
 | `IShell` | `Shell` | run a command to completion; spawn a `Proc` (write, close stdin, read chunks, wait, kill) | `LocalShell`; `ScriptedShell` |
 | `ISecrets` | `Secrets` | resolve a `secret:<name>` reference to a redacted `Secret` | `InMemorySecrets` (stores are T121) |
 | `ITrace` | `Trace` | start and end spans, record events (local only) | `TraceCollector` (in memory), `Trace.none` |
+| `IHttp` | `Http` | send a request; the response body streams (`HttpBody`: read, close); per-request timeouts; no redirects | `SystemHttp`; `InMemoryHttp`; `CassetteHttp` and `CassetteRecorder` (Fx.Models) |
 
 `IFs` inherits `IFsRead`. An environment that implements only `IFsRead` is the read-only attenuation of one that implements `IFs`.
 
-The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)), `IVariants` with the variant registry in `Fx.Variants` ([variants.md](variants.md)), and `IComponents` (with the installer's `IFetch` and `IInstallFiles`) with the component installer in `Fx.Components` ([components.md](components.md)).
+`ILlm`, the model capability, lives with the canonical model in `Fx.Models` ([models.md](models.md)). The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)), `IVariants` with the variant registry in `Fx.Variants` ([variants.md](variants.md)), and `IComponents` (with the installer's `IFetch` and `IInstallFiles`) with the component installer in `Fx.Components` ([components.md](components.md)).
 
 ### Decisions
 
@@ -128,6 +129,7 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 - **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes, ranged reads, patches, search and watching are envd's `FsOps` ([envd.md](envd.md)). Reads and writes here are whole files.
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
+- **HTTP.** A request's own timeouts (`Response`, `Idle`) fail it with `HttpError.TimedOut`; the scope's cancellation is an `OperationCanceledException`. Any status is a response. Response header names are lower case. Interpreters never follow redirects, so a payload goes only where its sender named. Failures name their kind, never an exception's message.
 - **Tracing.** Spec §4.2 names this capability `ITelemetry`; it is `ITrace` because "telemetry" suggests data leaving the machine, and fx has none of that (§18). Traces stay local. Exporting them to a local file or viewer is future work (spec §15, `fx trace`).
 - **Environment variables and process information are not a capability.** Configurable behaviour goes through `IVariants` ([variants.md](variants.md)), which records it. The composition root reads bootstrap values (home directory, `FX_*` variables) once, as values. It is an imperative shell with its own analyzers.json entry, like `src/Fx.Cli/Program.fs`.
 
@@ -139,7 +141,6 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 | `IPackages`; reading extension contributions from `IExtensionEnv` (the host reads them with `ExtensionHost.contributions`, T108) | T109b |
 | `IEnvs` | T112 |
 | `IInterpreter` | T116, T117 |
-| `ILlm` | T118 |
 | `IGrants` | T123 |
 | `IContext` | T126 |
 | `ISnapshots`: per-step snapshots, retention, two-phase undo (the capability and `GitSnapshots` are in `src/Fx.Envd`, [envd.md](envd.md)) | T205 |
