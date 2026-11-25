@@ -68,6 +68,16 @@
       "reason": "IBlobs interpreter: the only code that reads and writes blob files (temporary files, atomic renames, syncs) and their SQLite index."
     },
     {
+      "codes": ["EFF004", "EFF007"],
+      "files": ["src/Fx.Components.Live/HttpFetch.fs"],
+      "reason": "IFetch interpreter: the installer's only HTTP client; it streams each download into the file it is given (FileStream)."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Components.Live/LocalInstallFiles.fs"],
+      "reason": "IInstallFiles interpreter: the installer's only code that touches the disk directly (unpacking, hashing, deleting trees, atomic replacement, lock files)."
+    },
+    {
       "codes": ["EFF007"],
       "files": ["src/Fx.Transport.Http/LocalClient.fs"],
       "reason": "Dials local listeners (loopback, Unix socket, named pipe) for WebSocket clients: the only outgoing connection code."

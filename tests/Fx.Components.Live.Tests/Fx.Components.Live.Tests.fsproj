@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The installer conformance suite is shared with Fx.Components.Tests: the fakes and the live interpreters pass the same tests. -->
+    <Compile Include="..\Fx.Components.Tests\Support.fs" Link="Support.fs" />
+    <Compile Include="..\Fx.Components.Tests\Conformance\InstallerConformance.fs" Link="Conformance\InstallerConformance.fs" />
+    <Compile Include="LiveEnv.fs" />
+    <Compile Include="LiveConformanceTests.fs" />
+    <Compile Include="LocalInstallFilesTests.fs" />
+    <Compile Include="HttpFetchTests.fs" />
+    <Compile Include="BunTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Components.Live\Fx.Components.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

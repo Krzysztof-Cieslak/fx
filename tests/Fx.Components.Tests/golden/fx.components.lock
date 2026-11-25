@@ -1,0 +1,90 @@
+{
+  "components": [
+    {
+      "dependsOn": [],
+      "exports": {
+        "bin": {
+          "tool": "bin/tool"
+        },
+        "env": {
+          "TOOL_HOME": "${dir}"
+        }
+      },
+      "id": "tool",
+      "install": {
+        "linux-x64-glibc": {
+          "digest": "sha256:996a5db8081aeadf532c638d694a30370f693d46967e80e2d11317c380478e64",
+          "format": "tar.gz",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://example.test/tool/v1.2.3/tool.tar.gz"
+        },
+        "windows-x64": {
+          "digest": "sha256:996a5db8081aeadf532c638d694a30370f693d46967e80e2d11317c380478e64",
+          "format": "tar.gz",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://example.test/tool/v1.2.3/tool.tar.gz"
+        }
+      },
+      "layout": {
+        "executables": [
+          "bin/tool"
+        ]
+      },
+      "probe": {
+        "argv": [
+          "bin/tool",
+          "--version"
+        ],
+        "expect": "tool ${version}"
+      },
+      "size": {},
+      "version": "1.2.3"
+    },
+    {
+      "dependsOn": [],
+      "exports": {
+        "bin": {},
+        "env": {}
+      },
+      "id": "zeta",
+      "install": {
+        "linux-x64-glibc": {
+          "digest": "sha256:5cc10d9143b2cff082cf5fb373073b13d02d12c9a4d24a97d822d701404fb421",
+          "format": "tar.gz",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://example.test/zeta/v0.1.0/zeta.tar.gz"
+        },
+        "windows-x64": {
+          "digest": "sha256:5cc10d9143b2cff082cf5fb373073b13d02d12c9a4d24a97d822d701404fb421",
+          "format": "tar.gz",
+          "kind": "archive",
+          "strip": 1,
+          "url": "https://example.test/zeta/v0.1.0/zeta.tar.gz"
+        }
+      },
+      "layout": {
+        "executables": []
+      },
+      "size": {},
+      "version": "0.1.0"
+    }
+  ],
+  "lockfileVersion": 1,
+  "requires": [
+    {
+      "id": "tool",
+      "version": "1.2"
+    },
+    {
+      "id": "zeta",
+      "version": "*"
+    }
+  ],
+  "targets": [
+    "linux-x64-glibc",
+    "windows-x64"
+  ]
+}
