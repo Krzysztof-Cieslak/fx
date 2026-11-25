@@ -207,6 +207,9 @@ type private Log() =
     let lines = Collections.Concurrent.ConcurrentQueue<string>()
     member _.Add(line: string) = lines.Enqueue line
     member _.Lines = List.ofSeq lines
+
+    /// Completes when the cell `frozen` printed: its kernel is blocked, and only a kill stops it.
+    member val Frozen = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
     override _.ToString() = "Log"
 
 let private host (log: Log) (handles: HandleTable<string>) : KernelHost<Env> =
@@ -252,7 +255,12 @@ let private host (log: Log) (handles: HandleTable<string>) : KernelHost<Env> =
         Output =
             fun output ->
                 let cell = Option.defaultValue "-" output.CellId
-                Eff.ret (log.Add $"output {cell}: {escape output.Text}")
+                log.Add $"output {cell}: {escape output.Text}"
+
+                if cell = "frozen" then
+                    log.Frozen.TrySetResult() |> ignore
+
+                Eff.ret ()
         Activity = fun activity -> Eff.ret (log.Add $"activity: {activity}")
     }
 
@@ -352,13 +360,14 @@ let private transcript (env: Env) (log: Log) (kernel: Kernel) (stray: bool) : Ta
                     kernel
                     {
                         CellId = "frozen"
-                        Code = "call _s = test.signal []\nspin"
+                        Code = "call _s = test.signal []\nspin frozen now"
                         Intent = None
                         TimeoutMs = None
                         Check = false
                     })
 
-        do! Task.Delay 300
+        // `spin <text>` prints once the kernel is blocked: from then on, an interrupt must kill.
+        do! log.Frozen.Task.WaitAsync(TimeSpan.FromSeconds 60.0)
         let! interruption = Eff.run env (Kernel.interrupt kernel) |> within
         log.Add $"interrupt: {interruption}"
         let! frozen = running |> within

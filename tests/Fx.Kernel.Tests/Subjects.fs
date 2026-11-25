@@ -35,7 +35,8 @@ let scriptSnippets: Snippets =
         Throw = fun message -> "throw " + message
         SleepForever = "sleep"
         BusyLoop = "loop"
-        Freeze = "spin"
+        // Blocks the kernel, then prints.
+        Freeze = fun text -> "spin " + text
         LateOutput = fun text -> "later " + text
         Activity = Some(fun kind title -> $"activity {kind} {title}")
         ReadEnv = fun name variable -> $"env {name} = {variable}"
@@ -65,9 +66,10 @@ let typeScriptSnippets: Snippets =
         Throw = fun message -> $"throw new Error({quote message})"
         SleepForever = "await new Promise(() => {})"
         BusyLoop = "while (true) {}"
-        // After an await (it follows a host call): the VM's timeout no longer applies, and the
-        // event loop never reads cell/cancel.
-        Freeze = "while (true) {}"
+        // Output is flushed in a microtask, which runs (and writes the notification) at the await,
+        // before the loop's; after an await the VM's timeout no longer applies, and the looping
+        // microtask keeps the event loop from ever reading cell/cancel.
+        Freeze = fun text -> $"console.log({quote text})\nawait null\nwhile (true) {{}}"
         LateOutput = fun text -> $"setTimeout(() => console.log({quote text}), 50)"
         Activity = Some(fun kind title -> $"{bridge}.activity({quote kind}, {quote title})")
         ReadEnv = fun name variable -> $"let {name} = (await import(\"node:process\")).env[{quote variable}] ?? null"
