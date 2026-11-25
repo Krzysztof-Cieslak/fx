@@ -138,6 +138,14 @@ module LocalFs =
     let private delete (path: string) (_: CancellationToken) =
         attempt path (fun () ->
             if File.Exists path then
+                // Windows refuses to delete a read-only file (git's objects are); POSIX systems
+                // delete it if the directory is writable. Deleting works the same everywhere.
+                if OperatingSystem.IsWindows() then
+                    let attributes = File.GetAttributes path
+
+                    if attributes.HasFlag FileAttributes.ReadOnly then
+                        File.SetAttributes(path, attributes &&& ~~~FileAttributes.ReadOnly)
+
                 File.Delete path
                 now (Ok())
             elif Directory.Exists path then

@@ -17,6 +17,7 @@
     <Compile Include="OutputLog.fs" />
     <Compile Include="Snapshots.fs" />
     <Compile Include="TerminalSetup.fs" />
+    <Compile Include="BaseEnvironment.fs" />
     <Compile Include="EnvCodecs.fs" />
     <Compile Include="OutputRecords.fs" />
     <Compile Include="EnvProtocol.fs" />
