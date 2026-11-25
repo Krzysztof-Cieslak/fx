@@ -988,7 +988,27 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
         | Some actor -> actor
         | None -> invalidOp "The environments host is not started."
 
-    let snapshot () = Actor.snapshot (theActor ())
+    let followGate = obj ()
+
+    /// The newest state `waitUntil` returned a record from, when the actor has not published it yet:
+    /// the actor appends events, which wakes the log's followers, and only then publishes the state
+    /// they make. Reads take the newer of the two, so they never show less than a result did (`Create`
+    /// returned a `Ready` record, and `Get` must not say `Connected` after it).
+    let mutable followed: Snapshot<EnvsState> option = None
+
+    let snapshot () =
+        let published = Actor.snapshot (theActor ())
+
+        lock followGate (fun () ->
+            match followed with
+            | Some newer when newer.Seq > published.Seq -> newer
+            | _ -> published)
+
+    let saw (seen: Snapshot<EnvsState>) =
+        lock followGate (fun () ->
+            match followed with
+            | Some newer when newer.Seq >= seen.Seq -> ()
+            | _ -> followed <- Some seen)
 
     let tryRecord (id: string) : EnvRecord option =
         (snapshot ()).State.Environments.TryFind id
@@ -1024,6 +1044,13 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                                 match state.Value.Environments.TryFind id with
                                 | Some record when settled record ->
                                     found.Value <- Some record
+
+                                    saw
+                                        {
+                                            Seq = recorded.Seq
+                                            State = state.Value
+                                        }
+
                                     return false
                                 | _ -> return true
                             })
