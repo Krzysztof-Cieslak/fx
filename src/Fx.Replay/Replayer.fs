@@ -85,7 +85,8 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
 
     // A call that was cancelled (or still running at the end) gave nothing the program used: replay
     // may or may not make it (whether a timeout's timer even starts can depend on timing), so it is
-    // done from the start and never holds up what comes after it.
+    // done from the start and never holds up what comes after it. A turn's end is not a call: the
+    // host's closing waits for it, however the turn ended.
     let ordered =
         entries
         |> List.sortBy (fun (entry, _) -> entry.Seq)
@@ -93,7 +94,7 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
             let item = ReplayEntry(entry, value, position)
 
             match entry.Outcome with
-            | Outcome.Cancelled
+            | Outcome.Cancelled when entry.Lane <> "turns" && entry.Lane <> "host" -> item.Done <- true
             | Outcome.Pending -> item.Done <- true
             | _ -> ()
 
