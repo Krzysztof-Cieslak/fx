@@ -42,6 +42,7 @@
     <Project Path="src/Fx.Keyring/Fx.Keyring.fsproj" />
     <Project Path="src/Fx.CodeAct/Fx.CodeAct.fsproj" />
     <Project Path="src/Fx.Auth/Fx.Auth.fsproj" />
+    <Project Path="src/Fx.Replay/Fx.Replay.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Record and replay (spec §15, §4.2, §5, §18): the journal of a session's capability calls (by blob
+    hash), the recording interpreters and the recorded CodeAct strategy the host builds, the replay
+    interpreters (ReplayEnv) and exact replay of a recorded session, and `fx replay`. Pure apart from
+    the capabilities it is handed: the EFF analyzers apply to every file. Spec: docs/modules/replay.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Internal.fs" />
+    <Compile Include="Journal.fs" />
+    <Compile Include="Values.fs" />
+    <Compile Include="Recorder.fs" />
+    <Compile Include="Record.fs" />
+    <Compile Include="Recording.fs" />
+    <Compile Include="Replayer.fs" />
+    <Compile Include="Replay.fs" />
+    <Compile Include="SessionReplay.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.CodeAct\Fx.CodeAct.fsproj" />
+  </ItemGroup>
+</Project>
