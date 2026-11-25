@@ -211,6 +211,10 @@ stop) and keeps the leases for the next host. `EnvsSettings.Sandboxes` are the d
 (built-ins first: `auto` takes the first that confines on an environment's OS), and the host registers
 `SandboxSlots.all` with `Slots.all`.
 
+`Create`, `Destroy`, `Suspend` and `Resume` wait for the outcome in the log, which the actor appends
+before it publishes the state the events make; reads (`Get`, `List`, `Open`) take the newer of the
+actor's state and the one a wait returned, so they never show less than a result did.
+
 Continuations: actors reply, and the in-memory log wakes subscribers, on the appending thread; the
 host hands those results on asynchronously (`later`), so code that reads the log or sends again never
 runs inside an append.
