@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Encode, decode and preview throughput of codecs: a small union, a 24-case union and a 48-field
+    record (docs/modules/contracts.md, "Performance"). Run it with the command in AGENTS.md, "Commands".
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Contracts\Fx.Contracts.fsproj" />
+  </ItemGroup>
+</Project>
