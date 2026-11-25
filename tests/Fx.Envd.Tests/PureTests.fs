@@ -2,9 +2,11 @@
 module Fx.Envd.Tests.PureTests
 
 open Expecto
+open Fx.Contracts
 open Fx.Effects
 open Fx.Envd
 open Fx.Pty
+open Fx.Store
 
 let private edit line count lines : TextEdit =
     {
@@ -284,5 +286,76 @@ let records =
                 match OutputRecords.decode [| 9uy; 0uy |] 0 2 with
                 | OutputRecords.Decoded.Invalid _ -> ()
                 | other -> failtest $"{other}"
+            }
+        ]
+
+let private roundTrip (codec: Codec<'T>) (values: 'T list) =
+    for value in values do
+        let json = Codec.encode codec value
+        Expect.equal (Codec.decode codec json) (Ok value) $"{Json.serialize json}"
+
+[<Tests>]
+let codecs =
+    testList
+        "EnvCodecs"
+        [
+            test "errors are tagged unions that round-trip" {
+                roundTrip
+                    EnvCodecs.fsError
+                    [
+                        NotFound "/a"
+                        AlreadyExists "/a"
+                        NotADirectory "/a"
+                        IsADirectory "/a"
+                        DirectoryNotEmpty "/a"
+                        AccessDenied "/a"
+                        InvalidPath("a", "not absolute")
+                        IoFailed("/a", "disk full")
+                    ]
+
+                Expect.equal
+                    (Json.serialize (Codec.encode EnvCodecs.fsError (InvalidPath("a", "not absolute"))))
+                    """{"kind":"invalidPath","path":"a","reason":"not absolute"}"""
+                    "wire format"
+
+                let digest = BlobHash.ofBytes [| 1uy |]
+
+                roundTrip
+                    EnvCodecs.patchError
+                    [
+                        Stale("/a", digest, BlobHash.ofBytes [||])
+                        InvalidEdit("/a", "overlap")
+                        NotText "/a"
+                        PatchFsError(NotFound "/a")
+                    ]
+
+                roundTrip EnvCodecs.searchError [ InvalidQuery "bad"; SearchFsError(AccessDenied "/a") ]
+                roundTrip EnvCodecs.blobError [ BlobError.NotFound digest; BlobError.Corrupt digest ]
+                roundTrip EnvCodecs.snapshotError [ Unavailable "no git"; GitFailed("add", 128, "fatal") ]
+
+                roundTrip
+                    EnvProtocol.execError
+                    [
+                        ExecError.NotStarted("x", "missing")
+                        ExecError.InvalidSize { Cols = 0; Rows = 1 }
+                        ExecError.UnknownProcess "7"
+                    ]
+            }
+
+            test "patches and process specs round-trip" {
+                roundTrip
+                    EnvCodecs.filePatch
+                    [
+                        Create("/a", "text")
+                        Edit("/a", Some(BlobHash.ofBytes [||]), [ { Line = 1; Count = 0; Lines = [ "x" ] } ])
+                        Edit("/a", None, [])
+                        Delete("/a", None)
+                    ]
+
+                roundTrip EnvCodecs.program [ Exec("git", [ "status"; "-s" ]); Exec("ls", []); Script "echo hi" ]
+
+                roundTrip
+                    EnvCodecs.envVars
+                    [ Inherit [ "A", Some "1"; "B", None ]; Inherit []; Exactly [ "PATH", "/bin" ] ]
             }
         ]

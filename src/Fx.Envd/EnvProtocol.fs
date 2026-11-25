@@ -291,19 +291,27 @@ module EnvProtocol =
     // ---- Processes ------------------------------------------------------------------------------
 
     let execError: Codec<ExecError> =
-        Codec.union "kind" (fun notStarted invalidSize unknown value ->
-            match value with
-            | ExecError.NotStarted(program, reason) -> notStarted program reason
-            | ExecError.InvalidSize size -> invalidSize size
-            | ExecError.UnknownProcess id -> unknown id)
-        |> Codec.case2
-            "notStarted"
-            (fun program reason -> ExecError.NotStarted(program, reason))
-            (Field.required "program" Codec.string)
-            (Field.required "reason" Codec.string)
-        |> Codec.case1 "invalidSize" ExecError.InvalidSize (Field.required "size" EnvCodecs.ptySize)
-        |> Codec.case1 "unknownProcess" ExecError.UnknownProcess (Field.required "id" Codec.string)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! notStarted =
+                Codec.case2
+                    "notStarted"
+                    (fun program reason -> ExecError.NotStarted(program, reason))
+                    (Field.required "program" Codec.string)
+                    (Field.required "reason" Codec.string)
+
+            and! invalidSize =
+                Codec.case1 "invalidSize" ExecError.InvalidSize (Field.required "size" EnvCodecs.ptySize)
+
+            and! unknown =
+                Codec.case1 "unknownProcess" ExecError.UnknownProcess (Field.required "id" Codec.string)
+
+            return
+                fun value ->
+                    match value with
+                    | ExecError.NotStarted(program, reason) -> notStarted program reason
+                    | ExecError.InvalidSize size -> invalidSize size
+                    | ExecError.UnknownProcess id -> unknown id
+        }
 
     let private started: Codec<Started> =
         Codec.record {
