@@ -110,6 +110,7 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.Components.Live": "[0.0.0, )",
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
@@ -123,6 +124,22 @@
           "Fx.Store.Live": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )",
           "Fx.Variants": "[0.0.0, )"
+        }
+      },
+      "fx.components": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.components.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Components": "[0.0.0, )"
         }
       },
       "fx.contracts": {
