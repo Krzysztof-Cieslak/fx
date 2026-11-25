@@ -443,10 +443,15 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                         do! signal.Task
                     }
 
+            // How the interrupt stopped the cell, also when the cell's answer won the race (a kill ends
+            // the cell's run too): the race waits for both, so this is known after it.
+            let stopped = ref None
+
             let interrupt: Eff<'K, Ran> =
                 eff {
                     do! untilCancelled
                     let! how = Kernel.interrupt k
+                    stopped.Value <- Some how
                     return Ran.Interrupted how
                 }
 
@@ -454,10 +459,12 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                 let! outcome =
                     Eff.shield (Eff.race [ Kernel.run k cell |> Eff.map Ran.Answered; interrupt ])
 
+                // A killed kernel is closed here, whichever branch won: deciding it from what was done
+                // rather than from whether its connection has ended yet keeps it deterministic (replay).
                 let exited =
-                    match outcome with
-                    | Ran.Answered(Error(KernelFailure.Exited _))
-                    | Ran.Interrupted Interruption.Killed -> true
+                    match outcome, stopped.Value with
+                    | Ran.Answered(Error(KernelFailure.Exited _)), _
+                    | _, Some Interruption.Killed -> true
                     | _ -> (Kernel.exited k).IsCompleted
 
                 if exited then
@@ -468,8 +475,10 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
 
                     do! Eff.shield (Kernel.close k |> Eff.ignore)
 
+                // Interrupted is interrupted, whichever branch finished first.
                 match outcome with
                 | Ran.Interrupted _ -> return raise (OperationCanceledException turn)
+                | Ran.Answered _ when turn.IsCancellationRequested -> return raise (OperationCanceledException turn)
                 | Ran.Answered result ->
                     return
                         lock gate (fun () ->
