@@ -65,9 +65,10 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
 - The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`),
   and the host's registry the slots a turn reads (`CodeActSlots.read`: the core's, the render's, content
   exclusions', the strategy's and its grants guard's). Both are the composition root's (`src/Fx.Host`).
-- The composition root attaches the grants guard to each turn's hands (`GrantGuard.attach` with
-  `GrantSetup.create grants sessions turn (GrantSettings.ofVariants variants)`, the variants of the
-  turn's profile): without it, nothing asks the grants log.
+- The composition root (`src/Fx.Host`) attaches the grants guard to each turn's hands
+  (`GrantGuard.attach` with `GrantSetup.create grants sessions turn (GrantSettings.ofVariants
+  variants)`, the variants of the turn's profile): without it, nothing asks the grants log. `fx run`
+  puts the run's grant requests to the person at the terminal ([host.md](host.md)).
 - `codeact.Close()` closes every session's kernel when the host stops.
 
 ## A turn

@@ -132,11 +132,13 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   (`session/list`); the host starts them at boot.
 - A session's **hands** (`CodeActConfig.Hands`, per turn) are its environment opened through `IEnvs`
   (`EnvHands.ofHandle`, with envd's workspace snapshots for the step journal) and a `KernelPlan`: the interpreter named by `agent.interpreter` (default
-  `bun-ts`) on the runtime it names, the project's trust, the host's variables scrubbed. Grants on
-  host calls come with T127b (`Guard` allows everything until then). Every process of a session
-  (commands, the kernel) runs in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on
-  Linux, Seatbelt on macOS, none on Windows; the agent's overrides come with agents (T213,
-  `KernelPlan.Sandbox`).
+  `bun-ts`) on the runtime it names, the project's trust, the host's variables scrubbed. Each turn's
+  hands get the grants guard (`GrantGuard.attach` with `GrantSettings.ofVariants` of the turn's
+  profile, [codeact.md](codeact.md#grants-spec-13-18-t127b)): commands, writes outside the workspace
+  or to protected paths, reads outside it and network bindings ask the grants log; its slots
+  (`codeact.grants.*`) are in `HostSlots.core`. Every process of a session (commands, the kernel) runs
+  in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on Linux, Seatbelt on macOS,
+  none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`).
 - The workspace's **environment**: the spec named `default` in host config (or trusted project
   config), on the project's directory unless it names another; otherwise `fx.env.local` on the
   project, envd in the host's process. One per workspace, created with the first session; one that
@@ -233,11 +235,13 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    The environment's warnings are shown once (`warning: …` on standard error): an environment no
    sandbox driver confines runs unsandboxed, and says why (Windows; `sandbox.driver = none`; bubblewrap
    that cannot run here, with what to do).
-3. Grant requests that open meanwhile (e.g. installing Bun the first time) are put to the person at the
-   terminal: `y` once, `a` always on this host, anything else denies once. Without a terminal they are
-   denied once, saying so. A decision about a call in doubt (a turn the host stopped during a call,
-   recovered at its start) is put to the person too: the card's question, the call, what it printed,
-   and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
+3. Grant requests of the run (its session's, e.g. a command a cell runs, and those of no session, e.g.
+   installing Bun the first time) are put to the person at the terminal (`GrantPrompts`): the summary,
+   the action and resource, and the evidence (which turn and call asked, the command line), then `y`
+   once, `s` for this session and `a` always on this host where the request offers them, anything else
+   denies once. Without a terminal they are denied once, saying so. A decision about a call in doubt (a
+   turn the host stopped during a call, recovered at its start) is put to the person too: the card's
+   question, the call, what it printed, and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
    answer) the run ends with an error saying what waits, and the decision stays open.
 4. The prompt is steered in; activity lines go to standard error (`◇ cell  <intent>`, `◆ edit`, `✗`
    for failures); when the turn ends, the result card goes to standard output, or with `--json` one
@@ -282,14 +286,15 @@ install's approval (no terminal).
   after the person approves; a restart that continues the session without asking again; a turn the
   host stopped during a model call, abandoned at the next start; a cell the host stopped during, a
   decision at the next start that `fx run` cannot make without a terminal, then a person's `failed`
-  and the turn going on.
+  and the turn going on; a cell's command that asks the grants log and runs once a person allows it,
+  and one denied once with nobody at a terminal (the model reads the denial).
+- `GrantPromptTests`: what the terminal shows of a grant request, and replies as answers.
 
 ## Left to later tasks
 
 | What | Task |
 |---|---|
 | `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T130, T509 |
-| Grants on host calls (`Hands.Guard`) | T127b |
 | The TUI (`fx` without arguments), the trust prompt, showing warnings | T130 |
 | Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase | T115, with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
