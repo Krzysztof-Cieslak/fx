@@ -29,6 +29,7 @@ let all: Scenario list =
             Rpc.Wire.scenarios
             Rpc.Transports.scenarios
             Extensions.Extensions.scenarios
+            TypeScript.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
