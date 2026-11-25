@@ -847,6 +847,42 @@ let tests (name: string) (connect: unit -> Task<Link>) : Test =
                                 })
                     }
 
+                    testTask "channels opened from many threads at once keep the connection" {
+                        do!
+                            session (fun s ->
+                                task {
+                                    let limit =
+                                        min limits.Channels.Value.MaxChannels clientLimits.Channels.Value.MaxChannels
+
+                                    for _ in 1..200 do
+                                        // Released together, so that the opens race.
+                                        use start = new Barrier(limit)
+
+                                        let opening () =
+                                            start.SignalAndWait(TimeSpan.FromSeconds 30.0) |> ignore
+                                            Eff.run s.Env (Rpc.openChannel s.Peer)
+
+                                        let! opened =
+                                            within (
+                                                Task.WhenAll
+                                                    [
+                                                        for _ in 1..limit ->
+                                                            Task.Factory.StartNew(
+                                                                opening,
+                                                                TaskCreationOptions.LongRunning
+                                                            )
+                                                            |> fun t -> t.Unwrap()
+                                                    ]
+                                            )
+
+                                        for channel in opened |> Array.map expectOk do
+                                            channel.Reset(ResetCode.Cancelled, "done")
+
+                                    let! after = run s (Rpc.call s.Peer Methods.add { A = 1; B = 1 })
+                                    Expect.equal after (Ok 2) "still connected"
+                                })
+                    }
+
                     testTask "channels are limited and multiplexed" {
                         do!
                             session (fun s ->
