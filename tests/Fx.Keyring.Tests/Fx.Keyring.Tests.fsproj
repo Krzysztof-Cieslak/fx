@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Conformance\KeyringConformance.fs" />
+    <!-- Shared with Fx.Effects.Tests: the fake and LocalPrivateFiles pass the same tests. -->
+    <Compile Include="..\Fx.Effects.Tests\Conformance\PrivateFilesConformance.fs" Link="Conformance\PrivateFilesConformance.fs" />
     <Compile Include="KeyringTests.fs" />
     <Compile Include="HeadlessTests.fs" />
     <Compile Include="WireTests.fs" />
     <Compile Include="SessionCryptoTests.fs" />
     <Compile Include="LiveTests.fs" />
+    <Compile Include="PrivateFilesTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

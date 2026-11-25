@@ -1,6 +1,7 @@
 module Fx.Keyring.Tests.HeadlessTests
 
 open Expecto
+open Fx.Effects
 open Fx.Keyring
 
 let private facts (os: HostOs) (variables: (string * string) list) : HostFacts =

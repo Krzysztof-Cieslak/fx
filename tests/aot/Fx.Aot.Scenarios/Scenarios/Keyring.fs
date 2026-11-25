@@ -13,6 +13,7 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 open Fx
+open Fx.Effects
 open Fx.Keyring
 open Fx.Keyring.DBus
 open Fx.Keyring.SecretService
@@ -206,7 +207,7 @@ let private headless =
 /// The status without messages, which may name sockets or be localized.
 let private statusKind (status: KeyringStatus) =
     match status with
-    | KeyringStatus.Unavailable(Unavailable.BusUnreachable _) -> "unavailable: bus-unreachable"
+    | KeyringStatus.Unavailable(KeyringUnavailable.BusUnreachable _) -> "unavailable: bus-unreachable"
     | KeyringStatus.Failed(code, _) -> "failed: " + code
     | other -> string other
 

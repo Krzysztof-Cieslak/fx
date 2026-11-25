@@ -1,9 +1,8 @@
-namespace Fx.Keyring
+namespace Fx.Effects
 
 open System
 open System.Threading
 open System.Threading.Tasks
-open Fx.Effects
 
 /// A service: the namespace in a keyring that an application chooses, such as the product's name.
 /// 1–128 characters from `A-Z a-z 0-9 . _ - /`, starting with a letter or digit. Never `:`, which
@@ -63,16 +62,6 @@ module KeyringKey =
         KeyringService.tryCreate service
         |> Result.bind (fun service -> create service account)
 
-/// A secret's text. It never prints its value (`ToString` and string interpolation show only
-/// `(redacted)`), so it does not leak into logs, traces or prompts by accident. Keyrings store it as
-/// UTF-8.
-[<Sealed>]
-type SecretText(value: string) =
-    /// The secret itself. Call it at the one place that needs the value.
-    member _.Reveal() = value
-
-    override _.ToString() = "(redacted)"
-
 /// Whether a keyring may ask the user (an unlock dialog, an access confirmation).
 [<RequireQualifiedAccess>]
 type Prompts =
@@ -90,7 +79,7 @@ type Prompts =
 /// Why there is no usable keyring on this machine: an expected state of headless machines
 /// (SSH sessions, containers, CI, WSL), not a defect.
 [<RequireQualifiedAccess>]
-type Unavailable =
+type KeyringUnavailable =
     /// Linux: no D-Bus session bus (`DBUS_SESSION_BUS_ADDRESS` unset and no `$XDG_RUNTIME_DIR/bus`).
     | NoSessionBus
     /// Linux: the session bus address is set, but connecting or authenticating failed.
@@ -123,7 +112,7 @@ type KeyringStatus =
     | Ready
     /// The keyring exists but is locked: unlocking it needs the user (a prompt).
     | Locked
-    | Unavailable of Unavailable
+    | Unavailable of KeyringUnavailable
     /// The probe failed in a way this module does not classify; the code and message are for display.
     | Failed of code: string * message: string
 
@@ -137,7 +126,7 @@ type KeyringStatus =
 /// A keyring operation that failed (an expected failure).
 [<RequireQualifiedAccess>]
 type KeyringError =
-    | Unavailable of Unavailable
+    | Unavailable of KeyringUnavailable
     /// The keyring is locked and prompts are off (`Prompts.Never`), or it refused to ask.
     | Locked
     /// The user dismissed the keyring's prompt.
@@ -213,7 +202,7 @@ module Keyring =
         Text.Encoding.UTF8.GetByteCount(value.Reveal())
 
     /// A keyring on which everything fails with the same reason (no backend on this machine).
-    let unavailable (backend: string) (reason: Unavailable) : Keyring =
+    let unavailable (backend: string) (reason: KeyringUnavailable) : Keyring =
         let error () =
             Task.FromResult(Error(KeyringError.Unavailable reason))
 

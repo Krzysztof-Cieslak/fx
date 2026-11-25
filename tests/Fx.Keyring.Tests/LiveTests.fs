@@ -11,6 +11,7 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 open Expecto
+open Fx.Effects
 open Fx.Keyring
 open Fx.Keyring.DBus
 open Fx.Keyring.SecretService

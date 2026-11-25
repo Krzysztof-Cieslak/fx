@@ -5,6 +5,7 @@ open System.Runtime.InteropServices
 open System.Text
 open System.Threading
 open System.Threading.Tasks
+open Fx.Effects
 open Fx.Keyring.Native.Apple
 
 /// The macOS keychain: generic passwords (`kSecClassGenericPassword`) in the user's default keychain
@@ -34,7 +35,7 @@ module MacKeychain =
             || status = ErrSecNoSuchKeychain
             || status = ErrSecNotAvailable
         then
-            KeyringError.Unavailable Unavailable.NoKeychain
+            KeyringError.Unavailable KeyringUnavailable.NoKeychain
         else
             KeyringError.Failed(string status, describe status)
 
@@ -46,7 +47,7 @@ module MacKeychain =
             let status = SecKeychainCopyDefault slot
 
             if status = ErrSecNoDefaultKeychain || status = ErrSecNoSuchKeychain then
-                KeyringStatus.Unavailable Unavailable.NoKeychain
+                KeyringStatus.Unavailable KeyringUnavailable.NoKeychain
             elif status <> ErrSecSuccess then
                 KeyringStatus.Failed(string status, describe status)
             else

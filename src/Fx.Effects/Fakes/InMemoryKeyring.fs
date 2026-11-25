@@ -1,7 +1,8 @@
-namespace Fx.Keyring
+namespace Fx.Effects.Fakes
 
 open System.Threading
 open System.Threading.Tasks
+open Fx.Effects
 
 /// A keyring held in memory, for tests and `fx test` environments. It can play a locked or
 /// unavailable keyring, so code that falls back (spec §11.4: `keyring`, then `file`) can be tested

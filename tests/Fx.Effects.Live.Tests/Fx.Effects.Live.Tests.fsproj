@@ -5,12 +5,14 @@
     <Compile Include="..\Fx.Effects.Tests\Conformance\IdsConformance.fs" Link="Conformance\IdsConformance.fs" />
     <Compile Include="Conformance\ShellConformance.fs" />
     <Compile Include="..\Fx.Effects.Tests\Conformance\HttpConformance.fs" Link="Conformance\HttpConformance.fs" />
+    <Compile Include="..\Fx.Effects.Tests\Conformance\HostVariablesConformance.fs" Link="Conformance\HostVariablesConformance.fs" />
     <Compile Include="LiveEnv.fs" />
     <Compile Include="SystemClockTests.fs" />
     <Compile Include="SystemIdsTests.fs" />
     <Compile Include="LocalFsTests.fs" />
     <Compile Include="LocalShellTests.fs" />
     <Compile Include="SystemHttpTests.fs" />
+    <Compile Include="SystemVariablesTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

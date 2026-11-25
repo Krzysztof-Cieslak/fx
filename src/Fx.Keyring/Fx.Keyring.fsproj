@@ -2,15 +2,15 @@
   <!--
     The operating system's keyring (spec §11.4 `keyring`, §20 "OS keychains"): the macOS Keychain
     (Security.framework), the Windows Credential Manager and DPAPI, and the Secret Service on Linux
-    over our own D-Bus client, behind the capability-shaped `Keyring` record. The pure parts are
-    Keyring.fs, InMemoryKeyring.fs, Headless.fs, DBus/Message.fs, DBus/Wire.fs, DBus/Address.fs and
-    SecretService/SessionCrypto.fs; the rest is the imperative shell, with reviewed entries in
-    analyzers.json. Findings: docs/spikes/keychains.md.
+    over our own D-Bus client, interpreting the `Keyring` capability (src/Fx.Effects/Keyring.fs, with
+    its in-memory fake, since T121's fx.store.keyring builds on it through the public SDK); and the
+    private files the `file` credential store keeps its file in (LocalPrivateFiles: owner-only modes,
+    DPAPI on Windows). The pure parts are Headless.fs, DBus/Message.fs, DBus/Wire.fs,
+    DBus/Address.fs and SecretService/SessionCrypto.fs; the rest is the imperative shell, with
+    reviewed entries in analyzers.json. Findings: docs/spikes/keychains.md.
   -->
 
   <ItemGroup>
-    <Compile Include="Keyring.fs" />
-    <Compile Include="InMemoryKeyring.fs" />
     <Compile Include="Headless.fs" />
     <Compile Include="DBus\Message.fs" />
     <Compile Include="DBus\Wire.fs" />
@@ -24,6 +24,7 @@
     <Compile Include="MacKeychain.fs" />
     <Compile Include="WindowsCredentials.fs" />
     <Compile Include="Dpapi.fs" />
+    <Compile Include="LocalPrivateFiles.fs" />
     <Compile Include="LocalHostFacts.fs" />
     <Compile Include="LocalKeyring.fs" />
   </ItemGroup>
