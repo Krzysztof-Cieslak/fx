@@ -31,6 +31,7 @@
     <Compile Include="Scenarios\Kestrel\Transports.fs" />
     <Compile Include="Scenarios\Kestrel\Builders.fs" />
     <Compile Include="Scenarios\Contracts.fs" />
+    <Compile Include="Scenarios\ContractsLarge.fs" />
     <Compile Include="Scenarios\Sqlite.fs" />
     <Compile Include="Scenarios\Pty.fs" />
     <Compile Include="Scenarios\Store.fs" />
