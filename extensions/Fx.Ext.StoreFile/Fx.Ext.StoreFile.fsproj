@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.store.file package (spec §11.4, §16.4): a credential store in one file only the
+    user can read, over the host's private files (mode 0600 on Unix; an owner-only ACL and DPAPI on
+    Windows). A native extension: like every package under extensions/, it references the public SDK
+    (src/Fx.Sdk) and nothing else. See README.md and docs/modules/auth.md.
+  -->
+  <ItemGroup>
+    <Compile Include="StoreFile.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

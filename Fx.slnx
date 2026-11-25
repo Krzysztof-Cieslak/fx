@@ -40,6 +40,7 @@
     <Project Path="src/Fx.Identity.Host/Fx.Identity.Host.fsproj" />
     <Project Path="src/Fx.Keyring/Fx.Keyring.fsproj" />
     <Project Path="src/Fx.CodeAct/Fx.CodeAct.fsproj" />
+    <Project Path="src/Fx.Auth/Fx.Auth.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -58,6 +59,10 @@
     <Project Path="extensions/Fx.Ext.EgressExclusions/Fx.Ext.EgressExclusions.fsproj" />
     <Project Path="extensions/Fx.Ext.EnvLocal/Fx.Ext.EnvLocal.fsproj" />
     <Project Path="extensions/Fx.Ext.IdentityLocalOsUser/Fx.Ext.IdentityLocalOsUser.fsproj" />
+    <Project Path="extensions/Fx.Ext.AuthStandard/Fx.Ext.AuthStandard.fsproj" />
+    <Project Path="extensions/Fx.Ext.StoreKeyring/Fx.Ext.StoreKeyring.fsproj" />
+    <Project Path="extensions/Fx.Ext.StoreFile/Fx.Ext.StoreFile.fsproj" />
+    <Project Path="extensions/Fx.Ext.StoreEphemeral/Fx.Ext.StoreEphemeral.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -109,6 +114,7 @@
     <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
     <Project Path="tests/Fx.CodeAct.Tests/Fx.CodeAct.Tests.fsproj" />
+    <Project Path="tests/Fx.Auth.Tests/Fx.Auth.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
     <Project Path="tests/Fx.Grants.Tests/Fx.Grants.Tests.fsproj" />

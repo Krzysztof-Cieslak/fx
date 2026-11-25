@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.auth.standard package (spec §11.3–11.4, §16.4): the `api_key` and `env` auth
+    methods, and the `store` and `env` secret sources. A native extension: like every package under
+    extensions/, it references the public SDK (src/Fx.Sdk) and nothing else. See README.md and
+    docs/modules/auth.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Settings.fs" />
+    <Compile Include="AuthStandard.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

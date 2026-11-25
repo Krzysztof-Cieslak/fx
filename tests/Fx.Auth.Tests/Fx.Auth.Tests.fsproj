@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Service credentials (docs/modules/auth.md): the credential-store conformance suite on the built-in
+    stores (fx.store.ephemeral, fx.store.file, fx.store.keyring; the OS keyring on Windows and with
+    KEYRING_TESTS=1), fx.auth.standard's methods and sources, the host's auth service (src/Fx.Auth),
+    the `auth` commands, and loading the built-ins.
+  -->
+  <ItemGroup>
+    <Compile Include="Conformance\CredentialStoreConformance.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="StoreTests.fs" />
+    <Compile Include="MethodTests.fs" />
+    <Compile Include="ServiceTests.fs" />
+    <Compile Include="CommandTests.fs" />
+    <Compile Include="LoadTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Auth\Fx.Auth.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Keyring\Fx.Keyring.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Extensions\Fx.Extensions.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.AuthStandard\Fx.Ext.AuthStandard.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreKeyring\Fx.Ext.StoreKeyring.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreFile\Fx.Ext.StoreFile.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreEphemeral\Fx.Ext.StoreEphemeral.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
+  </ItemGroup>
+</Project>
