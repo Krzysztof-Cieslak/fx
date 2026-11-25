@@ -7,7 +7,7 @@
 //         platform-sensitive files (FULL_PATHS).
 //   fast  every other pull request: build and test on Linux, macOS and Windows, Native AOT and the
 //         JIT-vs-native diff on one target per OS family (FAST_AOT), and the jobs that test one
-//         area (keyring, musl Bun, the spike) only when that area changes.
+//         area (keyring, sandbox, musl Bun, the spike) only when that area changes.
 // A pull request that changes only Markdown runs neither builds nor AOT jobs.
 //
 //   bun scripts/ci-plan.ts                     in CI: reads the event from the environment
@@ -29,6 +29,7 @@ export type Plan = {
   code: boolean;
   aot: Target[];
   keyring: Target[];
+  sandbox: Target[];
   bunMusl: { arch: string; os: string }[];
   networkOnAllOs: boolean;
   spike: boolean;
@@ -54,6 +55,17 @@ const KEYRING: Target[] = [
 ];
 const FAST_KEYRING = ["linux-x64", "linux-musl-x64", "osx-arm64"];
 
+// The sandbox drivers' live suites on the targets the build job does not cover (arm64 Linux, Intel
+// macOS), and natively; bubblewrap needs no musl job (Alpine runs in a container without user
+// namespaces).
+const SANDBOX: Target[] = [
+  { rid: "linux-x64", os: "ubuntu-24.04" },
+  { rid: "linux-arm64", os: "ubuntu-24.04-arm" },
+  { rid: "osx-arm64", os: "macos-26" },
+  { rid: "osx-x64", os: "macos-26-intel" },
+];
+const FAST_SANDBOX = ["linux-x64", "osx-arm64"];
+
 const BUN_MUSL = [
   { arch: "x64", os: "ubuntu-24.04" },
   { arch: "arm64", os: "ubuntu-24.04-arm" },
@@ -74,6 +86,11 @@ const FULL_PATHS = [
   "src/Fx.Sqlite/**",
   "src/Fx.Transport.Http/**",
   "extensions/Fx.Ext.RuntimeBun/**",
+  // Sandbox drivers: what confines a process differs per OS, kernel and architecture (bwrap's
+  // namespaces, the seccomp program per architecture, Seatbelt).
+  "extensions/Fx.Ext.Sandbox*/**",
+  "src/Fx.Sdk/Sandbox.fs",
+  "src/Fx.Environments/Sandbox.fs",
   "scripts/ci-plan.ts",
 ];
 // The keyring job also runs the credential-store conformance suite on the keyring store (T121).
@@ -99,6 +116,17 @@ const BUN_PATHS = [
   "tests/Fx.Ext.RuntimeBun.Tests/**",
   "tests/Fx.Kernel.Tests/**",
   "tests/Fx.Ext.InterpreterBunTs.Tests/**",
+];
+// The sandbox job: the drivers, how environments use them, and their tests.
+const SANDBOX_PATHS = [
+  "extensions/Fx.Ext.Sandbox*/**",
+  "**/*Sandbox*",
+  "src/Fx.Environments/**",
+  "src/Fx.Envd/**",
+  "src/Fx.Envd.Live/**",
+  "tests/Fx.Environments.Tests/**",
+  "tests/Fx.Ext.Sandbox*/**",
+  "docs/modules/sandbox.md",
 ];
 const SPIKE_PATHS = ["spikes/**"];
 
@@ -127,12 +155,14 @@ export function plan(input: Input): Plan {
     (pr && anyMatch(FULL_PATHS, input.files));
   const code = !pr || full || input.files.length === 0 || !input.files.every((f) => f.endsWith(".md"));
   const keyringChanged = pr && anyMatch(KEYRING_PATHS, input.files);
+  const sandboxChanged = pr && anyMatch(SANDBOX_PATHS, input.files);
   const bunChanged = pr && anyMatch(BUN_PATHS, input.files);
   return {
     full,
     code,
     aot: code ? AOT.filter((t) => full || FAST_AOT.includes(t.rid)) : [],
     keyring: full ? KEYRING : code && keyringChanged ? KEYRING.filter((t) => FAST_KEYRING.includes(t.rid)) : [],
+    sandbox: full ? SANDBOX : code && sandboxChanged ? SANDBOX.filter((t) => FAST_SANDBOX.includes(t.rid)) : [],
     bunMusl: full ? BUN_MUSL : code && bunChanged ? BUN_MUSL.slice(0, 1) : [],
     networkOnAllOs: full || bunChanged,
     spike: input.event === "schedule" || (pr && anyMatch(SPIKE_PATHS, input.files)),
@@ -161,6 +191,8 @@ if (import.meta.main) {
       "aot-run": String(p.aot.length > 0),
       keyring: JSON.stringify({ include: p.keyring }),
       "keyring-run": String(p.keyring.length > 0),
+      sandbox: JSON.stringify({ include: p.sandbox }),
+      "sandbox-run": String(p.sandbox.length > 0),
       "bun-musl": JSON.stringify({ include: p.bunMusl }),
       "bun-musl-run": String(p.bunMusl.length > 0),
       "network-all-os": String(p.networkOnAllOs),
@@ -173,6 +205,7 @@ if (import.meta.main) {
       `- changed files: ${files.length}`,
       `- AOT: ${p.aot.map((t) => t.rid).join(", ") || "none"}`,
       `- keyring: ${p.keyring.map((t) => t.rid).join(", ") || "none"}`,
+      `- sandbox: ${p.sandbox.map((t) => t.rid).join(", ") || "none"}`,
       `- pinned Bun on musl: ${p.bunMusl.map((t) => t.arch).join(", ") || "none"}`,
       `- network Bun test on: ${p.networkOnAllOs ? "every OS" : "Linux"}`,
       `- spike: ${p.spike}`,

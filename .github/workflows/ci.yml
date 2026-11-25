@@ -46,6 +46,8 @@ jobs:
       aot-run: ${{ steps.plan.outputs.aot-run }}
       keyring: ${{ steps.plan.outputs.keyring }}
       keyring-run: ${{ steps.plan.outputs.keyring-run }}
+      sandbox: ${{ steps.plan.outputs.sandbox }}
+      sandbox-run: ${{ steps.plan.outputs.sandbox-run }}
       bun-musl: ${{ steps.plan.outputs.bun-musl }}
       bun-musl-run: ${{ steps.plan.outputs.bun-musl-run }}
       network-all-os: ${{ steps.plan.outputs.network-all-os }}
@@ -167,6 +169,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.5
+      # The sandbox drivers' suites require a driver that confines (SANDBOX_TESTS=1): Seatbelt is part
+      # of macOS; bubblewrap is installed here, and Ubuntu 24.04's AppArmor restriction on user
+      # namespaces lifted (docs/modules/sandbox.md says what users do instead).
+      - name: Install bubblewrap and let it create user namespaces (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --ro-bind / / --unshare-all --die-with-parent -- /bin/true
       - name: Restore (locked)
         run: dotnet restore Fx.slnx --locked-mode
       - name: Build
@@ -177,6 +189,7 @@ jobs:
       - name: Test
         env:
           PACKAGE_TESTS: "1"
+          SANDBOX_TESTS: "1"
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
       - name: Upload the SDK packages
         if: matrix.os == 'ubuntu-latest'
@@ -505,6 +518,72 @@ jobs:
         run: |
           security default-keychain -d user -s login.keychain-db || true
           security delete-keychain "$KEYRING_TEST_KEYCHAIN" || true
+
+  sandbox:
+    # The sandbox drivers (docs/modules/sandbox.md) where the build job does not run them: bubblewrap
+    # on arm64 Linux and Seatbelt on Intel macOS, besides linux-x64 and osx-arm64. Each job requires
+    # its OS's driver (SANDBOX_TESTS=1): the conformance suite, sandboxed environments, the bun-ts
+    # kernel in a sandbox (the CodeAct live tests), and the sandbox scenarios of the JIT-vs-native
+    # diff, natively. Targets from the plan: every one in the full tier; linux-x64 and osx-arm64 in
+    # the fast tier when sandbox or environment code changed.
+    name: Sandbox (${{ matrix.rid }})
+    needs: plan
+    if: needs.plan.outputs.sandbox-run == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.sandbox) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: bash
+    env:
+      RID: ${{ matrix.rid }}
+      SANDBOX_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-aot-${{ matrix.rid }}-
+      - name: Cache native libraries
+        uses: actions/cache@v6
+        with:
+          path: artifacts/native
+          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
+      - name: Cache the pinned Bun
+        uses: actions/cache@v6
+        with:
+          path: artifacts/kernel-bun-ts/runtimes
+          key: pinned-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/Fx.Kernel.Tests/PinnedBun.fs') }}
+      - name: Install bubblewrap and let it create user namespaces (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --ro-bind / / --unshare-all --die-with-parent -- /bin/true
+      - name: Restore (locked)
+        run: dotnet restore Fx.slnx --locked-mode
+      - name: Build the sandbox tests
+        run: |
+          for project in Fx.Environments.Tests Fx.Ext.SandboxBubblewrap.Tests Fx.Ext.SandboxSeatbelt.Tests Fx.CodeAct.Tests; do
+            dotnet build "tests/$project" --no-restore --configuration Release
+          done
+      - name: Sandbox tests
+        run: |
+          for project in Fx.Environments.Tests Fx.Ext.SandboxBubblewrap.Tests Fx.Ext.SandboxSeatbelt.Tests Fx.CodeAct.Tests; do
+            dotnet test --project "tests/$project" --no-build --configuration Release
+          done
+      - name: Publish the AOT scenarios
+        run: dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
+      - name: The sandbox scenarios of the JIT-vs-native diff, with a live sandbox
+        run: dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only sandbox-
 
   bun-musl:
     # fx.runtime.bun on musl (the build job covers glibc, macOS and Windows): installs the pinned Bun's
