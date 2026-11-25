@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    envd's imperative shell: the live interpreters it adds (ranged reads and atomic writes, watching,
+    spill files, platform detection) and its composition root (EnvdMain: the services from the real
+    interpreters, the state directory, `envd` on stdio). Only composition roots (the binary, tests)
+    reference this project; each file that touches the world has its own reviewed entry in
+    analyzers.json. Spec: docs/modules/envd.md.
+  -->
+  <ItemGroup>
+    <Compile Include="LocalWatch.fs" />
+    <Compile Include="LocalFsOps.fs" />
+    <Compile Include="LocalSpill.fs" />
+    <Compile Include="LocalPlatform.fs" />
+    <Compile Include="EnvdMain.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Envd\Fx.Envd.fsproj" />
+    <ProjectReference Include="..\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Store.Live\Fx.Store.Live.fsproj" />
+  </ItemGroup>
+</Project>

@@ -78,6 +78,31 @@
       "reason": "IInstallFiles interpreter: the installer's only code that touches the disk directly (unpacking, hashing, deleting trees, atomic replacement, lock files)."
     },
     {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Envd.Live/LocalFsOps.fs"],
+      "reason": "FsOps interpreter: ranged reads (seek) and atomic writes (a temporary file renamed over the target, keeping its Unix mode)."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Envd.Live/LocalWatch.fs"],
+      "reason": "FsOps.Watch interpreter: the only FileSystemWatcher; its events go into a ChangeQueue that the clock debounces."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Envd.Live/LocalSpill.fs"],
+      "reason": "Spill interpreter: appends overflowing process output to files in envd's state directory and reads them back for resumed attachments."
+    },
+    {
+      "codes": ["EFF003", "EFF004"],
+      "files": ["src/Fx.Envd.Live/LocalPlatform.fs"],
+      "reason": "envd's platform detection at startup: PATH (which shell), the locale variables (terminal defaults) and the workspace's case sensitivity, read once as values."
+    },
+    {
+      "codes": ["EFF003", "EFF004"],
+      "files": ["src/Fx.Envd.Live/EnvdMain.fs"],
+      "reason": "envd's composition root: the workspace (current directory), the per-user state directory (HOME or LOCALAPPDATA) and its layout."
+    },
+    {
       "codes": ["EFF007"],
       "files": ["src/Fx.Transport.Http/LocalClient.fs"],
       "reason": "Dials local listeners (loopback, Unix socket, named pipe) for WebSocket clients: the only outgoing connection code."
