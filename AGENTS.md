@@ -145,6 +145,14 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Bulk data goes over binary channels, not in JSON messages.
 - A new transport passes the conformance suite (`RpcConformance.tests` in `tests/Fx.Rpc.Tests`).
 
+**Kernel protocol** (module spec: [`docs/modules/kernel-protocol.md`](docs/modules/kernel-protocol.md))
+- Kernels speak `src/Fx.Kernel`'s protocol over Fx.Rpc on stdio; every message is defined once in `KernelProtocol` with codecs. TypeScript kernels import the generated `src/protocol.d.ts` (`KernelDeclarations`); never edit it, change the codecs and run the tests with `UPDATE_GOLDEN=1`.
+  - A kernel writes each message as `{"jsonrpc":"2.0",…}` (`jsonrpc` first) on a line of its own, so the host recovers messages after stray bytes on fd 1. No binary channels, no batches.
+  - A change an old kernel or host would misread is a new protocol version (`KernelProtocol.versions`), documented in the module spec.
+- Values cross the boundary as `Value` (`Inline | Blob | Handle`). Issue handles only from the session's `HandleTable` and resolve them there; decode values only into declared types (`Value.decode`, `Kernel.encodeAs`); validate `finish` with `KernelProtocol.Finish.validate`.
+- Start kernels with `Kernel.start` and a `KernelLaunch` whose environment is `Exactly` (the hygiene check refuses inherited environments and injection vectors).
+- A kernel is done when it passes `KernelConformance.tests` (tests/Fx.Kernel.Tests) on Linux, macOS and Windows: add it as a subject there, with its `Snippets`. Keep the suite language-neutral: check through the protocol, never a language's previews or completion values.
+
 **Extensions** (module spec: [`docs/modules/extensions.md`](docs/modules/extensions.md))
 - A built-in is a package under `extensions/<Name>/` (project `Fx.Ext.<Name>`, id `Product.extensionId "<local id>"`). It references `src/Fx.Sdk` and nothing else; `ArchitectureTests` (tests/Fx.Extensions.Tests) checks the `.fsproj` and the compiled assembly. Reference every new package from `tests/Fx.Extensions.Tests` so the check sees it. `extensions/Fx.Ext.Sample` is the reference.
 - Write it as a value: a `Manifest` (built with `Manifest.create` and the `Declare` helpers) and an `Activate` effect that returns an `Activation`: the contributions and methods the manifest declares, exactly. Native extensions are registered from a static list in the composition root, never loaded from assemblies.
@@ -274,6 +282,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Codec benchmark | `dotnet run -c Release --project tools/Fx.Contracts.Bench` (results in `docs/modules/contracts.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
+| Reference kernel | In `packages/kernel-bun-ts`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`. Its conformance runs in `dotnet test` (tests/Fx.Kernel.Tests), which downloads the pinned Bun into `artifacts/kernel-bun-ts/` (required in CI, skipped offline) |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
 | Install the pinned Bun over the network | `NETWORK_TESTS=1 dotnet test --project tests/Fx.Components.Live.Tests`: downloads Bun for this machine through the planner and installer and runs it (skipped without the variable; CI runs it as its own step) |
@@ -316,10 +325,12 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `src/Fx.Extensions` | The extension system's core: the registry machine, trust checks, the catalog, the declarative, native and process runtimes, the extension protocol and its F# server (`ExtensionServer`), and the bootstrap (`ExtensionHost`) |
 | `src/Fx.Components` | The component planner and lockfile, safe archive unpacking, the installer machine and its pipeline, the `IFetch`/`IInstallFiles`/`IComponents` capabilities and their fakes (pure; the model is in `Fx.Sdk`; spec in [`docs/modules/components.md`](docs/modules/components.md)) |
 | `src/Fx.Components.Live` | The installer's real interpreters: `HttpFetch` (downloads) and `LocalInstallFiles` (the disk); referenced only by composition roots |
+| `src/Fx.Kernel` | The kernel protocol (spec §6.4–6.6): messages and codecs, the `Value` wire type and session-scoped handles, the generated TypeScript declarations, the kernel framing and transport, and the host's `Kernel` client (spec in [`docs/modules/kernel-protocol.md`](docs/modules/kernel-protocol.md)) |
 | `extensions/` | Extension packages, one per directory, using only `src/Fx.Sdk`: `Fx.Ext.Sample` is the reference and the subject of the transport-parity tests (not bundled) |
+| `packages/` | TypeScript packages: `kernel-bun-ts`, the reference kernel of the kernel protocol (TypeScript cells on the pinned Bun), which T117 grows into `fx.interpreter.bun-ts` |
 | `native/` | Native libraries built from pinned sources: `native/sqlite` (the pin in `Sqlite.props`, compile options in `library.c`, the build in `Sqlite.targets`) |
 | `tests/<Project>.Tests` | Expecto tests for `src/<Project>`, run through Microsoft Testing Platform. `tests/Directory.Build.props` makes them JIT-only |
-| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff; also the JSON-RPC test service and its child-process peer (`Fx.Aot.Scenarios rpc-peer`), which `tests/Fx.Rpc.Tests` uses, and the sample extension's host and child process (`Fx.Aot.Scenarios ext-peer`), which `tests/Fx.Extensions.Tests` uses |
+| `tests/aot/Fx.Aot.Scenarios` | Native AOT scenarios for the JIT-vs-native diff; also the JSON-RPC test service and its child-process peer (`Fx.Aot.Scenarios rpc-peer`), which `tests/Fx.Rpc.Tests` uses, the sample extension's host and child process (`Fx.Aot.Scenarios ext-peer`), which `tests/Fx.Extensions.Tests` uses, and the script kernel and its process (`Fx.Aot.Scenarios kernel-peer`), which `tests/Fx.Kernel.Tests` uses |
 | `tests/aot/Fx.Aot.Diff` | The JIT-vs-native diff driver, which runs on the JIT |
 | `tests/support` | Programs that tests start as child processes (not test projects), e.g. `Fx.Store.Writer`, which the crash tests kill mid-append. A test project references one to get its apphost next to its own output |
 | `tests/Fx.Aot.Tests` | Tests for the diff harness in `tests/aot` |
@@ -332,7 +343,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `analyzers.json` | Analyzer policy: where each rule applies, and the reviewed allowlist |
 | `spikes/` | Throwaway prototypes from the spike tasks; findings live in `docs/spikes/` |
 | `docs/spikes/` | Spike findings and recommendations for the tasks that build on them, with any measurement tools they need |
-| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md), [`components.md`](docs/modules/components.md) |
+| `docs/modules/` | Module specs, one per module, e.g. [`contracts.md`](docs/modules/contracts.md), [`eff.md`](docs/modules/eff.md), [`machines.md`](docs/modules/machines.md), [`rpc.md`](docs/modules/rpc.md), [`extensions.md`](docs/modules/extensions.md), [`components.md`](docs/modules/components.md), [`kernel-protocol.md`](docs/modules/kernel-protocol.md) |
 
 - Add new F# projects under `src/`, and give each one a matching test project under `tests/`. F# repository tooling goes under `tools/`. Extension packages go under `extensions/`; their tests are the conformance and parity suites in `tests/Fx.Extensions.Tests`.
 - Get names such as `.fx/`, `FX_*`, `@fx/sdk` and `fx.env.local` from `Fx.Product`. F# namespaces and project names (`Fx.*`) are code identifiers and are not derived.

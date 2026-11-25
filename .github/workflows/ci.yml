@@ -43,6 +43,13 @@ jobs:
         run: dotnet tool restore
       - name: Formatting
         run: dotnet fantomas --check src tests tools extensions
+      # Its conformance suite runs in the build job (tests/Fx.Kernel.Tests), on the pinned Bun.
+      - name: Reference kernel type-checks and its unit tests pass
+        working-directory: packages/kernel-bun-ts
+        run: |
+          bun install --frozen-lockfile
+          bun check --no-script
+          bun test
 
   analyzers:
     name: Analyzers
@@ -87,6 +94,13 @@ jobs:
         with:
           path: artifacts/native
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/**') }}
+      # The pinned Bun the reference kernel runs on in the kernel conformance suite; the tests
+      # download it and check its digest (tests/Fx.Kernel.Tests/PinnedBun.fs holds the pin).
+      - name: Cache the pinned Bun
+        uses: actions/cache@v6
+        with:
+          path: artifacts/kernel-bun-ts/runtimes
+          key: pinned-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/Fx.Kernel.Tests/PinnedBun.fs') }}
       - name: Restore (locked)
         run: dotnet restore Fx.slnx --locked-mode
       - name: Build
