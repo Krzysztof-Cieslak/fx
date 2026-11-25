@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Service credentials on the host (spec §11.3–11.5): the choice of credential store
+    (`credentials.store`), the `secret:` resolver over the contributed sources (`secrets.sources`),
+    the auth service that resolves providers' credentials for ModelAccess and runs logins, and the
+    `auth` commands. The contracts (AuthMethod, CredentialStore, SecretSource) are in the public SDK
+    (src/Fx.Sdk); the built-in methods and stores are extensions (fx.auth.standard, fx.store.*).
+    Pure: the host's composition root hands it the keyring, private files, variables and HTTP.
+    Spec: docs/modules/auth.md.
+  -->
+  <ItemGroup>
+    <Compile Include="AuthSlots.fs" />
+    <Compile Include="StoreChoice.fs" />
+    <Compile Include="SecretResolver.fs" />
+    <Compile Include="AuthService.fs" />
+    <Compile Include="AuthHost.fs" />
+    <Compile Include="AuthCommands.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

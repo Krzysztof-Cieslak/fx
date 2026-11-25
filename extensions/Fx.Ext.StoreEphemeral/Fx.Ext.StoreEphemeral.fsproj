@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.store.ephemeral package (spec §11.4, §16.4): a credential store in the host's
+    memory, never written to disk. A native extension: like every package under extensions/, it
+    references the public SDK (src/Fx.Sdk) and nothing else. See README.md and docs/modules/auth.md.
+  -->
+  <ItemGroup>
+    <Compile Include="StoreEphemeral.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
