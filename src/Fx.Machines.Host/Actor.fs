@@ -104,16 +104,20 @@ type internal Rebuilt<'S> =
     {
         State: 'S
         Head: int64
-        /// Every command in the log, by key: deduplication survives restarts.
+        /// Every command in the log after `Floor`, by key: deduplication survives restarts.
         Keys: Map<IdempotencyKey, Outcome>
+        /// The sequence number of the snapshot the actor started from (0 for none). The keys of the
+        /// commits up to it are not in `Keys`: the actor looks them up in the log when it meets them.
+        Floor: int64
     }
 
 module internal Rebuilt =
-    let initial (state: 'S) : Rebuilt<'S> =
+    let from (snapshot: Snapshot<'S>) : Rebuilt<'S> =
         {
-            State = state
-            Head = 0L
+            State = snapshot.State
+            Head = snapshot.Seq
             Keys = Map.empty
+            Floor = snapshot.Seq
         }
 
     /// Folds one event. Events of a commit share its key, so a key's events are contiguous.
@@ -136,7 +140,7 @@ module internal Rebuilt =
                     rebuilt.Keys
             | Some _ -> rebuilt.Keys
 
-        {
+        { rebuilt with
             State = evolve rebuilt.State recorded.Event
             Head = recorded.Seq
             Keys = keys
@@ -150,6 +154,7 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
     let stream = spec.Stream
     let machine = spec.Machine
     let trace = env.Trace
+    let floor = start.Floor
 
     let span =
         trace.StartSpan env.Scope.Span "actor" [ Attr.text "stream" stream.Value ]
@@ -358,11 +363,27 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
 
         next, List.rev reactions
 
+    /// The outcome a key had: from memory, or, for an actor that started from a snapshot, from the
+    /// log's commits (whose keys up to the snapshot the actor never read).
+    let knownOutcome (key: IdempotencyKey) : Eff<'R, Outcome option> =
+        eff {
+            match lock gate (fun () -> Map.tryFind key outcomes) with
+            | Some outcome -> return Some outcome
+            | None when floor > 0L ->
+                match! EventLog.findCommit spec.Log stream key with
+                | Some first ->
+                    let outcome = Accepted first
+                    lock gate (fun () -> outcomes <- Map.add key outcome outcomes)
+                    return Some outcome
+                | None -> return None
+            | None -> return None
+        }
+
     /// Handles one command: command → Handle → append → Evolve → React → intents (spec §4.4).
     let handle (pending: Pending<'Cmd>) : Eff<'R, unit> =
         eff {
             let envelope = pending.Envelope
-            let known = lock gate (fun () -> Map.tryFind envelope.Key outcomes)
+            let! known = knownOutcome envelope.Key
 
             match known with
             | Some outcome ->
@@ -470,12 +491,20 @@ type internal ActorCore<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> 
             Send = fun envelope cancellation -> post envelope false cancellation
             Interrupt =
                 fun envelope cancellation ->
+                    let urgent () =
+                        cancelWork ()
+                        post envelope true cancellation
+
                     match lock gate (fun () -> Map.tryFind envelope.Key outcomes) with
                     // A retried interrupt must not cancel work that started after the first one.
                     | Some outcome -> Task.FromResult outcome
-                    | None ->
-                        cancelWork ()
-                        post envelope true cancellation
+                    | None when floor > 0L ->
+                        task {
+                            match! spec.Log.FindCommit stream envelope.Key cancellation with
+                            | Some first -> return Accepted first
+                            | None -> return! urgent ()
+                        }
+                    | None -> urgent ()
             Snapshot = fun () -> lock gate (fun () -> published)
             Stop =
                 fun () ->
@@ -496,9 +525,15 @@ module Actor =
         (machine: Machine<'Cmd, 'Evt, 'S, 'Intent>)
         (log: EventLog<'Evt>)
         (stream: StreamId)
+        (from: Snapshot<'S>)
         : Eff<'R, Rebuilt<'S>> =
         eff {
-            let mutable rebuilt = Rebuilt.initial machine.Initial
+            let! head = EventLog.head log stream
+
+            if from.Seq > head then
+                invalidArg (nameof from) $"{stream}: the snapshot is at {from.Seq}, past the head {head}."
+
+            let mutable rebuilt = Rebuilt.from from
             let mutable reading = true
 
             while reading do
@@ -512,17 +547,33 @@ module Actor =
             return rebuilt
         }
 
+    /// Starts an actor from a snapshot of its state (spec §5: snapshot + tail): folds the events after
+    /// it, runs `Recover`, then handles commands until stopped. The snapshot must be at a commit
+    /// boundary at or below the head (`Actor.snapshot` gives one; the log is the truth). The keys of the
+    /// commits up to the snapshot are looked up in the log (`EventLog.FindCommit`) when a command
+    /// carries one the actor has not seen, so a command sent again still gets its first outcome.
+    let startFrom<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> ITrace and 'R :> IScopeWith<'R>>
+        (from: Snapshot<'S>)
+        (spec: ActorSpec<'R, 'Cmd, 'Evt, 'S, 'Intent>)
+        : Eff<'R, Actor<'Cmd, 'Evt, 'S>> =
+        eff {
+            let! rebuilt = rebuild spec.Machine spec.Log spec.Stream from
+            let recover = spec.Recover rebuilt.State
+            let! env = Eff.ask
+            return ActorCore(spec, env, rebuilt, recover).Handle
+        }
+
     /// Starts an actor: rebuilds the machine's state from the log, runs `Recover`, then handles
     /// commands until stopped. The actor outlives the caller's scope; stop it with `stop`, or use `run`.
     let start<'R, 'Cmd, 'Evt, 'S, 'Intent when 'R :> IClock and 'R :> ITrace and 'R :> IScopeWith<'R>>
         (spec: ActorSpec<'R, 'Cmd, 'Evt, 'S, 'Intent>)
         : Eff<'R, Actor<'Cmd, 'Evt, 'S>> =
-        eff {
-            let! rebuilt = rebuild spec.Machine spec.Log spec.Stream
-            let recover = spec.Recover rebuilt.State
-            let! env = Eff.ask
-            return ActorCore(spec, env, rebuilt, recover).Handle
-        }
+        startFrom
+            {
+                Seq = 0L
+                State = spec.Machine.Initial
+            }
+            spec
 
     /// Sends a command and waits for its outcome. Sending a key again returns the first outcome.
     let send<'R, 'Cmd, 'Evt, 'S when 'R :> IScope>

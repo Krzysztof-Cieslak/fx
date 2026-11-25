@@ -55,13 +55,14 @@ type Machine<'Cmd, 'Evt, 'S, 'Intent> =
 | `Read stream after max` | at most `max` events after a sequence number, in order |
 | `Head stream` | the last sequence number, 0 for an empty stream |
 | `WaitPast stream after` | completes with the head once the head is past `after` |
+| `FindCommit stream key` | the commit the key appended (`Appended`), if the stream has one: what `Append` would answer with `Duplicate`. Actors that start from a snapshot look up the keys they have not read |
 
 - Sequence numbers start at 1, with no gaps. Streams are independent.
 - **A stream never holds two commits with one key.** So a command takes effect at most once even when the writer does not know the key (a retry after a lost reply, an actor that did not read the whole log), and the caller learns where its events went.
 - Every event carries `EventMeta`: when the actor handled the command (`At`, on `IClock`), who sent it (`By`), its key (`Key`) and its cause (`Cause`). Events of one commit share it.
 - **Interpreters.** `InMemoryEventLog` is for tests, simulations and `fx test`. Its calls complete synchronously, and an append wakes waiting readers inline, before it returns. The durable store is `SqliteEventStore` ([store.md](store.md)). Every interpreter passes `EventLogConformance`, a function from a log to a `Test`.
 - **Events are typed values here.** The durable store keeps them as codec JSON with a schema version; `EventLog.typed` (Fx.Store) gives the typed view ([store.md](store.md)).
-- `EventLog.next`, `readAll` and `subscribe` are built on the four functions.
+- `EventLog.next`, `readAll` and `subscribe` are built on `Read` and `WaitPast`.
   - **`subscribe log stream after handle`** is spec §5's `subscribe(afterSeq)`. It replays the events after `after`, then follows new commits, in order, without gaps or repeats.
   - It reads in pages, so a slow subscriber never holds up writers. It stops when `handle` returns false, or when its scope is cancelled.
 
@@ -102,7 +103,7 @@ Each input goes through the shell loop of §4.4, one at a time, in mailbox order
 
 | A key that… | is answered with the first outcome… |
 |---|---|
-| was accepted with events | always: the actor rebuilds its key index from the log's metadata, so this survives restarts. A key the log has but the actor does not know (another writer appended it) gets `Duplicate` from the log, and the actor answers with that commit, its state unchanged |
+| was accepted with events | always: the actor rebuilds its key index from the log's metadata, so this survives restarts. An actor that started from a snapshot looks up the keys it meets in the log (`FindCommit`) before handling the command, so a command whose commit predates the snapshot gets that commit even if `Handle` would now reject it. A key the log has but the actor does not know (another writer appended it) gets `Duplicate` from the log, and the actor answers with that commit, its state unchanged |
 | was rejected, or accepted with no events | by the same actor. A new actor handles the command again |
 | was answered `Stopped` | never: the command was not handled |
 
@@ -153,12 +154,13 @@ When an actor stops:
 ### Lifecycle
 
 - **`Actor.start`** rebuilds the state, the head and the key index from the log, starts the loop, then runs `Recover`.
+- **`Actor.startFrom snapshot`** does the same from a snapshot (spec §5: snapshot + tail): it folds only the events after it. The snapshot must be at a commit boundary at or below the head; `Actor.snapshot` gives one, and `ActorSnapshots` (Fx.Store) loads the latest stored one. The keys of the commits up to the snapshot are not in memory: a command or interrupt with a key the actor has not seen is looked up in the log first (one indexed read per new key), so it still gets its first outcome and a retried interrupt still cancels nothing.
   - The actor outlives the scope that started it.
   - Its loop runs without cancellation, so a stopping actor never abandons an append half-way.
 - **`Actor.stop`**: the command in progress finishes, then the actor stops as above.
 - **`Actor.run spec body`** is the structured form. It stops the actor when `body` ends, also on failure or cancellation.
 - **`ActorRegistry`** keeps one actor per stream in a process.
-  - It starts an actor on first use, and again after one stopped (rebuilding from the log).
+  - It starts an actor on first use, and again after one stopped (rebuilding from the log). `ActorRegistry.createWith` takes the start function, e.g. one that starts from a snapshot.
   - Concurrent first uses start it once.
   - `ActorRegistry.stop` stops them all.
 
@@ -232,11 +234,9 @@ How it works:
 
 | What | Task |
 |---|---|
-| Actors that start from a snapshot instead of replaying from 1. The stores are ready (`SqliteEventStore`, snapshots and `Projection` in [store.md](store.md)); the actor would not know the keys before the snapshot. `Duplicate` keeps such a command from taking effect twice, but a command that `Handle` now rejects would get a different outcome than the first; a lookup by key in the log closes that | T125 |
-| The session machine on this host: steer/queue, durable pending requests, the client protocol | T125 |
 | Principals behind `Attribution.Principal` | T122 |
 | `OutcomeUnknown` through `Recover` | T128 |
-| Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | T125, T129 |
+| Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | T129 |
 | Journaling intents for exact replay of a session | T131 |
 | Epoch-fenced takeover leases; the actor already stops on a conflicting append | T507 |
-| Bounding the key index; evicting idle actors from a registry | when a long-lived stream needs it |
+| Bounding the key index (an actor could forget old keys and look them up with `FindCommit`, as after a snapshot); evicting idle actors from a registry | when a long-lived stream needs it |

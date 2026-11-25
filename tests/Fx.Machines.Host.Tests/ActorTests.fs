@@ -321,6 +321,61 @@ let tests =
                 runIn fakes.Env (Actor.stop first)
             }
 
+            test "an actor started from a snapshot folds only the tail, and keys before it keep their first outcome" {
+                let fakes = create ()
+                let log = InMemoryEventLog<Event>()
+                let first = start fakes (spec log.Log)
+                let prompt = envelope "p1" alice (Prompt "ab")
+                completed (send fakes first prompt) |> ignore
+                completed (send fakes first (envelope "p2" bob (Prompt "cd"))) |> ignore
+                let snapshot = Actor.snapshot first
+                fakes.Clock.Advance(seconds 2.0)
+                runIn fakes.Env (Actor.stop first)
+
+                // A log whose events up to the snapshot cannot be read: the actor must not need them.
+                let reads = ResizeArray<int64>()
+
+                let tailOnly =
+                    { log.Log with
+                        Read =
+                            fun stream after max cancellation ->
+                                reads.Add after
+                                log.Log.Read stream after max cancellation
+                    }
+
+                let second = runIn fakes.Env (Actor.startFrom snapshot (spec tailOnly))
+                Expect.isTrue (reads |> Seq.forall (fun after -> after >= 2L)) "read after the snapshot only"
+                checkLog machine log stream (Actor.snapshot second)
+
+                // p1 was handled before the snapshot. Handled again now it would queue a third prompt;
+                // the log's commit is its first outcome.
+                Expect.equal (completed (send fakes second prompt)) (accepted 0L 1) "the first outcome"
+                Expect.equal (completed (send fakes second prompt)) (accepted 0L 1) "remembered"
+                Expect.equal (lines log stream).Length 4 "nothing appended"
+
+                // Turn 2's question died with the first actor; end it and start turn 3.
+                completed (interrupt fakes second (envelope "i1" bob Interrupt)) |> ignore
+                completed (send fakes second (envelope "p3" alice (Prompt "e"))) |> ignore
+                Expect.equal fakes.Clock.PendingDelays 1 "turn 3 is thinking"
+
+                // A key from before the snapshot, sent again as an interrupt, cancels nothing.
+                Expect.equal
+                    (completed (interrupt fakes second (envelope "p2" bob Interrupt)))
+                    (accepted 1L 1)
+                    "the key's first outcome"
+
+                Expect.equal fakes.Clock.PendingDelays 1 "still thinking"
+                Expect.equal (completed (interrupt fakes second (envelope "i2" bob Interrupt))) (accepted 6L 1) "new"
+                Expect.equal fakes.Clock.PendingDelays 0 "cancelled"
+                runIn fakes.Env (Actor.stop second)
+
+                Expect.throwsT<ArgumentException>
+                    (fun () ->
+                        runIn fakes.Env (Actor.startFrom { snapshot with Seq = 99L } (spec log.Log))
+                        |> ignore)
+                    "a snapshot past the head"
+            }
+
             test "a key the log has but the actor does not know gets the log's commit as its first outcome" {
                 let fakes = create ()
                 let log = InMemoryEventLog<Event>()

@@ -133,6 +133,10 @@ module internal EventDatabase =
 
     let selectHead = "SELECT head FROM streams WHERE name = ?"
 
+    let selectCommitByName =
+        "SELECT c.first_seq, c.count FROM streams s JOIN commits c ON c.stream = s.id "
+        + "WHERE s.name = ? AND c.key = ?"
+
     let selectEvents =
         "SELECT e.seq, e.version, e.data, c.key, c.at, c.principal, c.via, c.cause_stream, c.cause_seq "
         + "FROM streams s JOIN events e ON e.stream = s.id "
@@ -591,6 +595,23 @@ type SqliteEventStore internal (path: string, options: EventStoreOptions, writer
 
             completion.Task
 
+    let findCommit (stream: StreamId) (key: IdempotencyKey) (cancellation: CancellationToken) =
+        if cancellation.IsCancellationRequested then
+            Task.FromCanceled<Appended option> cancellation
+        else
+            readers.Use(fun db ->
+                Connections.read db cancellation "looking up an idempotency key" (fun () ->
+                    Database.tryFirst
+                        db
+                        EventDatabase.selectCommitByName
+                        [ Value.Text stream.Value; Value.Text key.Value ]
+                        (fun row ->
+                            {
+                                After = row.Int64 0 - 1L
+                                Count = int (row.Int64 1)
+                            })))
+            |> Task.FromResult
+
     // ---- Snapshots --------------------------------------------------------------------------------
 
     let saveSnapshot (stream: StreamId) (name: string) (snapshot: StoredSnapshot) (cancellation: CancellationToken) =
@@ -634,6 +655,7 @@ type SqliteEventStore internal (path: string, options: EventStoreOptions, writer
             Read = read
             Head = head
             WaitPast = waitPast
+            FindCommit = findCommit
         }
 
     /// The snapshots of the streams' states, kept in the same database.

@@ -155,6 +155,16 @@ type InMemoryEventLog<'Evt>() =
             Read = read
             Head = fun stream _ -> lock gate (fun () -> headOf stream) |> Task.FromResult
             WaitPast = waitPast
+            FindCommit =
+                fun stream key cancellation ->
+                    if cancellation.IsCancellationRequested then
+                        Task.FromCanceled<Appended option> cancellation
+                    else
+                        lock gate (fun () ->
+                            match commits.TryGetValue(struct (stream, key)) with
+                            | true, appended -> Some appended
+                            | false, _ -> None)
+                        |> Task.FromResult
         }
 
     /// Every event of a stream, in order.
