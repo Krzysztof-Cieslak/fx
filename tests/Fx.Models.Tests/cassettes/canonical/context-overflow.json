@@ -1,0 +1,88 @@
+{
+  "name": "context-overflow",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history "
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history very long history "
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 400,
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": "{\"error\":{\"kind\":\"contextOverflow\",\"tokens\":210000,\"limit\":200000,\"message\":\"prompt is too long\"}}",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "contextOverflow",
+      "tokens": 210000,
+      "limit": 200000,
+      "message": "prompt is too long"
+    }
+  }
+}

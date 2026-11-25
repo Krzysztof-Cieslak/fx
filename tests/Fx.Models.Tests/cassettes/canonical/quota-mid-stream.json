@@ -1,0 +1,86 @@
+{
+  "name": "quota-mid-stream",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Tell me everything"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Tell me everything"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"resp-1\",\"model\":\"echo-1\"}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":40,\"output\":0,\"cacheRead\":30,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"text\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"Half an answer, then the\"}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":40,\"output\":5,\"cacheRead\":30,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: failed\ndata: {\"kind\":\"failed\",\"error\":{\"kind\":\"quotaExhausted\",\"message\":\"the credit balance is too low\"}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "quotaExhausted",
+      "message": "the credit balance is too low"
+    }
+  }
+}

@@ -1,0 +1,276 @@
+{
+  "name": "tool-call",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "call ping"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "echo",
+        "description": "Echoes its text.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {
+      "key": "conversation-1"
+    },
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "call ping"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "echo",
+                "description": "Echoes its text.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {
+              "key": "conversation-1"
+            },
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"echo-1\",\"model\":\"echo-1\"}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"reasoning\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"echoing\"}\n\nevent: partState\ndata: {\"kind\":\"partState\",\"index\":0,\"state\":{\"family\":\"canonical\",\"model\":\"example/echo-1\",\"kind\":\"echo\",\"data\":\"turn-1\"}}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":0}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":1,\"part\":{\"kind\":\"toolCall\",\"id\":\"call-1\",\"name\":\"echo\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\"{\\\"text\\\":\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\"\\\"ping\\\"}\"}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":1}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":9,\"output\":16,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: finished\ndata: {\"kind\":\"finished\",\"stop\":{\"kind\":\"toolUse\"}}\n\n",
+          "end": "complete"
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "call ping"
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "parts": [
+                  {
+                    "kind": "reasoning",
+                    "text": "echoing",
+                    "state": {
+                      "family": "canonical",
+                      "model": "example/echo-1",
+                      "kind": "echo",
+                      "data": "turn-1"
+                    }
+                  },
+                  {
+                    "kind": "toolCall",
+                    "id": "call-1",
+                    "name": "echo",
+                    "arguments": "{\"text\":\"ping\"}"
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "toolResult",
+                    "callId": "call-1",
+                    "name": "echo",
+                    "content": [
+                      {
+                        "kind": "text",
+                        "text": "pong"
+                      }
+                    ],
+                    "isError": false
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "echo",
+                "description": "Echoes its text.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {
+              "key": "conversation-1"
+            },
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"echo-3\",\"model\":\"echo-1\"}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"reasoning\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"echoing\"}\n\nevent: partState\ndata: {\"kind\":\"partState\",\"index\":0,\"state\":{\"family\":\"canonical\",\"model\":\"example/echo-1\",\"kind\":\"echo\",\"data\":\"turn-3\"}}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":0}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":1,\"part\":{\"kind\":\"text\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\"pong\"}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":1}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":9,\"output\":11,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: finished\ndata: {\"kind\":\"finished\",\"stop\":{\"kind\":\"endTurn\"}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "echo-1",
+      "model": "echo-1",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "echoing",
+          "state": {
+            "family": "canonical",
+            "model": "example/echo-1",
+            "kind": "echo",
+            "data": "turn-1"
+          }
+        },
+        {
+          "kind": "toolCall",
+          "id": "call-1",
+          "name": "echo",
+          "arguments": "{\"text\":\"ping\"}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 9,
+        "output": 16,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  },
+  "followUp": {
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "call-1",
+            "name": "echo",
+            "content": [
+              {
+                "kind": "text",
+                "text": "pong"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    ],
+    "statesVerbatim": true
+  }
+}

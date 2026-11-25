@@ -1,0 +1,552 @@
+{
+  "request": {
+    "model": "anthropic/claude-sonnet-4-5",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a careful coding agent."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "long"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What is in this picture, and what is the weather?"
+          },
+          {
+            "kind": "media",
+            "media": "image",
+            "mediaType": "image/png",
+            "source": {
+              "kind": "base64",
+              "data": "iVBORw0KGgo="
+            }
+          },
+          {
+            "kind": "media",
+            "media": "pdf",
+            "mediaType": "application/pdf",
+            "source": {
+              "kind": "blob",
+              "digest": "sha256:00ff"
+            },
+            "name": "spec.pdf"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "reasoning",
+            "text": "A cat; then the tool.",
+            "state": {
+              "family": "anthropic.messages",
+              "model": "anthropic/claude-sonnet-4-5",
+              "kind": "signature",
+              "data": "EqQBCgIYAhIMé+/="
+            }
+          },
+          {
+            "kind": "text",
+            "text": "A cat."
+          },
+          {
+            "kind": "toolCall",
+            "id": "toolu_01",
+            "name": "get_weather",
+            "arguments": "{\"location\": \"Kraków\"}"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "toolu_01",
+            "name": "get_weather",
+            "content": [
+              {
+                "kind": "text",
+                "text": "12 °C"
+              },
+              {
+                "kind": "media",
+                "media": "image",
+                "mediaType": "image/png",
+                "source": {
+                  "kind": "base64",
+                  "data": "iVBORw0KGgo="
+                }
+              }
+            ],
+            "isError": false
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "refusal",
+            "text": "I won't guess."
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "The weather at a place.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            }
+          }
+        },
+        "strict": true
+      }
+    ],
+    "toolChoice": {
+      "kind": "tool",
+      "name": "get_weather"
+    },
+    "parallelToolCalls": false,
+    "sampling": {
+      "temperature": 0.7,
+      "topP": 0.95,
+      "topK": 40,
+      "seed": 42,
+      "stop": [
+        "\n\nHuman:"
+      ]
+    },
+    "reasoning": {
+      "effort": "high",
+      "budgetTokens": 8000,
+      "visible": true
+    },
+    "maxOutputTokens": 4096,
+    "output": {
+      "kind": "json",
+      "name": "answer",
+      "schema": {
+        "type": "object"
+      },
+      "strict": true
+    },
+    "cache": {
+      "key": "session-1",
+      "tools": "short"
+    },
+    "metadata": {
+      "user_id": "u-1"
+    }
+  },
+  "events": [
+    {
+      "kind": "started",
+      "id": "msg_01",
+      "model": "claude-sonnet-4-5"
+    },
+    {
+      "kind": "usage",
+      "usage": {
+        "input": 2520,
+        "output": 2,
+        "cacheRead": 2048,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    },
+    {
+      "kind": "partStarted",
+      "index": 0,
+      "part": {
+        "kind": "reasoning"
+      }
+    },
+    {
+      "kind": "delta",
+      "index": 0,
+      "text": "The user wants "
+    },
+    {
+      "kind": "delta",
+      "index": 0,
+      "text": "the weather."
+    },
+    {
+      "kind": "partState",
+      "index": 0,
+      "state": {
+        "family": "anthropic.messages",
+        "model": "anthropic/claude-sonnet-4-5",
+        "kind": "signature",
+        "data": "EqQBsig=="
+      }
+    },
+    {
+      "kind": "partEnded",
+      "index": 0
+    },
+    {
+      "kind": "partStarted",
+      "index": 1,
+      "part": {
+        "kind": "text"
+      }
+    },
+    {
+      "kind": "delta",
+      "index": 1,
+      "text": "Checking "
+    },
+    {
+      "kind": "delta",
+      "index": 1,
+      "text": "Kraków."
+    },
+    {
+      "kind": "partEnded",
+      "index": 1
+    },
+    {
+      "kind": "partStarted",
+      "index": 2,
+      "part": {
+        "kind": "toolCall",
+        "id": "toolu_01",
+        "name": "get_weather"
+      }
+    },
+    {
+      "kind": "delta",
+      "index": 2,
+      "text": "{\"location\": \"Kra"
+    },
+    {
+      "kind": "delta",
+      "index": 2,
+      "text": "ków\"}"
+    },
+    {
+      "kind": "partEnded",
+      "index": 2
+    },
+    {
+      "kind": "usage",
+      "usage": {
+        "input": 2520,
+        "output": 89,
+        "cacheRead": 2048,
+        "cacheWrite": 0,
+        "reasoning": 40
+      }
+    },
+    {
+      "kind": "finished",
+      "stop": {
+        "kind": "toolUse"
+      }
+    }
+  ],
+  "response": {
+    "id": "msg_01",
+    "model": "claude-sonnet-4-5",
+    "parts": [
+      {
+        "kind": "reasoning",
+        "text": "The user wants the weather.",
+        "state": {
+          "family": "anthropic.messages",
+          "model": "anthropic/claude-sonnet-4-5",
+          "kind": "signature",
+          "data": "EqQBsig=="
+        }
+      },
+      {
+        "kind": "text",
+        "text": "Checking Kraków."
+      },
+      {
+        "kind": "toolCall",
+        "id": "toolu_01",
+        "name": "get_weather",
+        "arguments": "{\"location\": \"Kraków\"}"
+      }
+    ],
+    "stop": {
+      "kind": "toolUse"
+    },
+    "usage": {
+      "input": 2520,
+      "output": 89,
+      "cacheRead": 2048,
+      "cacheWrite": 0,
+      "reasoning": 40
+    }
+  },
+  "errors": [
+    {
+      "kind": "rateLimited",
+      "retryAfterMs": 7500,
+      "message": "slow down"
+    },
+    {
+      "kind": "quotaExhausted",
+      "message": "credits"
+    },
+    {
+      "kind": "contextOverflow",
+      "tokens": 210000,
+      "limit": 200000,
+      "message": "prompt is too long"
+    },
+    {
+      "kind": "refused",
+      "message": "policy"
+    },
+    {
+      "kind": "authFailed",
+      "message": "invalid key"
+    },
+    {
+      "kind": "permissionDenied",
+      "message": "no access"
+    },
+    {
+      "kind": "notFound",
+      "message": "no such model"
+    },
+    {
+      "kind": "invalidRequest",
+      "message": "bad"
+    },
+    {
+      "kind": "overloaded",
+      "message": "busy"
+    },
+    {
+      "kind": "serverError",
+      "status": 502,
+      "message": "bad gateway"
+    },
+    {
+      "kind": "transport",
+      "error": {
+        "kind": "reset",
+        "reason": "the connection broke off"
+      }
+    },
+    {
+      "kind": "transport",
+      "error": {
+        "kind": "timedOut",
+        "phase": "body"
+      }
+    },
+    {
+      "kind": "cancelled",
+      "message": "cancelled by the provider"
+    },
+    {
+      "kind": "invalidResponse",
+      "message": "garbage"
+    },
+    {
+      "kind": "egressBlocked",
+      "ask": true,
+      "reasons": [
+        "acme.egress/paths: secrets/ is excluded"
+      ]
+    },
+    {
+      "kind": "unavailable",
+      "message": "no wire"
+    }
+  ],
+  "model": {
+    "ref": "anthropic/claude-sonnet-4-5",
+    "kind": "chat",
+    "family": "anthropic.messages",
+    "name": "Claude Sonnet 4.5",
+    "limits": {
+      "context": 200000,
+      "output": 64000
+    },
+    "caps": {
+      "reasoning": {
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "budget": {
+          "min": 1024,
+          "max": 32000
+        },
+        "visible": true,
+        "replay": true
+      },
+      "tools": {
+        "calls": true,
+        "parallel": true,
+        "forced": true,
+        "strict": false
+      },
+      "structuredOutput": true,
+      "logprobs": false,
+      "caching": {
+        "mode": "breakpoints",
+        "maxBreakpoints": 4,
+        "key": false,
+        "longTtl": true
+      },
+      "media": [
+        "image",
+        "pdf"
+      ],
+      "sampling": {
+        "temperature": true,
+        "topP": true,
+        "topK": true,
+        "seed": false,
+        "stop": true
+      },
+      "transports": [
+        "sse"
+      ]
+    },
+    "cost": {
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.3,
+      "cacheWrite": 3.75
+    },
+    "planBacked": false
+  },
+  "provider": {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "endpoints": {
+      "anthropic.messages": "https://api.anthropic.com/v1"
+    },
+    "catalog": {
+      "models": [
+        {
+          "ref": "anthropic/claude-sonnet-4-5",
+          "kind": "chat",
+          "family": "anthropic.messages",
+          "name": "Claude Sonnet 4.5",
+          "limits": {
+            "context": 200000,
+            "output": 64000
+          },
+          "caps": {
+            "reasoning": {
+              "efforts": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "budget": {
+                "min": 1024,
+                "max": 32000
+              },
+              "visible": true,
+              "replay": true
+            },
+            "tools": {
+              "calls": true,
+              "parallel": true,
+              "forced": true,
+              "strict": false
+            },
+            "structuredOutput": true,
+            "logprobs": false,
+            "caching": {
+              "mode": "breakpoints",
+              "maxBreakpoints": 4,
+              "key": false,
+              "longTtl": true
+            },
+            "media": [
+              "image",
+              "pdf"
+            ],
+            "sampling": {
+              "temperature": true,
+              "topP": true,
+              "topK": true,
+              "seed": false,
+              "stop": true
+            },
+            "transports": [
+              "sse"
+            ]
+          },
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          },
+          "planBacked": false
+        }
+      ],
+      "discover": "/models"
+    },
+    "auth": [
+      {
+        "kind": "api_key",
+        "settings": {
+          "header": "x-api-key"
+        }
+      }
+    ],
+    "quirks": {
+      "maxCacheBreakpoints": 4
+    },
+    "transform": {
+      "setHeaders": {
+        "anthropic-version": "2023-06-01"
+      },
+      "removeHeaders": [
+        "x-stainless-os"
+      ],
+      "setQuery": {
+        "beta": "true"
+      },
+      "body": [
+        {
+          "kind": "set",
+          "path": [
+            "metadata",
+            "source"
+          ],
+          "value": "agent"
+        },
+        {
+          "kind": "remove",
+          "path": [
+            "top_k"
+          ]
+        }
+      ]
+    }
+  }
+}

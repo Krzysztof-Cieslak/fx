@@ -1,0 +1,86 @@
+{
+  "name": "overloaded",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 529,
+          "headers": {
+            "content-type": "text/plain"
+          },
+          "body": "Overloaded",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "overloaded",
+      "message": "Overloaded"
+    }
+  }
+}

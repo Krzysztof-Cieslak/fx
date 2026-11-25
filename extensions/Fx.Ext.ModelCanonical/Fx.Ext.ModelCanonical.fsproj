@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The canonical chat wire: the reference wire adapter (the canonical model over HTTP and
+    server-sent events) and the subject of the wire-conformance suite's own tests
+    (tests/Fx.Models.Tests). Like every package under extensions/, it references the public SDK
+    (src/Fx.Sdk) and nothing else. Not bundled. Spec: docs/modules/models.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Canonical.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

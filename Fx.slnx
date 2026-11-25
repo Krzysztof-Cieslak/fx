@@ -40,6 +40,7 @@
   <Folder Name="/extensions/">
     <Project Path="extensions/Fx.Ext.Sample/Fx.Ext.Sample.fsproj" />
     <Project Path="extensions/Fx.Ext.RuntimeBun/Fx.Ext.RuntimeBun.fsproj" />
+    <Project Path="extensions/Fx.Ext.ModelCanonical/Fx.Ext.ModelCanonical.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -82,6 +83,7 @@
     <Project Path="tests/Fx.Components.Live.Tests/Fx.Components.Live.Tests.fsproj" />
     <Project Path="tests/Fx.Kernel.Tests/Fx.Kernel.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.RuntimeBun.Tests/Fx.Ext.RuntimeBun.Tests.fsproj" />
+    <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

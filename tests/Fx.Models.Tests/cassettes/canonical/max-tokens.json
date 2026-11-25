@@ -1,0 +1,104 @@
+{
+  "name": "max-tokens",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Write a long answer"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 8,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Write a long answer"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "maxOutputTokens": 8,
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"resp-1\",\"model\":\"echo-1\"}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"text\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"The first part of a long\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\" answer that\"}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":0}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":9,\"output\":8,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: finished\ndata: {\"kind\":\"finished\",\"stop\":{\"kind\":\"maxTokens\"}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp-1",
+      "model": "echo-1",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "The first part of a long answer that"
+        }
+      ],
+      "stop": {
+        "kind": "maxTokens"
+      },
+      "usage": {
+        "input": 9,
+        "output": 8,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

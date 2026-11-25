@@ -1,0 +1,88 @@
+{
+  "name": "rate-limited",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 429,
+          "headers": {
+            "retry-after": "7",
+            "content-type": "application/json"
+          },
+          "body": "{\"error\":{\"kind\":\"rateLimited\",\"message\":\"too many requests\"}}",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "rateLimited",
+      "retryAfterMs": 7000,
+      "message": "too many requests"
+    }
+  }
+}

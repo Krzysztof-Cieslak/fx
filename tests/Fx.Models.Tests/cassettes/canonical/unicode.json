@@ -1,0 +1,112 @@
+{
+  "name": "unicode",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Zażółć gęślą jaźń 🦀 — naïve “quotes” ✓"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Zażółć gęślą jaźń 🦀 — naïve “quotes” ✓"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "stop": []
+            },
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"echo-1\",\"model\":\"echo-1\"}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"reasoning\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"echoing\"}\n\nevent: partState\ndata: {\"kind\":\"partState\",\"index\":0,\"state\":{\"family\":\"canonical\",\"model\":\"example/echo-1\",\"kind\":\"echo\",\"data\":\"turn-1\"}}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":0}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":1,\"part\":{\"kind\":\"text\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\"Zażółć\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" gęślą\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" jaźń\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" 🦀\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" —\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" naïve\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" “quotes”\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" ✓\"}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":1}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":39,\"output\":46,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: finished\ndata: {\"kind\":\"finished\",\"stop\":{\"kind\":\"endTurn\"}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "echo-1",
+      "model": "echo-1",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "echoing",
+          "state": {
+            "family": "canonical",
+            "model": "example/echo-1",
+            "kind": "echo",
+            "data": "turn-1"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Zażółć gęślą jaźń 🦀 — naïve “quotes” ✓"
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 39,
+        "output": 46,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}
