@@ -1,0 +1,7 @@
+# actionlint (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color=false .github/workflows/*.yml`).
+self-hosted-runner:
+  # GitHub-hosted runners newer than actionlint 1.7.7's list, not self-hosted ones.
+  labels:
+    - macos-26
+    - macos-26-intel
+    - windows-11-arm
