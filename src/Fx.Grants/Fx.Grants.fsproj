@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The grants log's pure core (spec §13): actions, resources and patterns, grants, requests and
+    answers, events and state, the effective-rules projection, the machine's functions and every
+    codec, including the `grants/*` client protocol's messages. Clients fold the log with the same
+    `GrantLog.evolve` (Fable, spec §17), so this project references only FSharp.Core and
+    Fx.Contracts; Fx.Grants.Tests checks the compiled assembly. Fx.Sdk exposes it (the IGrants
+    capability and the GrantStore contribution type are there); the actor, the host-local store,
+    the service and the protocol's methods are Fx.Grants.Host. Spec: docs/modules/grants.md.
+  -->
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The grants log's model: actions, resource patterns, grants, requests, events, the effective rules and their codecs.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Pattern.fs" />
+    <Compile Include="Model.fs" />
+    <Compile Include="Actions.fs" />
+    <Compile Include="Rules.fs" />
+    <Compile Include="GrantLog.fs" />
+    <Compile Include="Codecs.fs" />
+    <Compile Include="Protocol.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+  </ItemGroup>
+</Project>

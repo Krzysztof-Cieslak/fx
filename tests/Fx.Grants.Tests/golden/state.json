@@ -1,0 +1,531 @@
+{
+  "grants": [
+    {
+      "grant": {
+        "id": "g1",
+        "action": "shell.exec",
+        "resource": "git push origin main",
+        "effect": "allow",
+        "scope": {
+          "kind": "once",
+          "request": "q1"
+        },
+        "by": "user:alice",
+        "at": 1800000002000000,
+        "reason": "reviewed",
+        "origin": {
+          "kind": "answer",
+          "request": "q1"
+        }
+      },
+      "status": {
+        "kind": "spent"
+      }
+    },
+    {
+      "grant": {
+        "id": "g2",
+        "action": "fs.write",
+        "resource": "src/**",
+        "effect": "allow",
+        "scope": {
+          "kind": "repo",
+          "repo": "r1",
+          "path": "src"
+        },
+        "by": "user:bob",
+        "at": 1800000004000000,
+        "expires": 1800003600000000,
+        "reason": "reviewed",
+        "origin": {
+          "kind": "answer",
+          "request": "q2"
+        }
+      },
+      "status": {
+        "kind": "active"
+      }
+    },
+    {
+      "grant": {
+        "id": "g3",
+        "action": "component.install",
+        "resource": "bun@1.4.5",
+        "effect": "allow",
+        "scope": {
+          "kind": "host"
+        },
+        "by": "user:alice",
+        "at": 1800000006000000,
+        "reason": "reviewed",
+        "origin": {
+          "kind": "answer",
+          "request": "q3"
+        }
+      },
+      "status": {
+        "kind": "revoked",
+        "grant": "g3",
+        "by": "user:bob",
+        "at": 1800000011000000,
+        "reason": "pin a newer version"
+      }
+    },
+    {
+      "grant": {
+        "id": "g5",
+        "action": "net.connect",
+        "resource": "*.github.com:443",
+        "effect": "allow",
+        "scope": {
+          "kind": "session",
+          "session": "s1"
+        },
+        "by": "user:alice",
+        "at": 1800000009000000,
+        "origin": {
+          "kind": "direct",
+          "via": "tui"
+        }
+      },
+      "status": {
+        "kind": "expired",
+        "at": 1800000038000000
+      }
+    },
+    {
+      "grant": {
+        "id": "g6",
+        "action": "shell.exec",
+        "resource": "rm **",
+        "effect": "deny",
+        "scope": {
+          "kind": "host"
+        },
+        "by": "user:alice",
+        "at": 1800000010000000,
+        "expires": 1800000020000000,
+        "reason": "never",
+        "origin": {
+          "kind": "direct",
+          "via": "cli"
+        }
+      },
+      "status": {
+        "kind": "expired",
+        "at": 1800000020000000
+      }
+    }
+  ],
+  "requests": [
+    {
+      "request": {
+        "id": "q1",
+        "key": "call-1",
+        "action": "shell.exec",
+        "resource": "git push origin main",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do git push origin main",
+        "evidence": [
+          {
+            "label": "branch",
+            "text": "main is 2 commits ahead"
+          }
+        ],
+        "suggestions": [
+          "git push origin *",
+          "git **"
+        ],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000001000000,
+        "expires": 1800000600000000
+      },
+      "status": {
+        "kind": "answered",
+        "grant": {
+          "id": "g1",
+          "action": "shell.exec",
+          "resource": "git push origin main",
+          "effect": "allow",
+          "scope": {
+            "kind": "once",
+            "request": "q1"
+          },
+          "by": "user:alice",
+          "at": 1800000002000000,
+          "reason": "reviewed",
+          "origin": {
+            "kind": "answer",
+            "request": "q1"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q10",
+        "key": "call-8",
+        "action": "shell.exec",
+        "resource": "dotnet test",
+        "context": {},
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do dotnet test",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "host"
+        ],
+        "at": 1800000039000000
+      },
+      "status": {
+        "kind": "pending"
+      }
+    },
+    {
+      "request": {
+        "id": "q2",
+        "key": "call-2",
+        "action": "fs.write",
+        "resource": "src/billing/retry.fs",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do src/billing/retry.fs",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000003000000
+      },
+      "status": {
+        "kind": "answered",
+        "grant": {
+          "id": "g2",
+          "action": "fs.write",
+          "resource": "src/**",
+          "effect": "allow",
+          "scope": {
+            "kind": "repo",
+            "repo": "r1",
+            "path": "src"
+          },
+          "by": "user:bob",
+          "at": 1800000004000000,
+          "expires": 1800003600000000,
+          "reason": "reviewed",
+          "origin": {
+            "kind": "answer",
+            "request": "q2"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q3",
+        "key": "install-bun",
+        "action": "component.install",
+        "resource": "bun@1.4.5",
+        "context": {},
+        "requester": {
+          "principal": "system",
+          "extension": "fx.runtime.bun"
+        },
+        "summary": "Do bun@1.4.5",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "host"
+        ],
+        "at": 1800000005000000
+      },
+      "status": {
+        "kind": "answered",
+        "grant": {
+          "id": "g3",
+          "action": "component.install",
+          "resource": "bun@1.4.5",
+          "effect": "allow",
+          "scope": {
+            "kind": "host"
+          },
+          "by": "user:alice",
+          "at": 1800000006000000,
+          "reason": "reviewed",
+          "origin": {
+            "kind": "answer",
+            "request": "q3"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q4",
+        "key": "dotenv",
+        "action": "env.dotenv",
+        "resource": ".env",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do .env",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000007000000
+      },
+      "status": {
+        "kind": "rejected",
+        "request": "q4",
+        "by": "user:alice",
+        "at": 1800000008000000,
+        "reason": "reviewed"
+      }
+    },
+    {
+      "request": {
+        "id": "q5",
+        "key": "call-3",
+        "action": "shell.exec",
+        "resource": "make",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do make",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000021000000,
+        "expires": 1800000030000000
+      },
+      "status": {
+        "kind": "closed",
+        "request": "q5",
+        "at": 1800000030000000,
+        "why": {
+          "kind": "timedOut"
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q6",
+        "key": "call-4",
+        "action": "shell.exec",
+        "resource": "ls",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do ls",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000031000000
+      },
+      "status": {
+        "kind": "closed",
+        "request": "q6",
+        "at": 1800000032000000,
+        "why": {
+          "kind": "withdrawn",
+          "reason": "the turn was interrupted"
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q7",
+        "key": "call-5",
+        "action": "fs.write",
+        "resource": "src/billing/a.fs",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do src/billing/a.fs",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000033000000
+      },
+      "status": {
+        "kind": "closed",
+        "request": "q7",
+        "at": 1800000034000000,
+        "why": {
+          "kind": "covered",
+          "grant": "g2"
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q8",
+        "key": "call-6",
+        "action": "shell.exec",
+        "resource": "rm -rf build",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do rm -rf build",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000035000000
+      },
+      "status": {
+        "kind": "closed",
+        "request": "q8",
+        "at": 1800000036000000,
+        "why": {
+          "kind": "refused",
+          "reasons": [
+            "deny by policy host/no-rm"
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "id": "q9",
+        "key": "call-7",
+        "action": "fs.write",
+        "resource": "README.md",
+        "context": {
+          "session": "s1",
+          "run": "run1",
+          "repo": {
+            "repo": "r1",
+            "path": "src/billing"
+          }
+        },
+        "requester": {
+          "principal": "user:alice",
+          "agent": "build"
+        },
+        "summary": "Do README.md",
+        "evidence": [],
+        "suggestions": [],
+        "offer": [
+          "once",
+          "session",
+          "repo",
+          "host"
+        ],
+        "at": 1800000037000000
+      },
+      "status": {
+        "kind": "closed",
+        "request": "q9",
+        "at": 1800000038000000,
+        "why": {
+          "kind": "sessionEnded"
+        }
+      }
+    }
+  ],
+  "seq": 24
+}
