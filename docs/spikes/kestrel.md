@@ -10,7 +10,7 @@ events, Unix domain sockets (Linux, macOS and Windows) and Windows named pipes b
 and as a native binary. The AOT publish has no trim or AOT warnings. Evidence:
 
 - six `kestrel-*` scenarios in the JIT-vs-native diff pass on `linux-x64`, `linux-arm64`, `linux-musl-x64`,
-  `linux-musl-arm64`, `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64` (CI `aot` job);
+  `linux-musl-arm64`, `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64` (CI's Native AOT steps);
 - the same scenarios run twice and in parallel on the JIT in `Fx.Aot.Tests` on Linux, macOS and Windows;
 - the probe (`docs/spikes/kestrel-probe`) publishes each feature on its own, and any IL2xxx/IL3xxx
   warning fails it.
@@ -172,7 +172,7 @@ APIs (`server-ws` − `client`: 3.65–4.51 MiB, most on Windows). Endpoint rout
 and the slim builder another 0.44–0.53 MiB; neither is needed. So a host-capable fx binary will be about
 9–10 MiB (`server-ws`: 8.6–9.9 MiB).
 
-The CI `aot` jobs report the real binaries (run
+CI's Native AOT steps report the real binaries (run
 [45493321826](https://github.com/Krzysztof-Cieslak/fx/actions/runs/45493321826)). `fx` has no ASP.NET Core
 yet. `Fx.Aot.Scenarios` (all scenarios, ASP.NET Core with routing and the slim builder, `HttpClient`,
 `ClientWebSocket`, named pipes) grew from 4.75 MiB to 13.34 MiB on `linux-x64` with this spike:

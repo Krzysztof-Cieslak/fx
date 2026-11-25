@@ -227,7 +227,7 @@ protocol (T116) and finished here:
   groups out; the prompt holding instructions, declarations and examples; privileged in-process code;
   caps that round-trip. bun-ts and a test provider pass it.
 - **Kernels**: the bun-ts kernel passes the kernel conformance suite (tests/Fx.Kernel.Tests) on Linux,
-  macOS and Windows (and musl in CI's Alpine job), launched through `Interpreter.prepare` with
+  macOS and Windows (and musl in CI's Alpine containers, in the full tier), launched through `Interpreter.prepare` with
   `fx.runtime.bun`'s runtime from the provider's assets, including `cell/check` and a launcher
   environment full of injection vectors that must not reach the kernel.
 - **End to end** (`tests/Fx.Ext.InterpreterBunTs.Tests/LiveTests.fs`, embedded mode): the core bindings

@@ -36,7 +36,7 @@ No change to the spec's design. §20 now names how SQLite is built.
 | `tests/Fx.Sqlite.Tests` | Unit tests, including FsCheck round trips of every value type |
 | `tests/aot/Fx.Aot.Scenarios/Scenarios/Sqlite.fs` | The `sqlite-*` scenarios below |
 | `src/Fx.Cli` | `fx --build-info`: the version and the embedded SQLite (so `fx` links SQLite now) |
-| `.github/workflows/ci.yml` | Caches `artifacts/native`; checks that `fx` carries SQLite |
+| `.github/workflows/ci.yml`, `.github/scripts/aot-smoke.sh` | Caches `artifacts/native`; checks that `fx` carries SQLite |
 
 | Scenario | Proves |
 |---|---|

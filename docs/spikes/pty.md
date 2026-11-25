@@ -13,10 +13,10 @@ by the program, with `SIGWINCH` on Linux and macOS), Ctrl+C, exit codes, end of 
 the same on the JIT and as a native binary. PowerShell 7 (`pwsh`), Windows PowerShell 5.1 and `cmd`
 start on ConPTY. Evidence:
 
-- `tests/Fx.Pty.Tests` on Linux x64, macOS arm64 and Windows x64 (CI `build` job): real terminals,
+- `tests/Fx.Pty.Tests` on Linux x64, macOS arm64 and Windows x64 (CI's `os` jobs): real terminals,
   including a controlling-terminal check, `SIGWINCH`, `SIGINT`, `SIGPIPE` and both PowerShells;
 - seven `pty-*` scenarios in the JIT-vs-native diff on `linux-x64`, `linux-arm64`, `linux-musl-x64`,
-  `linux-musl-arm64`, `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64` (CI `aot` job). Each fact they
+  `linux-musl-arm64`, `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64` (CI's Native AOT steps). Each fact they
   print is also checked against its expected value, so they verify behaviour on every target, not only
   parity;
 - the probe (`docs/spikes/pty-probe`, workflow `pty-probe.yml`) records what a terminal looks like on

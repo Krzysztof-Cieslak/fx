@@ -1,6 +1,6 @@
 /// Sandbox drivers (docs/modules/sandbox.md): the pure parts everywhere (policies and their access,
 /// overrides, the host's choice of driver and an environment's policy, bubblewrap's command lines and
-/// seccomp program, Seatbelt's profiles), and with `SANDBOX_TESTS=1` (CI's sandbox job) a process
+/// seccomp program, Seatbelt's profiles), and with `SANDBOX_TESTS=1` (CI's sandbox steps) a process
 /// confined by this OS's driver.
 module Fx.Aot.Scenarios.Sandbox
 

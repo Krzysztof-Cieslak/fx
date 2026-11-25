@@ -14,7 +14,7 @@ type Options =
         Rid: string
         Publish: bool
         SelfTest: bool
-        /// Only the scenarios whose names start with this (e.g. CI's keyring job: `keyring-`).
+        /// Only the scenarios whose names start with this (e.g. CI's keyring steps: `keyring-`).
         Only: string option
     }
 
