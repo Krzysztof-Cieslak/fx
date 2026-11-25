@@ -2,20 +2,31 @@
 // Decides what a CI run runs (.github/workflows/ci.yml, the `plan` job).
 //
 // Two tiers:
-//   full  every target and every platform job. Pushes to main, the nightly schedule, manual runs
-//         (unless `full` is false), pull requests labelled `ci:full`, and pull requests that change
-//         platform-sensitive files (FULL_PATHS).
-//   fast  every other pull request: build and test on Linux, macOS and Windows, Native AOT and the
-//         JIT-vs-native diff on one target per OS family (FAST_AOT), and the jobs that test one
-//         area (keyring, sandbox, musl Bun, the spike) only when that area changes.
-// A pull request that changes only Markdown runs neither builds nor AOT jobs.
+//   fast  every pull request: lint, and one `os` job per OS (linux-x64, osx-arm64, win-x64) that
+//         builds, tests, publishes with Native AOT and runs the JIT-vs-native diff. Each area's own
+//         steps (keyring, sandbox, the network Bun test on macOS and Windows, the spike) run only when
+//         the area changes.
+//   full  the same jobs with every area's steps, plus the other targets (`targets` job: TARGETS).
+//         Pushes to main, the nightly schedule, manual runs (unless `full` is false) and pull
+//         requests labelled `ci:full`. Changed paths never pick the full tier: a pull request that
+//         touches platform-sensitive files (PLATFORM_PATHS) gets a notice asking for the label.
+// A pull request that changes only Markdown runs lint only, without its .NET steps.
 //
 //   bun scripts/ci-plan.ts                     in CI: reads the event from the environment
 //   bun scripts/ci-plan.ts --files a.fs b.md   prints the plan a pull request changing those files gets
 
 import { appendFileSync } from "node:fs";
 
-type Target = { rid: string; os: string; alpine?: boolean };
+// A target of the `targets` job and what it runs besides Native AOT: the areas its runner covers
+// and the os jobs cannot.
+export type Target = {
+  rid: string;
+  os: string;
+  alpine: boolean; // in the Alpine container (musl)
+  keyring: boolean; // the live keyring tests and the probe's headless states
+  sandbox: boolean; // the sandbox suites with this OS's confining driver
+  bun: boolean; // the pinned Bun's musl build, the kernel conformance and the interpreter on it
+};
 
 export type Input = {
   event: string;
@@ -27,53 +38,47 @@ export type Input = {
 export type Plan = {
   full: boolean;
   code: boolean;
-  aot: Target[];
-  keyring: Target[];
-  sandbox: Target[];
-  bunMusl: { arch: string; os: string }[];
-  networkOnAllOs: boolean;
+  keyring: boolean;
+  sandbox: boolean;
+  bun: boolean;
   spike: boolean;
+  targets: Target[];
+  // Changed platform-sensitive files, for the notice (pull requests in the fast tier only).
+  platform: string[];
 };
 
-const AOT: Target[] = [
+// The os jobs' runners (fixed in ci.yml; scripts/ci-plan.test.ts checks the two agree).
+export const OS_JOBS = [
   { rid: "linux-x64", os: "ubuntu-24.04" },
-  { rid: "linux-arm64", os: "ubuntu-24.04-arm" },
-  { rid: "linux-musl-x64", os: "ubuntu-24.04", alpine: true },
-  { rid: "linux-musl-arm64", os: "ubuntu-24.04-arm", alpine: true },
   { rid: "osx-arm64", os: "macos-26" },
-  { rid: "osx-x64", os: "macos-26-intel" },
   { rid: "win-x64", os: "windows-2025" },
-  { rid: "win-arm64", os: "windows-11-arm" },
-];
-const FAST_AOT = ["linux-x64", "linux-musl-x64", "osx-arm64", "win-x64"];
-
-const KEYRING: Target[] = [
-  { rid: "linux-x64", os: "ubuntu-24.04" },
-  { rid: "linux-musl-x64", os: "ubuntu-24.04", alpine: true },
-  { rid: "osx-arm64", os: "macos-26" },
-  { rid: "osx-x64", os: "macos-26-intel" },
-];
-const FAST_KEYRING = ["linux-x64", "linux-musl-x64", "osx-arm64"];
-
-// The sandbox drivers' live suites on the targets the build job does not cover (arm64 Linux, Intel
-// macOS), and natively; bubblewrap needs no musl job (Alpine runs in a container without user
-// namespaces).
-const SANDBOX: Target[] = [
-  { rid: "linux-x64", os: "ubuntu-24.04" },
-  { rid: "linux-arm64", os: "ubuntu-24.04-arm" },
-  { rid: "osx-arm64", os: "macos-26" },
-  { rid: "osx-x64", os: "macos-26-intel" },
-];
-const FAST_SANDBOX = ["linux-x64", "osx-arm64"];
-
-const BUN_MUSL = [
-  { arch: "x64", os: "ubuntu-24.04" },
-  { arch: "arm64", os: "ubuntu-24.04-arm" },
 ];
 
-// Files whose effect differs per architecture or runner: native code and P/Invoke, build and
-// package settings, the workflows themselves, and the pinned runtime's per-target archives.
-const FULL_PATHS = [
+const target = (rid: string, os: string, extra: Partial<Target> = {}): Target => ({
+  rid,
+  os,
+  alpine: false,
+  keyring: false,
+  sandbox: false,
+  bun: false,
+  ...extra,
+});
+
+// The full tier's other targets, natively. Besides Native AOT, each runs what only it can show:
+// bubblewrap's arm64 seccomp program (linux-arm64), gnome-keyring in Alpine and the pinned Bun's musl
+// builds with the bun-ts kernel on them (musl), the Keychain and Seatbelt on Intel (osx-x64).
+export const TARGETS: Target[] = [
+  target("linux-arm64", "ubuntu-24.04-arm", { sandbox: true }),
+  target("linux-musl-x64", "ubuntu-24.04", { alpine: true, keyring: true, bun: true }),
+  target("linux-musl-arm64", "ubuntu-24.04-arm", { alpine: true, bun: true }),
+  target("osx-x64", "macos-26-intel", { keyring: true, sandbox: true }),
+  target("win-arm64", "windows-11-arm"),
+];
+
+// Files whose effect can differ per architecture or runner: native code and P/Invoke, build and
+// package settings, the workflows themselves, and the pinned runtime's per-target archives. Pull
+// requests run three targets only, so a change here asks for the `ci:full` label before merging.
+const PLATFORM_PATHS = [
   ".github/**",
   "global.json",
   "nuget.config",
@@ -93,7 +98,7 @@ const FULL_PATHS = [
   "src/Fx.Environments/Sandbox.fs",
   "scripts/ci-plan.ts",
 ];
-// The keyring job also runs the credential-store conformance suite on the keyring store (T121).
+// The keyring steps also run the credential-store conformance suite on the keyring store (T121).
 const KEYRING_PATHS = [
   "**/*Keyring*/**",
   "**/*Keyring*",
@@ -105,6 +110,7 @@ const KEYRING_PATHS = [
   "src/Fx.Effects/Secrets.fs",
   "docs/spikes/keychains.md",
 ];
+// The network Bun test off Linux: the runtime, the installer and the kernel.
 const BUN_PATHS = [
   "extensions/Fx.Ext.RuntimeBun/**",
   "extensions/Fx.Ext.InterpreterBunTs/**",
@@ -117,7 +123,7 @@ const BUN_PATHS = [
   "tests/Fx.Kernel.Tests/**",
   "tests/Fx.Ext.InterpreterBunTs.Tests/**",
 ];
-// The sandbox job: the drivers, how environments use them, and their tests.
+// The sandbox steps: the drivers, how environments use them, and their tests.
 const SANDBOX_PATHS = [
   "extensions/Fx.Ext.Sandbox*/**",
   "**/*Sandbox*",
@@ -140,10 +146,11 @@ const glob = (pattern: string) =>
         .join(".*") +
       "$",
   );
-const anyMatch = (patterns: string[], files: string[]) => {
+const matching = (patterns: string[], files: string[]) => {
   const res = patterns.map(glob);
-  return files.some((f) => res.some((re) => re.test(f)));
+  return files.filter((f) => res.some((re) => re.test(f)));
 };
+const anyMatch = (patterns: string[], files: string[]) => matching(patterns, files).length > 0;
 
 export function plan(input: Input): Plan {
   const pr = input.event === "pull_request";
@@ -151,27 +158,51 @@ export function plan(input: Input): Plan {
     input.event === "push" ||
     input.event === "schedule" ||
     (input.event === "workflow_dispatch" && input.fullInput !== "false") ||
-    input.labels.includes("ci:full") ||
-    (pr && anyMatch(FULL_PATHS, input.files));
+    (pr && input.labels.includes("ci:full"));
   const code = !pr || full || input.files.length === 0 || !input.files.every((f) => f.endsWith(".md"));
-  const keyringChanged = pr && anyMatch(KEYRING_PATHS, input.files);
-  const sandboxChanged = pr && anyMatch(SANDBOX_PATHS, input.files);
-  const bunChanged = pr && anyMatch(BUN_PATHS, input.files);
+  const area = (paths: string[]) => code && (full || (pr && anyMatch(paths, input.files)));
   return {
     full,
     code,
-    aot: code ? AOT.filter((t) => full || FAST_AOT.includes(t.rid)) : [],
-    keyring: full ? KEYRING : code && keyringChanged ? KEYRING.filter((t) => FAST_KEYRING.includes(t.rid)) : [],
-    sandbox: full ? SANDBOX : code && sandboxChanged ? SANDBOX.filter((t) => FAST_SANDBOX.includes(t.rid)) : [],
-    bunMusl: full ? BUN_MUSL : code && bunChanged ? BUN_MUSL.slice(0, 1) : [],
-    networkOnAllOs: full || bunChanged,
-    spike: input.event === "schedule" || (pr && anyMatch(SPIKE_PATHS, input.files)),
+    keyring: area(KEYRING_PATHS),
+    sandbox: area(SANDBOX_PATHS),
+    bun: area(BUN_PATHS),
+    spike: full || (pr && anyMatch(SPIKE_PATHS, input.files)),
+    targets: full ? TARGETS : [],
+    platform: pr && !full ? matching(PLATFORM_PATHS, input.files) : [],
   };
 }
 
 async function changedFiles(base: string): Promise<string[]> {
   const out = await Bun.$`git diff --name-only ${base}...HEAD`.quiet().text();
   return out.split("\n").filter((l) => l.length > 0);
+}
+
+function summary(p: Plan, changed: number): string {
+  const areas = [
+    p.keyring && "keyring",
+    p.sandbox && "sandbox",
+    p.bun && "the network Bun test on macOS and Windows",
+    p.spike && "the Bun kernel spike",
+  ].filter(Boolean);
+  const lines = [
+    `### CI plan: ${p.full ? "full" : p.code ? "fast" : "docs only"}`,
+    `- changed files: ${changed}`,
+    `- os jobs: ${p.code ? OS_JOBS.map((t) => t.rid).join(", ") : "none"}`,
+    `- other targets: ${p.targets.map((t) => t.rid).join(", ") || "none"}`,
+    `- area steps: ${areas.join(", ") || "none"}`,
+  ];
+  if (p.platform.length > 0) {
+    const shown = p.platform.slice(0, 10).map((f) => `\`${f}\``);
+    if (p.platform.length > shown.length) shown.push(`and ${p.platform.length - shown.length} more`);
+    lines.push(
+      "",
+      `> [!WARNING]`,
+      `> This pull request touches platform-sensitive code (${shown.join(", ")}); label it \`ci:full\` to run every target before merging.`,
+    );
+  }
+  lines.push("", "Label a pull request `ci:full`, or run `gh workflow run CI --ref <branch>`, for every target.");
+  return lines.join("\n");
 }
 
 if (import.meta.main) {
@@ -187,32 +218,21 @@ if (import.meta.main) {
     const outputs = {
       full: String(p.full),
       code: String(p.code),
-      aot: JSON.stringify({ include: p.aot }),
-      "aot-run": String(p.aot.length > 0),
-      keyring: JSON.stringify({ include: p.keyring }),
-      "keyring-run": String(p.keyring.length > 0),
-      sandbox: JSON.stringify({ include: p.sandbox }),
-      "sandbox-run": String(p.sandbox.length > 0),
-      "bun-musl": JSON.stringify({ include: p.bunMusl }),
-      "bun-musl-run": String(p.bunMusl.length > 0),
-      "network-all-os": String(p.networkOnAllOs),
+      keyring: String(p.keyring),
+      sandbox: String(p.sandbox),
+      bun: String(p.bun),
       spike: String(p.spike),
+      targets: JSON.stringify({ include: p.targets }),
     };
     const lines = Object.entries(outputs).map(([k, v]) => `${k}=${v}`);
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, lines.join("\n") + "\n");
-    const summary = [
-      `### CI plan: ${p.full ? "full" : p.code ? "fast" : "docs only"}`,
-      `- changed files: ${files.length}`,
-      `- AOT: ${p.aot.map((t) => t.rid).join(", ") || "none"}`,
-      `- keyring: ${p.keyring.map((t) => t.rid).join(", ") || "none"}`,
-      `- sandbox: ${p.sandbox.map((t) => t.rid).join(", ") || "none"}`,
-      `- pinned Bun on musl: ${p.bunMusl.map((t) => t.arch).join(", ") || "none"}`,
-      `- network Bun test on: ${p.networkOnAllOs ? "every OS" : "Linux"}`,
-      `- spike: ${p.spike}`,
-      "",
-      "Label a pull request `ci:full`, or run `gh workflow run CI --ref <branch>`, for every target.",
-    ].join("\n");
-    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
-    console.log(summary);
+    const text = summary(p, files.length);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text + "\n");
+    console.log(text);
+    // An annotation, so the notice shows on the pull request's checks too.
+    if (p.platform.length > 0)
+      console.log(
+        "::warning title=Platform-sensitive change::This pull request touches platform-sensitive code; label it ci:full to run every target before merging.",
+      );
   }
 }
