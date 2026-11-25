@@ -466,7 +466,8 @@ module SessionReplay =
                                                                     Inputs.hostCall call,
                                                                     call.Binding
                                                                 ),
-                                                                Gate.Immediate,
+                                                                // It ends when people answered (grants).
+                                                                Gate.Ordered,
                                                                 Decode.using Markers.guardResult,
                                                                 env.Scope.Cancellation
                                                             )

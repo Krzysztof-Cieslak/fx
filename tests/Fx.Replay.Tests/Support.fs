@@ -358,13 +358,14 @@ let baseSelections: (string * Json) list =
         "codeact.journal.snapshots", Json.Bool false
     ]
 
-/// A recorded fixture with these selections, commands, the variables commands get, and a model (the
-/// scripted one by default).
-let createFull
+/// A recorded fixture with these selections, commands, the variables commands get, a model (the scripted
+/// one by default), and what each turn's hands are given (a guard).
+let createGuarded
     (selections: (string * Json) list)
     (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
     (commandEnv: EnvVars)
     (llm: Llm option)
+    (guard: Variants -> EventLog<Event> -> TurnStart -> Hands<HandsEnv> -> Eff<HostEnv, Hands<HandsEnv>>)
     : Fixture =
     let fsClock = FakeClock(Instant.ofUnixMicroseconds 1_700_000_000_000_000L)
 
@@ -432,7 +433,7 @@ let createFull
                     Steps = StepJournal.typed store.Log
                     Blobs = Some blobs.Blobs
                     Profile = fun _ -> Eff.ret variants
-                    Hands = fun _ -> Eff.ret (Ok hands)
+                    Hands = fun turn -> guard variants sessions turn hands |> Eff.map Ok
                     Catalog = fun _ -> None
                 }
 
@@ -453,6 +454,16 @@ let createFull
         Process = start ()
         Start = start
     }
+
+/// A recorded fixture with these selections, commands, the variables commands get, and a model (the
+/// scripted one by default).
+let createFull
+    (selections: (string * Json) list)
+    (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
+    (commandEnv: EnvVars)
+    (llm: Llm option)
+    : Fixture =
+    createGuarded selections commands commandEnv llm (fun _ _ _ hands -> Eff.ret hands)
 
 /// A recorded fixture with these selections, commands and the variables commands get.
 let createWith
