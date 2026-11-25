@@ -531,6 +531,27 @@ module CoreBindings =
                                 }
                 })
 
+    /// A path as content exclusions match it: normalized (`..` resolved, so `../repo/x` inside the
+    /// workspace is `x`), relative to the workspace when inside it.
+    let exclusionPath (settings: CoreSettings) (full: string) : string =
+        let path = Fx.Models.WorkspacePath.normalize full
+        let root = Fx.Models.WorkspacePath.normalize settings.Workspace
+
+        let comparison =
+            if settings.Os = Os.Linux then
+                StringComparison.Ordinal
+            else
+                StringComparison.OrdinalIgnoreCase
+
+        let prefix = if root.EndsWith '/' then root else root + "/"
+
+        if String.Equals(path, root, comparison) then
+            ""
+        elif path.Length > prefix.Length && path.StartsWith(prefix, comparison) then
+            path.Substring prefix.Length
+        else
+            path
+
     /// The failure of reading an excluded file: code `excluded`, with why as data.
     let excluded (path: string) (found: Fx.Models.ExclusionMatch) : HostCallError =
         HostCallError.Failed(
@@ -551,7 +572,7 @@ module CoreBindings =
                 eff {
                     let full = resolve settings path
 
-                    match Fx.Models.Exclusions.test settings.Exclusions (display settings full) with
+                    match Fx.Models.Exclusions.test settings.Exclusions (exclusionPath settings full) with
                     | Some found -> return Error(excluded path found)
                     | None ->
                         match! FsOps.readRange full 0L settings.ReadBytes with
