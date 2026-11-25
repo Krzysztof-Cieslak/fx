@@ -44,6 +44,20 @@ type Reference =
 
     override this.ToString() = $"{this.Kind} {this.Id}"
 
+/// Text that may quote files without showing them as such: what a cell printed after it read them
+/// through the bridge (docs/modules/egress.md, provenance). It carries their provenance, so the render
+/// withholds it and the model-egress hooks redact it when one of them is excluded; it never counts as
+/// seen (`SeenRanges`), because what of the files it shows is unknown.
+type Quote =
+    {
+        Text: string
+        /// The files it may quote (workspace-relative, `/`-separated).
+        Sources: ContentSource list
+    }
+
+    override this.ToString() =
+        $"quote ({this.Text.Length} chars, {this.Sources.Length} sources)"
+
 /// A piece of context: text, a file's content, a reference or media. Pieces that show a file say so,
 /// so the render can withhold excluded files and record what was seen.
 [<RequireQualifiedAccess>]
@@ -54,6 +68,8 @@ type Piece =
     | Withheld of path: string
     | Ref of Reference
     | Media of MediaPart
+    /// Text with the files it may quote (a cell's output after it read them).
+    | Quote of Quote
 
     override this.ToString() =
         match this with
@@ -62,6 +78,7 @@ type Piece =
         | Withheld path -> "withheld " + path
         | Ref reference -> "ref " + string reference
         | Media media -> "media " + string media
+        | Quote quote -> string quote
 
 /// A block of context with an id: a section of the prefix (instructions, the interpreter's prompt,
 /// agents, a repo map) or a view in the suffix. `Version` tells views whether what they would show has
@@ -156,6 +173,20 @@ module Reference =
         |> Codec.named "Reference"
 
 [<RequireQualifiedAccess>]
+module Quote =
+    let codec: Codec<Quote> =
+        Codec.record {
+            let! text = Codec.field "text" (fun (q: Quote) -> q.Text) Codec.string
+
+            and! sources =
+                Codec.defaultField "sources" (fun q -> q.Sources) [] (Codec.list ContentSource.codec)
+
+            return { Text = text; Sources = sources }
+        }
+        |> Codec.describe "Text with the files it may quote, e.g. a cell's output after it read them."
+        |> Codec.named "Quote"
+
+[<RequireQualifiedAccess>]
 module Piece =
     let codec: Codec<Piece> =
         Codec.union "kind" {
@@ -167,6 +198,7 @@ module Piece =
 
             and! reference = Codec.case1 "ref" Piece.Ref (Field.required "ref" Reference.codec)
             and! media = Codec.caseOf "media" Piece.Media MediaPart.codec
+            and! quote = Codec.caseOf "quote" Piece.Quote Quote.codec
 
             return
                 fun value ->
@@ -176,8 +208,10 @@ module Piece =
                     | Piece.Withheld path -> withheld path
                     | Piece.Ref r -> reference r
                     | Piece.Media m -> media m
+                    | Piece.Quote q -> quote q
         }
-        |> Codec.describe "A piece of context: text, a file's content, a withheld file, a reference or media."
+        |> Codec.describe
+            "A piece of context: text, a file's content, a withheld file, a reference, media, or text quoting files."
         |> Codec.named "Piece"
 
     let text (text: string) : Piece = Piece.Text text
@@ -226,6 +260,7 @@ module Piece =
     let render (piece: Piece) : string =
         match piece with
         | Piece.Text text -> text
+        | Piece.Quote quote -> quote.Text
         | Piece.File view -> FileView.header view + "\n" + view.Text
         | Piece.Withheld path -> $"[{path}: withheld by content exclusions]"
         | Piece.Ref r ->
@@ -244,8 +279,8 @@ module Piece =
             $"[{m.Kind} {m.MediaType}{name}]"
 
     /// The files a piece quotes (provenance for the model-egress hooks, docs/modules/egress.md): a
-    /// file's lines (each range, or the whole file), media's own sources; nothing for text, withheld
-    /// files and references.
+    /// file's lines (each range, or the whole file), media's and quotes' own sources; nothing for text,
+    /// withheld files and references.
     let sources (piece: Piece) : ContentSource list =
         match piece with
         | Piece.File view ->
@@ -253,6 +288,7 @@ module Piece =
             | [] -> [ ContentSource.file view.Path ]
             | ranges -> ranges |> List.map (fun range -> { Path = view.Path; Lines = Some range })
         | Piece.Media media -> media.Sources
+        | Piece.Quote quote -> quote.Sources
         | Piece.Text _
         | Piece.Withheld _
         | Piece.Ref _ -> []
