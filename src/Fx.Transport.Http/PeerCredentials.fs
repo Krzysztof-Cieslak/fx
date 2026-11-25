@@ -201,11 +201,12 @@ module private Windows =
 
     let socketPeer (socket: Socket) : PeerAccount option =
         let pid = Array.zeroCreate<byte> 4
+        // The pid is written whatever length the call reports; 0 is no process.
+        socket.IOControl(SioAfUnixGetPeerPid, null, pid) |> ignore
 
-        if socket.IOControl(SioAfUnixGetPeerPid, null, pid) = 4 then
-            ofProcess (BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan pid))
-        else
-            None
+        match BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan pid) with
+        | 0u -> None
+        | processId -> ofProcess processId
 
 /// The account this process runs as, in the form peers are reported in: the effective user id on
 /// Unix, the user's SID on Windows.
