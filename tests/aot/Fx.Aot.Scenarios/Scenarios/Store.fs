@@ -56,28 +56,37 @@ type Item =
         | Removed name -> $"Removed {name}"
 
 let private codecV1: Codec<ItemV1> =
-    Codec.union "kind" (fun added value ->
-        match value with
-        | AddedV1(name, qty) -> added name qty)
-    |> Codec.case2
-        "added"
-        (fun name qty -> AddedV1(name, qty))
-        (Field.required "name" Codec.string)
-        (Field.required "qty" Codec.int)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! added =
+            Codec.case2
+                "added"
+                (fun name qty -> AddedV1(name, qty))
+                (Field.required "name" Codec.string)
+                (Field.required "qty" Codec.int)
+
+        return
+            fun value ->
+                match value with
+                | AddedV1(name, qty) -> added name qty
+    }
 
 let private codec: Codec<Item> =
-    Codec.union "kind" (fun added removed value ->
-        match value with
-        | Added(name, count) -> added name count
-        | Removed name -> removed name)
-    |> Codec.case2
-        "added"
-        (fun name count -> Added(name, count))
-        (Field.required "name" Codec.string)
-        (Field.required "count" Codec.int)
-    |> Codec.case1 "removed" Removed (Field.required "name" Codec.string)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! added =
+            Codec.case2
+                "added"
+                (fun name count -> Added(name, count))
+                (Field.required "name" Codec.string)
+                (Field.required "count" Codec.int)
+
+        and! removed = Codec.case1 "removed" Removed (Field.required "name" Codec.string)
+
+        return
+            fun value ->
+                match value with
+                | Added(name, count) -> added name count
+                | Removed name -> removed name
+    }
 
 let private renameQty: Upcaster =
     fun json ->

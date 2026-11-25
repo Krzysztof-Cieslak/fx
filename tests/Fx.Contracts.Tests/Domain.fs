@@ -80,41 +80,55 @@ let matchCodec: Codec<Match> =
     |> Codec.named "Match"
 
 let turnResult: Codec<TurnResult> =
-    Codec.union "kind" (fun done' needInput waiting moved cancelled value ->
-        match value with
-        | Done(summary, evidence, verify) -> done' summary evidence verify
-        | NeedInput decisions -> needInput decisions
-        | Waiting(on, note) -> waiting on note
-        | Moved span -> moved span
-        | Cancelled -> cancelled)
-    |> Codec.case3
-        "done"
-        (fun summary evidence verify -> Done(summary, evidence, verify))
-        (Field.required "summary" Codec.string)
-        (Field.withDefault "evidence" [] (Codec.list matchCodec))
-        (Field.optional "verify" Codec.string)
-    |> Codec.case1 "needInput" NeedInput (Field.required "decisions" (Codec.list Codec.string))
-    |> Codec.case2
-        "waiting"
-        (fun on note -> Waiting(on, note))
-        (Field.required "on" (Codec.list Codec.string))
-        (Field.required "note" Codec.string)
-    |> Codec.caseOf "moved" Moved span
-    |> Codec.case0 "cancelled" Cancelled
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! done' =
+            Codec.case3
+                "done"
+                (fun summary evidence verify -> Done(summary, evidence, verify))
+                (Field.required "summary" Codec.string)
+                (Field.withDefault "evidence" [] (Codec.list matchCodec))
+                (Field.optional "verify" Codec.string)
+
+        and! needInput =
+            Codec.case1 "needInput" NeedInput (Field.required "decisions" (Codec.list Codec.string))
+
+        and! waiting =
+            Codec.case2
+                "waiting"
+                (fun on note -> Waiting(on, note))
+                (Field.required "on" (Codec.list Codec.string))
+                (Field.required "note" Codec.string)
+
+        and! moved = Codec.caseOf "moved" Moved span
+        and! cancelled = Codec.case0 "cancelled" Cancelled
+
+        return
+            fun value ->
+                match value with
+                | Done(summary, evidence, verify) -> done' summary evidence verify
+                | NeedInput decisions -> needInput decisions
+                | Waiting(on, note) -> waiting on note
+                | Moved span -> moved span
+                | Cancelled -> cancelled
+    }
     |> Codec.describeCase "done" "The work is complete."
     |> Codec.named "TurnResult"
 
 let tree: Codec<Tree> =
     Codec.recursive "Tree" (fun tree ->
-        Codec.union "kind" (fun leaf node value ->
-            match value with
-            | Leaf n -> leaf n
-            | Node(label, children) -> node label children)
-        |> Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
-        |> Codec.case2
-            "node"
-            (fun label children -> Node(label, children))
-            (Field.required "label" Codec.string)
-            (Field.required "children" (Codec.list tree))
-        |> Codec.buildUnion)
+        Codec.union "kind" {
+            let! leaf = Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
+
+            and! node =
+                Codec.case2
+                    "node"
+                    (fun label children -> Node(label, children))
+                    (Field.required "label" Codec.string)
+                    (Field.required "children" (Codec.list tree))
+
+            return
+                fun value ->
+                    match value with
+                    | Leaf n -> leaf n
+                    | Node(label, children) -> node label children
+        })

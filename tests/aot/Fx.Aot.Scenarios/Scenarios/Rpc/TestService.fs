@@ -93,13 +93,16 @@ module Codecs =
         }
 
     let mathError: Codec<MathError> =
-        Codec.union "kind" (fun divideByZero overflow value ->
-            match value with
-            | DivideByZero -> divideByZero
-            | Overflow limit -> overflow limit)
-        |> Codec.case0 "divideByZero" DivideByZero
-        |> Codec.case1 "overflow" Overflow (Field.required "limit" Codec.int)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! divideByZero = Codec.case0 "divideByZero" DivideByZero
+            and! overflow = Codec.case1 "overflow" Overflow (Field.required "limit" Codec.int)
+
+            return
+                fun value ->
+                    match value with
+                    | DivideByZero -> divideByZero
+                    | Overflow limit -> overflow limit
+        }
 
 /// Requests the service handles.
 module Methods =

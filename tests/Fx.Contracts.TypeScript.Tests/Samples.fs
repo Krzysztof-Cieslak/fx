@@ -96,28 +96,37 @@ let matchCodec: Codec<Match> =
     |> Codec.named "Match"
 
 let turnResult: Codec<TurnResult> =
-    Codec.union "kind" (fun done' needInput waiting moved cancelled value ->
-        match value with
-        | Done(summary, evidence, verify) -> done' summary evidence verify
-        | NeedInput decisions -> needInput decisions
-        | Waiting(on, note) -> waiting on note
-        | Moved span -> moved span
-        | Cancelled -> cancelled)
-    |> Codec.case3
-        "done"
-        (fun summary evidence verify -> Done(summary, evidence, verify))
-        (Field.required "summary" Codec.string)
-        (Field.withDefault "evidence" [] (Codec.list matchCodec))
-        (Field.optional "verify" (Codec.string |> Codec.describe "A command that checks the work."))
-    |> Codec.case1 "needInput" NeedInput (Field.required "decisions" (Codec.list Codec.string |> Codec.minItems 1))
-    |> Codec.case2
-        "waiting"
-        (fun on note -> Waiting(on, note))
-        (Field.required "on" (Codec.list Codec.string))
-        (Field.required "note" Codec.string)
-    |> Codec.caseOf "moved" Moved span
-    |> Codec.case0 "cancelled" Cancelled
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! done' =
+            Codec.case3
+                "done"
+                (fun summary evidence verify -> Done(summary, evidence, verify))
+                (Field.required "summary" Codec.string)
+                (Field.withDefault "evidence" [] (Codec.list matchCodec))
+                (Field.optional "verify" (Codec.string |> Codec.describe "A command that checks the work."))
+
+        and! needInput =
+            Codec.case1 "needInput" NeedInput (Field.required "decisions" (Codec.list Codec.string |> Codec.minItems 1))
+
+        and! waiting =
+            Codec.case2
+                "waiting"
+                (fun on note -> Waiting(on, note))
+                (Field.required "on" (Codec.list Codec.string))
+                (Field.required "note" Codec.string)
+
+        and! moved = Codec.caseOf "moved" Moved span
+        and! cancelled = Codec.case0 "cancelled" Cancelled
+
+        return
+            fun value ->
+                match value with
+                | Done(summary, evidence, verify) -> done' summary evidence verify
+                | NeedInput decisions -> needInput decisions
+                | Waiting(on, note) -> waiting on note
+                | Moved span -> moved span
+                | Cancelled -> cancelled
+    }
     |> Codec.describeCase "done" "The work is complete."
     |> Codec.describeCase "cancelled" "The user cancelled the turn."
     |> Codec.describe "How a turn ends."
@@ -125,17 +134,22 @@ let turnResult: Codec<TurnResult> =
 
 let tree: Codec<Tree> =
     Codec.recursive "Tree" (fun tree ->
-        Codec.union "kind" (fun leaf node value ->
-            match value with
-            | Leaf n -> leaf n
-            | Node(label, children) -> node label children)
-        |> Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
-        |> Codec.case2
-            "node"
-            (fun label children -> Node(label, children))
-            (Field.required "label" Codec.string)
-            (Field.required "children" (Codec.list tree))
-        |> Codec.buildUnion)
+        Codec.union "kind" {
+            let! leaf = Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
+
+            and! node =
+                Codec.case2
+                    "node"
+                    (fun label children -> Node(label, children))
+                    (Field.required "label" Codec.string)
+                    (Field.required "children" (Codec.list tree))
+
+            return
+                fun value ->
+                    match value with
+                    | Leaf n -> leaf n
+                    | Node(label, children) -> node label children
+        })
 
 let private ofKind (kind: SchemaKind) = Schema.ofKind kind
 
@@ -165,13 +179,16 @@ let shapes: Schema =
 
     let nullableUnion =
         (Codec.option (
-            Codec.union "type" (fun text image value ->
-                match value with
-                | Choice1Of2 s -> text s
-                | Choice2Of2 n -> image n)
-            |> Codec.case1 "text" Choice1Of2 (Field.required "text" Codec.string)
-            |> Codec.case1 "image" Choice2Of2 (Field.required "bytes" Codec.int)
-            |> Codec.buildUnion
+            Codec.union "type" {
+                let! text = Codec.case1 "text" Choice1Of2 (Field.required "text" Codec.string)
+                and! image = Codec.case1 "image" Choice2Of2 (Field.required "bytes" Codec.int)
+
+                return
+                    fun value ->
+                        match value with
+                        | Choice1Of2 s -> text s
+                        | Choice2Of2 n -> image n
+            }
         ))
             .Schema
 

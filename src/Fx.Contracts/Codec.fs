@@ -67,7 +67,7 @@ type RecordFields<'T, 'A> =
 
     override this.ToString() = string this.Part
 
-/// One encoded union case, made by a case encoder inside the function given to `Codec.union`.
+/// One encoded union case, made by a case encoder in the function returned from `Codec.union { }`.
 [<Sealed>]
 type CaseValue internal (tag: string, members: unit -> (string * Json) list, show: Limits -> Preview) =
     member internal _.Tag = tag
@@ -80,24 +80,27 @@ type internal CaseDef<'U> =
         Tag: string
         Description: string option
         Payload: ObjectSchema
-        /// Decodes the object's members (the tag member included).
+        /// Decodes the object's members.
         Decode: (string * Json) list -> Validation<'U, Issue>
+        /// Whether `Decode` gets the members without the tag member: a payload codec (`caseOf`) may be
+        /// strict, and the tag belongs to the union.
+        PayloadOnly: bool
     }
 
     override this.ToString() = this.Tag
 
-/// A union codec under construction: `Codec.union`, one `Codec.case*` per case, then `Codec.buildUnion`.
-/// `'Match` is what remains of the match function: one case encoder per case still to add, then the
-/// union value.
-[<Sealed>]
-type UnionBuilder<'U, 'Match> internal (discriminator: string, matcher: 'Match, cases: CaseDef<'U> list) =
-    member internal _.Discriminator = discriminator
-    member internal _.Match = matcher
-    /// Added cases, last first.
-    member internal _.Cases = cases
+/// Cases of a union `'U` with their encoders `'E`: one case from `Codec.case0` … `Codec.caseOf`, or
+/// several merged with `and!` in `Codec.union { }`.
+type UnionCases<'U, 'E> =
+    internal
+        {
+            /// In declaration order.
+            Cases: CaseDef<'U> list
+            Encoders: 'E
+        }
 
-    override _.ToString() =
-        $"UnionBuilder({discriminator}: {String.Join(' ', cases |> List.rev |> List.map string)})"
+    override this.ToString() =
+        "UnionCases(" + String.Join(", ", this.Cases |> List.map string) + ")"
 
 module internal CodecSupport =
 
@@ -175,13 +178,74 @@ module internal CodecSupport =
             Preview = fun limits value -> Preview.record limits (part.Show value)
         }
 
+    /// A union of `cases`, in order, that encodes values with `matcher`.
+    let unionCodec (discriminator: string) (cases: CaseDef<'U> list) (matcher: 'U -> CaseValue) : Codec<'U> =
+        checkUnique "case tag" (cases |> List.map (fun c -> c.Tag))
+
+        for case in cases do
+            if case.Payload.Fields |> List.exists (fun f -> f.Name = discriminator) then
+                invalidArg
+                    (nameof cases)
+                    $"Case {Json.quote case.Tag} has a field named like the discriminator {Json.quote discriminator}."
+
+            checkUnique "field" (case.Payload.Fields |> List.map (fun f -> f.Name))
+
+        let byTag = cases |> List.map (fun c -> c.Tag, c) |> Map.ofList
+
+        let tags = Issue.quoteAll (cases |> List.map (fun c -> c.Tag))
+
+        let tagIssue (message: string) =
+            Error [ Issue.at [ PathSegment.Key discriminator ] message ]
+
+        {
+            Schema =
+                Schema.ofKind (
+                    SchemaKind.Union
+                        {
+                            Discriminator = discriminator
+                            Cases =
+                                cases
+                                |> List.map (fun c ->
+                                    ({
+                                        Tag = c.Tag
+                                        Description = c.Description
+                                        Payload = c.Payload
+                                    }
+                                    : UnionCase))
+                        }
+                )
+            Encode =
+                fun value ->
+                    let case = matcher value
+                    Json.Object((discriminator, Json.String case.Tag) :: case.Members())
+            Decode =
+                fun json ->
+                    match json with
+                    | Json.Object members ->
+                        match tryMember discriminator members with
+                        | None -> tagIssue $"missing required field; expected one of {tags}"
+                        | Some(Json.String tag as found) ->
+                            match byTag.TryFind tag with
+                            | Some case when case.PayloadOnly ->
+                                members
+                                |> List.filter (fun (key, _) ->
+                                    not (String.Equals(key, discriminator, StringComparison.Ordinal)))
+                                |> case.Decode
+                            | Some case -> case.Decode members
+                            | None -> tagIssue $"expected one of {tags}, got {Json.describe found}"
+                        | Some other -> tagIssue $"expected one of {tags}, got {Json.describe other}"
+                    | other -> expected "object" other
+            Preview = fun limits value -> Preview.clamp limits ((matcher value).Show limits)
+        }
+
 /// The `Codec.record { }` builder: each field is bound with `let!`/`and!`, and `return` builds the
 /// record from them. Decoding accumulates the issues of every field.
 ///
-/// Native AOT: `and!` normally nests one tuple per field (`'A * ('B * ('C * …))`), and ILC aborts
-/// generic expansions nested deeper than 4 levels inside FSharp.Core's closures (IL3054). So up to 12
-/// fields merge into one flat tuple (`MergeSources3` … `MergeSources12`; the compiler chains them for
-/// more), and values travel between fields in `Slot`s instead of through generic closures.
+/// Up to 12 fields merge into one flat tuple (`MergeSources3` … `MergeSources12`; the compiler chains
+/// them for more), and decoded values travel between fields in `Slot`s. Native AOT: the tuple of all
+/// fields must only ever reach single-parameter functions (here `return`'s). In a curried function, a
+/// partial application or a curried call, ILC aborts it once it is big enough (IL3054; see AGENTS.md,
+/// "Native AOT").
 type RecordBuilder() =
     member _.BindReturn(fields: RecordFields<'T, 'A>, make: 'A -> 'T) : Codec<'T> =
         CodecSupport.objectCodec fields.Part (fun value -> make (CodecSupport.read<'A> value))
@@ -488,6 +552,269 @@ type RecordBuilder() =
                             CodecSupport.read<'L> v[11]
                         ))
         }
+
+/// The `Codec.union "kind" { }` builder: each case is bound with `let!`/`and!` to its encoder, and
+/// `return` gives the function that encodes a union value with them (see `Codec.union`).
+///
+/// Native AOT: the encoders reach that function in one tuple (flat up to 12 cases, chained beyond), as
+/// the single parameter of `return`'s lambda. Never pass them as curried parameters, one per case: ILC
+/// aborts curried functions over that many function types (IL3054; see AGENTS.md, "Native AOT").
+[<Sealed>]
+type UnionBuilder internal (discriminator: string) =
+    member _.BindReturn(cases: UnionCases<'U, 'E>, matcher: 'E -> 'U -> CaseValue) : Codec<'U> =
+        CodecSupport.unionCodec discriminator cases.Cases (matcher cases.Encoders)
+
+    member _.MergeSources(a: UnionCases<'U, 'A>, b: UnionCases<'U, 'B>) : UnionCases<'U, 'A * 'B> =
+        {
+            Cases = a.Cases @ b.Cases
+            Encoders = a.Encoders, b.Encoders
+        }
+
+    member _.MergeSources3
+        (a: UnionCases<'U, 'A>, b: UnionCases<'U, 'B>, c: UnionCases<'U, 'C>)
+        : UnionCases<'U, 'A * 'B * 'C> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders
+        }
+
+    member _.MergeSources4
+        (a: UnionCases<'U, 'A>, b: UnionCases<'U, 'B>, c: UnionCases<'U, 'C>, d: UnionCases<'U, 'D>)
+        : UnionCases<'U, 'A * 'B * 'C * 'D> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases; d.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders, d.Encoders
+        }
+
+    member _.MergeSources5
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases; d.Cases; e.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders, d.Encoders, e.Encoders
+        }
+
+    member _.MergeSources6
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases; d.Cases; e.Cases; f.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders, d.Encoders, e.Encoders, f.Encoders
+        }
+
+    member _.MergeSources7
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases; d.Cases; e.Cases; f.Cases; g.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders, d.Encoders, e.Encoders, f.Encoders, g.Encoders
+        }
+
+    member _.MergeSources8
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>,
+            h: UnionCases<'U, 'H>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G * 'H> =
+        {
+            Cases = List.concat [ a.Cases; b.Cases; c.Cases; d.Cases; e.Cases; f.Cases; g.Cases; h.Cases ]
+            Encoders = a.Encoders, b.Encoders, c.Encoders, d.Encoders, e.Encoders, f.Encoders, g.Encoders, h.Encoders
+        }
+
+    member _.MergeSources9
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>,
+            h: UnionCases<'U, 'H>,
+            i: UnionCases<'U, 'I>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G * 'H * 'I> =
+        {
+            Cases =
+                List.concat
+                    [
+                        a.Cases
+                        b.Cases
+                        c.Cases
+                        d.Cases
+                        e.Cases
+                        f.Cases
+                        g.Cases
+                        h.Cases
+                        i.Cases
+                    ]
+            Encoders =
+                a.Encoders,
+                b.Encoders,
+                c.Encoders,
+                d.Encoders,
+                e.Encoders,
+                f.Encoders,
+                g.Encoders,
+                h.Encoders,
+                i.Encoders
+        }
+
+    member _.MergeSources10
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>,
+            h: UnionCases<'U, 'H>,
+            i: UnionCases<'U, 'I>,
+            j: UnionCases<'U, 'J>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G * 'H * 'I * 'J> =
+        {
+            Cases =
+                List.concat
+                    [
+                        a.Cases
+                        b.Cases
+                        c.Cases
+                        d.Cases
+                        e.Cases
+                        f.Cases
+                        g.Cases
+                        h.Cases
+                        i.Cases
+                        j.Cases
+                    ]
+            Encoders =
+                a.Encoders,
+                b.Encoders,
+                c.Encoders,
+                d.Encoders,
+                e.Encoders,
+                f.Encoders,
+                g.Encoders,
+                h.Encoders,
+                i.Encoders,
+                j.Encoders
+        }
+
+    member _.MergeSources11
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>,
+            h: UnionCases<'U, 'H>,
+            i: UnionCases<'U, 'I>,
+            j: UnionCases<'U, 'J>,
+            k: UnionCases<'U, 'K>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G * 'H * 'I * 'J * 'K> =
+        {
+            Cases =
+                List.concat
+                    [
+                        a.Cases
+                        b.Cases
+                        c.Cases
+                        d.Cases
+                        e.Cases
+                        f.Cases
+                        g.Cases
+                        h.Cases
+                        i.Cases
+                        j.Cases
+                        k.Cases
+                    ]
+            Encoders =
+                a.Encoders,
+                b.Encoders,
+                c.Encoders,
+                d.Encoders,
+                e.Encoders,
+                f.Encoders,
+                g.Encoders,
+                h.Encoders,
+                i.Encoders,
+                j.Encoders,
+                k.Encoders
+        }
+
+    member _.MergeSources12
+        (
+            a: UnionCases<'U, 'A>,
+            b: UnionCases<'U, 'B>,
+            c: UnionCases<'U, 'C>,
+            d: UnionCases<'U, 'D>,
+            e: UnionCases<'U, 'E>,
+            f: UnionCases<'U, 'F>,
+            g: UnionCases<'U, 'G>,
+            h: UnionCases<'U, 'H>,
+            i: UnionCases<'U, 'I>,
+            j: UnionCases<'U, 'J>,
+            k: UnionCases<'U, 'K>,
+            l: UnionCases<'U, 'L>
+        ) : UnionCases<'U, 'A * 'B * 'C * 'D * 'E * 'F * 'G * 'H * 'I * 'J * 'K * 'L> =
+        {
+            Cases =
+                List.concat
+                    [
+                        a.Cases
+                        b.Cases
+                        c.Cases
+                        d.Cases
+                        e.Cases
+                        f.Cases
+                        g.Cases
+                        h.Cases
+                        i.Cases
+                        j.Cases
+                        k.Cases
+                        l.Cases
+                    ]
+            Encoders =
+                a.Encoders,
+                b.Encoders,
+                c.Encoders,
+                d.Encoders,
+                e.Encoders,
+                f.Encoders,
+                g.Encoders,
+                h.Encoders,
+                i.Encoders,
+                j.Encoders,
+                k.Encoders,
+                l.Encoders
+        }
+
+    override _.ToString() = $"UnionBuilder({discriminator})"
 
 /// Object fields without getters, for union cases (`Codec.case1` …) and `Codec.fieldOf`.
 [<RequireQualifiedAccess>]
@@ -881,24 +1208,29 @@ module Codec =
 
     // ---- Unions ----------------------------------------------------------------------------------
 
-    /// Starts a union codec whose JSON objects carry the case tag in the `discriminator` field, e.g.
-    /// `{"kind": "done", "summary": "…"}`. `matcher` gets one encoder per case, in the order the cases
-    /// are added, then the value; matching on the value keeps encoding exhaustive:
+    /// Builds a union codec whose JSON objects carry the case tag in the `discriminator` field, e.g.
+    /// `{"kind": "done", "summary": "…"}`. Bind each case to its encoder with `let!`/`and!`, and
+    /// `return` the function that encodes a value with them; matching on the value keeps encoding
+    /// exhaustive:
     ///
     /// ```fsharp
-    /// Codec.union "kind" (fun finished waiting value ->
-    ///     match value with
-    ///     | Finished summary -> finished summary
-    ///     | Waiting(jobs, note) -> waiting jobs note)
-    /// |> Codec.case1 "finished" Finished (Field.required "summary" Codec.string)
-    /// |> Codec.case2 "waiting" (fun jobs note -> Waiting(jobs, note))
-    ///     (Field.required "jobs" (Codec.list Codec.string)) (Field.required "note" Codec.string)
-    /// |> Codec.buildUnion
+    /// Codec.union "kind" {
+    ///     let! finished = Codec.case1 "finished" Finished (Field.required "summary" Codec.string)
+    ///     and! waiting =
+    ///         Codec.case2 "waiting" (fun jobs note -> Waiting(jobs, note))
+    ///             (Field.required "jobs" (Codec.list Codec.string)) (Field.required "note" Codec.string)
+    ///     and! cancelled = Codec.case0 "cancelled" Cancelled
+    ///
+    ///     return fun value ->
+    ///         match value with
+    ///         | Finished summary -> finished summary
+    ///         | Waiting(jobs, note) -> waiting jobs note
+    ///         | Cancelled -> cancelled }
     /// ```
     ///
-    /// Cases with the same payload types can be swapped by mistake: the round-trip tests catch that.
-    let union (discriminator: string) (matcher: 'Match) : UnionBuilder<'U, 'Match> =
-        UnionBuilder(discriminator, matcher, [])
+    /// The schema lists the cases in this order. A case that the function never uses is an unused
+    /// value (FS1182, an error in this repository).
+    let union (discriminator: string) : UnionBuilder = UnionBuilder(discriminator)
 
     let private entry (spec: FieldSpec<'F>) (value: 'F) : (string * Json) option =
         spec.Encode value |> Option.map (fun json -> spec.Name, json)
@@ -917,52 +1249,39 @@ module Codec =
             fun limits -> Preview.prefixed tag limits (fun limits -> Preview.record limits (List.choose id (fields ())))
         )
 
-    let private addCase
+    /// A case that reads the members of the union's object (the tag member included).
+    let private caseDef
         (tag: string)
-        (description: string option)
         (fields: FieldSchema list)
         (decode: (string * Json) list -> Validation<'U, Issue>)
-        (rest: 'Rest)
-        (builder: UnionBuilder<'U, 'M>)
-        : UnionBuilder<'U, 'Rest> =
-        let def: CaseDef<'U> =
-            {
-                Tag = tag
-                Description = description
-                Payload =
-                    {
-                        Fields = fields
-                        UnknownFields = UnknownFields.Ignore
-                    }
-                Decode = decode
-            }
+        : CaseDef<'U> =
+        {
+            Tag = tag
+            Description = None
+            Payload =
+                {
+                    Fields = fields
+                    UnknownFields = UnknownFields.Ignore
+                }
+            Decode = decode
+            PayloadOnly = false
+        }
 
-        UnionBuilder(builder.Discriminator, rest, def :: builder.Cases)
+    let private single (def: CaseDef<'U>) (encoder: 'E) : UnionCases<'U, 'E> = { Cases = [ def ]; Encoders = encoder }
 
     /// A case without fields: `{"kind": "cancelled"}`. Its encoder is the `CaseValue` itself.
-    let case0 (tag: string) (value: 'U) (builder: UnionBuilder<'U, CaseValue -> 'Rest>) : UnionBuilder<'U, 'Rest> =
+    let case0 (tag: string) (value: 'U) : UnionCases<'U, CaseValue> =
         let encoded =
             CaseValue(tag, (fun () -> []), (fun limits -> Preview.atom limits tag))
 
-        builder |> addCase tag None [] (fun _ -> Ok value) (builder.Match encoded)
+        single (caseDef tag [] (fun _ -> Ok value)) encoded
 
     /// A case with one field.
-    let case1
-        (tag: string)
-        (make: 'A -> 'U)
-        (f1: FieldSpec<'A>)
-        (builder: UnionBuilder<'U, ('A -> CaseValue) -> 'Rest>)
-        : UnionBuilder<'U, 'Rest> =
+    let case1 (tag: string) (make: 'A -> 'U) (f1: FieldSpec<'A>) : UnionCases<'U, 'A -> CaseValue> =
         let encoder a =
             caseValue tag (fun () -> [ entry f1 a ]) (fun () -> [ shown f1 a ])
 
-        builder
-        |> addCase
-            tag
-            None
-            [ f1.Schema ]
-            (fun members -> decodeField f1 members |> Result.map make)
-            (builder.Match encoder)
+        single (caseDef tag [ f1.Schema ] (fun members -> decodeField f1 members |> Result.map make)) encoder
 
     /// A case with two fields.
     let case2
@@ -970,16 +1289,14 @@ module Codec =
         (make: 'A -> 'B -> 'U)
         (f1: FieldSpec<'A>)
         (f2: FieldSpec<'B>)
-        (builder: UnionBuilder<'U, ('A -> 'B -> CaseValue) -> 'Rest>)
-        : UnionBuilder<'U, 'Rest> =
+        : UnionCases<'U, 'A -> 'B -> CaseValue> =
         let encoder a b =
             caseValue tag (fun () -> [ entry f1 a; entry f2 b ]) (fun () -> [ shown f1 a; shown f2 b ])
 
         let decode members =
             Validation.map2 make (decodeField f1 members) (decodeField f2 members)
 
-        builder
-        |> addCase tag None [ f1.Schema; f2.Schema ] decode (builder.Match encoder)
+        single (caseDef tag [ f1.Schema; f2.Schema ] decode) encoder
 
     /// A case with three fields.
     let case3
@@ -988,8 +1305,7 @@ module Codec =
         (f1: FieldSpec<'A>)
         (f2: FieldSpec<'B>)
         (f3: FieldSpec<'C>)
-        (builder: UnionBuilder<'U, ('A -> 'B -> 'C -> CaseValue) -> 'Rest>)
-        : UnionBuilder<'U, 'Rest> =
+        : UnionCases<'U, 'A -> 'B -> 'C -> CaseValue> =
         let encoder a b c =
             caseValue tag (fun () -> [ entry f1 a; entry f2 b; entry f3 c ]) (fun () ->
                 [ shown f1 a; shown f2 b; shown f3 c ])
@@ -997,8 +1313,7 @@ module Codec =
         let decode members =
             Validation.map3 make (decodeField f1 members) (decodeField f2 members) (decodeField f3 members)
 
-        builder
-        |> addCase tag None [ f1.Schema; f2.Schema; f3.Schema ] decode (builder.Match encoder)
+        single (caseDef tag [ f1.Schema; f2.Schema; f3.Schema ] decode) encoder
 
     /// A case with four fields.
     let case4
@@ -1008,8 +1323,7 @@ module Codec =
         (f2: FieldSpec<'B>)
         (f3: FieldSpec<'C>)
         (f4: FieldSpec<'D>)
-        (builder: UnionBuilder<'U, ('A -> 'B -> 'C -> 'D -> CaseValue) -> 'Rest>)
-        : UnionBuilder<'U, 'Rest> =
+        : UnionCases<'U, 'A -> 'B -> 'C -> 'D -> CaseValue> =
         let encoder a b c d =
             caseValue tag (fun () -> [ entry f1 a; entry f2 b; entry f3 c; entry f4 d ]) (fun () ->
                 [ shown f1 a; shown f2 b; shown f3 c; shown f4 d ])
@@ -1020,17 +1334,11 @@ module Codec =
                 (Validation.zip (decodeField f1 members) (decodeField f2 members))
                 (Validation.zip (decodeField f3 members) (decodeField f4 members))
 
-        builder
-        |> addCase tag None [ f1.Schema; f2.Schema; f3.Schema; f4.Schema ] decode (builder.Match encoder)
+        single (caseDef tag [ f1.Schema; f2.Schema; f3.Schema; f4.Schema ] decode) encoder
 
     /// A case whose fields are those of an object codec (a record, possibly named), written next to the
     /// tag: `{"kind": "blob", "digest": "…", "size": 3}`. For cases with many fields.
-    let caseOf
-        (tag: string)
-        (make: 'P -> 'U)
-        (payload: Codec<'P>)
-        (builder: UnionBuilder<'U, ('P -> CaseValue) -> 'Rest>)
-        : UnionBuilder<'U, 'Rest> =
+    let caseOf (tag: string) (make: 'P -> 'U) (payload: Codec<'P>) : UnionCases<'U, 'P -> CaseValue> =
         let fields, name, description =
             match payload.Schema.Kind with
             | SchemaKind.Object o -> o.Fields, None, payload.Schema.Description
@@ -1039,8 +1347,6 @@ module Codec =
                                    Body = { Kind = SchemaKind.Object o } as body
                                } -> o.Fields, Some name, Option.orElse body.Description payload.Schema.Description
             | _ -> invalidArg (nameof payload) $"The payload of case {Json.quote tag} must be an object codec."
-
-        let discriminator = builder.Discriminator
 
         let encoder (value: 'P) =
             let members () =
@@ -1071,72 +1377,14 @@ module Codec =
             CaseValue(tag, members, show)
 
         let decode (members: (string * Json) list) =
-            members
-            |> List.filter (fun (key, _) -> not (String.Equals(key, discriminator, StringComparison.Ordinal)))
-            |> Json.Object
-            |> payload.Decode
-            |> Result.map make
+            payload.Decode(Json.Object members) |> Result.map make
 
-        builder |> addCase tag description fields decode (builder.Match encoder)
-
-    /// Finishes a union once every case of the match function has been added.
-    let buildUnion (builder: UnionBuilder<'U, 'U -> CaseValue>) : Codec<'U> =
-        let discriminator = builder.Discriminator
-        let cases = List.rev builder.Cases
-        checkUnique "case tag" (cases |> List.map (fun c -> c.Tag))
-
-        for case in cases do
-            if case.Payload.Fields |> List.exists (fun f -> f.Name = discriminator) then
-                invalidArg
-                    (nameof builder)
-                    $"Case {Json.quote case.Tag} has a field named like the discriminator {Json.quote discriminator}."
-
-            checkUnique "field" (case.Payload.Fields |> List.map (fun f -> f.Name))
-
-        let byTag = cases |> List.map (fun c -> c.Tag, c) |> Map.ofList
-
-        let tags = Issue.quoteAll (cases |> List.map (fun c -> c.Tag))
-
-        let tagIssue (message: string) =
-            Error [ Issue.at [ PathSegment.Key discriminator ] message ]
-
-        let matcher = builder.Match
-
-        {
-            Schema =
-                Schema.ofKind (
-                    SchemaKind.Union
-                        {
-                            Discriminator = discriminator
-                            Cases =
-                                cases
-                                |> List.map (fun c ->
-                                    ({
-                                        Tag = c.Tag
-                                        Description = c.Description
-                                        Payload = c.Payload
-                                    }
-                                    : UnionCase))
-                        }
-                )
-            Encode =
-                fun value ->
-                    let case = matcher value
-                    Json.Object((discriminator, Json.String case.Tag) :: case.Members())
-            Decode =
-                fun json ->
-                    match json with
-                    | Json.Object members ->
-                        match tryMember discriminator members with
-                        | None -> tagIssue $"missing required field; expected one of {tags}"
-                        | Some(Json.String tag as found) ->
-                            match byTag.TryFind tag with
-                            | Some case -> case.Decode members
-                            | None -> tagIssue $"expected one of {tags}, got {Json.describe found}"
-                        | Some other -> tagIssue $"expected one of {tags}, got {Json.describe other}"
-                    | other -> expected "object" other
-            Preview = fun limits value -> Preview.clamp limits ((matcher value).Show limits)
-        }
+        single
+            { caseDef tag fields decode with
+                Description = description
+                PayloadOnly = true
+            }
+            encoder
 
     /// Documents one case of a union codec.
     let describeCase (tag: string) (description: string) (codec: Codec<'U>) : Codec<'U> =

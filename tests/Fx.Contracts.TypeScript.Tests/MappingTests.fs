@@ -235,13 +235,16 @@ let tests =
 
             test "tagged unions: one case per line, the case description on the tag" {
                 let union =
-                    Codec.union "type" (fun a b value ->
-                        match value with
-                        | Choice1Of2 x -> a x
-                        | Choice2Of2() -> b)
-                    |> Codec.case1 "a" Choice1Of2 (Field.required "x" Codec.string)
-                    |> Codec.case0 "b" (Choice2Of2())
-                    |> Codec.buildUnion
+                    Codec.union "type" {
+                        let! a = Codec.case1 "a" Choice1Of2 (Field.required "x" Codec.string)
+                        and! b = Codec.case0 "b" (Choice2Of2())
+
+                        return
+                            fun value ->
+                                match value with
+                                | Choice1Of2 x -> a x
+                                | Choice2Of2() -> b
+                    }
                     |> Codec.describeCase "b" "The other one."
 
                 Expect.equal
@@ -265,13 +268,16 @@ let tests =
 
             test "multi-line unions inside arrays, maps and fields" {
                 let union =
-                    Codec.union "kind" (fun a b value ->
-                        match value with
-                        | Choice1Of2 x -> a x
-                        | Choice2Of2 x -> b x)
-                    |> Codec.case1 "a" Choice1Of2 (Field.required "x" Codec.string)
-                    |> Codec.case1 "b" Choice2Of2 (Field.required "y" Codec.bool)
-                    |> Codec.buildUnion
+                    Codec.union "kind" {
+                        let! a = Codec.case1 "a" Choice1Of2 (Field.required "x" Codec.string)
+                        and! b = Codec.case1 "b" Choice2Of2 (Field.required "y" Codec.bool)
+
+                        return
+                            fun value ->
+                                match value with
+                                | Choice1Of2 x -> a x
+                                | Choice2Of2 x -> b x
+                    }
 
                 let shape =
                     record

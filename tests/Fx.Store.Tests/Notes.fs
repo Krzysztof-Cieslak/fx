@@ -29,28 +29,36 @@ type Note =
         | Edited(index, body) -> $"Edited {index} {body}"
 
 let codecV1: Codec<NoteV1> =
-    Codec.union "kind" (fun added removed value ->
-        match value with
-        | AddedV1 text -> added text
-        | RemovedV1 index -> removed index)
-    |> Codec.case1 "added" AddedV1 (Field.required "text" Codec.string)
-    |> Codec.case1 "removed" RemovedV1 (Field.required "index" Codec.int)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! added = Codec.case1 "added" AddedV1 (Field.required "text" Codec.string)
+        and! removed = Codec.case1 "removed" RemovedV1 (Field.required "index" Codec.int)
+
+        return
+            fun value ->
+                match value with
+                | AddedV1 text -> added text
+                | RemovedV1 index -> removed index
+    }
 
 let codec: Codec<Note> =
-    Codec.union "kind" (fun added removed edited value ->
-        match value with
-        | Added body -> added body
-        | Removed index -> removed index
-        | Edited(index, body) -> edited index body)
-    |> Codec.case1 "added" Added (Field.required "body" Codec.string)
-    |> Codec.case1 "removed" Removed (Field.required "index" Codec.int)
-    |> Codec.case2
-        "edited"
-        (fun index body -> Edited(index, body))
-        (Field.required "index" Codec.int)
-        (Field.required "body" Codec.string)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! added = Codec.case1 "added" Added (Field.required "body" Codec.string)
+        and! removed = Codec.case1 "removed" Removed (Field.required "index" Codec.int)
+
+        and! edited =
+            Codec.case2
+                "edited"
+                (fun index body -> Edited(index, body))
+                (Field.required "index" Codec.int)
+                (Field.required "body" Codec.string)
+
+        return
+            fun value ->
+                match value with
+                | Added body -> added body
+                | Removed index -> removed index
+                | Edited(index, body) -> edited index body
+    }
 
 /// Version 1 to 2: `added.text` became `added.body`.
 let renameText: Upcaster =
