@@ -79,13 +79,17 @@ type ReplayReport =
                else
                    "\n  replay's last steps:\n    " + String.concat "\n    " this.Trace)
 
-/// A segment of the journal as loaded: its entries with their values.
-type internal LoadedSegment =
+/// A segment of a session's journal as read back: its entries with their values (from the blob store
+/// for those stored there), and whether the host closed it.
+type JournalSegment =
     {
         Number: int
         Entries: (JournalEntry * Json option) list
         Ended: bool
     }
+
+    override this.ToString() =
+        $"segment {this.Number} ({this.Entries.Length} entries, ended: {this.Ended})"
 
 /// Exact replay of a recorded CodeAct session (spec §15; docs/modules/replay.md): every turn runs again
 /// on the CodeAct strategy with an environment that answers from the journal (`ReplayTurnEnv`,
@@ -127,7 +131,11 @@ module SessionReplay =
         }
 
     /// The segments of a session's journal, with values read back from the blob store.
-    let internal load (recording: RecordedSession) (session: string) (cancellation: CancellationToken) =
+    let segments
+        (recording: RecordedSession)
+        (session: string)
+        (cancellation: CancellationToken)
+        : Task<JournalSegment list> =
         task {
             let! events =
                 readAll (JournalLog.typed recording.Log) (JournalLog.stream session) cancellation
@@ -154,7 +162,7 @@ module SessionReplay =
                         list.Add entry
                 | JournalEvent.Ended n -> (snd (segmentOf n)).Value <- true
 
-            let loaded = ResizeArray<LoadedSegment>()
+            let loaded = ResizeArray<JournalSegment>()
 
             for n in order do
                 let entries, ended = segments[n]
@@ -216,6 +224,10 @@ module SessionReplay =
             Create = fresh.Create
         }
 
+    /// Waits for a task, as an effect its scope can give up on (a timeout's race cancels it).
+    let private within<'E when 'E :> IScope> (work: Task) : Eff<'E, unit> =
+        Eff.ofCancellableTask (fun cancellation -> Internal.awaited (work.WaitAsync cancellation))
+
     /// Completes when either task does.
     let private either (a: Task) (b: Task) : Task<unit> =
         let done' =
@@ -242,8 +254,7 @@ module SessionReplay =
                     let before = segment.Progress
                     let progressed = segment.Progressed
 
-                    let! _ =
-                        Eff.timeout settings.StallAfter (Eff.ofTask (fun () -> either work progressed))
+                    let! _ = Eff.timeout settings.StallAfter (within (either work progressed))
 
                     if not work.IsCompleted && segment.Progress = before && segment.Divergence.IsNone then
                         let expected =
@@ -324,6 +335,8 @@ module SessionReplay =
                         Json.serializeCanonical replayed = Json.serializeCanonical value, Json.serialize replayed
                     | Outcome.Threw name, Error e, _ -> exceptionName e = name, "threw " + exceptionName e
                     | Outcome.Cancelled, Error(:? OperationCanceledException), _ -> true, "cancelled"
+                    | Outcome.Pending, Error(:? OperationCanceledException), _ ->
+                        true, "still running when the host closed"
                     | _, Ok result, _ -> false, Json.serialize (Markers.result.Encode result)
                     | _, Error e, _ -> false, "threw " + exceptionName e + where e
 
@@ -341,7 +354,7 @@ module SessionReplay =
         (written: InMemoryEventLog<Payload>)
         (blobs: Blobs)
         (session: string)
-        (loaded: LoadedSegment)
+        (loaded: JournalSegment)
         : Eff<'E, ReplaySegment * int> =
         eff {
             let segment = ReplaySegment(loaded.Number, loaded.Entries, loaded.Ended)
@@ -608,15 +621,13 @@ module SessionReplay =
                 cancel.Cancel()
 
             for task in List.ofSeq work do
-                let! _ =
-                    Eff.timeout settings.StallAfter (Eff.ofTask (fun () -> Internal.awaited task))
+                let! _ = Eff.timeout settings.StallAfter (within task)
 
                 ()
 
             if not loaded.Ended then
                 // The host stopped without closing: its kernels died with it.
-                let! _ =
-                    Eff.timeout settings.StallAfter (Eff.ofTask (fun () -> Internal.awaited (codeact.Close())))
+                let! _ = Eff.timeout settings.StallAfter (within (codeact.Close()))
 
                 ()
 
@@ -678,7 +689,7 @@ module SessionReplay =
         : Eff<'E, ReplayReport> =
         eff {
             let! cancellation = Eff.cancellation
-            let! segments = Eff.ofTask (fun () -> load recording session cancellation)
+            let! segments = Eff.ofTask (fun () -> segments recording session cancellation)
             let written = InMemoryEventLog<Payload>()
             let puts = ConcurrentQueue<BlobRef>()
             let blobs = layered (InMemoryBlobs()).Blobs recording.Blobs puts
