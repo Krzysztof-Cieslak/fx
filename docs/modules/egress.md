@@ -67,7 +67,7 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 
 | Producer | Sources it sets | Task |
 |---|---|---|
-| Prompt render: pinned files (`fx.context.pinFile`), project instructions (`AGENTS.md`), smart previews | the file and range | T126, T203 |
+| Prompt render (`Fx.Prompt`): every text part and tool result made from pieces that show a file (`Piece.File`: sections, pinned files, receipts, summaries, views) | each file and its lines (`Piece.sources`) | T126 (done), T203 |
 | The CodeAct loop: a cell's result as a tool result or message | every file the cell read through the bridge (its `Read` activity) | T127, T205 |
 | Hybrid tools (`read`, `edit` diffs) | the file read or edited | T127 |
 | Per-cell diffs shown to the model | the files changed | T205 |
@@ -76,6 +76,10 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 
 - Provenance is host metadata. Every stage keeps it with its part (fitting, replay rules, the hooks);
   `ModelEgress.clear` drops it after the gates, so no wire sends it (`ChatRequest.withoutSources`).
+- **Granularity is the part.** The render joins consecutive pieces into one text part, so a part that
+  quotes an excluded file is redacted whole, with whatever else it joined. The render withholds the
+  files its own exclusions name before that (`Withhold`), so egress redaction only meets files excluded
+  after they were recorded, or by lists only the egress hooks have (a provider's policy).
 - A transform that rewrites a part must keep its sources (or redact it). One that adds content from a
   file must set them; the gate catches it if the file is excluded.
 - **Unknown provenance is the limitation.** Content without sources is not matched: a command's
@@ -86,16 +90,24 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 
 ## The matcher (`Fx.Models.Exclusions`)
 
-One pure module for every place that keeps content from models: the egress hooks, prompt render
-(T126), the host bindings, activity and diffs (T205). Fx.Models is under every one of them and exposed
-by the SDK.
+One pure module for every place that keeps content from models: the egress hooks, the prompt render
+(`Fx.Prompt.Withhold`), the host bindings, activity and diffs (T205). Fx.Models is under every one of
+them and exposed by the SDK.
+
+T126 had a matcher of its own in `Fx.Prompt`; when the two were stacked they were merged here, keeping
+the stronger rule of each: from T126, no negations, `\` as a separator (no escapes), an unclosed `[`
+as a literal, blank patterns as errors, case always ignored; from T124, lists by origin, `{a,b}`,
+`..` resolved before matching, linear matching (T126's backtracked: `*a*a*a*a*b` was exponential),
+reversed ranges and patterns of only separators or `.` as errors (T126 read `.` as "everything"). Both
+test suites run against it (`tests/Fx.Models.Tests/ExclusionTests.fs`, `tests/Fx.Prompt.Tests`).
 
 ```fsharp
 WorkspacePath.normalize : string -> string                    // "/" separators, ".", ".." resolved
-Glob.parse   : string -> Result<Glob option, string>          // None: blank line or # comment
-Glob.isMatch : PathCase -> Glob -> path -> isDirectory -> bool
-Exclusions.create : PathCase -> ExclusionList list -> Validation<Exclusions, Issue>
+Glob.parse   : string -> Result<Glob option, string>          // None: a # comment
+Glob.isMatch : Glob -> path -> isDirectory -> bool
+Exclusions.create : ExclusionList list -> Validation<Exclusions, Issue>
 Exclusions.test          : Exclusions -> path -> ExclusionMatch option   // a file
+Exclusions.excludes      : Exclusions -> path -> bool
 Exclusions.testDirectory : Exclusions -> path -> ExclusionMatch option   // a directory and its contents
 Exclusions.firstExcluded : Exclusions -> ContentSource list -> ExclusionMatch option
 ExclusionRedaction.redact : (ExclusionMatch -> string) -> Exclusions -> ChatRequest -> ChatRequest * ExcludedContent list
@@ -103,8 +115,8 @@ ExclusionRedaction.find   : Exclusions -> ChatRequest -> ExcludedContent list
 Placeholder.text : PlaceholderStyle -> ExclusionMatch -> string
 ```
 
-**Patterns** are gitignore's (what people already write in `.gitignore`, `.copilotignore` and
-`.aiexclude` files), with ripgrep's `{a,b}`:
+**Patterns** are `.gitignore`'s (what people already write in `.gitignore`, `.copilotignore` and
+`.aiexclude` files) without negations or escapes, with ripgrep's `{a,b}`:
 
 | Pattern | Meaning |
 |---|---|
@@ -114,30 +126,29 @@ Placeholder.text : PlaceholderStyle -> ExclusionMatch -> string
 | no `/` but at the end | matches the name at any depth (`*.env`, `node_modules`) |
 | a leading or inner `/` | anchored at the workspace root (`/config/*.json`, `docs/*.md`) |
 | a trailing `/` | directories only, so everything inside them (`secrets/`) |
-| `!pattern` | re-includes what an earlier pattern **of the same list** excluded |
-| `\x` | `x` literally (`\*`, `\#`, `\!`, `\{`) |
-| blank, `# …` | ignored; patterns are trimmed |
+| `\` | a separator, as `/` (a pattern written on Windows works); there are no escapes: `[*]`, `[?]`, `[[]`, `[{]` match those characters |
+| an unclosed `[` or `{` | the character itself (`a[b` matches `a[b`) |
+| `# …` | a comment; patterns are trimmed |
+| `!pattern`, a blank pattern, only separators or `.`, a reversed range (`[z-a]`), more than 256 alternatives | an error, never ignored: an exclusion silently dropped would leak what it was meant to withhold |
 
-- A path is excluded if the last pattern that matches it (or one of its directories) excludes; as in
-  git, nothing inside an excluded directory can be re-included.
-- **Lists combine by union.** `Exclusions` holds one `ExclusionList {origin, patterns}` per origin;
-  a path is excluded if any list excludes it, and the first such list is reported. So adding a list
-  only ever excludes more ("policy only tightens"), a project's `!` cannot undo the host's patterns,
-  and a provider's policy can be added as one more list (a property test checks it).
+- **Patterns only add up.** A path is excluded if any pattern of any list matches it or a directory
+  above it. There are no negations, so the order of patterns and lists does not matter, adding a
+  pattern or a list only ever excludes more ("policy only tightens"), and no list can undo another's
+  (a property test checks it). `Exclusions` keeps one `ExclusionList {origin, patterns}` per origin to
+  report which one excluded a path (the first that does).
 - **Paths** are normalized first: `\` becomes `/`, repeated separators, `.` and a trailing separator go,
   `..` is resolved where it can be (`C:\..\x` is `C:/x`; a relative path above the workspace keeps its
   `..`s). Absolute paths keep their root (`/`, `C:/`, `//server/`): unanchored patterns match them
   (`*.env` excludes `/home/u/p/.env`), anchored ones do not.
-- **Case** follows the filesystem the paths come from (`ContentExclusions.caseOf`: sensitive on Linux,
-  insensitive on Windows and macOS). Where that is not known, as at the egress hooks (provenance may
-  come from any environment), matching ignores case: excluding too much is the safe side.
+- **Case** is always ignored (patterns and paths): a pattern must hold on case-insensitive filesystems,
+  the render and the egress hooks cannot know which filesystem a path came from, and excluding too much
+  is the safe side. One rule for every caller keeps them in agreement.
 - Unicode normalization is not applied (the binary runs with invariant globalization, where
   `String.Normalize` does nothing): a pattern written in NFC does not match an NFD name (macOS can store
   either). Write patterns with wildcards around accented letters if this matters.
 - Matching is dynamic programming over the pattern's tokens and the path (no backtracking, linear in
   both), so a project's patterns cannot make it slow.
-- Invalid patterns (an unclosed `[` or `{`, a trailing `\`, only separators, a reversed range, too
-  many alternatives) are issues with their list and index; the slot codecs reject them when config is
+- Invalid patterns are issues with their list and index; the slot codecs reject them when config is
   resolved.
 
 **Redaction** replaces each part whose sources are excluded:
@@ -155,7 +166,7 @@ cacheable prefix) and tells the model the content exists but is excluded: `[cont
 comes from a file that content exclusions keep out of model requests]`, or with the `path` style
 `[content excluded: <path> is kept out of model requests by content exclusions]`. It never carries a
 size or a digest. A redaction before a provider's signed reasoning changes the prompt prefix; Anthropic
-then refuses the request (`invalidRequest`), which is why render filters its inputs first (T126) and
+then refuses the request (`invalidRequest`), which is why the render withholds excluded files first and
 egress redaction is the backstop.
 
 ## Configuration (`ContentExclusions`, Fx.Sdk)
@@ -218,17 +229,21 @@ to its requests.
   listings and stats are allowed (names and digests are not content). The path is matched normalized
   and relative to the workspace (`CoreBindings.exclusionPath`), so `..` cannot step around an anchored
   pattern; a symbolic link is matched by its own path, not its target (exclusions are a guardrail, not
-  a sandbox). The strategy fills the exclusions from the session's variants with the environment's
-  case rules (T127).
+  a sandbox). The strategy fills the exclusions from the session's settings (`ContentExclusions.compile`,
+  T127).
 - **Kernels** never see excluded content through the bridge; the kernel conformance suite checks that a
   read refused as excluded fails in the cell with the reason and no content.
-- **Prompt render** (T126) filters its inputs with `Exclusions.test` (pinned files, instructions,
-  `SeenRanges` of excluded files are not rendered) and sets `Sources` on what it renders; **activity
-  and per-cell diffs** (T205) skip excluded files and attribute the rest.
+- **Prompt render** (`Fx.Prompt`, [prompt.md](prompt.md)): `Withhold.pieces` replaces every excluded
+  `Piece.File` (prefix, history, suffix, pins) with `Piece.Withheld` and keeps it out of `SeenRanges`;
+  `ContextEvent.withhold` keeps excluded content out of the log. Its `RenderConfig.Exclusions` is the
+  same `Exclusions` value the hooks compile (`ContentExclusions.compile settings`), so render and egress
+  exclude the same files. Every part it makes from pieces that show files carries their `Sources`;
+  `Render.cacheKey` hashes the parts without them.
+- **Activity and per-cell diffs** (T205) skip excluded files and attribute the rest.
 
 ## Native AOT
 
-`egress-globs` (a table of patterns and paths both case modes, invalid patterns, normalization),
+`egress-globs` (a table of patterns and paths, invalid patterns, normalization),
 `egress-redaction` (the session request redacted in both placeholder styles, as canonical JSON) and
 `egress-model-access` (the extension bootstrapped with the Anthropic, OpenAI and canonical wires;
 what reaches each provider; the deny action; invalid settings), on all eight targets.
@@ -237,8 +252,7 @@ what reaches each provider; the deny action; invalid settings), on all eight tar
 
 | What | Task |
 |---|---|
-| Setting `Sources` in render, and filtering render inputs and `SeenRanges` with the matcher | T126 |
-| Sources of cell results (from `Read` activity) and hybrid tools; `CoreSettings.Exclusions` from the session's variants | T127, T205 |
+| Receipts that show what a cell read as `Piece.File` (or `Sources` from its `Read` activity), so cell output gets provenance; `RenderConfig.Exclusions` and `CoreSettings.Exclusions` from `ContentExclusions.compile` over the session's settings | T127, T205 |
 | Building `ModelAccess` from the contributions in effect; `EgressExclusions.create (ContentExclusions.ofVariants …)` in the static list of built-ins | T129 |
 | Extensions reading their own slots (`ContentExclusions.read` in `IExtensionEnv`) | T109b |
 | Copilot organisation exclusions as a provider's own egress hooks | T210 |

@@ -21,8 +21,8 @@ let request  = Render.request cfg template rendered       // the canonical ChatR
 
 | Piece | Where |
 |---|---|
-| Content: `Piece`, `Block`, `FileView`, `Reference`, `LineRange`, `Paths` | `Content.fs` |
-| Content exclusions | `Exclusions.fs` |
+| Content: `Piece`, `Block`, `FileView`, `Reference`, `Paths` (`LineRange` is `Fx.Models`') | `Content.fs` |
+| Content exclusions in the render (`Withhold`; the matcher is `Fx.Models.Exclusions`) | `Withhold.fs` |
 | `SeenRanges` | `SeenRanges.fs` |
 | Context events and their JSON (`ContextEvent`, `ContextCodecs`) | `Events.fs` |
 | The fold (`LogItem`, `Transcript`, `Entry`, `Visible`, `reconcile`) | `Transcript.fs` |
@@ -44,6 +44,10 @@ of the prefix or a view in the suffix.
   (12 hex digits name the version), a reference as `[handle h1: Match[]] Match[](len=37)`.
 - `Piece.parts` turns pieces into message parts: consecutive pieces joined by line breaks into one text part,
   media apart, empty text left out. `Piece.toolContent` does the same for a tool result.
+- **Provenance:** a text part (and a tool result, and a system part) made from pieces that show files quotes
+  them in its `Sources` (`Piece.sources`: the path and each range of lines, or the whole file), so the
+  model-egress hooks can redact a file excluded after it was recorded ([egress.md](egress.md)). Empty sources
+  leave a part's JSON unchanged.
 - Receipt helpers bound content when it is recorded: `Piece.output maxChars text` keeps the head and the tail
   with how much was left out (never splitting a surrogate pair), `Piece.preview name preview` and
   `Piece.value limits name codec value` show a value's preview (`values.previewLimits`). Large values travel by
@@ -186,22 +190,25 @@ a pure projection of what a rendered prompt shows. The edit guard (T204) reads i
 
 ## Content exclusions
 
-`Exclusions.create patterns` (every invalid pattern is an error: an exclusion silently ignored would leak what it
-was meant to withhold). Patterns follow `.gitignore`: `*`, `?`, `[abc]`, `[a-z]`, `[!a]`, `**`; a pattern without
-a `/` matches a name at any depth; a leading or inner `/` anchors it at the workspace root; a trailing `/`
-matches directories only; a matched directory excludes everything under it. Matching ignores case (a pattern
-must hold on case-insensitive file systems), `\` separates segments as `/` does, and there are no escapes and
-no negations: exclusions only ever withhold more.
+The render uses the shared matcher, `Fx.Models.Exclusions` ([egress.md](egress.md#the-matcher-fxmodelsexclusions)):
+the same patterns, semantics and precedence as the host bindings and the model-egress hooks. `RenderConfig.Exclusions`
+is the value `ContentExclusions.compile` makes from the session's settings (policy, host and project lists, patterns
+that only ever add up; T127 builds it). Patterns follow `.gitignore` without negations or escapes: `*`, `?`,
+`[abc]`, `[a-z]`, `[!a]`, `**`, `{a,b}`; a pattern without a `/` matches a name at any depth; a leading or inner
+`/` anchors it at the workspace root; a trailing `/` matches directories only; a matched directory excludes
+everything under it. Matching ignores case, `\` separates segments as `/` does, and every pattern that cannot be
+used (blank, a negation, no path) is an error: an exclusion silently ignored would leak what it was meant to
+withhold.
 
-- The render withholds every excluded `Piece.File` (prefix, history, suffix, live pins), shows `[path: withheld
-  by content exclusions]` instead, and keeps it out of `SeenRanges`.
+- The render withholds every excluded `Piece.File` (prefix, history, suffix, live pins; `Withhold.pieces`), shows
+  `[path: withheld by content exclusions]` instead, and keeps it out of `SeenRanges`.
 - Record context events through `ContextEvent.withhold exclusions`: the log then never holds excluded content,
   and a render has nothing to rewrite. A file the render withholds that the log holds means the exclusions
   changed since: a boundary (above).
 - Only pieces that say they show a file can be withheld. Text that merely contains a file's content (a cell's
-  output of `cat`) is the kernel's to refuse and the model-egress hooks' to catch (T124, which owns the
-  configuration of exclusions: host, project and Copilot organization patterns together, never a variant a
-  session could reset).
+  output of `cat`) is the kernel's to refuse and the model-egress hooks' to catch; parts made from file pieces
+  carry `Sources`, so the hooks also catch files excluded by lists the render was not given (a provider's
+  organization policy, T210).
 
 ## Views
 
@@ -278,6 +285,7 @@ kept JSON of version 1's context events.
 | Choosing and summarizing ranges to collapse, cache-sharing summary requests, `fx.history.*` | T206 |
 | The repo map's content | T202 |
 | The agent list from the agents registry | T213 |
-| Exclusion configuration (host, project, Copilot organizations) and the model-egress check | T124, T210 |
+| Building `RenderConfig.Exclusions` with `ContentExclusions.compile` from the session's settings; receipts that show what a cell read as `Piece.File` | T127 |
+| Copilot organization exclusions (a provider's own egress hooks) | T210 |
 | Registering `PromptSlots.all` in the host's registry | T129 |
 | A per-message render for clients (`/context` with cost, the prompt and seen-range viewer) | T130, T205 |
