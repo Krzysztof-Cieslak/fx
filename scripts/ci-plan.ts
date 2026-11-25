@@ -76,7 +76,18 @@ const FULL_PATHS = [
   "extensions/Fx.Ext.RuntimeBun/**",
   "scripts/ci-plan.ts",
 ];
-const KEYRING_PATHS = ["**/*Keyring*/**", "**/*Keyring*", "**/*Credential*", "docs/spikes/keychains.md"];
+// The keyring job also runs the credential-store conformance suite on the keyring store (T121).
+const KEYRING_PATHS = [
+  "**/*Keyring*/**",
+  "**/*Keyring*",
+  "**/*Credential*",
+  "src/Fx.Auth/**",
+  "tests/Fx.Auth.Tests/**",
+  "extensions/Fx.Ext.Store*/**",
+  "src/Fx.Effects/PrivateFiles.fs",
+  "src/Fx.Effects/Secrets.fs",
+  "docs/spikes/keychains.md",
+];
 const BUN_PATHS = [
   "extensions/Fx.Ext.RuntimeBun/**",
   "extensions/Fx.Ext.InterpreterBunTs/**",

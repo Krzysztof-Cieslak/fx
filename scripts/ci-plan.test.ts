@@ -51,6 +51,9 @@ describe("ci plan", () => {
   test("an area's own jobs run when the area changes", () => {
     expect(rids(pr("src/Fx.Auth/KeyringStore.fs").keyring)).toEqual(["linux-x64", "linux-musl-x64", "osx-arm64"]);
     expect(rids(pr("tests/Fx.Auth.Tests/CredentialStoreConformance.fs").keyring)).toHaveLength(3);
+    expect(rids(pr("extensions/Fx.Ext.StoreKeyring/StoreKeyring.fs").keyring)).toHaveLength(3);
+    expect(rids(pr("src/Fx.Effects/Keyring.fs").keyring)).toHaveLength(3);
+    expect(pr("src/Fx.Effects/Clock.fs").keyring).toEqual([]);
     const bun = pr("packages/kernel-bun-ts/src/kernel.ts");
     expect(bun.bunMusl.map((t) => t.arch)).toEqual(["x64"]);
     expect(bun.networkOnAllOs).toBe(true);
