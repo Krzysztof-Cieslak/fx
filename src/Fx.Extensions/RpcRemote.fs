@@ -30,10 +30,14 @@ let private run (cancellation: CancellationToken) (effect: Eff<CallEnv, 'T>) : T
 
 let private failure (error: CallError<ProtocolError>) : RemoteFailure =
     match error with
-    | CallError.Failed(ProtocolError.Unknown what) -> RemoteFailure.Unknown what
+    | CallError.Failed(ProtocolError.UnknownExtension extension) -> RemoteFailure.Unknown("extension " + extension)
+    | CallError.Failed(ProtocolError.UnknownContribution address) -> RemoteFailure.Unknown("contribution " + address)
+    | CallError.Failed(ProtocolError.UnknownMethod name) -> RemoteFailure.Unknown("method " + name)
     | CallError.Failed(ProtocolError.Invalid issues) -> RemoteFailure.InvalidInput issues
-    | CallError.Failed(ProtocolError.MethodFailed _ as e)
-    | CallError.Failed(ProtocolError.Failed _ as e) -> RemoteFailure.Failed(string e)
+    | CallError.Failed(ProtocolError.NotActive _ as e)
+    | CallError.Failed(ProtocolError.ActivationFailed _ as e)
+    | CallError.Failed(ProtocolError.InProcessOnly _ as e)
+    | CallError.Failed(ProtocolError.MethodFailed _ as e) -> RemoteFailure.Failed(string e)
     | CallError.Rejected e -> RemoteFailure.Failed(string e)
     | CallError.TooLarge _ -> RemoteFailure.Failed(string error)
     | CallError.InvalidReply _
@@ -43,7 +47,7 @@ let private failure (error: CallError<ProtocolError>) : RemoteFailure =
 /// What a call to the method `name` failed with.
 let private methodFailure (name: string) (error: CallError<ProtocolError>) : MethodFailure =
     match error with
-    | CallError.Failed(ProtocolError.Unknown _) -> MethodFailure.UnknownMethod name
+    | CallError.Failed(ProtocolError.UnknownMethod _) -> MethodFailure.UnknownMethod name
     | CallError.Failed(ProtocolError.Invalid issues) -> MethodFailure.InvalidParams issues
     | CallError.Failed(ProtocolError.MethodFailed(message, data)) -> MethodFailure.Failed(message, data)
     | CallError.Rejected e when e.Code = Protocol.ErrorCode.InternalError -> MethodFailure.Crashed(string e)
