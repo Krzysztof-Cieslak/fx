@@ -480,7 +480,7 @@ let caseChecks (wire: ChatWire) (case: WireCase) : Check list =
                     while waiting.IsNone do
                         let next = stream.Next cancel.Token
 
-                        if next.Wait(TimeSpan.FromMilliseconds 200.0) then
+                        if next.Wait(TimeSpan.FromMilliseconds 500.0) then
                             match next.Result with
                             | Some _ -> ()
                             | None -> waiting <- Some None

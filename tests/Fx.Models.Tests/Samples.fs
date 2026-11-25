@@ -5,7 +5,6 @@ open System
 open Fx.Contracts
 open Fx.Effects
 open Fx.Models
-open Fx.Models.Tests.Support
 
 let state (data: string) : ProviderState =
     {
