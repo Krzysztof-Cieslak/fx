@@ -394,7 +394,8 @@ carry only a signature). Not reachable from the canonical efforts yet: `xhigh`, 
 2. Two breakpoints on one block are one, with the longer lifetime.
 3. At most `maxCacheBreakpoints` (4): the earliest are dropped, as `Fit.request` does for catalog
    models, so the breakpoints nearest the end of the conversation (which make the next request's
-   prefix hit) stay. T126 should place no more than four, putting the stable system prefix first.
+   prefix hit) stay. The prompt render places no more than four, the stable system prefix first
+   ([prompt.md](prompt.md)).
 4. A 1-hour breakpoint may not follow a 5-minute one (the API refuses it): later ones become 5-minute
    ones.
 
@@ -447,7 +448,7 @@ providers: another provider of the family may be a gateway or a third party's Me
 API that does not check Claude signatures, and some models' thinking is bound to the account that
 produced it. A host whose providers of the family are all Anthropic platforms may set `sameFamily`.
 Editing what came before a thinking block (system, tools, earlier messages) fails Anthropic's prefix
-check (400): prompt render (T126) must keep the history stable.
+check (400): the prompt render keeps the history append-only ([prompt.md](prompt.md)).
 
 ### Cassettes
 
@@ -658,7 +659,7 @@ prompt's placement) on all eight targets.
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
 | Auth methods resolving `ResolvedAuth` from stored credentials | T121 |
 | The built-in content exclusions on the egress hook points | T124 |
-| Mapping stable receipts to cache breakpoints, compaction on `contextOverflow` | T126, T206 |
+| Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
 | The CodeAct loop and the action surfaces on `ILlm` | T127 |
 | Building `ModelAccess` from the host's contributions (with the adapters' replay scopes, `Anthropic.withReplay`), `ILlm` in session environments | T129 |
 | Journaling streams for exact replay | T131 |
