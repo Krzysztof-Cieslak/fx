@@ -864,12 +864,19 @@ let private turnTests =
 
 // ---- Replay -----------------------------------------------------------------------------------------
 
+/// `mkdir made` printing nothing: PowerShell's `mkdir` lists what it made (paths and times).
+let private quietMkdir =
+    if OperatingSystem.IsWindows() then
+        "mkdir made > $null"
+    else
+        "mkdir made"
+
 /// A hybrid turn that asks twice (allowed, then denied), and finishes.
 let private scenario (g: Granted) : Task<unit> =
     task {
         g.F.Model.AddAll
             [
-                Say.tool "bash" [ "command", Json.String "mkdir made" ]
+                Say.tool "bash" [ "command", Json.String quietMkdir ]
                 Say.cell "// intent: hook\ncall w = fs.write [\".git/hooks/pre-commit\", \"x\"]\nw"
                 Say.finish "Made, not hooked"
             ]
