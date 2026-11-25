@@ -21,6 +21,12 @@ module Withhold =
                 | Piece.File view when Exclusions.excludes exclusions view.Path ->
                     changed <- true
                     Piece.Withheld(Paths.normalize view.Path)
+                | Piece.Quote quote ->
+                    match Exclusions.firstExcluded exclusions quote.Sources with
+                    | Some found ->
+                        changed <- true
+                        Piece.Withheld(Paths.normalize found.Path)
+                    | None -> piece
                 | piece -> piece)
 
         (if changed then filtered else pieces), changed
