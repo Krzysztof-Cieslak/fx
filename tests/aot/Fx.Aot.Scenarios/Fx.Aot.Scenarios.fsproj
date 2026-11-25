@@ -65,6 +65,7 @@
     <Compile Include="Scenarios\Identity.fs" />
     <Compile Include="Scenarios\Keyring.fs" />
     <Compile Include="Scenarios\Auth.fs" />
+    <Compile Include="Scenarios\Kernel\ScriptProc.fs" />
     <Compile Include="Scenarios\CodeAct.fs" />
     <Compile Include="Scenarios\Host.fs" />
     <Compile Include="Scenarios\Canary.fs" />

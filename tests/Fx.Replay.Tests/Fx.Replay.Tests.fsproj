@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of src/Fx.Replay: the journal's JSON (version 1, kept), the recording and replay interpreters
+    (concurrency, delays, divergences, secrets never journaled), and recorded CodeAct sessions on the
+    session host replayed exactly (both surfaces, a kernel through the shell, steering, an interrupt,
+    questions, retries, crash recovery), with the golden recorded session that must keep replaying.
+  -->
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="Harness.fs" />
+    <Compile Include="SessionTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="golden\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Replay\Fx.Replay.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <!-- The script kernel, as a process of a shell (ScriptProc). -->
+    <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
+  </ItemGroup>
+</Project>

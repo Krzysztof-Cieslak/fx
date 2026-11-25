@@ -121,6 +121,7 @@
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
     <Project Path="tests/Fx.CodeAct.Tests/Fx.CodeAct.Tests.fsproj" />
     <Project Path="tests/Fx.Auth.Tests/Fx.Auth.Tests.fsproj" />
+    <Project Path="tests/Fx.Replay.Tests/Fx.Replay.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
     <Project Path="tests/Fx.Grants.Tests/Fx.Grants.Tests.fsproj" />
