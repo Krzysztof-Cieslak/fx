@@ -581,9 +581,19 @@ let tests =
                 Expect.equal after (Session.background interrupted.State) "timers and forks again"
                 Expect.equal after.Length 2 "a timer and a fork"
 
+                let running = drive.State.Running.Value
+
                 Expect.equal
                     (Session.recover drive.State)
-                    (Intent.Abandon 1 :: Session.background drive.State)
-                    "abandon the turn, restart the rest"
+                    (Intent.RecoverTurn
+                        {
+                            Session = drive.State.Id
+                            Turn = 1
+                            Profile = running.Profile
+                            Inputs = running.Inputs
+                            Seq = running.Seq
+                        }
+                     :: Session.background drive.State)
+                    "recover the turn, restart the rest"
             }
         ]

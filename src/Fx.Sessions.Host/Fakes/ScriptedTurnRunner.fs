@@ -52,12 +52,18 @@ type ScriptedTurnRunner<'R when 'R :> IClock and 'R :> IScope>(script: TurnStart
     let inputs (items: Input list) =
         "[" + (items |> List.map string |> String.concat "; ") + "]"
 
-    let run (context: TurnContext<'R>) : Eff<'R, Result<TurnResult, string>> =
+    let mutable recovery: TurnStart -> TurnStep list option = fun _ -> None
+
+    let play
+        (started: string)
+        (script: TurnStep list)
+        (context: TurnContext<'R>)
+        : Eff<'R, Result<TurnResult, string>> =
         let turn = "turn " + string context.Turn.Turn
 
         eff {
-            note (turn + " started with " + inputs context.Turn.Inputs)
-            let mutable steps = script context.Turn
+            note (turn + " " + started + " with " + inputs context.Turn.Inputs)
+            let mutable steps = script
             let mutable step = 0
             let mutable ended = None
 
@@ -96,10 +102,24 @@ type ScriptedTurnRunner<'R when 'R :> IClock and 'R :> IScope>(script: TurnStart
             return ended.Value
         }
 
-    member val Runner: TurnRunner<'R> = { Run = run }
+    let run (context: TurnContext<'R>) =
+        play "started" (script context.Turn) context
+
+    let recover (context: TurnContext<'R>) : Eff<'R, Result<TurnResult, string> option> =
+        match recovery context.Turn with
+        | Some steps -> play "recovered" steps context |> Eff.map Some
+        | None -> Eff.ret None
+
+    member val Runner: TurnRunner<'R> = { Run = run; Recover = recover }
 
     /// The steps of each turn.
     member _.Script = script
+
+    /// What a turn the host stopped during does: `None` (the default) abandons it; steps play as the
+    /// turn's recovery (e.g. asking what happened to a tool call in doubt), and its result ends it.
+    member _.Recovery
+        with get () = recovery
+        and set value = recovery <- value
 
     /// What the turns saw and did, in order.
     member _.Transcript: string list = lock gate (fun () -> List.ofSeq transcript)

@@ -588,12 +588,14 @@ type Intent =
     | Expire of request: string * at: int64
     /// Start a fork's child session: `ChildStarted` or `ChildFailed`.
     | StartFork of ForkStart
-    /// End a turn the host stopped during: `AbandonTurn`.
-    | Abandon of turn: int
+    /// Recover a turn the host stopped during (spec §5, crash recovery): its strategy says whether
+    /// something it did is in doubt. If not, `AbandonTurn`; if so, the strategy asks people what
+    /// happened and the turn's result comes back as `EndTurn` or `FailTurn`, as from `RunTurn`.
+    | RecoverTurn of TurnStart
 
     override this.ToString() =
         match this with
         | RunTurn turn -> "run " + string turn
         | Expire(request, at) -> "expire " + request + " at " + string at
         | StartFork fork -> string fork
-        | Abandon turn -> "abandon turn " + string turn
+        | RecoverTurn turn -> "recover " + string turn
