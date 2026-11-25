@@ -90,6 +90,7 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.Auth": "[0.0.0, )",
           "Fx.CodeAct": "[0.0.0, )",
           "Fx.Components.Live": "[0.0.0, )",
           "Fx.Contracts": "[0.0.0, )",
@@ -97,6 +98,7 @@
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Envd.Live": "[0.0.0, )",
           "Fx.Environments": "[0.0.0, )",
+          "Fx.Ext.AuthStandard": "[0.0.0, )",
           "Fx.Ext.EgressExclusions": "[0.0.0, )",
           "Fx.Ext.EnvLocal": "[0.0.0, )",
           "Fx.Ext.IdentityLocalOsUser": "[0.0.0, )",
@@ -106,6 +108,9 @@
           "Fx.Ext.ModelOpenAI": "[0.0.0, )",
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
+          "Fx.Ext.StoreEphemeral": "[0.0.0, )",
+          "Fx.Ext.StoreFile": "[0.0.0, )",
+          "Fx.Ext.StoreKeyring": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
           "Fx.Grants.Host": "[0.0.0, )",
           "Fx.Identity.Host": "[0.0.0, )",
@@ -122,6 +127,13 @@
           "Fx.Store.Live": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )",
           "Fx.Variants": "[0.0.0, )"
+        }
+      },
+      "fx.auth": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.codeact": {
@@ -208,6 +220,13 @@
           "Fx.Store": "[0.0.0, )"
         }
       },
+      "fx.ext.authstandard": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.egressexclusions": {
         "type": "Project",
         "dependencies": {
@@ -265,6 +284,27 @@
         }
       },
       "fx.ext.sample": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storeephemeral": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storefile": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storekeyring": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",

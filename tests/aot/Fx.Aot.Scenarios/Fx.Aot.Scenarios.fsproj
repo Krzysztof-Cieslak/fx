@@ -62,6 +62,7 @@
     <Compile Include="Scenarios\Environments.fs" />
     <Compile Include="Scenarios\Identity.fs" />
     <Compile Include="Scenarios\Keyring.fs" />
+    <Compile Include="Scenarios\Auth.fs" />
     <Compile Include="Scenarios\CodeAct.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
@@ -101,5 +102,10 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Keyring\Fx.Keyring.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.CodeAct\Fx.CodeAct.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Auth\Fx.Auth.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.AuthStandard\Fx.Ext.AuthStandard.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreKeyring\Fx.Ext.StoreKeyring.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreFile\Fx.Ext.StoreFile.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreEphemeral\Fx.Ext.StoreEphemeral.fsproj" />
   </ItemGroup>
 </Project>
