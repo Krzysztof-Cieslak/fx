@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Prompt render (spec §5): the agent's context as a fold over the session's log and the context
+    events its turns add, and the pure render of it into a prompt (stable prefix, append-only history,
+    dynamic suffix) and a canonical chat request with cache breakpoints and a cache key. Stable
+    receipts, SeenRanges and content exclusions live here too. Pure: no I/O, so the EFF analyzers
+    apply to every file. Spec: docs/modules/prompt.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Content.fs" />
+    <Compile Include="Exclusions.fs" />
+    <Compile Include="SeenRanges.fs" />
+    <Compile Include="Events.fs" />
+    <Compile Include="Transcript.fs" />
+    <Compile Include="Views.fs" />
+    <Compile Include="Render.fs" />
+    <Compile Include="Sections.fs" />
+    <Compile Include="Settings.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Variants\Fx.Variants.fsproj" />
+    <ProjectReference Include="..\Fx.Models\Fx.Models.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+    <ProjectReference Include="..\Fx.Sessions\Fx.Sessions.fsproj" />
+  </ItemGroup>
+</Project>
