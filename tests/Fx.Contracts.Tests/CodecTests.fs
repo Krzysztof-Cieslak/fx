@@ -631,19 +631,32 @@ let tests =
                         throws "invalid recursive name" (fun () -> Codec.recursive "a-b" id)
 
                         throws "duplicate tag" (fun () ->
-                            Codec.union "kind" (fun a b value -> if value then a else b)
-                            |> Codec.case0 "x" true
-                            |> Codec.case0 "x" false
-                            |> Codec.buildUnion)
+                            Codec.union "kind" {
+                                let! a = Codec.case0 "x" true
+                                and! b = Codec.case0 "x" false
+                                return fun value -> if value then a else b
+                            })
 
                         throws "field named like the tag" (fun () ->
-                            Codec.union "kind" (fun a (value: int) -> a value)
-                            |> Codec.case1 "x" id (Field.required "kind" Codec.int)
-                            |> Codec.buildUnion)
+                            Codec.union "kind" {
+                                let! a = Codec.case1 "x" id (Field.required "kind" Codec.int)
+                                return fun (value: int) -> a value
+                            })
+
+                        throws "duplicate field in a case" (fun () ->
+                            Codec.union "kind" {
+                                let! a =
+                                    Codec.case2
+                                        "x"
+                                        (fun (a: int) (b: int) -> a + b)
+                                        (Field.required "a" Codec.int)
+                                        (Field.required "a" Codec.int)
+
+                                return fun value -> a value 0
+                            })
 
                         throws "case payload that is not an object" (fun () ->
-                            Codec.union "kind" (fun a (value: int) -> a value)
-                            |> Codec.caseOf "x" id Codec.int)
+                            Codec.caseOf "x" (fun (value: int) -> value) Codec.int)
 
                         throws "describing a missing case" (fun () -> Codec.describeCase "nope" "" turnResult)
                     }

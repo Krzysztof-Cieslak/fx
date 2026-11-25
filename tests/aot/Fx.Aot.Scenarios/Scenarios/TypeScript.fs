@@ -92,35 +92,47 @@ let private hit: Codec<Hit> =
     |> Codec.named "Hit"
 
 let private outcome: Codec<Outcome> =
-    Codec.union "kind" (fun finished asked cancelled value ->
-        match value with
-        | Done(summary, hits) -> finished summary hits
-        | Asked questions -> asked questions
-        | Cancelled -> cancelled)
-    |> Codec.case2
-        "done"
-        (fun summary hits -> Done(summary, hits))
-        (Field.required "summary" Codec.string)
-        (Field.withDefault "hits" [] (Codec.list hit))
-    |> Codec.case1 "asked" Asked (Field.required "questions" (Codec.list Codec.string |> Codec.minItems 1))
-    |> Codec.case0 "cancelled" Cancelled
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! finished =
+            Codec.case2
+                "done"
+                (fun summary hits -> Done(summary, hits))
+                (Field.required "summary" Codec.string)
+                (Field.withDefault "hits" [] (Codec.list hit))
+
+        and! asked =
+            Codec.case1 "asked" Asked (Field.required "questions" (Codec.list Codec.string |> Codec.minItems 1))
+
+        and! cancelled = Codec.case0 "cancelled" Cancelled
+
+        return
+            fun value ->
+                match value with
+                | Done(summary, hits) -> finished summary hits
+                | Asked questions -> asked questions
+                | Cancelled -> cancelled
+    }
     |> Codec.describeCase "done" "Finished."
     |> Codec.named "Outcome"
 
 let private tree: Codec<Tree> =
     Codec.recursive "Tree" (fun tree ->
-        Codec.union "kind" (fun leaf node value ->
-            match value with
-            | Leaf n -> leaf n
-            | Node(label, children) -> node label children)
-        |> Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
-        |> Codec.case2
-            "node"
-            (fun label children -> Node(label, children))
-            (Field.required "label" Codec.string)
-            (Field.required "children" (Codec.list tree))
-        |> Codec.buildUnion)
+        Codec.union "kind" {
+            let! leaf = Codec.case1 "leaf" Leaf (Field.required "value" Codec.int)
+
+            and! node =
+                Codec.case2
+                    "node"
+                    (fun label children -> Node(label, children))
+                    (Field.required "label" Codec.string)
+                    (Field.required "children" (Codec.list tree))
+
+            return
+                fun value ->
+                    match value with
+                    | Leaf n -> leaf n
+                    | Node(label, children) -> node label children
+        })
 
 let private named (name: string) (body: Schema) =
     Schema.ofKind (SchemaKind.Named { Name = name; Body = body })

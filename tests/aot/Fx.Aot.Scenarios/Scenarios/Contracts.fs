@@ -71,26 +71,34 @@ let private item: Codec<Item> =
 
 let private shape: Codec<Shape> =
     Codec.recursive "Shape" (fun shape ->
-        Codec.union "kind" (fun circle rect group empty value ->
-            match value with
-            | Circle r -> circle r
-            | Rect(w, h) -> rect w h
-            | Group(name, items, shapes) -> group name items shapes
-            | Empty -> empty)
-        |> Codec.case1 "circle" Circle (Field.required "radius" Codec.float)
-        |> Codec.case2
-            "rect"
-            (fun w h -> Rect(w, h))
-            (Field.required "width" Codec.float)
-            (Field.required "height" Codec.float)
-        |> Codec.case3
-            "group"
-            (fun name items shapes -> Group(name, items, shapes))
-            (Field.required "name" Codec.string)
-            (Field.withDefault "items" [] (Codec.list item))
-            (Field.required "shapes" (Codec.list shape))
-        |> Codec.case0 "empty" Empty
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! circle = Codec.case1 "circle" Circle (Field.required "radius" Codec.float)
+
+            and! rect =
+                Codec.case2
+                    "rect"
+                    (fun w h -> Rect(w, h))
+                    (Field.required "width" Codec.float)
+                    (Field.required "height" Codec.float)
+
+            and! group =
+                Codec.case3
+                    "group"
+                    (fun name items shapes -> Group(name, items, shapes))
+                    (Field.required "name" Codec.string)
+                    (Field.withDefault "items" [] (Codec.list item))
+                    (Field.required "shapes" (Codec.list shape))
+
+            and! empty = Codec.case0 "empty" Empty
+
+            return
+                fun value ->
+                    match value with
+                    | Circle r -> circle r
+                    | Rect(w, h) -> rect w h
+                    | Group(name, items, shapes) -> group name items shapes
+                    | Empty -> empty
+        }
         |> Codec.strict)
 
 /// More fields than `MergeSources12`: the compiler chains the merges.

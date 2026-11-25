@@ -14,11 +14,14 @@ type Failure =
         | TooBig limit -> $"too big (limit {limit})"
 
 let private failure: Codec<Failure> =
-    Codec.union "kind" (fun tooBig value ->
-        match value with
-        | TooBig limit -> tooBig limit)
-    |> Codec.case1 "tooBig" TooBig (Field.required "limit" Codec.int)
-    |> Codec.buildUnion
+    Codec.union "kind" {
+        let! tooBig = Codec.case1 "tooBig" TooBig (Field.required "limit" Codec.int)
+
+        return
+            fun value ->
+                match value with
+                | TooBig limit -> tooBig limit
+    }
 
 let private double =
     ExtMethod.define "math/double" Codec.int Codec.int

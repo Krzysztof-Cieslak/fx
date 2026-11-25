@@ -96,15 +96,18 @@ type ObserverFailure =
 [<RequireQualifiedAccess>]
 module Decision =
     let codec: Codec<Decision> =
-        Codec.union "decision" (fun allow ask deny value ->
-            match value with
-            | Decision.Allow -> allow
-            | Decision.Ask reason -> ask reason
-            | Decision.Deny reason -> deny reason)
-        |> Codec.case0 "allow" Decision.Allow
-        |> Codec.case1 "ask" Decision.Ask (Field.required "reason" Codec.string)
-        |> Codec.case1 "deny" Decision.Deny (Field.required "reason" Codec.string)
-        |> Codec.buildUnion
+        Codec.union "decision" {
+            let! allow = Codec.case0 "allow" Decision.Allow
+            and! ask = Codec.case1 "ask" Decision.Ask (Field.required "reason" Codec.string)
+            and! deny = Codec.case1 "deny" Decision.Deny (Field.required "reason" Codec.string)
+
+            return
+                fun value ->
+                    match value with
+                    | Decision.Allow -> allow
+                    | Decision.Ask reason -> ask reason
+                    | Decision.Deny reason -> deny reason
+        }
         |> Codec.describe "What a gate decides: allow, ask a human, or deny."
         |> Codec.named "Decision"
 
@@ -166,15 +169,22 @@ module Verdict =
         |> Codec.named "Reason"
 
     let codec: Codec<Verdict> =
-        Codec.union "verdict" (fun allow ask deny value ->
-            match value with
-            | Verdict.Allow -> allow
-            | Verdict.Ask reasons -> ask reasons
-            | Verdict.Deny reasons -> deny reasons)
-        |> Codec.case0 "allow" Verdict.Allow
-        |> Codec.case1 "ask" Verdict.Ask (Field.required "reasons" (Codec.list reason))
-        |> Codec.case1 "deny" Verdict.Deny (Field.required "reasons" (Codec.list reason))
-        |> Codec.buildUnion
+        Codec.union "verdict" {
+            let! allow = Codec.case0 "allow" Verdict.Allow
+
+            and! ask =
+                Codec.case1 "ask" Verdict.Ask (Field.required "reasons" (Codec.list reason))
+
+            and! deny =
+                Codec.case1 "deny" Verdict.Deny (Field.required "reasons" (Codec.list reason))
+
+            return
+                fun value ->
+                    match value with
+                    | Verdict.Allow -> allow
+                    | Verdict.Ask reasons -> ask reasons
+                    | Verdict.Deny reasons -> deny reasons
+        }
         |> Codec.named "Verdict"
 
 [<RequireQualifiedAccess>]

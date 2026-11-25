@@ -73,11 +73,14 @@ module Codecs =
         |> Codec.named "Division"
 
     let mathError: Codec<MathError> =
-        Codec.union "kind" (fun divideByZero value ->
-            match value with
-            | DivideByZero -> divideByZero)
-        |> Codec.case0 "divideByZero" DivideByZero
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! divideByZero = Codec.case0 "divideByZero" DivideByZero
+
+            return
+                fun value ->
+                    match value with
+                    | DivideByZero -> divideByZero
+        }
 
 /// The hook points the sample hooks into. They belong to whoever runs them: here, the tests, which
 /// reference these values and add them to the host's catalog.

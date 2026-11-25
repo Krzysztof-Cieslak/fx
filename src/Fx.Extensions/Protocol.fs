@@ -74,21 +74,31 @@ module Codecs =
     let private issues = Codec.list Codecs.issue
 
     let protocolError: Codec<ProtocolError> =
-        Codec.union "kind" (fun unknown invalid methodFailed failed value ->
-            match value with
-            | ProtocolError.Unknown what -> unknown what
-            | ProtocolError.Invalid issues -> invalid issues
-            | ProtocolError.MethodFailed(message, data) -> methodFailed message data
-            | ProtocolError.Failed reason -> failed reason)
-        |> Codec.case1 "unknown" ProtocolError.Unknown (Field.required "what" Codec.string)
-        |> Codec.case1 "invalid" ProtocolError.Invalid (Field.required "issues" issues)
-        |> Codec.case2
-            "methodFailed"
-            (fun message data -> ProtocolError.MethodFailed(message, data))
-            (Field.required "message" Codec.string)
-            (Field.required "data" Codec.json)
-        |> Codec.case1 "failed" ProtocolError.Failed (Field.required "reason" Codec.string)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! unknown =
+                Codec.case1 "unknown" ProtocolError.Unknown (Field.required "what" Codec.string)
+
+            and! invalid =
+                Codec.case1 "invalid" ProtocolError.Invalid (Field.required "issues" issues)
+
+            and! methodFailed =
+                Codec.case2
+                    "methodFailed"
+                    (fun message data -> ProtocolError.MethodFailed(message, data))
+                    (Field.required "message" Codec.string)
+                    (Field.required "data" Codec.json)
+
+            and! failed =
+                Codec.case1 "failed" ProtocolError.Failed (Field.required "reason" Codec.string)
+
+            return
+                fun value ->
+                    match value with
+                    | ProtocolError.Unknown what -> unknown what
+                    | ProtocolError.Invalid issues -> invalid issues
+                    | ProtocolError.MethodFailed(message, data) -> methodFailed message data
+                    | ProtocolError.Failed reason -> failed reason
+        }
         |> Codec.named "ExtensionProtocolError"
 
     let activateParams: Codec<ActivateParams> =
