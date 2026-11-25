@@ -264,6 +264,58 @@ let tests =
                         f.Fs.AddText(inWorkspace "big.txt", String.replicate (settings.ReadBytes + 1) "x")
                         Expect.equal (failedCode (call f "fs.read" [ str "big.txt" ])) "tooLarge" "too large"
 
+                    testCase "fs.read refuses files content exclusions keep from models, with why"
+                    <| fun () ->
+                        let exclusions =
+                            match
+                                Fx.Models.Exclusions.create
+                                    (ContentExclusions.caseOf os)
+                                    [
+                                        {
+                                            Origin = "host"
+                                            Patterns = [ "*.env"; "secrets/" ]
+                                        }
+                                    ]
+                            with
+                            | Ok e -> e
+                            | Error issues -> failtest (string issues)
+
+                        let excluding =
+                            { settings with
+                                Exclusions = exclusions
+                            }
+
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace ".env", "TOKEN=SECRET")
+                        f.Fs.AddDirectory(inWorkspace "secrets")
+                        f.Fs.AddText(inWorkspace "secrets/k.txt", "SECRET")
+                        f.Fs.AddText(inWorkspace "readme.md", "hello")
+
+                        let read (path: string) =
+                            run
+                                f.Env
+                                (HostBinding.dispatch
+                                    (CoreBindings.all excluding)
+                                    {
+                                        CellId = Some "c1"
+                                        Binding = "fs.read"
+                                        Args = [ str path ]
+                                    })
+
+                        for path in [ ".env"; "./secrets/k.txt"; @"secrets\k.txt"; inWorkspace "secrets/k.txt" ] do
+                            match read path with
+                            | Error(HostCallError.Failed("excluded", message, Some data)) ->
+                                Expect.isFalse (message.Contains "SECRET") $"{path}: no content"
+                                Expect.equal (field "origin" data |> text) "host" $"{path}: the origin"
+                            | other -> failtest $"{path}: {other}"
+
+                        Expect.equal (read "readme.md" |> json |> field "text" |> text) "hello" "other files"
+
+                        Expect.equal
+                            (call f "fs.read" [ str ".env" ] |> json |> field "text" |> text)
+                            "TOKEN=SECRET"
+                            "no exclusions"
+
                     testCase "patches apply together, and a stale digest fails them all"
                     <| fun () ->
                         let f = fakes (fun _ -> None)

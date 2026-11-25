@@ -93,6 +93,9 @@ type CoreSettings =
         OutputChars: int
         /// The largest file `fs.read` returns.
         ReadBytes: int
+        /// Files `fs.read` refuses (`excluded`): content exclusions (spec §6.5, §18), matched on the
+        /// path relative to the workspace, with the case rules of the environment's filesystem.
+        Exclusions: Fx.Models.Exclusions
     }
 
     override this.ToString() = $"CoreSettings({this.Workspace})"
@@ -107,6 +110,7 @@ module CoreSettings =
             CommandEnv = Inherit []
             OutputChars = 16000
             ReadBytes = 1024 * 1024
+            Exclusions = Fx.Models.Exclusions.none
         }
 
 /// The core bindings (spec §6.5 "env-side"): `shell.run`, `fs.read`, `fs.write`, `fs.list`,
@@ -527,40 +531,52 @@ module CoreBindings =
                                 }
                 })
 
-    /// `fs.read(path)`: a text file, whole (up to `ReadBytes`).
+    /// The failure of reading an excluded file: code `excluded`, with why as data.
+    let excluded (path: string) (found: Fx.Models.ExclusionMatch) : HostCallError =
+        HostCallError.Failed(
+            "excluded",
+            $"{path} is excluded: content exclusions keep it from models ({found.Origin}: {found.Pattern})",
+            Some(Fx.Models.ExclusionMatch.codec.Encode found)
+        )
+
+    /// `fs.read(path)`: a text file, whole (up to `ReadBytes`); `excluded` for a file content
+    /// exclusions keep from models (nothing of it is read).
     let fsRead<'R when 'R :> IFsOps and 'R :> IScope> (settings: CoreSettings) : HostBinding<'R> =
         HostBinding.create1
             "fs.read"
-            "Reads a text file (UTF-8)."
+            "Reads a text file (UTF-8). Fails (data.code excluded) for files content exclusions keep from models."
             (Arg.required "path" "Relative to the workspace." Codec.string)
             Codecs.fileText
             (fun path ->
                 eff {
                     let full = resolve settings path
 
-                    match! FsOps.readRange full 0L settings.ReadBytes with
-                    | Error e -> return Error(fsFailed e)
-                    | Ok chunk when not chunk.AtEnd ->
-                        return
-                            Error(
-                                failure
-                                    "tooLarge"
-                                    $"{path} has {chunk.FileSize} bytes, more than {settings.ReadBytes}: read parts of it with a command"
-                            )
-                    | Ok chunk when not (Unicode.Utf8.IsValid(ReadOnlySpan chunk.Content)) ->
-                        return Error(failure "notText" $"{path} is not UTF-8 text")
-                    | Ok chunk ->
-                        let text = withoutBom (utf8.GetString chunk.Content)
+                    match Fx.Models.Exclusions.test settings.Exclusions (display settings full) with
+                    | Some found -> return Error(excluded path found)
+                    | None ->
+                        match! FsOps.readRange full 0L settings.ReadBytes with
+                        | Error e -> return Error(fsFailed e)
+                        | Ok chunk when not chunk.AtEnd ->
+                            return
+                                Error(
+                                    failure
+                                        "tooLarge"
+                                        $"{path} has {chunk.FileSize} bytes, more than {settings.ReadBytes}: read parts of it with a command"
+                                )
+                        | Ok chunk when not (Unicode.Utf8.IsValid(ReadOnlySpan chunk.Content)) ->
+                            return Error(failure "notText" $"{path} is not UTF-8 text")
+                        | Ok chunk ->
+                            let text = withoutBom (utf8.GetString chunk.Content)
 
-                        return
-                            Ok
-                                {
-                                    Path = display settings full
-                                    Text = text
-                                    Lines = lineCount text
-                                    Size = chunk.FileSize
-                                    Digest = BlobHash.ofBytes chunk.Content
-                                }
+                            return
+                                Ok
+                                    {
+                                        Path = display settings full
+                                        Text = text
+                                        Lines = lineCount text
+                                        Size = chunk.FileSize
+                                        Digest = BlobHash.ofBytes chunk.Content
+                                    }
                 })
 
     /// `fs.write(path, text)`: creates or replaces a text file atomically, with its directories.
