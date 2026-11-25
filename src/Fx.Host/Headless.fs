@@ -39,6 +39,10 @@ type RunIo =
         /// Asks the person to answer a grant request (spec §13: only people answer); `None` when nobody
         /// can (no terminal), which denies it once.
         Answer: GrantRequest -> Task<GrantAnswer option>
+        /// Asks the person what happened to a call that was running when the host stopped (a turn
+        /// recovered at the host's start waits for it: codeact.md "Crash recovery"); `None` when nobody
+        /// can (no terminal), which ends the run and leaves the decision open.
+        Decide: OutcomeUnknown -> Task<OutcomeAnswer option>
         /// Cancelled when the person asks to interrupt the turn (Ctrl+C).
         Interrupt: CancellationToken
     }
@@ -59,8 +63,9 @@ type RunOutcome =
         $"{this.Session} turn {this.Turn}: {this.Ending}"
 
 /// `fx run -p`: one prompt, run headless to the end of its turn in the host's workspace (embedded
-/// mode, spec §19.5). The person is signed in in process; grant requests are put to them through
-/// `RunIo.Answer`; Ctrl+C interrupts the turn on the control path.
+/// mode, spec §19.5). The person is signed in in process; grant requests and decisions about calls in
+/// doubt are put to them through `RunIo.Answer` and `RunIo.Decide`; Ctrl+C interrupts the turn on the
+/// control path.
 [<RequireQualifiedAccess>]
 module Headless =
     /// The client name a headless run signs in as.
@@ -123,6 +128,73 @@ module Headless =
                 ()
             with _ ->
                 // Cancelled, or the host stopped (its stores closed): nothing more to answer.
+                ()
+        }
+
+    /// Puts each decision about a call in doubt that the session's turn waits for (open at `from`, or
+    /// opened later) to the person, until cancelled; `stuck` gets the question nobody can answer.
+    let private deciding
+        (host: Host)
+        (session: string)
+        (by: Attribution)
+        (io: RunIo)
+        (from: SessionState)
+        (stuck: string -> unit)
+        (cancellation: CancellationToken)
+        : Task =
+        let env = Host.within host cancellation
+        let asked = Collections.Generic.HashSet<string>(StringComparer.Ordinal)
+
+        let decide (request: RequestSpec) : Eff<HostEnv, unit> =
+            eff {
+                if request.Kind = Recovery.KindId && asked.Add request.Id then
+                    match Codec.decode Recovery.payload request.Payload with
+                    | Error _ -> ()
+                    | Ok card ->
+                        match! Eff.ofTask (fun () -> io.Decide card) with
+                        | None -> stuck card.Question
+                        | Some answer ->
+                            let! token = Eff.cancellation
+
+                            let! outcome =
+                                Eff.ofTask (fun () ->
+                                    HostSessions.send
+                                        host
+                                        session
+                                        $"{session}/decide/{request.Id}"
+                                        by
+                                        (Command.Answer(request.Id, Codec.encode Recovery.answer answer))
+                                        token)
+
+                            match outcome with
+                            | Rejected rejection -> io.Show $"  ✗ the decision was refused: {rejection}"
+                            | Accepted _
+                            | Stopped -> ()
+            }
+
+        task {
+            try
+                do!
+                    Eff.run
+                        env
+                        (eff {
+                            for pending in from.Requests do
+                                do! decide pending.Request
+
+                            let! _ =
+                                SessionHost.subscribe host.Sessions session from.Seq (fun feed ->
+                                    match feed with
+                                    | Feed.Next recorded ->
+                                        match recorded.Event with
+                                        | Event.RequestOpened pending ->
+                                            decide pending.Request |> Eff.map (fun () -> true)
+                                        | _ -> Eff.ret true
+                                    | Feed.Reset _ -> Eff.ret true)
+
+                            ()
+                        })
+            with _ ->
+                // Cancelled, or the host stopped: nothing more to decide.
                 ()
         }
 
@@ -219,6 +291,16 @@ module Headless =
                         | Rejected rejection -> return Error $"the prompt was refused: {rejection}"
                         | Stopped -> return Error "the session host stopped"
                         | Accepted appended ->
+                            // A decision nobody here can make ends the wait for the turn.
+                            use waiting = CancellationTokenSource.CreateLinkedTokenSource cancellation
+                            let undecided = ref None
+
+                            let stuck (question: string) =
+                                undecided.Value <- Some question
+                                waiting.Cancel()
+
+                            let decisions = deciding host id by io before stuck watching.Token
+
                             use _ =
                                 io.Interrupt.Register(fun () ->
                                     HostSessions.send
@@ -230,13 +312,19 @@ module Headless =
                                         CancellationToken.None
                                     |> ignore)
 
-                            let env = Host.within host cancellation
+                            let env = Host.within host waiting.Token
 
                             let! ended = Eff.run env (Eff.catch (ended host id appended.After))
                             watching.Cancel()
                             do! follow
+                            do! decisions
 
                             match ended with
+                            | Error(:? OperationCanceledException) when undecided.Value.IsSome ->
+                                return
+                                    Error(
+                                        $"the session's turn waits for a decision about a call that was running when the host stopped: {undecided.Value.Value} Decide it from a terminal."
+                                    )
                             | Error(:? OperationCanceledException) when cancellation.IsCancellationRequested ->
                                 return Error "cancelled before the turn ended"
                             | Error _

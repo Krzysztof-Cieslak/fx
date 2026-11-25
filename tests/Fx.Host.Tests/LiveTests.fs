@@ -1,8 +1,9 @@
 /// The host end to end with the real kernel (spec §19.5 `fx run -p`): TypeScript cells on
 /// `fx.interpreter.bun-ts`, on the pinned Bun that the host's own installer downloads after a person
 /// approves it (the grants log), in an environment of `fx.env.local` with envd in this process; then a
-/// restart that continues the session, and one that finds a turn the host stopped during. Needs the
-/// network for Bun (cached in artifacts/; skipped offline, required in CI).
+/// restart that continues the session, one that finds a turn the host stopped during, and one that
+/// finds a cell in doubt and asks a person about it. Needs the network for Bun (cached in artifacts/;
+/// skipped offline, required in CI).
 module Fx.Host.Tests.LiveTests
 
 open System
@@ -13,7 +14,9 @@ open Fx.Contracts
 open Fx.Effects
 open Fx.Grants
 open Fx.Grants.Host
+open Fx.Machines.Host
 open Fx.Sessions
+open Fx.CodeAct
 open Fx.Host
 open Fx.Host.Tests.Support
 
@@ -27,21 +30,37 @@ let private network =
             | Error reason -> return skiptest $"Bun is not available: {reason}"
         })
 
-/// A person at the terminal: answers every grant request with `answer`, and keeps what was asked.
+/// A person at the terminal: answers every grant request with `answer`, decides calls in doubt with
+/// `Decision` (`None`: nobody can), and keeps what was asked.
 type private Person(answer: GrantAnswer) =
     let asked = ResizeArray<GrantRequest>()
     let lines = ResizeArray<string>()
+    let decided = ResizeArray<OutcomeUnknown>()
 
+    member val Decision: string option = None with get, set
     member _.Asked = lock asked (fun () -> List.ofSeq asked)
     member _.Lines = lock lines (fun () -> List.ofSeq lines)
+    member _.Decided = lock decided (fun () -> List.ofSeq decided)
 
-    member _.Io(interrupt: CancellationToken) : RunIo =
+    member this.Io(interrupt: CancellationToken) : RunIo =
         {
             Show = fun line -> lock lines (fun () -> lines.Add line)
             Answer =
                 fun request ->
                     lock asked (fun () -> asked.Add request)
                     Task.FromResult(Some answer)
+            Decide =
+                fun card ->
+                    lock decided (fun () -> decided.Add card)
+
+                    Task.FromResult(
+                        this.Decision
+                        |> Option.map (fun option ->
+                            {
+                                Option = option
+                                Note = Some "decided in a test"
+                            })
+                    )
             Interrupt = interrupt
         }
 
@@ -232,6 +251,113 @@ let tests =
 
                     Expect.equal again.Turn 2 "a new turn"
                     Expect.equal (done' again person) "Back" "done"
+                finally
+                    stop host
+            }
+
+            testTask
+                "a cell running when the host stops is a person's decision at the next start, then the turn goes on" {
+                do! network.Force()
+                let p = place "doubt"
+                let model = Model()
+
+                model.Add(
+                    "// intent: wait\nconsole.log(\"waiting\")\nawait new Promise((resolve) => setTimeout(resolve, 600000))"
+                )
+
+                let person = Person always
+                let host = start (options p model [ "model.role.main", Json.String modelId ])
+                let mutable session = ""
+
+                try
+                    let running =
+                        Headless.run
+                            host
+                            {
+                                Prompt = "Wait a while"
+                                Session = None
+                                Title = None
+                            }
+                            (person.Io CancellationToken.None)
+                            CancellationToken.None
+
+                    do! (model.Asked 1).WaitAsync(TimeSpan.FromSeconds 300.0)
+
+                    session <-
+                        match HostSessions.entries host with
+                        | [ entry ] -> entry.Session
+                        | other -> failtest $"{other}"
+
+                    // The step journal says the cell started: it is in doubt once the host stops.
+                    let steps = StepJournal.typed host.Stores.Log
+
+                    let! _ =
+                        Eff.run
+                            (Host.within host (new CancellationTokenSource(TimeSpan.FromSeconds 300.0)).Token)
+                            (EventLog.subscribe steps (StepJournal.stream session) 0L (fun recorded ->
+                                match recorded.Event with
+                                | StepEvent.CallStarted _ -> Eff.ret false
+                                | _ -> Eff.ret true))
+
+                    do! (Host.stop host).WaitAsync(TimeSpan.FromSeconds 60.0)
+                    let! _ = running.WaitAsync(TimeSpan.FromSeconds 60.0)
+                    ()
+                finally
+                    stop host
+
+                let host = start (options p model [])
+
+                try
+                    // Nobody at a terminal: the run says what waits, and the decision stays open.
+                    match
+                        waitFor
+                            120.0
+                            (Headless.run
+                                host
+                                {
+                                    Prompt = "Go on"
+                                    Session = Some session
+                                    Title = None
+                                }
+                                (person.Io CancellationToken.None)
+                                CancellationToken.None)
+                    with
+                    | Ok outcome -> failtest $"the run ended {outcome}"
+                    | Error e -> Expect.stringContains e "waits for a decision" "says so"
+
+                    match person.Decided with
+                    | [ card ] ->
+                        Expect.equal card.Call.Tool "cell" "the cell"
+                        Expect.equal card.Call.Intent (Some "wait") "its intent"
+
+                        Expect.equal
+                            (card.Options |> List.map _.Id)
+                            [ "completed"; "failed"; "rerun"; "inspect" ]
+                            "the options"
+                    | other -> failtest $"decided {other}"
+
+                    // A person decides: the call failed; the turn goes on to its end.
+                    person.Decision <- Some "failed"
+                    model.Add(finish "Back" "\"after the decision\"")
+
+                    let decided =
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Go on, please"
+                                Session = Some session
+                                Title = None
+                            }
+
+                    Expect.equal decided.Turn 1 "the recovered turn"
+                    Expect.equal (done' decided person) "Back" "done"
+                    Expect.equal person.Decided.Length 2 "asked once more"
+
+                    Expect.stringContains
+                        (Fx.Effects.HttpRequest.bodyText model.Requests[1])
+                        "decided in a test"
+                        "the decision's note reached the model"
                 finally
                     stop host
             }

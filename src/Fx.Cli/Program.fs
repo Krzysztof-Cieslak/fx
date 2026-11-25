@@ -8,6 +8,7 @@ open System.IO
 open System.Threading
 open System.Threading.Tasks
 open Fx
+open Fx.Auth
 open Fx.Contracts
 open Fx.Envd.Live
 open Fx.Grants
@@ -91,6 +92,93 @@ let private answer (request: GrantRequest) : Task<GrantAnswer option> =
                             Reason = Some "denied at the terminal"
                         }))
 
+/// Asks the person at the terminal what happened to a call that was running when the host stopped;
+/// nobody can when input is redirected.
+let private decide (card: Fx.CodeAct.OutcomeUnknown) : Task<Fx.CodeAct.OutcomeAnswer option> =
+    if Console.IsInputRedirected then
+        show $"  ! {card.Question} (needs a person's decision)"
+        Task.FromResult None
+    else
+        Task.Run(fun () ->
+            lock console (fun () ->
+                stderr.WriteLine $"? {card.Question}"
+
+                let action = card.Call.Action.Split('\n') |> Array.truncate 8
+
+                for line in action do
+                    stderr.WriteLine $"    {line}"
+
+                if card.Evidence.Output <> "" then
+                    stderr.WriteLine "  It printed:"
+
+                    for line in card.Evidence.Output.Split('\n') |> Array.rev |> Array.truncate 8 |> Array.rev do
+                        stderr.WriteLine $"    {line}"
+
+                for option in card.Options do
+                    stderr.WriteLine $"  [{option.Id}] {option.Label}: {option.Detail}"
+
+                let mutable chosen = None
+                let mutable asking = true
+
+                while asking do
+                    stderr.Write "  Choose one (empty to leave it open): "
+                    stderr.Flush()
+                    let reply = (stdin.ReadLine() |> Option.ofObj |> Option.defaultValue "").Trim()
+
+                    if reply = "" then
+                        asking <- false
+                    else
+                        match card.Options |> List.tryFind (fun o -> o.Id = reply) with
+                        | Some option ->
+                            let answer: Fx.CodeAct.OutcomeAnswer = { Option = option.Id; Note = None }
+                            chosen <- Some answer
+                            asking <- false
+                        | None -> ()
+
+                chosen))
+
+/// A line typed at the terminal without echo (a pasted key), or a line of standard input when it is
+/// redirected (`… | fx auth login <provider>`).
+let private readSecret () : string =
+    if Console.IsInputRedirected then
+        stdin.ReadLine() |> Option.ofObj |> Option.defaultValue ""
+    else
+        let text = Text.StringBuilder()
+        let mutable reading = true
+
+        while reading do
+            let key = Console.ReadKey(true)
+
+            match key.Key with
+            | ConsoleKey.Enter -> reading <- false
+            | ConsoleKey.Backspace ->
+                if text.Length > 0 then
+                    text.Length <- text.Length - 1
+            | _ ->
+                if not (Char.IsControl key.KeyChar) then
+                    text.Append key.KeyChar |> ignore
+
+        stderr.WriteLine()
+        text.ToString()
+
+/// Runs a login's flow at the terminal (`auth login`): a paste prompt that does not echo, or a device
+/// code to enter elsewhere. Browser logins need a loopback listener the command line does not have.
+let private runFlow (flow: Fx.Sdk.AuthFlow) (_: CancellationToken) : Task<Result<Fx.Sdk.FlowResult, string>> =
+    match flow with
+    | Fx.Sdk.AuthFlow.Paste instructions ->
+        lock console (fun () ->
+            stderr.WriteLine instructions
+            stderr.Write "Paste it here (it is not shown): "
+            stderr.Flush()
+
+            match (readSecret ()).Trim() with
+            | "" -> Task.FromResult(Error "nothing was pasted")
+            | text -> Task.FromResult(Ok(Fx.Sdk.FlowResult.Pasted(Fx.Effects.SecretText text))))
+    | Fx.Sdk.AuthFlow.DeviceCode(code, uri, _) ->
+        show $"Open {uri} and enter the code {code}; waiting for the provider…"
+        Task.FromResult(Ok Fx.Sdk.FlowResult.Device)
+    | Fx.Sdk.AuthFlow.Browser _ -> Task.FromResult(Error "browser logins are not supported on the command line yet")
+
 /// Ctrl+C: the first press interrupts (the token), the second exits.
 let private interrupts () : CancellationTokenSource =
     let source = new CancellationTokenSource()
@@ -134,6 +222,7 @@ let private run (args: Cli.RunArgs) : int =
                     {
                         Show = show
                         Answer = answer
+                        Decide = decide
                         Interrupt = interrupt.Token
                     }
 
@@ -202,6 +291,22 @@ let private variants (view: VariantsView) : int =
             0
         | Error errors -> fail errors
 
+let private auth (command: AuthCommand) : int =
+    let facts = facts ()
+
+    match hostOptions facts [] with
+    | Error e -> fail [ e ]
+    | Ok options ->
+        match (Commands.auth options runFlow command).GetAwaiter().GetResult() with
+        | Error errors -> fail errors
+        | Ok(code, lines) ->
+            let out = if code = 0 then stdout else stderr
+
+            for line in lines do
+                out.WriteLine line
+
+            code
+
 [<EntryPoint>]
 let main argv =
     match Cli.parse (List.ofArray argv) with
@@ -216,3 +321,4 @@ let main argv =
     | Cli.Run args -> run args
     | Cli.Trust args -> trust args
     | Cli.Variants view -> variants view
+    | Cli.Auth command -> auth command

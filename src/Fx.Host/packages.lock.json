@@ -14,6 +14,13 @@
         "resolved": "11.0.0",
         "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
+      "fx.auth": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.codeact": {
         "type": "Project",
         "dependencies": {
@@ -98,6 +105,13 @@
           "Fx.Store": "[0.0.0, )"
         }
       },
+      "fx.ext.authstandard": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.egressexclusions": {
         "type": "Project",
         "dependencies": {
@@ -141,6 +155,27 @@
         }
       },
       "fx.ext.runtimebun": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storeephemeral": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storefile": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.storekeyring": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
@@ -218,6 +253,13 @@
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )",
           "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.keyring": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
         }
       },
       "fx.machines": {

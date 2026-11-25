@@ -9,6 +9,8 @@ open System.Threading.Tasks
 open Expecto
 open Fx
 open Fx.Contracts
+open Fx.Effects
+open Fx.Auth
 open Fx.Identity
 open Fx.Identity.Host
 open Fx.Grants
@@ -21,6 +23,7 @@ let private quietIo (lines: ResizeArray<string>) : RunIo =
     {
         Show = fun line -> lock lines (fun () -> lines.Add line)
         Answer = fun request -> failtest $"no grant should be asked for: {request}"
+        Decide = fun card -> failtest $"no decision should be asked for: {card}"
         Interrupt = CancellationToken.None
     }
 
@@ -173,6 +176,77 @@ let tests =
                     | Ok schema -> Expect.isSome (Json.tryField "properties" schema) "a JSON Schema"
                     | Error e -> failtest (string e)
                 | Error errors -> failtest (String.concat "\n" errors)
+
+            testCase "fx auth stores a credential the host's model requests use, and waits for a running host"
+            <| fun () ->
+                let p = place "auth"
+                hostConfig p """{"variants": {"credentials.store": "file"}}"""
+                let opts = options p (Model()) []
+                let flows = ResizeArray<string>()
+
+                let paste: FlowRunner =
+                    fun flow _ ->
+                        flows.Add(string flow)
+
+                        match flow with
+                        | Fx.Sdk.AuthFlow.Paste _ ->
+                            Task.FromResult(Ok(Fx.Sdk.FlowResult.Pasted(SecretText "sk-test-openai")))
+                        | other -> Task.FromResult(Error $"not a paste: {other}")
+
+                let auth (command: AuthCommand) =
+                    match waitFor 60.0 (Commands.auth opts paste command) with
+                    | Ok(code, lines) ->
+                        let text = String.concat "\n" lines
+                        Expect.isFalse (text.Contains "sk-test-openai") "no secret in the output"
+                        code, text
+                    | Error errors -> failtest (String.concat "\n" errors)
+
+                let code, text = auth (AuthCommand.Login("openai", None))
+                Expect.equal code 0 text
+                Expect.equal (List.ofSeq flows) [ "paste" ] "the paste flow ran"
+                Expect.stringContains text "Stored the api_key credential for openai in the file store" "stored"
+                Expect.isTrue (Directory.Exists(Path.Combine(p.Data, "credentials"))) "in the data directory"
+
+                let code, text = auth AuthCommand.List
+                Expect.equal code 0 text
+                Expect.stringContains text "openai" "listed"
+
+                let code, text = auth AuthCommand.Status
+                Expect.equal code 0 text
+                Expect.stringContains text "Credential store: file" "the store"
+                Expect.stringContains text "anthropic  env" "anthropic from its variable"
+                Expect.stringContains text "openai     api_key" "openai from the store"
+
+                let host = start opts
+
+                try
+                    Expect.isEmpty host.Warnings "every provider's methods check"
+
+                    match
+                        wait (
+                            Eff.run
+                                (Host.within host CancellationToken.None)
+                                (AuthService.resolve host.Auth Fx.Ext.ModelOpenAI.Provider.def)
+                        )
+                    with
+                    | Ok(resolved, kind) ->
+                        Expect.equal kind "api_key" "the stored credential"
+
+                        Expect.equal resolved.Headers [ "authorization", "Bearer sk-test-openai" ] "what the wire gets"
+                    | Error e -> failtest (string e)
+
+                    match waitFor 60.0 (Commands.auth opts paste AuthCommand.List) with
+                    | Ok _ -> failtest "fx auth ran beside a running host"
+                    | Error errors -> Expect.stringContains (String.concat "\n" errors) "a host is running" "refused"
+                finally
+                    stop host
+
+                let code, text = auth (AuthCommand.Logout "openai")
+                Expect.equal code 0 text
+                Expect.stringContains text "Removed openai" "removed"
+
+                let _, text = auth AuthCommand.Status
+                Expect.isFalse (text.Contains "openai     api_key") "not from the store again"
 
             testCase "a session in an embedded environment runs its turns, and a restarted host continues it"
             <| fun () ->

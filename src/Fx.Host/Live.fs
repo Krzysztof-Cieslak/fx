@@ -8,6 +8,7 @@ open Fx.Effects.Live
 open Fx.Components.Live
 open Fx.Envd.Live
 open Fx.Environments
+open Fx.Keyring
 open Fx.Sdk
 open Fx.Transport.Http
 
@@ -26,7 +27,8 @@ type ProcessFacts =
     override this.ToString() = $"process ({this.CurrentDirectory})"
 
 /// The host's live interpreters (the imperative shell): the system clock and randomness, the local
-/// filesystem and processes, HTTP, the installer's downloads and disk, embedded envd, the SQLite stores.
+/// filesystem and processes, HTTP, the installer's downloads and disk, the OS keyring and private
+/// files, embedded envd, the SQLite stores.
 [<RequireQualifiedAccess>]
 module Live =
     /// envd in this process (embedded mode), as environments ask for it.
@@ -87,10 +89,12 @@ module Live =
                 |> Option.defaultValue data
 
             let name = variable facts (if windows then "USERNAME" else "USER")
+            let paths = HostPaths.under data
+            let host = LocalHostFacts.read ()
 
             Ok
                 {
-                    Paths = HostPaths.under data
+                    Paths = paths
                     Workspace = workspace
                     Variables = facts.Variables
                     Explicit = explicit
@@ -112,6 +116,10 @@ module Live =
                     Http = SystemHttp.create (SystemHttp.client ())
                     Fetch = HttpFetch.create (HttpFetch.client ())
                     InstallFiles = LocalInstallFiles.files
+                    Keyring = LocalKeyring.create host.Os (LocalKeyring.settings host)
+                    PrivateFiles = LocalPrivateFiles.create paths.Credentials Fx.Product.Name
+                    HostVariables = SystemVariables.variables
+                    Prompts = Fx.Keyring.Headless.prompts host = Prompts.Allow
                     Embed = Some embed
                     OpenStores = HostStores.live clock ids
                     Extensions = []

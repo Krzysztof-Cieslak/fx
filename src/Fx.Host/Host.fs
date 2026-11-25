@@ -25,10 +25,11 @@ open Fx.Sessions
 open Fx.Sessions.Host
 open Fx.Prompt
 open Fx.CodeAct
+open Fx.Auth
 
 /// A running host (spec §3, the "brain"): its stores, the extensions in effect, the variant registry
-/// and its resolution, the grants log, identity, environments, model access and the session host with
-/// the CodeAct strategy. Built by `Host.start`, released by `Host.stop`. One per data directory: the
+/// and its resolution, the grants log, service credentials, identity, environments, model access and
+/// the session host with the CodeAct strategy. Built by `Host.start`, released by `Host.stop`. One per data directory: the
 /// host holds its lock while it runs.
 [<Sealed>]
 type Host
@@ -42,6 +43,7 @@ type Host
         resolution: Fx.Variants.Resolution,
         stores: HostStores,
         grants: GrantsService<HostEnv>,
+        auth: AuthService,
         authenticator: Authenticator,
         environments: EnvsHost<HostEnv>,
         sessions: SessionHost<HostEnv>,
@@ -63,6 +65,8 @@ type Host
     member _.Resolution = resolution
     member _.Stores = stores
     member _.Grants = grants
+    /// Service credentials: what model requests authenticate with (`fx auth`, auth.md).
+    member _.Auth = auth
     member _.Authenticator = authenticator
     member _.Environments = environments
     member _.Sessions = sessions
@@ -459,10 +463,15 @@ module Host =
 
             cleanup.Push(fun () -> EnvsHost.stop environments :> Task)
 
+            // Service credentials: one store, chosen once (an error stops the host), and the methods
+            // and sources of the extensions in effect (spec §11.3–11.5).
+            let! auth =
+                Eff.provide env2 (Setup.auth options extensions)
+                |> EffResult.mapError (fun e -> [ $"service credentials: {e}" ])
+
             // Models: every request through the egress hooks; credentials only here.
-            let providers =
-                ExtensionHost.contributions ProviderDefs.contributionType extensions
-                |> List.map _.Value
+            let providers = Setup.providers extensions
+            warnings.AddRange(AuthService.check auth providers)
 
             let access =
                 { ModelAccess.create
@@ -476,7 +485,7 @@ module Host =
                             Transforms = ExtensionHost.contributions ModelEgress.transforms extensions
                             Gates = ExtensionHost.contributions ModelEgress.gates extensions
                         }
-                    Auth = ModelAuth.ofVariables options.Variables
+                    Auth = AuthService.modelAuth auth
                     Timeouts = modelTimeouts
                     Replay =
                         Replay.defaults
@@ -616,6 +625,8 @@ module Host =
                     {
                         Sessions = SessionLog.typed stores.Log
                         Contexts = ContextLog.typed stores.Log
+                        Steps = StepJournal.typed stores.Log
+                        Blobs = Some stores.Blobs
                         Profile = profileOf
                         Hands = hands
                         Catalog = catalog
@@ -657,6 +668,7 @@ module Host =
                     resolution,
                     stores,
                     grants,
+                    auth,
                     authenticator,
                     environments,
                     sessions,
@@ -672,9 +684,10 @@ module Host =
 
     /// Starts a host: takes the data directory's lock, reads trust, config and policy, loads the
     /// built-ins, resolves the variants, opens the stores, then starts the grants log, the component
-    /// installer, identity, environments, model access and the session host, and starts the sessions
-    /// the index knows (so turns that were running are abandoned and timers armed again: spec §5).
-    /// An `Error` lists what is wrong; nothing is left running.
+    /// installer, service credentials, identity, environments, model access and the session host, and
+    /// starts the sessions the index knows (so turns that were running are recovered through the
+    /// step journal and timers armed again: spec §5). An `Error` lists what is wrong; nothing is left
+    /// running.
     let start (options: HostOptions) : Task<Result<Host, string list>> =
         task {
             let lifetime = new CancellationTokenSource()

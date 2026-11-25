@@ -10,12 +10,14 @@ open Fx.Extensions
 [<RequireQualifiedAccess>]
 module Builtins =
     /// The contribution types the host knows besides the extension system's own (`Catalog.core`):
-    /// models (wires, providers, egress hooks), identity providers and grants.
+    /// models (wires, providers, egress hooks), identity providers, grants, and service credentials
+    /// (auth methods, credential stores, secret sources).
     let catalog: Catalog =
         Catalog.create (
             ModelAccess.contributionTypes
             @ IdentityProviders.contributionTypes
             @ GrantPolicy.contributionTypes
+            @ AuthMethods.contributionTypes
         )
 
     /// The built-ins, in bootstrap order: `fx.egress.exclusions` reads its settings through `exclusions`
@@ -24,6 +26,10 @@ module Builtins =
         [
             Package.Native Fx.Ext.EnvLocal.EnvLocal.extension
             Package.Native Fx.Ext.IdentityLocalOsUser.LocalOsUser.extension
+            Package.Native Fx.Ext.StoreKeyring.StoreKeyring.extension
+            Package.Native Fx.Ext.StoreFile.StoreFile.extension
+            Package.Native Fx.Ext.StoreEphemeral.StoreEphemeral.extension
+            Package.Native Fx.Ext.AuthStandard.AuthStandard.extension
             Package.Native Fx.Ext.ModelAnthropic.Anthropic.extension
             Package.Native Fx.Ext.ModelOpenAI.OpenAI.extension
             Package.Native(Fx.Ext.EgressExclusions.EgressExclusions.create exclusions)

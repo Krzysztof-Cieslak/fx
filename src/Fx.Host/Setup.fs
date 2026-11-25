@@ -12,6 +12,7 @@ open Fx.Extensions
 open Fx.Environments
 open Fx.Identity
 open Fx.Rpc
+open Fx.Auth
 
 /// What the host starts with: the world as the entry point read it once (the process's variables, the
 /// current directory, who runs it) and the interpreters of its capabilities. `HostOptions.live`
@@ -48,6 +49,14 @@ type HostOptions =
         /// Downloads for the component installer.
         Fetch: Fx.Components.Fetch
         InstallFiles: Fx.Components.InstallFiles
+        /// The OS keyring (`LocalKeyring.create`), private files in the data directory
+        /// (`LocalPrivateFiles.create`) and the variables credentials are read from
+        /// (`SystemVariables.variables`): what service credentials are kept in and come from.
+        Keyring: Keyring
+        PrivateFiles: PrivateFiles
+        HostVariables: HostVariables
+        /// Whether the keyring may ask the person (`Headless.prompts`).
+        Prompts: bool
         /// envd in the host's process (embedded mode, `EnvdMain.embed`); `None`: piped only.
         Embed: (EmbeddedLaunch -> Task<Result<Embedded, string>>) option
         /// Opens the event and blob stores at the paths (`HostStores.live`: SQLite and files).
@@ -208,6 +217,29 @@ module Setup =
 
         SlotRegistry.create (HostSlots.core @ contributed)
         |> Result.mapError (List.map string)
+
+    /// The host's service credentials (auth.md): the credential stores, auth methods and secret
+    /// sources the extensions in effect contribute, over the options' keyring, private files and
+    /// variables. Runs under the host's resolution (`credentials.store`, `secrets.sources`); an
+    /// `Error` (no store can be used as configured) stops the host.
+    let auth (options: HostOptions) (extensions: Fx.Extensions.Host) : Eff<HostEnv, Result<AuthService, string>> =
+        AuthHost.start
+            {
+                Keyring = options.Keyring
+                PrivateFiles = options.PrivateFiles
+                Variables = options.HostVariables
+                Http = options.Http
+                Prompts = options.Prompts
+                Trace = options.Trace
+            }
+            (ExtensionHost.contributions CredentialStores.contributionType extensions)
+            (ExtensionHost.contributions AuthMethods.contributionType extensions)
+            (ExtensionHost.contributions SecretSources.contributionType extensions)
+
+    /// The model providers the extensions in effect contribute.
+    let providers (extensions: Fx.Extensions.Host) : Fx.Models.ProviderDef list =
+        ExtensionHost.contributions ProviderDefs.contributionType extensions
+        |> List.map _.Value
 
     /// The host's resolution: the layers under the policies. Every issue is reported.
     let resolve (registry: SlotRegistry) (config: HostConfig) : Result<Fx.Variants.Resolution, string list> =

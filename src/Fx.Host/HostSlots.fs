@@ -5,6 +5,7 @@ open Fx.Variants
 open Fx.Prompt
 open Fx.CodeAct
 open Fx.Identity.Host
+open Fx.Auth
 
 /// How hard the host's stores work to keep what they committed (`Durability` of Fx.Store.Live).
 [<RequireQualifiedAccess>]
@@ -76,7 +77,12 @@ module HostSlots =
         ]
 
     /// Every core slot a host registers: the variants module's, the prompt render's, the CodeAct
-    /// strategy's, identity's and the host's. Extensions contribute theirs (content exclusions among
-    /// them, from `fx.egress.exclusions`).
+    /// strategy's, identity's, service credentials' and the host's. Extensions contribute theirs
+    /// (content exclusions among them, from `fx.egress.exclusions`).
     let core: SlotInfo list =
-        Slots.all @ PromptSlots.all @ CodeActSlots.all @ IdentitySlots.all @ all
+        Slots.all
+        @ PromptSlots.all
+        @ CodeActSlots.all
+        @ IdentitySlots.all
+        @ AuthSlots.all
+        @ all

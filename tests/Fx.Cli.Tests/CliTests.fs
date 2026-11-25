@@ -162,4 +162,24 @@ let tests =
                 Expect.equal (string (Cli.parse [ "variants"; "schema" ])) "variants schema" "schema"
                 Expect.equal (printed [ "variants"; "x" ]).ExitCode 2 "unknown"
             }
+
+            test "auth logs in, out, lists and shows status" {
+                Expect.equal (string (Cli.parse [ "auth"; "login"; "anthropic" ])) "auth login anthropic" "login"
+
+                Expect.equal
+                    (string (Cli.parse [ "auth"; "login"; "openai"; "--method"; "api_key" ]))
+                    "auth login openai --method api_key"
+                    "a method"
+
+                Expect.equal (string (Cli.parse [ "auth"; "logout"; "openai" ])) "auth logout openai" "logout"
+                Expect.equal (string (Cli.parse [ "auth"; "list" ])) "auth list" "list"
+                Expect.equal (string (Cli.parse [ "auth"; "status" ])) "auth status" "status"
+
+                let o = printed [ "auth"; "login" ]
+                Expect.equal o.ExitCode 2 "exit code"
+                Expect.stringContains o.Stderr "auth login <provider>" "the usage"
+                Expect.stringContains o.Stderr "auth status" "every command"
+                Expect.equal (printed [ "auth" ]).ExitCode 2 "no command"
+                Expect.stringContains (printed [ "--help" ]).Stdout "auth login <provider>" "in the usage"
+            }
         ]
