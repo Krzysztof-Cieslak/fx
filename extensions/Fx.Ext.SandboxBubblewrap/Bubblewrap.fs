@@ -99,7 +99,7 @@ let mounts (request: SandboxRequest) : Result<string list, string> =
             // sandbox cannot grant is simply not granted.
             | Error e when
                 rule.Access <> PathAccess.ReadWrite
-                && policy.Readable |> List.contains rule.Root |> not
+                && not (policy.Readable |> List.exists (fun r -> SandboxPath.trim r = rule.Root))
                 ->
                 Error e
             | Error _ -> Ok(rule, None))
