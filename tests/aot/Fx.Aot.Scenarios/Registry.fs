@@ -51,6 +51,7 @@ let all: Scenario list =
             Auth.scenarios
             CodeAct.scenarios
             Host.scenarios
+            Replay.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff

@@ -68,6 +68,7 @@
     <Compile Include="Scenarios\Kernel\ScriptProc.fs" />
     <Compile Include="Scenarios\CodeAct.fs" />
     <Compile Include="Scenarios\Host.fs" />
+    <Compile Include="Scenarios\Replay.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -109,6 +110,7 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Keyring\Fx.Keyring.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.CodeAct\Fx.CodeAct.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Replay\Fx.Replay.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Auth\Fx.Auth.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.AuthStandard\Fx.Ext.AuthStandard.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreKeyring\Fx.Ext.StoreKeyring.fsproj" />
