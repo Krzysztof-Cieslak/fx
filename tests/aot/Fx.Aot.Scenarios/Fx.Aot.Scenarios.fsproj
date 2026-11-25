@@ -57,6 +57,7 @@
     <Compile Include="Scenarios\Sessions.fs" />
     <Compile Include="Scenarios\ModelsAnthropic.fs" />
     <Compile Include="Scenarios\Prompt.fs" />
+    <Compile Include="Scenarios\Grants.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -79,6 +80,7 @@
     <ProjectReference Include="..\..\..\src\Fx.Kernel\Fx.Kernel.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Sessions.Host\Fx.Sessions.Host.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.Sample\Fx.Ext.Sample.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
