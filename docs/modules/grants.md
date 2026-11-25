@@ -158,11 +158,12 @@ so events record them and clients see who did what by folding events alone.
 | `Close(request, why)` | the requester (`Withdrawn`), the host (`Covered g`, `Refused`, `TimedOut` once due, `SessionEnded`) | `Closed` |
 | `EndSession session` | the host | `Expired` for the session's grants, `Closed SessionEnded` for its pending requests |
 
-- **Only people grant** (spec §13.2): answers, grants and revocations from `system` are refused
-  `grants.not-a-person`. The real boundary is the capability split: agents and extensions hold only
-  `Grants` (check, request, await, withdraw), and only the host server's client protocol reaches answer,
-  grant and revoke, with the connection's principal. T122's principal kinds will let the machine refuse
-  non-human principals too.
+- **Only people grant** (spec §13.2): answers, grants and revocations from anything but a `user:`
+  principal (a device, a service, `system`, an id without a kind) are refused `grants.not-a-person`; the
+  machine reads the kind from the principal id (`PrincipalId.isPerson`, [identity.md](identity.md)). The
+  first boundary is the capability split: agents and extensions hold only `Grants` (check, request,
+  await, withdraw), and only the host server's client protocol reaches answer, grant and revoke, with the
+  connection's principal.
 - A request is resolved at most once: an answer, a denial or a closure; later ones are refused
   `grants.not-pending`.
 - `react` asks for timers (`ExpireAt`, `TimeOutAt`); `recover` asks again for those of a rebuilt state.
@@ -256,7 +257,6 @@ this connection" (`Attribution`, or `NotAPerson`). The TypeScript types are gene
 | What | Task |
 |---|---|
 | Composition in the host and embedded mode; the installer forwarding approvals from an environment | T129 |
-| Principal kinds (refusing non-human principals in the machine, not only by capability) | T122 |
 | Several stores at once (a repository-policy store's grants next to the host-local ones) | when such a store exists |
 | `IGrants` for extensions (`IExtensionEnv`), and over the extension protocol | T109b |
 | Snapshots of the grants log, bounding the history kept in the state | when a long-lived host needs it |

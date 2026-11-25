@@ -125,7 +125,8 @@ The client sends `initialize`; nothing else is accepted before it (`NotInitializ
 - **Capabilities** are what each side *accepts*: the largest message it reads, how many requests it
   takes in flight, its channel settings (absent: no channels; channels work only if both offer them),
   and the methods it handles (sorted).
-- **Application members** (identity, a session token: T122, T129) ride next to the protocol's:
+- **Application members** ride next to the protocol's, e.g. the client's `identity` and the result's
+  `session` ([identity.md](identity.md#initialize): `IdentityServer.withIdentity`, `IdentityClient`):
   `Rpc.connect` adds members to the params, `Service.Accept` sees the client's (`Remote.Members`),
   may refuse with an `RpcError`, and adds members to the result. The server stays in the handshake
   after a refusal or invalid params, so a client may retry, until `HandshakeTimeout`.
@@ -245,7 +246,8 @@ connection's limits: `ConnectionLimits.frames`.
 - **WebSocket.** One message per frame. Closing sends a close frame (1000, or 1002 / 1009 for
   violations) without waiting; the reader sees the peer's close as the end. Kestrel's body limit does
   not apply; the transport's limits do. The listener's token, `Origin` and `Host` checks (spec §18)
-  happen before the upgrade; the `initialize` identity and session token (T122) come on top.
+  happen before the upgrade (the bearer may also be a host-issued session token); the `initialize`
+  identity and session token ([identity.md](identity.md)) come on top.
 
 ## Bounds
 

@@ -757,6 +757,10 @@ type IdentityProvider =
 
 Built-in: `local-os-user`, `device-pairing`, `ssh-key`. Plugins: GitHub OAuth, OIDC. Ledger and grant events carry the principal; git-ledger events also record the git author.
 
+- **Principal ids** are `<kind>:<provider>:<subject>` (`user:local-os-user:<machine>/<uid or SID>`): stable, recorded for ever, and they say what kind of principal acted without a lookup. Only `user` principals answer, grant and revoke (§13.2); a person signing in through a device is a user.
+- **`Verify`** gets the client's presented credential with what the host itself established about the connection (in process; the peer's OS account on Unix sockets and named pipes; possession of the listener's owner-only token) and the host's own identity. Providers never mint tokens: the host issues the session token (random, kept hashed, expiring, revocable), bound to the principal, the client and its roles.
+- **Roles** are ordered: `viewer` < `collaborator` (drives sessions and runs) < `owner` (also permissions and the host). Module spec: `docs/modules/identity.md`.
+
 ### 11.3 Service credentials
 
 ```fsharp
