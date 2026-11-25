@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The session host (spec §5, §17): session actors on the event store (started from snapshots), the
+    interpreter of the session's intents, the boundary to the strategy that runs turns, profile binding
+    for variant overrides, and subscriptions with snapshot + tail. Pure apart from the capabilities it
+    is handed, so the EFF analyzers apply to every file. The machine itself is Fx.Sessions.
+    Spec: docs/modules/sessions.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="SessionLog.fs" />
+    <Compile Include="TurnRunner.fs" />
+    <Compile Include="Profiles.fs" />
+    <Compile Include="SessionHost.fs" />
+    <Compile Include="Fakes\ScriptedTurnRunner.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sessions\Fx.Sessions.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Variants\Fx.Variants.fsproj" />
+  </ItemGroup>
+</Project>
