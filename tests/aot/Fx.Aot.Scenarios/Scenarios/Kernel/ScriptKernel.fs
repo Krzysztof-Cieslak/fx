@@ -19,6 +19,7 @@
 /// | `sleep` | waits until cancelled |
 /// | `loop` | a busy loop that the kernel can interrupt |
 /// | `spin` | a busy loop that blocks the whole kernel: only a kill stops it |
+/// | `spin <text>` | blocks the kernel, then prints the text: once the text is out, only a kill stops the cell |
 /// | `later <text>` | prints after the cell returned |
 /// | `activity <kind> <title>` | reports an activity |
 /// | `env x = <VARIABLE>` | binds an environment variable (or null) |
@@ -52,7 +53,8 @@ type Statement =
     | Throw of string
     | Sleep
     | Loop
-    | Spin
+    /// Blocks the kernel; with a text, prints it once blocked (a cancel can no longer stop the cell).
+    | Spin of announce: string option
     | Later of string
     | Activity of kind: string * title: string
     | Env of name: string * variable: string
@@ -71,7 +73,7 @@ type Statement =
         | Throw _ -> "throw"
         | Sleep -> "sleep"
         | Loop -> "loop"
-        | Spin -> "spin"
+        | Spin _ -> "spin"
         | Later _ -> "later"
         | Activity(kind, _) -> "activity " + kind
         | Env(name, _) -> "env " + name
@@ -158,7 +160,8 @@ let parse (code: string) : Result<(int * Statement) list, SyntaxFailure> =
             | "throw" -> add (Statement.Throw(rest line word))
             | "sleep" when line = word -> add Statement.Sleep
             | "loop" when line = word -> add Statement.Loop
-            | "spin" when line = word -> add Statement.Spin
+            | "spin" when line = word -> add (Statement.Spin None)
+            | "spin" -> add (Statement.Spin(Some(rest line word)))
             | "later" -> add (Statement.Later(rest line word))
             | "activity" ->
                 match (rest line word).Split(' ', 2) with
@@ -427,8 +430,17 @@ type Kernel(stray: string -> unit) =
                         Thread.SpinWait 1000
 
                     cancellation.ThrowIfCancellationRequested()
-                | Statement.Spin ->
+                | Statement.Spin announce ->
                     lock gate (fun () -> frozen <- true)
+
+                    // Frozen first: whoever reads the text knows a cancel cannot stop the cell any more
+                    // (the cancel handler waits for the kill), so an interrupt ends in a kill.
+                    match announce with
+                    | Some text ->
+                        output.Append(text + "\n")
+                        do! stream (text + "\n")
+                    | None -> ()
+
                     do! killed.Task
                     raise (OperationCanceledException "killed")
                 | Statement.Later text ->
