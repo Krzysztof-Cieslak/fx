@@ -1,7 +1,8 @@
-/// The pinned Bun the reference kernel runs on, for the tests: download, verify against the pinned
-/// SHA-256, extract, probe (`bun --revision`), as the Bun kernel spike does (docs/spikes/bun-kernel.md).
-/// The kernel never runs on a Bun from PATH. T114 (`fx.runtime.bun`) replaces this with a component
-/// the installer manages; keep the pin in step with spikes/bun-kernel/src/pinned-bun.ts until then.
+/// The pinned Bun the bun-ts kernel and the TypeScript sample run on in the tests: download, verify
+/// against the pinned SHA-256, extract, probe (`bun --revision`), as the Bun kernel spike does
+/// (docs/spikes/bun-kernel.md). It never runs a Bun from PATH. The product installs it as
+/// `fx.runtime.bun`'s component instead (T114; its network tests do, with NETWORK_TESTS=1); keep the
+/// pin in step with extensions/Fx.Ext.RuntimeBun/Pins.fs.
 module Fx.Kernel.Tests.PinnedBun
 
 open System
@@ -193,49 +194,6 @@ let executable () : Task<Result<string, string>> =
         try
             let! bun = installed.Force()
             return Ok bun
-        with e ->
-            return Error(e.GetType().Name + ": " + e.Message)
-    }
-
-/// The reference kernel bundled into one file with the pinned Bun, as a release build would.
-type Prepared =
-    {
-        Bun: string
-        Kernel: string
-    }
-
-    override this.ToString() = $"{this.Bun} {this.Kernel}"
-
-let private bundle (bun: string) : Task<string> =
-    task {
-        let output =
-            Repo.path [ "artifacts"; "kernel-bun-ts"; $"kernel-{Environment.ProcessId}.js" ]
-
-        let entry = Path.Combine(Repo.kernelPackage, "src", "main.ts")
-
-        let! code, log =
-            run bun [ "build"; entry; "--target=bun"; $"--outfile={output}" ] Repo.kernelPackage
-
-        if code <> 0 then
-            failwith $"bundling the kernel failed: {log}"
-
-        return output
-    }
-
-let private prepared =
-    lazy
-        (task {
-            let! bun = installed.Force()
-            let! kernel = bundle bun
-            return { Bun = bun; Kernel = kernel }
-        })
-
-/// The pinned Bun and the bundled kernel, or why they are not available.
-let prepare () : Task<Result<Prepared, string>> =
-    task {
-        try
-            let! p = prepared.Force()
-            return Ok p
         with e ->
             return Error(e.GetType().Name + ": " + e.Message)
     }

@@ -6,6 +6,7 @@ open Fx.Effects
 open Fx.Effects.Fakes
 open Fx.Effects.Live
 open Fx.Kernel
+open Fx.Sdk
 open Fx.Store
 
 let private roundTrip (codec: Codec<'T>) (value: 'T) =

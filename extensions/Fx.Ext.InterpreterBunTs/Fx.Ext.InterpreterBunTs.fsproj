@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.interpreter.bun-ts package (spec §6.3): TypeScript cells in a persistent kernel on
+    the pinned Bun. A native extension contributing one InterpreterProvider: the kernel's files
+    (KernelFiles.fs, generated from packages/kernel-bun-ts/src and carried in the binary), its launch
+    on fx.runtime.bun, the bridge's declarations, the prompt pack and bun check. Like every package
+    under extensions/, it references the public SDK (src/Fx.Sdk) and nothing else; the architecture
+    tests check the compiled assembly. See README.md.
+  -->
+  <ItemGroup>
+    <Compile Include="KernelFiles.fs" />
+    <Compile Include="BunTs.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

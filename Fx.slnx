@@ -29,6 +29,7 @@
     <Project Path="src/Fx.Envd/Fx.Envd.fsproj" />
     <Project Path="src/Fx.Envd.Live/Fx.Envd.Live.fsproj" />
     <Project Path="src/Fx.Models/Fx.Models.fsproj" />
+    <Project Path="src/Fx.Interpreters/Fx.Interpreters.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -41,6 +42,7 @@
     <Project Path="extensions/Fx.Ext.Sample/Fx.Ext.Sample.fsproj" />
     <Project Path="extensions/Fx.Ext.RuntimeBun/Fx.Ext.RuntimeBun.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelCanonical/Fx.Ext.ModelCanonical.fsproj" />
+    <Project Path="extensions/Fx.Ext.InterpreterBunTs/Fx.Ext.InterpreterBunTs.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -84,6 +86,8 @@
     <Project Path="tests/Fx.Kernel.Tests/Fx.Kernel.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.RuntimeBun.Tests/Fx.Ext.RuntimeBun.Tests.fsproj" />
     <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
+    <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

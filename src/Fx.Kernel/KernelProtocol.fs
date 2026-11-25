@@ -9,6 +9,7 @@ module Fx.Kernel.KernelProtocol
 open System.Text.RegularExpressions
 open Fx.Contracts
 open Fx.Rpc
+open Fx.Sdk
 
 /// The kernel protocol versions this host speaks, preferred first.
 let versions = [ "1" ]
@@ -45,44 +46,10 @@ module Codecs =
 
     let private count = Codec.int |> Codec.atLeast 0
 
-    let asyncHostCalls: Codec<AsyncHostCalls> =
-        Codec.enum [ AsyncHostCalls.Await, "await"; AsyncHostCalls.Transparent, "transparent" ]
-        |> Codec.describe "How cells see host calls: awaited, or as synchronous calls."
-        |> Codec.named "AsyncHostCalls"
-
-    let packageSupport: Codec<PackageSupport> =
-        Codec.record {
-            let! manager =
-                Codec.field "manager" (fun (p: PackageSupport) -> p.Manager) (Codec.string |> Codec.nonEmpty)
-
-            return { Manager = manager }
-        }
-        |> Codec.describe "How the kernel installs packages for a session."
-        |> Codec.named "PackageSupport"
-
-    let interpreterCaps: Codec<InterpreterCaps> =
-        Codec.record {
-            let! snapshot =
-                Codec.field "snapshot" (fun (c: InterpreterCaps) -> c.Snapshot) Codec.bool
-
-            and! hostCalls =
-                Codec.field "asyncHostCalls" (fun c -> c.AsyncHostCalls) asyncHostCalls
-
-            and! packages = Codec.optionalField "packages" (fun c -> c.Packages) packageSupport
-
-            and! deterministic =
-                Codec.field "deterministic" (fun c -> c.Deterministic) Codec.bool
-
-            return
-                {
-                    Snapshot = snapshot
-                    AsyncHostCalls = hostCalls
-                    Packages = packages
-                    Deterministic = deterministic
-                }
-        }
-        |> Codec.describe "What the kernel can do (spec §6.2 InterpreterCaps)."
-        |> Codec.named "InterpreterCaps"
+    // Interpreter caps are part of the public SDK (Fx.Sdk): interpreters declare them (spec §6.2).
+    let asyncHostCalls: Codec<AsyncHostCalls> = AsyncHostCalls.codec
+    let packageSupport: Codec<PackageSupport> = PackageSupport.codec
+    let interpreterCaps: Codec<InterpreterCaps> = InterpreterCaps.codec
 
     let kernelLimits: Codec<KernelLimits> =
         Codec.record {

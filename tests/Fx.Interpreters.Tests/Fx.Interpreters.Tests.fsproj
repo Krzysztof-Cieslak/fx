@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of src/Fx.Interpreters over fakes: the host bridge (bindings, dispatch, finish), the core
+    bindings, assets, preparing a launch, and the interpreter provider conformance suite (also run on
+    the built-ins by their own tests). Kernels themselves are tested by the kernel conformance suite
+    (tests/Fx.Kernel.Tests) and by tests/Fx.Ext.InterpreterBunTs.Tests on the pinned Bun.
+  -->
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="Conformance\InterpreterConformance.fs" />
+    <Compile Include="BridgeTests.fs" />
+    <Compile Include="CoreBindingsTests.fs" />
+    <Compile Include="AssetsTests.fs" />
+    <Compile Include="InterpreterTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Interpreters\Fx.Interpreters.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+  </ItemGroup>
+</Project>

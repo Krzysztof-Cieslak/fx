@@ -241,10 +241,10 @@ type Kernel(stray: string -> unit) =
             Language = "script"
             Caps =
                 {
-                    Snapshot = true
-                    AsyncHostCalls = AsyncHostCalls.Transparent
-                    Packages = None
-                    Deterministic = true
+                    Fx.Sdk.InterpreterCaps.Snapshot = true
+                    Fx.Sdk.InterpreterCaps.AsyncHostCalls = Fx.Sdk.AsyncHostCalls.Transparent
+                    Fx.Sdk.InterpreterCaps.Packages = None
+                    Fx.Sdk.InterpreterCaps.Deterministic = true
                 }
             Details = Some(Json.Object [ "implementation", Json.String "ScriptKernel" ])
         }

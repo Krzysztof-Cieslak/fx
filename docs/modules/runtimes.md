@@ -127,7 +127,7 @@ the files are rewritten, so a process cannot change what the next launch reads.
 `OwnedDirs.under dir` is the usual layout: `cwd`, `home`, `config`, `cache`, `tmp`. Owned
 directories belong to one launch, or to one kernel or session. Never put them inside the workspace.
 
-### Using a runtime (T115, T117)
+### Using a runtime (T115, T117: `Interpreter.prepare`, interpreters.md)
 
 ```fsharp
 // 1. Install it: the extension requires { Id = "bun"; Version = "^1.4" } (manifest `requires`),
@@ -190,9 +190,9 @@ environment). Their output does not depend on the operating system.
 | What | Task |
 |---|---|
 | Launching a process extension on a runtime (a manifest `launch` that names the `bun` runtime and its entry point), the TypeScript extension host | T115 |
-| The bun-ts kernel on this runtime, its owned directories per kernel, killing stale kernels | T117 |
+| The bun-ts kernel's owned directories per session and environment, killing stale kernels (T117 launches it on this runtime: interpreters.md) | T112, T129 |
 | Where launches' owned directories live (under the product's home, per session), serving runtimes to envd over the environment protocol | T111, T129 |
 | The installer's probe (`bun --revision`) inherits the installer's environment minus the vectors' exact names: an inherited environment cannot drop prefixes (`BUN_INSPECT*`). The composition root should set `InstallerSettings.ProbeEnv` to `Exactly` a small environment | T129 |
 | `ReleaseIndex` with `SHASUMS256.txt` and its signature as the vendor index | T211 |
-| `--no-addons` and other optional hardening as variants | T117 |
+| `--no-addons` and other optional hardening as variants | when packages come (interpreters.md) |
 | A `${shared.*}` placeholder for caches shared across launches | when a runtime needs one |

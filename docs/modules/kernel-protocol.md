@@ -3,11 +3,12 @@
 How the host drives a CodeAct kernel (spec §6.4–6.6): a process, in any language, that runs the
 model's cells and keeps their state. Task: T116. The protocol is language-neutral; the first kernel is
 TypeScript on the pinned Bun ([`packages/kernel-bun-ts`](../../packages/kernel-bun-ts), the reference
-kernel, which T117 turns into `fx.interpreter.bun-ts`).
+kernel, which is `fx.interpreter.bun-ts`'s kernel: [interpreters.md](interpreters.md)).
 
 - **Code:** `src/Fx.Kernel` (pure: no I/O of its own; kernel processes start through the shell
   capability). Dependencies: `Fx.Contracts` (codecs), `Fx.Contracts.TypeScript` (declarations),
-  `Fx.Effects`, `Fx.Rpc` (the wire), `Fx.Store` (`BlobRef`), `Fx.Sdk` (the host's deny list).
+  `Fx.Effects`, `Fx.Rpc` (the wire), `Fx.Store` (`BlobRef`), `Fx.Sdk` (the host's deny list, and
+  `InterpreterCaps`, which interpreters declare).
 - **Tests:** `tests/Fx.Kernel.Tests`: the conformance suite v1 against three kernels, unit tests, and a
   golden test of the TypeScript declarations; the `kernel-*` scenarios of the JIT-vs-native diff.
 - **Versions:** this document is protocol version **1** (`KernelProtocol.versions`). A change that an
@@ -289,15 +290,18 @@ stays language-neutral and checks everything through the protocol. Version 1 cov
 | Optional | snapshot/restore into a new kernel, `cell/check`, determinism (when announced) |
 | Launch hygiene | (process kernels) exactly the launch's environment, injection vectors refused, stray stdout survived, exit on close |
 
-Pending, with reasons in the suite: the Bun launch's positive controls (T114 owns the `LaunchSpec`;
-the spike's `test/hardening.test.ts` shows them) and content exclusions (T117 and T124: model-egress
-hooks).
+Subjects launched through a runtime's launch spec also start with every kind of injection vector in
+the launcher's own environment (`StartFromLauncher`), and none may reach the kernel; the positive
+controls that show the vectors work are `fx.runtime.bun`'s (tests/Fx.Ext.RuntimeBun.Tests). Pending,
+with its reason in the suite: content exclusions (T124: model-egress hooks).
 
 The suite runs against three kernels: the **script kernel** (F#, `tests/aot/Fx.Aot.Scenarios/Scenarios/Kernel`)
-in process and as a child process (`Fx.Aot.Scenarios kernel-peer`), and the **reference kernel** on the
-pinned Bun 1.4.5, which the tests download, check against the pinned SHA-256, and bundle the kernel with
-(`artifacts/kernel-bun-ts/`; skipped offline, required in CI). The script kernel is a second
-implementation, so the protocol is proven language-neutral, and it runs where Bun does not (musl).
+in process and as a child process (`Fx.Aot.Scenarios kernel-peer`), and the **bun-ts kernel**
+(`fx.interpreter.bun-ts`) as the product launches it: its assets extracted and checked, on the pinned
+Bun 1.4.5 through `fx.runtime.bun`'s hardened launch (`Interpreter.prepare`, [interpreters.md](interpreters.md)).
+The tests download that Bun and check it against the pinned SHA-256 (`artifacts/kernel-bun-ts/`;
+skipped offline, required in CI, which also runs it in an Alpine container for musl). The script
+kernel is a second implementation, so the protocol is proven language-neutral.
 
 ## Native AOT
 
@@ -308,10 +312,8 @@ a refused launch, a snapshot and a killed kernel).
 
 ## Left to later tasks
 
-- **T117:** `fx.interpreter.bun-ts` from the reference kernel: `cell/check` (the spike's checker), the
-  generated `<global>.d.ts` and prompt pack, kernel-side wrappers reporting activity, packages.
-- **T114:** the Bun `RuntimeSpec` and hardened `LaunchSpec`; the conformance suite's positive controls.
+- **T205:** kernel-side wrappers reporting activity. **Later:** packages (interpreters.md).
 - **T201:** blobs for large values and output overflow; handles inside data; how kernels read blobs;
   `fx.recall(callId)` and handles in the journal.
-- **T124, T117:** content exclusions on output and previews.
+- **T124:** content exclusions on output and previews.
 - **T128:** journaling cell results and outputs for `recall` after a restart.

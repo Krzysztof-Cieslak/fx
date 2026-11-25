@@ -21,20 +21,22 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Package | Project | Who uses it | Contents |
 |---|---|---|---|
-| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)) |
-| `<Name>.Prelude`, `.Contracts`, `.Effects`, `.Variants`, `.Models` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes |
+| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)) |
+| `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
-| `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host, T117's kernel) | codecs, the generated contract types, the extension API, the protocol's server |
+| `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host) | codecs, the generated contract types, the extension API, the protocol's server |
 
 - **Built-ins** (`extensions/`) reference `src/Fx.Sdk` and nothing else, and their compiled assemblies
-  reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`,
-  `Fx.Models`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
+  reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Contracts.TypeScript`,
+  `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
   `Fx.Sdk.Process` reference only their surfaces (`processSdkSurface` adds `Fx.Sdk.Process`, `Fx.Rpc`,
   `Fx.Effects.Live`). Widening a surface is a deliberate edit of those sets and of this table.
 - **Not public:** `Fx.Extensions` (the registry, catalog, runtimes, bootstrap), `Fx.Machines(.Host)`,
-  `Fx.Store`, `Fx.Kernel`, `Fx.Components`, `Fx.Transport.Http`, the CLI. Kernels are not extensions'
-  code: an interpreter extension (T117) is a process that speaks the kernel protocol, not a library.
+  `Fx.Store`, `Fx.Kernel`, `Fx.Interpreters`, `Fx.Components`, `Fx.Transport.Http`, the CLI. Kernels
+  are not extensions' code: an interpreter extension (`fx.interpreter.bun-ts`) contributes an
+  `InterpreterProvider` (data and pure functions); its kernel is a process that speaks the kernel
+  protocol, launched by the core (`Fx.Interpreters`).
   When machines become a contribution type, `Fx.Machines` (FSharp.Core only) joins `sdkSurface`.
 
 ### Decisions
@@ -46,6 +48,12 @@ they are packaged and versioned, and how to write an extension with them. The ex
 - **`Fx.Models` is exposed** (T118): wire adapters and provider definitions are extensions' contributions
   (spec §10.1, §16.2), so the canonical model they translate is public. It is pure and references only
   Prelude, Contracts and Effects.
+- **`Fx.Contracts.TypeScript` is exposed** (T117): an interpreter generates its kernel's declarations
+  from the bindings' schemas (`InterpreterProvider.Bindings`), host-side, and the TypeScript one needs
+  the generator. It is pure and references only Contracts.
+- **The bun-ts kernel keeps its own JSON-RPC peer** rather than `@fx/sdk`'s: the kernel protocol frames
+  every message on a line of its own after stray bytes, and the kernel ships as a few flat TypeScript
+  files carried in the binary, without dependencies.
 - **`Fx.Variants` is exposed**: extensions define slots (`VariantSlots.contributionType`, `variant-slot`,
   in the core catalog) and will read them through `IVariants` (T109b). It is pure and references only
   Contracts and Effects.
@@ -223,5 +231,4 @@ await runStdio([{
 |---|---|
 | Host capabilities in `IExtensionEnv` beyond the clock, attenuated to the manifest's `capabilities` (`IVariants` reads of an extension's slots, …), and over the protocol for extension processes (`host/*` requests from the process, in both SDKs); `IPackages`; reading contributions from extension code | T109b |
 | The `bun` extension runtime (`fx.exthost.bun`), hosting TypeScript packages written with `@fx/sdk` in one process, and contributing `ExtensionRuntime` from TypeScript | T115 |
-| The reference kernel moving to `@fx/sdk`'s JSON-RPC peer and codecs; the host bridge's `<global>.d.ts` | T117 |
 | Publishing the packages to nuget.org and npm | with the first release |

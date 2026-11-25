@@ -44,7 +44,7 @@ jobs:
       - name: Formatting
         run: dotnet fantomas --check src tests tools extensions
       # Its conformance suite runs in the build job (tests/Fx.Kernel.Tests), on the pinned Bun.
-      - name: Reference kernel type-checks and its unit tests pass
+      - name: bun-ts kernel type-checks and its unit tests pass
         working-directory: packages/kernel-bun-ts
         run: |
           bun install --frozen-lockfile
@@ -269,7 +269,8 @@ jobs:
   bun-musl:
     # fx.runtime.bun on musl (the build job covers glibc, macOS and Windows): installs the pinned Bun's
     # musl build from GitHub through the component installer, launches it hardened and runs the
-    # positive controls, in the Alpine container the musl AOT jobs use.
+    # positive controls, in the Alpine container the musl AOT jobs use. Then fx.interpreter.bun-ts on
+    # it: the kernel conformance suite and the interpreter's end-to-end tests.
     name: Pinned Bun on musl (${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -278,7 +279,7 @@ jobs:
           - { arch: x64, os: ubuntu-24.04 }
           - { arch: arm64, os: ubuntu-24.04-arm }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
       - name: Cache NuGet packages
@@ -300,6 +301,16 @@ jobs:
         run: docker exec alpine dotnet restore tests/Fx.Ext.RuntimeBun.Tests --locked-mode
       - name: Install and launch the pinned Bun (network)
         run: docker exec alpine dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-restore --configuration Release
+      - name: Restore the kernel tests (locked)
+        run: |
+          docker exec alpine dotnet restore tests/Fx.Kernel.Tests --locked-mode
+          docker exec alpine dotnet restore tests/Fx.Ext.InterpreterBunTs.Tests --locked-mode
+      # The kernel conformance suite (the bun-ts kernel on the pinned musl Bun) and the interpreter end
+      # to end. The tests download the pinned Bun themselves and check its digest.
+      - name: bun-ts kernel conformance on musl
+        run: docker exec alpine dotnet test --project tests/Fx.Kernel.Tests --no-restore --configuration Release
+      - name: bun-ts interpreter on musl
+        run: docker exec alpine dotnet test --project tests/Fx.Ext.InterpreterBunTs.Tests --no-restore --configuration Release
 
   bun-kernel-spike:
     name: Bun kernel spike (${{ matrix.os }})

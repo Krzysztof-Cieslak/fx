@@ -571,6 +571,57 @@ let tests =
                     "refused with a clear issue"
             }
 
+            test "fx.interpreter.bun-ts loads natively next to fx.runtime.bun; a project cannot contribute interpreters" {
+                let interpreter = Fx.Ext.InterpreterBunTs.BunTs.extension
+                let runtime = Fx.Ext.RuntimeBun.RuntimeBun.manifest
+
+                let host = bootstrap [ builtin interpreter; fromManifest Source.Builtin runtime ]
+
+                Expect.equal
+                    (report host)
+                    [
+                        $"{interpreter.Manifest.Id} [in-binary] activated"
+                        $"{runtime.Id} [in-binary] activated"
+                    ]
+                    "activated"
+
+                match ExtensionHost.contributions InterpreterProviders.contributionType host with
+                | [ contributed ] ->
+                    Expect.equal contributed.By $"{interpreter.Manifest.Id}/bun-ts" "the interpreter"
+
+                    let runtimes =
+                        ExtensionHost.contributions RuntimeSpecs.contributionType host
+                        |> List.map (fun c -> c.Id)
+
+                    Expect.contains runtimes contributed.Value.Launch.Runtime "its runtime is there"
+                | other -> failtest $"{other}"
+
+                let fromProject =
+                    bootstrapWith
+                        { defaultSettings with
+                            Trust =
+                                { defaultSettings.Trust with
+                                    ProjectTrusted = true
+                                }
+                        }
+                        [
+                            Candidate.create
+                                Source.Project
+                                (Package.Native
+                                    { interpreter with
+                                        Manifest =
+                                            { interpreter.Manifest with
+                                                Id = "acme.ts"
+                                            }
+                                    })
+                        ]
+
+                Expect.stringStarts
+                    (List.head (report fromProject))
+                    "acme.ts [in-binary] rejected: trust.privileged"
+                    "privileged"
+            }
+
             test "a process that cannot start fails its extension" {
                 let manifest =
                     { SampleHost.processManifest () with

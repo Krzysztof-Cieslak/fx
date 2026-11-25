@@ -90,7 +90,7 @@ let fsMiddle  : ContributionType<Middleware<Fs>> = Hook.interpret "fs" "…"    
 - `Contribution.create t id value` erases the type (a `Contribution`); `Contribution.tryValue t` gets it
   back. Two types with one name and different value types are a defect.
 - **Catalog:** the host's table of types by name: the core's (`extension-runtime`,
-  `contribution-type`), the host's own hook points (`HostSettings.Catalog`), and types native
+  `contribution-type`, `variant-slot`, `component`, `runtime`, `interpreter`), the host's own hook points (`HostSettings.Catalog`), and types native
   extensions define by contributing a `ContributionTypes.contributionType` (so later extensions,
   declarative manifests and extension processes can contribute to them). Admission refuses types the
   catalog does not know.

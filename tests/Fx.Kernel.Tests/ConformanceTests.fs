@@ -10,5 +10,5 @@ let tests =
         [
             KernelConformance.tests Subjects.scriptInProcess
             KernelConformance.tests Subjects.scriptProcess
-            KernelConformance.tests Subjects.bunKernelLazy
+            KernelConformance.tests Subjects.bunTsKernelLazy
         ]

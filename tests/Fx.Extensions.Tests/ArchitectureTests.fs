@@ -28,6 +28,7 @@ let sdkSurface =
             "Fx.Sdk"
             "Fx.Prelude"
             "Fx.Contracts"
+            "Fx.Contracts.TypeScript"
             "Fx.Effects"
             "Fx.Variants"
             "Fx.Models"
@@ -145,7 +146,14 @@ let tests =
 
                 Expect.equal
                     (projects |> List.map (fun p -> Path.GetFileNameWithoutExtension p) |> List.sort)
-                    [ "Fx.Contracts"; "Fx.Effects"; "Fx.Models"; "Fx.Prelude"; "Fx.Variants" ]
+                    [
+                        "Fx.Contracts"
+                        "Fx.Contracts.TypeScript"
+                        "Fx.Effects"
+                        "Fx.Models"
+                        "Fx.Prelude"
+                        "Fx.Variants"
+                    ]
                     "project references"
 
                 Expect.equal packages [] "package references"

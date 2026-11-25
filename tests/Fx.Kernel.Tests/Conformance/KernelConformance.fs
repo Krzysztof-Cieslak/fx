@@ -111,6 +111,10 @@ type KernelSubject =
         Start: Env -> KernelHost<Env> -> KernelSetup -> (string * string) list -> Task<Result<Started, StartError>>
         /// The kernel runs in a process of its own: stray output, exit and launch hygiene apply.
         IsProcess: bool
+        /// For kernels launched through a runtime's launch spec (spec §6.2): starts one with these
+        /// variables in the launcher's own environment, which the launch must not pass on.
+        StartFromLauncher:
+            (Env -> KernelHost<Env> -> KernelSetup -> (string * string) list -> Task<Result<Started, StartError>>) option
     }
 
     override this.ToString() = this.Name
@@ -1426,7 +1430,53 @@ let private hygiene (subject: KernelSubject) =
                         | Error e -> failtest $"{name}: {e}"
                 }
 
-                ptestCase "runtime injection vectors are inert (positive controls; T114: the Bun LaunchSpec)" ignore
+                match subject.StartFromLauncher with
+                | Some startFrom ->
+                    testTask "runtime injection vectors in the launcher's environment never reach the kernel" {
+                        // Each would change what the runtime loads if it were passed on (a preload that
+                        // does not exist would stop Bun from starting at all); the positive controls
+                        // that show they work are fx.runtime.bun's (tests/Fx.Ext.RuntimeBun.Tests).
+                        let vectors =
+                            [
+                                "BUN_OPTIONS", "--preload=./injected-preload.ts"
+                                "bun_inspect", "127.0.0.1:9"
+                                "BUN_CONFIG_REGISTRY", "http://127.0.0.1:9/"
+                                "NODE_OPTIONS", "--require=./injected.js"
+                                "NODE_PATH", "./injected"
+                                "LD_PRELOAD", "./injected.so"
+                                "DYLD_INSERT_LIBRARIES", "./injected.dylib"
+                                "DOTNET_STARTUP_HOOKS", "./injected.dll"
+                            ]
+
+                        let recorder = Recorder()
+
+                        match! startFrom (env ()) recorder.Host setup vectors |> within with
+                        | Error e -> failtest $"the kernel did not start: {e}"
+                        | Ok started ->
+                            let context =
+                                {
+                                    Subject = subject
+                                    Started = started
+                                    Recorder = recorder
+                                    Env = env ()
+                                    Snippets = s
+                                    Next = 0
+                                }
+
+                            try
+                                for i, (name, _) in List.indexed vectors do
+                                    let! _ = context.Run(s.ReadEnv $"v{i}" name)
+                                    let! value = context.EncodeVariable $"v{i}"
+                                    expectJson value Json.Null $"{name} is not set in the kernel"
+
+                                    if name <> name.ToUpperInvariant() then
+                                        let! _ = context.Run(s.ReadEnv $"u{i}" (name.ToUpperInvariant()))
+                                        let! upper = context.EncodeVariable $"u{i}"
+                                        expectJson upper Json.Null $"{name.ToUpperInvariant()} is not set in the kernel"
+                            finally
+                                (started.Dispose()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                    }
+                | None -> ()
 
                 match s.Stray with
                 | Some stray ->
@@ -1467,5 +1517,5 @@ let tests (subject: KernelSubject) : Test =
             recall subject
             optional subject
             hygiene subject
-            ptestCase "content exclusions filter output and previews (T117, T124: model-egress hooks)" ignore
+            ptestCase "content exclusions filter output and previews (T124: model-egress hooks)" ignore
         ]
