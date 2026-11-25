@@ -339,6 +339,10 @@ The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `
   - workflow IR validation;
   - ledger merge and history-rewrite tests.
 - CI publishes `src/Fx.Cli` with Native AOT for `linux-x64`, `linux-arm64`, `linux-musl-x64`, `linux-musl-arm64` (in an Alpine container), `osx-arm64`, `osx-x64`, `win-x64` and `win-arm64`, each on a native runner. Each job smoke-tests the binary, reports the binary sizes in the job summary, runs the JIT-vs-native diff and its self-test, and uploads the binary as a workflow artifact.
+- CI has two tiers, decided by its `plan` job (`scripts/ci-plan.ts`, tested by `scripts/ci-plan.test.ts`; the run's summary shows the plan):
+  - **full**: every target and every platform job. Pushes to `main`, the nightly schedule, manual runs (`gh workflow run CI --ref <branch>`), pull requests labelled `ci:full`, and pull requests that change platform-sensitive files (native code and P/Invoke projects, build and package settings, the workflows, the pinned runtime);
+  - **fast**: every other pull request. Build and test on Linux, macOS and Windows; AOT and the JIT-vs-native diff on `linux-x64`, `linux-musl-x64`, `osx-arm64` and `win-x64`; the keyring, musl-Bun and spike jobs only when their area changes; the network Bun test on Linux only. A Markdown-only pull request runs lint only.
+  - When you add code whose behaviour may differ per architecture (P/Invoke, native libraries, per-target data), add its paths to `FULL_PATHS` in `scripts/ci-plan.ts`; when you add a job that tests one area, gate it on that area's paths the same way.
 
 **JIT-vs-native diff** (`tests/aot`)
 - `Fx.Aot.Scenarios` is a Native AOT executable. Its scenarios are values: a name and a function that produces deterministic output lines.
