@@ -16,8 +16,14 @@ open Fx.Keyring.Native.Windows
 /// A credential holds at most 2560 bytes (`CRED_MAX_CREDENTIAL_BLOB_SIZE`); larger values fail with
 /// `TooLarge`. Logon sessions without credentials (an SSH key logon, a service, a batch logon) have
 /// no credential set: `NoLogonSession`.
+///
+/// Writes and deletes run one at a time in the process: concurrent `CredWriteW` calls for different
+/// targets lost one of them (found on windows-latest by T121's credential-store conformance).
 module WindowsCredentials =
     let MaxValueBytes = CredMaxBlobSize
+
+    /// Serializes the calls that change the credential set.
+    let private changes = obj ()
 
     let private utf8 = UTF8Encoding(false, true)
 
@@ -96,10 +102,11 @@ module WindowsCredentials =
                     Marshal.WriteInt32(credential, Credential.Persist, int CredPersistLocalMachine)
                     Marshal.WriteIntPtr(credential, Credential.UserName, userName)
 
-                    if CredWrite(credential, 0u) = 0 then
-                        Error(toError (lastError ()))
-                    else
-                        Ok()
+                    lock changes (fun () ->
+                        if CredWrite(credential, 0u) = 0 then
+                            Error(toError (lastError ()))
+                        else
+                            Ok())
                 finally
                     clear blob bytes.Length
                     free blob
@@ -112,15 +119,16 @@ module WindowsCredentials =
             let targetName = wide (target key.Service.Name key.Account)
 
             try
-                if CredDelete(targetName, CredTypeGeneric, 0u) <> 0 then
-                    Ok true
-                else
-                    let error = lastError ()
-
-                    if error = ErrorNotFound then
-                        Ok false
+                lock changes (fun () ->
+                    if CredDelete(targetName, CredTypeGeneric, 0u) <> 0 then
+                        Ok true
                     else
-                        Error(toError error)
+                        let error = lastError ()
+
+                        if error = ErrorNotFound then
+                            Ok false
+                        else
+                            Error(toError error))
             finally
                 free targetName)
 
