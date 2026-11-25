@@ -54,6 +54,7 @@ type Host
         ensureEnvironment: Eff<HostEnv, Result<string, string>>,
         lockfile: Lockfile option,
         warnings: string list,
+        streams: Streams,
         stop: unit -> Task
     ) =
     member _.Options = options
@@ -79,6 +80,8 @@ type Host
     member _.Lockfile = lockfile
     /// What a person should know about this host's setup (an extension that failed to load, …).
     member _.Warnings = warnings
+    /// What the model writes in running turns, as it writes it (for clients that follow a session).
+    member _.Streams = streams
     member internal _.StopAll() = stop ()
 
     override _.ToString() = $"Host({options.Paths.Data})"
@@ -669,10 +672,17 @@ module Host =
                     ProfileAttempts = Setup.value HostSlots.profileAttempts variants
                 }
 
+            // Clients see replies as they are written; the log records them when complete.
+            let streams = Streams()
+
             let! sessions =
                 Eff.provide
                     env
-                    (SessionHost.create (SessionLog.typed stores.Log) stores.Snapshots codeact.Runner settings)
+                    (SessionHost.create
+                        (SessionLog.typed stores.Log)
+                        stores.Snapshots
+                        (Streams.runner streams codeact.Runner)
+                        settings)
 
             cleanup.Push(fun () -> Eff.run env (SessionHost.stop sessions) :> Task)
 
@@ -701,6 +711,7 @@ module Host =
                     ensureEnvironment,
                     lockfile,
                     List.ofSeq warnings,
+                    streams,
                     release
                 )
         }

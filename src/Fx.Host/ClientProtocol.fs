@@ -122,6 +122,18 @@ type SessionNotice =
 
     override this.ToString() = $"{this.Session}: {this.Item}"
 
+/// `session/contextEvent`: one event a session's turns recorded in its context log (spec §5: frames,
+/// the model's replies, receipts of actions, pins), with its envelope (its cause places it after a
+/// session event).
+type ContextNotice =
+    {
+        Session: string
+        Item: Fx.Machines.Host.Recorded<Fx.Prompt.ContextEvent>
+    }
+
+    override this.ToString() =
+        $"{this.Session}: context #{this.Item.Seq}"
+
 /// An environment as clients see it.
 type EnvSummary =
     {
@@ -377,6 +389,50 @@ module ClientProtocol =
         }
         |> Codec.named "SessionNotice"
 
+    let contextEvent: Codec<ContextNotice> =
+        let recorded =
+            Fx.Store.Codecs.recorded Fx.Prompt.ContextCodecs.event
+            |> Codec.describe "A context event with its position, time, sender, key and cause."
+            |> Codec.named "RecordedContextEvent"
+
+        Codec.record {
+            let! session =
+                Codec.field "session" (fun (e: ContextNotice) -> e.Session) Codec.string
+
+            and! item = Codec.field "item" (fun (e: ContextNotice) -> e.Item) recorded
+            return { Session = session; Item = item }
+        }
+        |> Codec.named "ContextNotice"
+
+    let streaming: Codec<StreamingNotice> =
+        Codec.record {
+            let! session =
+                Codec.field "session" (fun (n: StreamingNotice) -> n.Session) Codec.string
+
+            and! turn = Codec.field "turn" (fun (n: StreamingNotice) -> n.Turn) Codec.int
+
+            and! fresh =
+                Codec.defaultField "fresh" (fun (n: StreamingNotice) -> n.Fresh) false Codec.bool
+
+            and! text =
+                Codec.defaultField "text" (fun (n: StreamingNotice) -> n.Text) "" Codec.string
+
+            and! tool =
+                Codec.optionalField "tool" (fun (n: StreamingNotice) -> n.Tool) Codec.string
+
+            return
+                {
+                    Session = session
+                    Turn = turn
+                    Fresh = fresh
+                    Text = text
+                    Tool = tool
+                }
+        }
+        |> Codec.describe
+            "What the model is writing in a running turn, as it writes it: text the reply adds, or a tool call it started. Not recorded: the complete reply arrives as a context event."
+        |> Codec.named "StreamingNotice"
+
     let envSummary: Codec<EnvSummary> =
         Codec.record {
             let! id = Codec.field "id" (fun (e: EnvSummary) -> e.Id) Codec.string
@@ -575,6 +631,21 @@ module ClientProtocol =
     /// One item of a subscription.
     let event = Notification.define "session/event" sessionEvent
 
+    /// Follows a session's context log (what its turns recorded: replies, receipts, frames) after a
+    /// sequence number of that log, then live, as `session/contextEvent` notifications, with what the
+    /// model writes meanwhile as `session/streaming`, until cancelled; answers the last sequence
+    /// number sent if it ends.
+    let context =
+        Method.define "session/context" subscribeSession Codec.int64
+        |> Method.withErrors clientError
+
+    /// One event of a `session/context` subscription.
+    let contextNotice = Notification.define "session/contextEvent" contextEvent
+
+    /// What the model writes in the session's running turn, sent while a `session/context`
+    /// subscription runs.
+    let streamingNotice = Notification.define "session/streaming" streaming
+
     // ---- identity/* --------------------------------------------------------------------------------
 
     /// Who this connection is (no token).
@@ -629,6 +700,7 @@ module ClientProtocol =
         | "session/get"
         | "session/offers"
         | "session/subscribe"
+        | "session/context"
         | "identity/whoami"
         | "identity/signOut"
         | "env/list"
@@ -653,6 +725,8 @@ module ClientProtocol =
             subscribeSession.Schema
             committed.Schema
             sessionEvent.Schema
+            contextEvent.Schema
+            streaming.Schema
             envSummary.Schema
             idRef.Schema
             clientError.Schema

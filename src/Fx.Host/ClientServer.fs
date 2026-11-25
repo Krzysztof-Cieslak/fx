@@ -238,6 +238,48 @@ module ClientServer =
 
                     return last
                 })
+
+            Handler.request ClientProtocol.context (fun context p ->
+                effResult {
+                    let! _ = caller host client ClientProtocol.context.Name
+                    do! known host p.Session
+
+                    let recorded: Eff<HostEnv, int64> =
+                        Fx.Machines.Host.EventLog.subscribe
+                            (Fx.CodeAct.ContextLog.typed host.Stores.Log)
+                            (Fx.CodeAct.ContextLog.stream p.Session)
+                            p.After
+                            (fun item ->
+                                Rpc.notify
+                                    context.Peer
+                                    ClientProtocol.contextNotice
+                                    { Session = p.Session; Item = item }
+                                |> Eff.map Result.isOk)
+
+                    // What the model writes, in the order it wrote it, until the subscription ends.
+                    let streamed: Eff<HostEnv, int64> =
+                        eff {
+                            let pieces = System.Threading.Channels.Channel.CreateUnbounded<StreamingNotice>()
+
+                            use _ =
+                                host.Streams.Subscribe(
+                                    p.Session,
+                                    fun notice -> pieces.Writer.TryWrite notice |> ignore
+                                )
+
+                            let! token = Eff.cancellation
+
+                            while true do
+                                let! notice = Eff.ofTask (fun () -> pieces.Reader.ReadAsync(token).AsTask())
+                                let! _ = Rpc.notify context.Peer ClientProtocol.streamingNotice notice
+                                ()
+
+                            return 0L
+                        }
+
+                    let! last = Eff.race [ recorded; streamed ]
+                    return last
+                })
         ]
 
     let private identityHandlers (host: Host) (client: ClientState) : Handler<HostEnv> list =

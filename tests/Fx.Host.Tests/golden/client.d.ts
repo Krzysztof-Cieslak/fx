@@ -21,6 +21,16 @@ export type AuthError =
   | { kind: "expired" }
   | { kind: "unavailable"; reason: string };
 
+/** A block of context: a section of the prefix or a view in the suffix. */
+export interface Block {
+  /** Non-empty. */
+  id: string;
+  version?: string;
+  pieces: Piece[];
+}
+
+export type CacheTtl = "short" | "long";
+
 /** Why the host refused a request of the client protocol. */
 export type ClientError =
   | { kind: "forbidden"; failure: IdentityFailure }
@@ -37,6 +47,66 @@ export interface Committed {
   after: number;
   /** Integer. */
   count: number;
+}
+
+/** A file whose content a part quotes, relative to the workspace (with /) when inside it. */
+export interface ContentSource {
+  /** Non-empty. */
+  path: string;
+  lines?: LineRange;
+}
+
+/** What a session's turns add to its context: frames, replies, receipts, pins, collapses. */
+export type ContextEvent =
+  | { kind: "framed"; sections: Block[] }
+  | {
+      kind: "updated";
+      /** @default [] */
+      changed?: Block[];
+      /** @default [] */
+      removed?: string[];
+    }
+  | {
+      kind: "replied";
+      /** Integer, at least 0. */
+      turn: number;
+      /** Integer, at least 0. */
+      step: number;
+      /** @default [] */
+      shown?: Block[];
+      parts: Part[];
+    }
+  | {
+      kind: "returned";
+      /** Integer, at least 0. */
+      turn: number;
+      /** Integer, at least 0. */
+      step: number;
+      call?: string;
+      name: string;
+      pieces: Piece[];
+      /** @default false */
+      isError?: boolean;
+    }
+  | {
+      kind: "pinned";
+      /** Non-empty. */
+      name: string;
+      pin: Pin;
+    }
+  | { kind: "unpinned"; name: string }
+  | {
+      kind: "collapsed";
+      /** The position of an event: its stream and sequence number. */
+      from: EventRef;
+      /** The position of an event: its stream and sequence number. */
+      to: EventRef;
+      summary: Piece[];
+    };
+
+export interface ContextNotice {
+  session: string;
+  item: RecordedContextEvent;
 }
 
 /** A session in the host's workspace; with an id the client chose, creating again is harmless. */
@@ -237,6 +307,24 @@ export interface LastTurn {
 /** turn: cancelled when its turn ends; session: open until settled. */
 export type Lifetime = "turn" | "session";
 
+/** Lines of a file, 1-based and inclusive. */
+export interface LineRange {
+  /** Integer, at least 1. */
+  first: number;
+  /** Integer, at least 1. */
+  last: number;
+}
+
+export type MediaKind = "image" | "pdf" | "audio" | "video";
+
+export type MediaSource =
+  | { kind: "base64"; data: string }
+  | { kind: "url"; url: string }
+  | { kind: "blob"; digest: string };
+
+/** A model: `provider/model`. */
+export type ModelRef = string;
+
 /** Variant overrides of a session: slots to set, and slots whose override to remove. */
 export interface OverrideSession {
   /** From 1 to 128 characters. */
@@ -248,6 +336,49 @@ export interface OverrideSession {
   /** @default [] */
   unset?: string[];
 }
+
+/** A typed part of a message. */
+export type Part =
+  | {
+      kind: "text";
+      text: string;
+      state?: ProviderState;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    }
+  | {
+      kind: "media";
+      media: MediaKind;
+      mediaType: string;
+      source: MediaSource;
+      name?: string;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    }
+  | { kind: "reasoning"; text: string; state?: ProviderState }
+  | {
+      kind: "toolCall";
+      id: string;
+      name: string;
+      arguments: string;
+      state?: ProviderState;
+    }
+  | {
+      kind: "toolResult";
+      callId: string;
+      name: string;
+      content: ToolContent[];
+      /** @default false */
+      isError?: boolean;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    }
+  | { kind: "refusal"; text: string }
+  | {
+      kind: "cacheBreakpoint";
+      /** @default "short" */
+      ttl?: CacheTtl;
+    };
 
 /** An open request, the client capabilities that can answer it, and who opened it when. */
 export interface PendingRequest {
@@ -267,6 +398,52 @@ export interface PendingRequest {
   seq: number;
 }
 
+/** A piece of context: text, a file's content, a withheld file, a reference, media, or text quoting files. */
+export type Piece =
+  | { kind: "text"; text: string }
+  | {
+      /** A file's content as context shows it: path, version (digest), lines and text. */
+      kind: "file";
+      /** Non-empty. */
+      path: string;
+      digest: string;
+      /** @default [] */
+      lines?: LineRange[];
+      text: string;
+    }
+  | { kind: "withheld"; path: string }
+  | { kind: "ref"; ref: Reference }
+  | {
+      kind: "media";
+      media: MediaKind;
+      mediaType: string;
+      source: MediaSource;
+      name?: string;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    }
+  | {
+      /** Text with the files it may quote, e.g. a cell's output after it read them. */
+      kind: "quote";
+      text: string;
+      /** @default [] */
+      sources?: ContentSource[];
+    };
+
+export type Pin =
+  | { kind: "value"; pieces: Piece[] }
+  | {
+      kind: "file";
+      path: string;
+      /** @default [] */
+      lines?: LineRange[];
+    };
+
+export interface Preview {
+  text: string;
+  truncated: boolean;
+}
+
 /** steer: into the running turn at its next step; queue: a turn of its own after it. */
 export type PromptMode = "steer" | "queue";
 
@@ -277,6 +454,50 @@ export interface PromptSession {
   key: string;
   text: string;
   mode: PromptMode;
+}
+
+/** Opaque provider state, replayed byte for byte. */
+export interface ProviderState {
+  family: string;
+  model: ModelRef;
+  kind: string;
+  data: string;
+}
+
+/** A context event with its position, time, sender, key and cause. */
+export interface RecordedContextEvent {
+  /**
+   * An event stream, `kind/id`.
+   * Non-empty.
+   */
+  stream: string;
+  /** Integer, at least 1. */
+  seq: number;
+  event: ContextEvent;
+  /**
+   * Microseconds since the Unix epoch, UTC.
+   * Integer.
+   */
+  at: number;
+  /** Who sent a command (the principal) and what delivered it. */
+  by: Attribution;
+  /**
+   * The idempotency key of a command.
+   * Non-empty.
+   */
+  key: string;
+  /** The position of an event: its stream and sequence number. */
+  cause?: EventRef;
+}
+
+/** A value shown by reference: its kind, the name the model passes, its type and preview. */
+export interface Reference {
+  /** Non-empty. */
+  kind: string;
+  id: string;
+  type?: string;
+  /** A bounded rendering of a value; truncated when something was left out. */
+  preview: Preview;
 }
 
 /** toOpener: the opener waits for it in the log; asInput: it becomes an input for the agent. */
@@ -591,6 +812,18 @@ export interface SessionView {
   state: SessionState;
 }
 
+/** What the model is writing in a running turn, as it writes it: text the reply adds, or a tool call it started. Not recorded: the complete reply arrives as a context event. */
+export interface StreamingNotice {
+  session: string;
+  /** Integer. */
+  turn: number;
+  /** @default false */
+  fresh?: boolean;
+  /** @default "" */
+  text?: string;
+  tool?: string;
+}
+
 export interface SubscribeSession {
   /** From 1 to 128 characters. */
   session: string;
@@ -601,6 +834,18 @@ export interface SubscribeSession {
    */
   after?: number;
 }
+
+export type ToolContent =
+  | { kind: "text"; text: string }
+  | {
+      kind: "media";
+      media: MediaKind;
+      mediaType: string;
+      source: MediaSource;
+      name?: string;
+      /** The files its content quotes (provenance for content exclusions; never sent). */
+      sources?: ContentSource[];
+    };
 
 /** How a turn ended. */
 export type TurnEnd =

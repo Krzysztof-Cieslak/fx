@@ -105,6 +105,27 @@ let private clientService (events: ConcurrentQueue<SessionNotice>) : Service<Cli
             Handler.notification ClientProtocol.event (fun _ event -> Eff.ret (events.Enqueue event))
         ]
 
+/// What a client following a session's context log receives.
+let private contextService
+    (context: ConcurrentQueue<ContextNotice>)
+    (streamed: ConcurrentQueue<StreamingNotice>)
+    : Service<ClientEnv> =
+    Service.create
+        { Name = "tests"; Version = "0" }
+        [
+            Handler.notification ClientProtocol.contextNotice (fun _ notice -> Eff.ret (context.Enqueue notice))
+            Handler.notification ClientProtocol.streamingNotice (fun _ notice -> Eff.ret (streamed.Enqueue notice))
+        ]
+
+let private until (what: string) (condition: unit -> bool) =
+    let deadline = DateTime.UtcNow.AddSeconds 60.0
+
+    while not (condition ()) do
+        if DateTime.UtcNow > deadline then
+            failtest $"never: {what}"
+
+        Thread.Sleep 10
+
 let private answers = [ "confirm"; "choice"; "agent.question" ]
 
 /// A client in the host's process, signed in as the OS user.
@@ -365,6 +386,107 @@ let tests =
                     c.WaitFor isTurnEnded |> ignore
                     Expect.isTrue (c.Events |> Seq.forall (fun e -> seqOf e > last)) "only new events"
                     c.Close()
+                finally
+                    stop h
+
+            testCase "session/context: the context log after a sequence number, then live, and what the model writes"
+            <| fun () ->
+                let _, h = host "context" []
+
+                try
+                    let owner = embedded h
+
+                    owner.Call(ClientProtocol.create, { Session = Some "s1"; Title = None })
+                    |> ignore
+
+                    let log = Fx.CodeAct.ContextLog.typed h.Stores.Log
+                    let stream = Fx.CodeAct.ContextLog.stream "s1"
+
+                    let receipt (n: int) : Fx.Prompt.ContextEvent =
+                        Fx.Prompt.ContextEvent.Returned
+                            {
+                                Turn = 1
+                                Step = n
+                                Call = Some $"toolu_{n}"
+                                Name = "bash"
+                                Pieces = [ Fx.Prompt.Piece.Text $"exit {n}" ]
+                                IsError = false
+                            }
+
+                    let append (n: int) =
+                        let meta: Fx.Machines.Host.EventMeta =
+                            {
+                                At = Instant(int64 n)
+                                By = Host.system
+                                Key = Fx.Machines.IdempotencyKey $"tests/{n}"
+                                Cause = Some(Fx.Machines.EventRef.create (Session.stream "s1") 1L)
+                            }
+
+                        match
+                            waitFor
+                                30.0
+                                (Eff.run
+                                    h.Env
+                                    (Fx.Machines.Host.EventLog.append log stream (int64 (n - 1)) meta [ receipt n ]))
+                        with
+                        | Ok _ -> ()
+                        | Error e -> failtest $"{e}"
+
+                    append 1
+                    append 2
+                    let context = ConcurrentQueue<ContextNotice>()
+                    let streamed = ConcurrentQueue<StreamingNotice>()
+                    let lifetime = new CancellationTokenSource()
+
+                    let peer =
+                        match
+                            waitFor
+                                60.0
+                                (Eff.run
+                                    (clientEnv lifetime.Token)
+                                    (HostClient.embedded h (contextService context streamed) answers))
+                        with
+                        | Ok peer -> peer
+                        | Error e -> failtest $"{e}"
+
+                    Eff.run
+                        (clientEnv lifetime.Token)
+                        (Rpc.call peer ClientProtocol.context { Session = "s1"; After = 1L })
+                    |> ignore
+
+                    until "the second receipt" (fun () -> context.Count = 1)
+                    append 3
+                    until "the third receipt, live" (fun () -> context.Count = 2)
+
+                    Expect.equal
+                        (context |> Seq.map (fun n -> n.Item.Seq, n.Item.Event) |> List.ofSeq)
+                        [ 2L, receipt 2; 3L, receipt 3 ]
+                        "after #1, in order, with their envelopes"
+
+                    // What a running turn's model writes reaches the session's followers.
+                    h.Streams.Publish
+                        {
+                            Session = "s1"
+                            Turn = 1
+                            Fresh = true
+                            Text = "Reading"
+                            Tool = None
+                        }
+
+                    h.Streams.Publish
+                        {
+                            Session = "other"
+                            Turn = 1
+                            Fresh = true
+                            Text = "not this one"
+                            Tool = None
+                        }
+
+                    until "the streamed text" (fun () -> streamed.Count = 1)
+                    Expect.equal (streamed |> Seq.map _.Text |> List.ofSeq) [ "Reading" ] "this session's only"
+                    lifetime.Cancel()
+                    peer.CloseAsync().Wait(TimeSpan.FromSeconds 10.0) |> ignore
+                    owner.Close()
                 finally
                     stop h
 
@@ -669,6 +791,7 @@ let tests =
                         ClientProtocol.get.Name
                         ClientProtocol.offers.Name
                         ClientProtocol.subscribe.Name
+                        ClientProtocol.context.Name
                         ClientProtocol.whoami.Name
                         ClientProtocol.signOut.Name
                         ClientProtocol.envList.Name
