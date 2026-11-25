@@ -36,6 +36,7 @@
     <Compile Include="Models\Egress.fs" />
     <Compile Include="Interpreter.fs" />
     <Compile Include="Grants.fs" />
+    <Compile Include="Environment.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
