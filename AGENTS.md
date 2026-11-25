@@ -267,6 +267,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - give the library a name no system library has (`Fx.Sqlite.Native`): `DllImport` falls back to system paths;
   - builds are cached in `artifacts/native/` under a key that hashes their inputs, never compared by timestamp.
 - P/Invoke: blittable `DllImport` signatures only (pointers, `nativeint`, numbers; text as UTF-8 bytes you encode), with `[<assembly: DisableRuntimeMarshalling>]` so a signature that needs marshalling fails on the JIT too.
+  - No `SetLastError = true` under `DisableRuntimeMarshalling`: the call fails at run time (found on Windows in T122's `PeerCredentials`). Signal failure through return values.
   - Never call a variadic C function (e.g. `sqlite3_db_config`) through `DllImport`: variadic arguments go on the stack on Apple arm64. Add a fixed-arity C shim next to the library's sources, or declare the variadic arguments exactly as the platform passes them (see `Posix.ioctl` in `src/Fx.Pty`).
   - Pin arrays with a `GCHandle` (`Native.pinned` in `src/Fx.Sqlite`), not `use p = fixed array`: the analyzers' typed-tree walk throws on `fixed`.
 - Native interop and processes (details in [`docs/spikes/pty.md`](docs/spikes/pty.md)); `src/Fx.Pty` follows these rules:
