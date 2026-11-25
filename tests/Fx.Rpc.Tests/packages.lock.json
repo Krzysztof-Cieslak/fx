@@ -111,6 +111,7 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Contracts": "[0.0.0, )",
+          "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
@@ -128,6 +129,13 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.contracts.typescript": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
         }
       },
       "fx.effects": {
