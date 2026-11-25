@@ -1,0 +1,19 @@
+{
+  "name": "@fx/sdk",
+  "version": "0.0.0",
+  "description": "The public TypeScript SDK for extensions: codecs, the extension API and the extension protocol's server.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "bun check --no-script"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.5"
+  }
+}

@@ -1,0 +1,2062 @@
+{
+  "schemas": {
+    "issue": {
+      "kind": "named",
+      "name": "Issue",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "path",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "anyOf",
+                "schemas": [
+                  {
+                    "kind": "string"
+                  },
+                  {
+                    "kind": "integer",
+                    "minimum": {
+                      "kind": "inclusive",
+                      "value": 0
+                    }
+                  }
+                ]
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "message",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      },
+      "description": "A problem in a value: where it is (keys and indexes from the root) and what is wrong."
+    },
+    "manifest": {
+      "kind": "named",
+      "name": "Manifest",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "id",
+            "schema": {
+              "kind": "string",
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+              "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "version",
+            "schema": {
+              "kind": "string",
+              "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+              "description": "A semantic version, e.g. \"1.2.0\"."
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "description",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          },
+          {
+            "name": "sdk",
+            "schema": {
+              "kind": "string",
+              "description": "The SDK API version the extension is built against, e.g. \"0.1\"."
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "protocol",
+            "schema": {
+              "kind": "string",
+              "minLength": 1,
+              "description": "The extension protocol version it speaks, e.g. \"1\"."
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "placement",
+            "schema": {
+              "kind": "enum",
+              "values": [
+                "host",
+                "environment",
+                "client"
+              ],
+              "description": "Where the extension runs: in the host, in an environment (envd) or in a client."
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": "host"
+            }
+          },
+          {
+            "name": "runtime",
+            "schema": {
+              "kind": "string",
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "description": "The extension runtime: declarative, native, process, or a contributed one."
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "launch",
+            "schema": {
+              "kind": "named",
+              "name": "LaunchSpec",
+              "body": {
+                "kind": "object",
+                "fields": [
+                  {
+                    "name": "exe",
+                    "schema": {
+                      "kind": "string",
+                      "minLength": 1
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "args",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string"
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "envAllowlist",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                        "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "envSet",
+                    "schema": {
+                      "kind": "map",
+                      "values": {
+                        "kind": "string"
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": {}
+                    }
+                  },
+                  {
+                    "name": "envDeny",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                        "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "cwd",
+                    "schema": {
+                      "kind": "enum",
+                      "values": [
+                        "owned",
+                        "workspace"
+                      ]
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": "owned"
+                    }
+                  }
+                ],
+                "unknownFields": "reject",
+                "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+              }
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          },
+          {
+            "name": "requires",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "ComponentRef",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string",
+                        "minLength": 1
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "version",
+                      "schema": {
+                        "kind": "string",
+                        "minLength": 1
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "reject",
+                  "description": "A component to install before the extension starts: its id and a version range."
+                }
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": []
+            }
+          },
+          {
+            "name": "capabilities",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+                "description": "A capability name, e.g. \"fs.read\"."
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": []
+            }
+          },
+          {
+            "name": "contributions",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "ContributionDecl",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "type",
+                      "schema": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*([.:/][a-z0-9][a-z0-9-]*)*$",
+                        "description": "A contribution type, e.g. \"extension-runtime\"."
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string",
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                        "description": "The contribution's id, unique for its type."
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "value",
+                      "schema": {
+                        "kind": "any"
+                      },
+                      "presence": {
+                        "kind": "optional"
+                      }
+                    }
+                  ],
+                  "unknownFields": "reject",
+                  "description": "A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate."
+                }
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": []
+            }
+          },
+          {
+            "name": "rpc",
+            "schema": {
+              "kind": "named",
+              "name": "RpcContract",
+              "body": {
+                "kind": "object",
+                "fields": [
+                  {
+                    "name": "methods",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "named",
+                        "name": "MethodDecl",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "name",
+                              "schema": {
+                                "kind": "string",
+                                "pattern": "^[a-z][A-Za-z0-9]*(/[a-z][A-Za-z0-9]*)*$",
+                                "description": "The method's name; clients call ext/<extension id>/<name>."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "description",
+                              "schema": {
+                                "kind": "string"
+                              },
+                              "presence": {
+                                "kind": "optional"
+                              }
+                            },
+                            {
+                              "name": "params",
+                              "schema": {
+                                "kind": "any"
+                              },
+                              "presence": {
+                                "kind": "optional"
+                              }
+                            },
+                            {
+                              "name": "result",
+                              "schema": {
+                                "kind": "any"
+                              },
+                              "presence": {
+                                "kind": "optional"
+                              }
+                            }
+                          ],
+                          "unknownFields": "reject",
+                          "description": "A method of the extension's RPC contract; params and result are JSON Schemas."
+                        }
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  }
+                ],
+                "unknownFields": "reject"
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": {
+                "methods": []
+              }
+            }
+          },
+          {
+            "name": "replaces",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string",
+                "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+              }
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": []
+            }
+          },
+          {
+            "name": "hash",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          }
+        ],
+        "unknownFields": "reject",
+        "description": "An extension package's manifest."
+      }
+    },
+    "decision": {
+      "kind": "named",
+      "name": "Decision",
+      "body": {
+        "kind": "union",
+        "discriminator": "decision",
+        "cases": [
+          {
+            "tag": "allow",
+            "fields": [],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "ask",
+            "fields": [
+              {
+                "name": "reason",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "deny",
+            "fields": [
+              {
+                "name": "reason",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          }
+        ],
+        "description": "What a gate decides: allow, ask a human, or deny."
+      }
+    },
+    "transformSettings": {
+      "kind": "object",
+      "fields": [
+        {
+          "name": "priority",
+          "schema": {
+            "kind": "integer"
+          },
+          "presence": {
+            "kind": "defaulted",
+            "value": 0
+          }
+        }
+      ],
+      "unknownFields": "ignore",
+      "description": "Lower priorities run first."
+    },
+    "slotDecl": {
+      "kind": "named",
+      "name": "SlotDecl",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "id",
+            "schema": {
+              "kind": "string",
+              "pattern": "^[a-z][A-Za-z0-9_-]*(\\.[a-z][A-Za-z0-9_-]*)+$"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "description",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "default",
+            "schema": {
+              "kind": "any"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "choices",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "any"
+              }
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          },
+          {
+            "name": "privileged",
+            "schema": {
+              "kind": "boolean"
+            },
+            "presence": {
+              "kind": "defaulted",
+              "value": false
+            }
+          }
+        ],
+        "unknownFields": "ignore",
+        "description": "A variant slot: its id, what it changes, its default and the values it may take."
+      }
+    },
+    "activateParams": {
+      "kind": "named",
+      "name": "ActivateParams",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "manifest",
+            "schema": {
+              "kind": "named",
+              "name": "Manifest",
+              "body": {
+                "kind": "object",
+                "fields": [
+                  {
+                    "name": "id",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                      "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "version",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+                      "description": "A semantic version, e.g. \"1.2.0\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "description",
+                    "schema": {
+                      "kind": "string"
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  },
+                  {
+                    "name": "sdk",
+                    "schema": {
+                      "kind": "string",
+                      "description": "The SDK API version the extension is built against, e.g. \"0.1\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "protocol",
+                    "schema": {
+                      "kind": "string",
+                      "minLength": 1,
+                      "description": "The extension protocol version it speaks, e.g. \"1\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "placement",
+                    "schema": {
+                      "kind": "enum",
+                      "values": [
+                        "host",
+                        "environment",
+                        "client"
+                      ],
+                      "description": "Where the extension runs: in the host, in an environment (envd) or in a client."
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": "host"
+                    }
+                  },
+                  {
+                    "name": "runtime",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^[a-z][a-z0-9-]*$",
+                      "description": "The extension runtime: declarative, native, process, or a contributed one."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "launch",
+                    "schema": {
+                      "kind": "named",
+                      "name": "LaunchSpec",
+                      "body": {
+                        "kind": "object",
+                        "fields": [
+                          {
+                            "name": "exe",
+                            "schema": {
+                              "kind": "string",
+                              "minLength": 1
+                            },
+                            "presence": {
+                              "kind": "required"
+                            }
+                          },
+                          {
+                            "name": "args",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string"
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "envAllowlist",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                                "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "envSet",
+                            "schema": {
+                              "kind": "map",
+                              "values": {
+                                "kind": "string"
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": {}
+                            }
+                          },
+                          {
+                            "name": "envDeny",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                                "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "cwd",
+                            "schema": {
+                              "kind": "enum",
+                              "values": [
+                                "owned",
+                                "workspace"
+                              ]
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": "owned"
+                            }
+                          }
+                        ],
+                        "unknownFields": "reject",
+                        "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+                      }
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  },
+                  {
+                    "name": "requires",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "named",
+                        "name": "ComponentRef",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "schema": {
+                                "kind": "string",
+                                "minLength": 1
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "version",
+                              "schema": {
+                                "kind": "string",
+                                "minLength": 1
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            }
+                          ],
+                          "unknownFields": "reject",
+                          "description": "A component to install before the extension starts: its id and a version range."
+                        }
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "capabilities",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+                        "description": "A capability name, e.g. \"fs.read\"."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "contributions",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "named",
+                        "name": "ContributionDecl",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "type",
+                              "schema": {
+                                "kind": "string",
+                                "pattern": "^[a-z][a-z0-9-]*([.:/][a-z0-9][a-z0-9-]*)*$",
+                                "description": "A contribution type, e.g. \"extension-runtime\"."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "id",
+                              "schema": {
+                                "kind": "string",
+                                "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                                "description": "The contribution's id, unique for its type."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "value",
+                              "schema": {
+                                "kind": "any"
+                              },
+                              "presence": {
+                                "kind": "optional"
+                              }
+                            }
+                          ],
+                          "unknownFields": "reject",
+                          "description": "A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate."
+                        }
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "rpc",
+                    "schema": {
+                      "kind": "named",
+                      "name": "RpcContract",
+                      "body": {
+                        "kind": "object",
+                        "fields": [
+                          {
+                            "name": "methods",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "named",
+                                "name": "MethodDecl",
+                                "body": {
+                                  "kind": "object",
+                                  "fields": [
+                                    {
+                                      "name": "name",
+                                      "schema": {
+                                        "kind": "string",
+                                        "pattern": "^[a-z][A-Za-z0-9]*(/[a-z][A-Za-z0-9]*)*$",
+                                        "description": "The method's name; clients call ext/<extension id>/<name>."
+                                      },
+                                      "presence": {
+                                        "kind": "required"
+                                      }
+                                    },
+                                    {
+                                      "name": "description",
+                                      "schema": {
+                                        "kind": "string"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    },
+                                    {
+                                      "name": "params",
+                                      "schema": {
+                                        "kind": "any"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    },
+                                    {
+                                      "name": "result",
+                                      "schema": {
+                                        "kind": "any"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    }
+                                  ],
+                                  "unknownFields": "reject",
+                                  "description": "A method of the extension's RPC contract; params and result are JSON Schemas."
+                                }
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          }
+                        ],
+                        "unknownFields": "reject"
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": {
+                        "methods": []
+                      }
+                    }
+                  },
+                  {
+                    "name": "replaces",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                        "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "hash",
+                    "schema": {
+                      "kind": "string"
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  }
+                ],
+                "unknownFields": "reject",
+                "description": "An extension package's manifest."
+              }
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          },
+          {
+            "name": "root",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "activated": {
+      "kind": "named",
+      "name": "Activated",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "manifest",
+            "schema": {
+              "kind": "named",
+              "name": "Manifest",
+              "body": {
+                "kind": "object",
+                "fields": [
+                  {
+                    "name": "id",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                      "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "version",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+                      "description": "A semantic version, e.g. \"1.2.0\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "description",
+                    "schema": {
+                      "kind": "string"
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  },
+                  {
+                    "name": "sdk",
+                    "schema": {
+                      "kind": "string",
+                      "description": "The SDK API version the extension is built against, e.g. \"0.1\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "protocol",
+                    "schema": {
+                      "kind": "string",
+                      "minLength": 1,
+                      "description": "The extension protocol version it speaks, e.g. \"1\"."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "placement",
+                    "schema": {
+                      "kind": "enum",
+                      "values": [
+                        "host",
+                        "environment",
+                        "client"
+                      ],
+                      "description": "Where the extension runs: in the host, in an environment (envd) or in a client."
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": "host"
+                    }
+                  },
+                  {
+                    "name": "runtime",
+                    "schema": {
+                      "kind": "string",
+                      "pattern": "^[a-z][a-z0-9-]*$",
+                      "description": "The extension runtime: declarative, native, process, or a contributed one."
+                    },
+                    "presence": {
+                      "kind": "required"
+                    }
+                  },
+                  {
+                    "name": "launch",
+                    "schema": {
+                      "kind": "named",
+                      "name": "LaunchSpec",
+                      "body": {
+                        "kind": "object",
+                        "fields": [
+                          {
+                            "name": "exe",
+                            "schema": {
+                              "kind": "string",
+                              "minLength": 1
+                            },
+                            "presence": {
+                              "kind": "required"
+                            }
+                          },
+                          {
+                            "name": "args",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string"
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "envAllowlist",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                                "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "envSet",
+                            "schema": {
+                              "kind": "map",
+                              "values": {
+                                "kind": "string"
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": {}
+                            }
+                          },
+                          {
+                            "name": "envDeny",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+                                "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          },
+                          {
+                            "name": "cwd",
+                            "schema": {
+                              "kind": "enum",
+                              "values": [
+                                "owned",
+                                "workspace"
+                              ]
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": "owned"
+                            }
+                          }
+                        ],
+                        "unknownFields": "reject",
+                        "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+                      }
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  },
+                  {
+                    "name": "requires",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "named",
+                        "name": "ComponentRef",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "schema": {
+                                "kind": "string",
+                                "minLength": 1
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "version",
+                              "schema": {
+                                "kind": "string",
+                                "minLength": 1
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            }
+                          ],
+                          "unknownFields": "reject",
+                          "description": "A component to install before the extension starts: its id and a version range."
+                        }
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "capabilities",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+                        "description": "A capability name, e.g. \"fs.read\"."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "contributions",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "named",
+                        "name": "ContributionDecl",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "type",
+                              "schema": {
+                                "kind": "string",
+                                "pattern": "^[a-z][a-z0-9-]*([.:/][a-z0-9][a-z0-9-]*)*$",
+                                "description": "A contribution type, e.g. \"extension-runtime\"."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "id",
+                              "schema": {
+                                "kind": "string",
+                                "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                                "description": "The contribution's id, unique for its type."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "value",
+                              "schema": {
+                                "kind": "any"
+                              },
+                              "presence": {
+                                "kind": "optional"
+                              }
+                            }
+                          ],
+                          "unknownFields": "reject",
+                          "description": "A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate."
+                        }
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "rpc",
+                    "schema": {
+                      "kind": "named",
+                      "name": "RpcContract",
+                      "body": {
+                        "kind": "object",
+                        "fields": [
+                          {
+                            "name": "methods",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "named",
+                                "name": "MethodDecl",
+                                "body": {
+                                  "kind": "object",
+                                  "fields": [
+                                    {
+                                      "name": "name",
+                                      "schema": {
+                                        "kind": "string",
+                                        "pattern": "^[a-z][A-Za-z0-9]*(/[a-z][A-Za-z0-9]*)*$",
+                                        "description": "The method's name; clients call ext/<extension id>/<name>."
+                                      },
+                                      "presence": {
+                                        "kind": "required"
+                                      }
+                                    },
+                                    {
+                                      "name": "description",
+                                      "schema": {
+                                        "kind": "string"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    },
+                                    {
+                                      "name": "params",
+                                      "schema": {
+                                        "kind": "any"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    },
+                                    {
+                                      "name": "result",
+                                      "schema": {
+                                        "kind": "any"
+                                      },
+                                      "presence": {
+                                        "kind": "optional"
+                                      }
+                                    }
+                                  ],
+                                  "unknownFields": "reject",
+                                  "description": "A method of the extension's RPC contract; params and result are JSON Schemas."
+                                }
+                              }
+                            },
+                            "presence": {
+                              "kind": "defaulted",
+                              "value": []
+                            }
+                          }
+                        ],
+                        "unknownFields": "reject"
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": {
+                        "methods": []
+                      }
+                    }
+                  },
+                  {
+                    "name": "replaces",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+                        "description": "An extension id: dotted lowercase segments, e.g. \"acme.tools\"."
+                      }
+                    },
+                    "presence": {
+                      "kind": "defaulted",
+                      "value": []
+                    }
+                  },
+                  {
+                    "name": "hash",
+                    "schema": {
+                      "kind": "string"
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
+                  }
+                ],
+                "unknownFields": "reject",
+                "description": "An extension package's manifest."
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "contributions",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "ContributionDecl",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "type",
+                      "schema": {
+                        "kind": "string",
+                        "pattern": "^[a-z][a-z0-9-]*([.:/][a-z0-9][a-z0-9-]*)*$",
+                        "description": "A contribution type, e.g. \"extension-runtime\"."
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string",
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                        "description": "The contribution's id, unique for its type."
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "value",
+                      "schema": {
+                        "kind": "any"
+                      },
+                      "presence": {
+                        "kind": "optional"
+                      }
+                    }
+                  ],
+                  "unknownFields": "reject",
+                  "description": "A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate."
+                }
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "methods",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string"
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "invokeParams": {
+      "kind": "named",
+      "name": "InvokeParams",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "type",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "id",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "input",
+            "schema": {
+              "kind": "any"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "callParams": {
+      "kind": "named",
+      "name": "CallParams",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "method",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "params",
+            "schema": {
+              "kind": "any"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "extensionRef": {
+      "kind": "named",
+      "name": "ExtensionRef",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "output": {
+      "kind": "object",
+      "fields": [
+        {
+          "name": "output",
+          "schema": {
+            "kind": "any"
+          },
+          "presence": {
+            "kind": "required"
+          }
+        }
+      ],
+      "unknownFields": "ignore"
+    },
+    "protocolError": {
+      "kind": "named",
+      "name": "ExtensionProtocolError",
+      "body": {
+        "kind": "union",
+        "discriminator": "kind",
+        "cases": [
+          {
+            "tag": "unknownExtension",
+            "fields": [
+              {
+                "name": "extension",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "notActive",
+            "fields": [
+              {
+                "name": "extension",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "activationFailed",
+            "fields": [
+              {
+                "name": "extension",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              },
+              {
+                "name": "reason",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "unknownContribution",
+            "fields": [
+              {
+                "name": "address",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "inProcessOnly",
+            "fields": [
+              {
+                "name": "address",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "unknownMethod",
+            "fields": [
+              {
+                "name": "method",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "invalid",
+            "fields": [
+              {
+                "name": "issues",
+                "schema": {
+                  "kind": "array",
+                  "items": {
+                    "kind": "named",
+                    "name": "Issue",
+                    "body": {
+                      "kind": "object",
+                      "fields": [
+                        {
+                          "name": "path",
+                          "schema": {
+                            "kind": "array",
+                            "items": {
+                              "kind": "anyOf",
+                              "schemas": [
+                                {
+                                  "kind": "string"
+                                },
+                                {
+                                  "kind": "integer",
+                                  "minimum": {
+                                    "kind": "inclusive",
+                                    "value": 0
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          "presence": {
+                            "kind": "required"
+                          }
+                        },
+                        {
+                          "name": "message",
+                          "schema": {
+                            "kind": "string"
+                          },
+                          "presence": {
+                            "kind": "required"
+                          }
+                        }
+                      ],
+                      "unknownFields": "ignore"
+                    },
+                    "description": "A problem in a value: where it is (keys and indexes from the root) and what is wrong."
+                  }
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          },
+          {
+            "tag": "methodFailed",
+            "fields": [
+              {
+                "name": "message",
+                "schema": {
+                  "kind": "string"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              },
+              {
+                "name": "data",
+                "schema": {
+                  "kind": "any"
+                },
+                "presence": {
+                  "kind": "required"
+                }
+              }
+            ],
+            "unknownFields": "ignore"
+          }
+        ]
+      }
+    }
+  },
+  "manifests": [
+    {
+      "input": {
+        "id": "acme.tools",
+        "version": "1.2.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "bun",
+        "capabilities": [
+          "clock"
+        ],
+        "contributions": [
+          {
+            "type": "gate:acme.check",
+            "id": "strict"
+          }
+        ],
+        "rpc": {
+          "methods": [
+            {
+              "name": "tools/list",
+              "description": "Lists tools."
+            }
+          ]
+        }
+      },
+      "output": {
+        "id": "acme.tools",
+        "version": "1.2.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "host",
+        "runtime": "bun",
+        "requires": [],
+        "capabilities": [
+          "clock"
+        ],
+        "contributions": [
+          {
+            "type": "gate:acme.check",
+            "id": "strict"
+          }
+        ],
+        "rpc": {
+          "methods": [
+            {
+              "name": "tools/list",
+              "description": "Lists tools."
+            }
+          ]
+        },
+        "replaces": []
+      },
+      "hash": "sha256:e22a93c2a5b41917e0708a9565507454b4205b6304c8204fc3893ad785ed745c"
+    },
+    {
+      "input": {
+        "id": "acme.data",
+        "version": "0.1.0",
+        "description": "Data.",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "environment",
+        "runtime": "declarative",
+        "contributions": [
+          {
+            "type": "sample.word",
+            "id": "w",
+            "value": "word"
+          }
+        ],
+        "replaces": [
+          "acme.old"
+        ]
+      },
+      "output": {
+        "id": "acme.data",
+        "version": "0.1.0",
+        "description": "Data.",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "environment",
+        "runtime": "declarative",
+        "requires": [],
+        "capabilities": [],
+        "contributions": [
+          {
+            "type": "sample.word",
+            "id": "w",
+            "value": "word"
+          }
+        ],
+        "rpc": {
+          "methods": []
+        },
+        "replaces": [
+          "acme.old"
+        ]
+      },
+      "hash": "sha256:36510408d617bf324102a534f231d9680972928eb932157cde7bc61d0ad1e6e6"
+    },
+    {
+      "input": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/bin/tools${exeSuffix}",
+          "args": [
+            "--stdio"
+          ],
+          "envAllowlist": [
+            "PATH"
+          ],
+          "envSet": {
+            "MODE": "fast"
+          }
+        }
+      },
+      "output": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "host",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/bin/tools${exeSuffix}",
+          "args": [
+            "--stdio"
+          ],
+          "envAllowlist": [
+            "PATH"
+          ],
+          "envSet": {
+            "MODE": "fast"
+          },
+          "envDeny": [],
+          "cwd": "owned"
+        },
+        "requires": [],
+        "capabilities": [],
+        "contributions": [],
+        "rpc": {
+          "methods": []
+        },
+        "replaces": []
+      },
+      "hash": "sha256:2a77ac1351e6a00308b962bdc846320cb44fc1bb869d1630560b4681046a5394"
+    },
+    {
+      "input": {
+        "id": "Acme",
+        "version": "1.0",
+        "sdk": "one",
+        "protocol": "",
+        "runtime": "process",
+        "extra": 1,
+        "contributions": [
+          {
+            "type": "x",
+            "id": "a"
+          },
+          {
+            "type": "x",
+            "id": "a"
+          }
+        ],
+        "replaces": [
+          "Acme"
+        ]
+      },
+      "issues": [
+        {
+          "path": [
+            "id"
+          ],
+          "message": "expected a string matching /^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$/, got string \"Acme\""
+        },
+        {
+          "path": [
+            "version"
+          ],
+          "message": "expected a string matching /^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$/, got string \"1.0\""
+        },
+        {
+          "path": [
+            "protocol"
+          ],
+          "message": "expected a non-empty string"
+        },
+        {
+          "path": [
+            "replaces",
+            0
+          ],
+          "message": "expected a string matching /^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$/, got string \"Acme\""
+        },
+        {
+          "path": [
+            "extra"
+          ],
+          "message": "unknown field; known fields are \"id\", \"version\", \"description\", \"sdk\", \"protocol\", \"placement\", \"runtime\", \"launch\", \"requires\", \"capabilities\", \"contributions\", \"rpc\", \"replaces\", \"hash\""
+        }
+      ]
+    },
+    {
+      "input": {
+        "id": "acme.decl",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "declarative",
+        "contributions": [
+          {
+            "type": "x",
+            "id": "a"
+          }
+        ],
+        "rpc": {
+          "methods": [
+            {
+              "name": "m"
+            }
+          ]
+        },
+        "launch": {
+          "exe": "x",
+          "envSet": {
+            "NODE_OPTIONS": "--require x"
+          }
+        }
+      },
+      "issues": [
+        {
+          "path": [
+            "contributions",
+            0
+          ],
+          "message": "a declarative extension gives each contribution's value; add \"value\""
+        },
+        {
+          "path": [
+            "rpc",
+            "methods"
+          ],
+          "message": "a declarative extension has no code, so no methods"
+        },
+        {
+          "path": [
+            "launch"
+          ],
+          "message": "a declarative extension is not started as a process; remove \"launch\""
+        }
+      ]
+    },
+    {
+      "input": {
+        "id": "acme.tools",
+        "version": "1.2.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "bun",
+        "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "issues": [
+        {
+          "path": [
+            "hash"
+          ],
+          "message": "does not match the manifest's content; its hash is \"sha256:6c653352a0025f34167df77dbf0ad682aa9a05432a4dabfb95f5d553abd98e85\""
+        }
+      ]
+    }
+  ]
+}
