@@ -33,6 +33,10 @@ FSharp.Core, Fx.Machines and Fx.Contracts (Fable; `ArchitectureTests` reads the 
   `SessionCommand` is `{ Command; By; At }`. The host builds it from the envelope's attribution and the clock,
   so events record the same sender as their metadata, and clients see who did what by folding events alone.
 - **Times** are microseconds since the Unix epoch (`int64`), as in the store's envelopes.
+- **Commands are read through their codec first, canonical.** The JSON they carry (payloads, answers,
+  overrides, evidence) goes into events exactly as the store reads it back, so a live actor's state equals the
+  fold of the stored log whatever member order or number notation a client sent; what the codec refuses is
+  refused `session.invalid`.
 - **Inputs** (a prompt, a request settled as input, a finished job) are numbered by the sequence number of the
   event that received them. Later events refer to them by that id (`TurnStarted`, `InputsDelivered`), so a
   prompt is stored once, and `Session.inputOf event` gives the input an event received.

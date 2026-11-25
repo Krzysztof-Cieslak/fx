@@ -517,6 +517,47 @@ let tests =
                 Expect.equal next.State.Running.Value.Profile "sha256:new" "the next turn runs under it"
             }
 
+            test
+                "JSON in commands is kept canonical, as the store keeps it: the live state is the fold of the stored log" {
+                let loose =
+                    Json.Object
+                        [
+                            "b", (Json.tryNumber "1.50").Value
+                            "a", Json.Array [ (Json.tryNumber "2e0").Value ]
+                        ]
+
+                let drive =
+                    started
+                    |> send
+                        bob
+                        (Command.SelectProfile
+                            {
+                                Profile = "sha256:new"
+                                Overrides = [ "z.slot", loose; "a.slot", Json.Null ]
+                                Changed = [ "z.slot" ]
+                                BasedOn = "sha256:base"
+                            })
+
+                Expect.equal
+                    drive.State.Overrides
+                    [ "a.slot", Json.Null; "z.slot", Json.canonicalize loose ]
+                    "sorted, with canonical values"
+
+                let stored =
+                    drive.Events
+                    |> List.map (fun event ->
+                        match Codec.decodeText Codecs.event (Json.serializeCanonical (Codecs.event.Encode event)) with
+                        | Ok event -> event
+                        | Error issues -> failtest (Issue.render issues))
+
+                Expect.equal (Machine.replay machine stored) drive.State "the same state"
+
+                Expect.equal
+                    (started |> send alice (Command.Withdraw 0L) |> rejected)
+                    Rejections.Invalid
+                    "what the codec refuses is refused"
+            }
+
             test "an interrupt asks again for the background work it cancelled; recovery abandons the running turn" {
                 let expiry =
                     {
