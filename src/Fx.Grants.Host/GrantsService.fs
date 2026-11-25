@@ -200,17 +200,16 @@ module GrantsService =
                 return Ok decision
         }
 
-    /// Sends a command to the log. A refusal is read again from the state as a typed error; if the
-    /// state now accepts the command, the refusal was a race (`Conflict`).
-    let private send<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
+    /// Sends a command to the log, stamped with `at`. A refusal is read again from the state as a
+    /// typed error; if the state now accepts the command, the refusal was a race (`Conflict`).
+    let private sendAt<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
         (service: GrantsService<'R>)
         (by: Attribution)
         (key: string)
+        (at: int64)
         (op: GrantOp)
         : Eff<'R, Result<unit, GrantError>> =
         eff {
-            let! at = now
-
             let command =
                 {
                     Command = op
@@ -225,6 +224,18 @@ module GrantsService =
                 match GrantLog.decide service.Settings.Actions (snapshot service).State command with
                 | Error e -> return Error e
                 | Ok _ -> return Error(GrantError.Conflict(rejection.Code, rejection.Message))
+        }
+
+    /// Sends a command to the log, stamped with the clock's time now.
+    let private send<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
+        (service: GrantsService<'R>)
+        (by: Attribution)
+        (key: string)
+        (op: GrantOp)
+        : Eff<'R, Result<unit, GrantError>> =
+        eff {
+            let! at = now
+            return! sendAt service by key at op
         }
 
     let private outcomeOf (state: GrantsState) (id: RequestId) : AskOutcome =
@@ -278,7 +289,8 @@ module GrantsService =
 
                             let by = Attribution.create ask.Requester.Principal via
 
-                            let! sent = send service by ("request/" + ask.Key) (GrantOp.Request made)
+                            // The command carries the request's own time (the machine checks it).
+                            let! sent = sendAt service by ("request/" + ask.Key) at (GrantOp.Request made)
 
                             match sent with
                             | Error e -> return Error e

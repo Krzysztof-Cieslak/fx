@@ -55,6 +55,32 @@ let tests =
                 Expect.equal (List.length (events h)) 1 "one event"
             }
 
+            test "a request is recorded when the clock moves between reads (a live clock)" {
+                // The machine checks that a request is made at its command's time: the service must
+                // stamp both from one reading, whatever the clock does in between.
+                let fakes = fakes ()
+                let mutable now = 1_764_000_000_000_000L
+
+                let ticking: Clock =
+                    { fakes.Env.Clock with
+                        Now =
+                            fun () ->
+                                now <- now + 1L
+                                Instant.ofUnixMicroseconds now
+                    }
+
+                let h =
+                    startOn
+                        { fakes with
+                            Env = { fakes.Env with Clock = ticking }
+                        }
+                        (InMemoryEventLog<Payload>())
+                        id
+
+                let id = pendingOf h (ask "call-1" shellExec "git status")
+                Expect.equal ((GrantsService.pending h.Service).Requests |> List.map _.Id) [ id ] "pending"
+            }
+
             test "a key is one request: its answer is final, unless the rules decide now" {
                 let h = harness ()
                 let id = pendingOf h (ask "call-1" shellExec "make deploy")
