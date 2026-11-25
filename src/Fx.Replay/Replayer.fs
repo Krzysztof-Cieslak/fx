@@ -162,6 +162,12 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
         | Some item -> string item.Entry
         | None -> "nothing: the lane ends here"
 
+    let trace = ResizeArray<string>()
+
+    member _.Trace: string list = lock gate (fun () -> List.ofSeq trace)
+
+    member _.Note(text: string) = lock gate (fun () -> trace.Add text)
+
     member _.Number = number
 
     /// Whether the host closed this segment cleanly (else it stopped without that: a crash, or
@@ -227,6 +233,7 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
                     match unclaimed |> Seq.tryFind (fun e -> e.Entry.Op = op && e.Entry.Input = input) with
                     | Some item ->
                         item.Claimed <- true
+                        trace.Add $"claim #{item.Entry.Seq} {lane} {op}"
                         Found.Entry item
                     | None when not ended -> Found.Beyond
                     | None -> Found.Missing(Seq.tryHead unclaimed)
@@ -262,6 +269,7 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
                 if not item.Done then
                     item.Done <- true
                     item.Claimed <- true
+                    trace.Add $"done #{item.Entry.Seq} {item.Entry.Lane} {item.Entry.Op}"
 
                     while floor < ordered.Length && ordered[floor].Done do
                         floor <- floor + 1

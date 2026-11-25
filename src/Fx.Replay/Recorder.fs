@@ -44,6 +44,8 @@ type JournalCall =
         Op: string
         Input: string
         Summary: string
+        /// Its place in `Seq` order, if taken when it started (a call that acts on the world).
+        Seq: int64 option
     }
 
     override this.ToString() = $"{this.Lane}[{this.Index}] {this.Op}"
@@ -199,13 +201,18 @@ type SessionJournal
                 flushes.Release() |> ignore
         }
 
+    let numbered (call: JournalCall) =
+        match call.Seq with
+        | Some reserved -> reserved
+        | None ->
+            seq <- seq + 1L
+            seq
+
     let complete (call: JournalCall) (ended: Ended) =
         lock gate (fun () ->
             running.Remove(struct (call.Lane, call.Index)) |> ignore
 
             if not closed then
-                seq <- seq + 1L
-
                 let size =
                     match ended with
                     | Ended.Value json -> int64 (Json.serialize json).Length
@@ -215,15 +222,12 @@ type SessionJournal
 
                 buffer.Add
                     {
-                        Seq = seq
+                        Seq = numbered call
                         Call = call
                         Ended = ended
                     })
 
-    member _.Session = session
-
-    /// Starts a call in a lane: it takes the lane's next index (the order calls start in).
-    member _.Start(lane: string, op: string, input: string, summary: string) : JournalCall =
+    let start (lane: string) (op: string) (input: string) (summary: string) (acts: bool) : JournalCall =
         lock gate (fun () ->
             let index =
                 match lanes.TryGetValue lane with
@@ -232,6 +236,13 @@ type SessionJournal
 
             lanes[lane] <- index + 1L
 
+            let reserved =
+                if acts then
+                    seq <- seq + 1L
+                    Some seq
+                else
+                    None
+
             let call =
                 {
                     Lane = lane
@@ -239,10 +250,23 @@ type SessionJournal
                     Op = op
                     Input = input
                     Summary = Digest.bound 160 summary
+                    Seq = reserved
                 }
 
             running[struct (lane, index)] <- call
             call)
+
+    member _.Session = session
+
+    /// Starts a call in a lane: it takes the lane's next index (the order calls start in), and its place
+    /// in `Seq` order when it completes (what it brings from the world arrives then).
+    member _.Start(lane: string, op: string, input: string, summary: string) : JournalCall =
+        start lane op input summary false
+
+    /// Starts a call that acts on the world (writes to a process): it takes its place in `Seq` order
+    /// now, since others may see its effect before it completes.
+    member _.StartActing(lane: string, op: string, input: string, summary: string) : JournalCall =
+        start lane op input summary true
 
     /// Ends a call with a value.
     member _.Returned(call: JournalCall, value: Json) = complete call (Ended.Value value)
@@ -268,22 +292,31 @@ type SessionJournal
 
         if full then flush () else Task.FromResult()
 
-    /// Runs and journals an asynchronous call: its value, or how it failed.
-    member this.Run<'T>
-        (lane: string, op: string, input: string, summary: string, encode: 'T -> Json, start: unit -> Task<'T>)
-        : Task<'T> =
+    member private this.RunAs<'T>(call: unit -> JournalCall, encode: 'T -> Json, work: unit -> Task<'T>) : Task<'T> =
         task {
             do! this.Due()
-            let call = this.Start(lane, op, input, summary)
+            let call = call ()
 
             try
-                let! value = start ()
+                let! value = work ()
                 this.Returned(call, encode value)
                 return value
             with e ->
                 this.Failed(call, e)
                 return Internal.rethrow e
         }
+
+    /// Runs and journals an asynchronous call: its value, or how it failed.
+    member this.Run<'T>
+        (lane: string, op: string, input: string, summary: string, encode: 'T -> Json, work: unit -> Task<'T>)
+        : Task<'T> =
+        this.RunAs((fun () -> start lane op input summary false), encode, work)
+
+    /// Runs and journals a call that acts on the world (`StartActing`).
+    member this.RunActing<'T>
+        (lane: string, op: string, input: string, summary: string, encode: 'T -> Json, work: unit -> Task<'T>)
+        : Task<'T> =
+        this.RunAs((fun () -> start lane op input summary true), encode, work)
 
     /// Runs and journals a synchronous call.
     member this.RunSync<'T>
@@ -308,11 +341,9 @@ type SessionJournal
         task {
             lock gate (fun () ->
                 for call in List.ofSeq running.Values |> List.sortBy (fun c -> c.Lane, c.Index) do
-                    seq <- seq + 1L
-
                     buffer.Add
                         {
-                            Seq = seq
+                            Seq = numbered call
                             Call = call
                             Ended = Ended.Pending
                         }
