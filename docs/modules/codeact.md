@@ -331,7 +331,9 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   catalogs, on streams in each provider's documented format (tool calls and results, tools from codecs,
   breakpoints, a stable cache key).
 - **Live** (the pinned Bun; skipped offline, required in CI): TypeScript cells on the bun-ts kernel for
-  both surfaces, a rejected `finish`, and a turn in an environment of `fx.env.local` opened through `IEnvs`.
+  both surfaces, a rejected `finish`, a turn in an environment of `fx.env.local` opened through `IEnvs`, and a
+  host stopped during a TypeScript cell (the decision shows what it printed; `Out` and `fx.recall` give a
+  kept value back to the new kernel).
 
 Native AOT: `codeact-hybrid`, `codeact-text-only` (a session on the session host with the script
 kernel, an in-memory workspace and a scripted model; the receipts, the context log and the logs replayed

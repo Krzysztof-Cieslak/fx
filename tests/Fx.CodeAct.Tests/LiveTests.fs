@@ -251,6 +251,59 @@ let private rejected (f: Fixture) : Task<unit> =
         Expect.stringContains (text rs[0]) "the summary must say what was done" "the reasons"
     }
 
+/// The host stops while a TypeScript cell waits: the decision shows what the cell printed; after the
+/// answer, the next cell reads the value an earlier cell returned back from the journal.
+let private crashed (f: Fixture) : Task<unit> =
+    task {
+        f.Model.AddAll
+            [
+                Say.cell "// intent: count the rows\n({ rows: 3 })"
+                Say.cell "// intent: wait for the deploy\nconsole.log(\"deploying\")\nawait new Promise(() => {})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Deploy"
+
+        do!
+            until "the waiting cell's output is journaled" (fun () ->
+                journal f "s1"
+                |> List.exists (fun r ->
+                    match r.Event with
+                    | StepEvent.Printed printed -> printed.Text.Contains "deploying"
+                    | _ -> false))
+
+        do! restart f
+        let! _ = state f "s1"
+        let! request = opened f "s1" "unknown-t1-s2-1"
+
+        match Recovery.payload.Decode request.Request.Payload with
+        | Ok card -> Expect.stringContains card.Evidence.Output "deploying" "what the cell printed"
+        | Error issues -> failtest (Fx.Contracts.Issue.render issues)
+
+        f.Model.AddAll
+            [
+                Say.cell
+                    $"// intent: read the rows back\nconst r = await {g}.recall(\"t1-s1-1\") as {{ rows: number }}\n[(Out[\"t1-s1-1\"] as {{ rows: number }}).rows, r.rows]"
+                Say.cell $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"deployed\" }})"
+            ]
+
+        let! _ =
+            send
+                f
+                "s1"
+                "a1"
+                (Fx.Sessions.Command.Answer(
+                    "unknown-t1-s2-1",
+                    RequestKind.answer Recovery.kind { Option = "completed"; Note = None }
+                ))
+
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed ending) (TurnResult.Done("deployed", [], None)) $"finished: {seen f}"
+        let read = receipts f "s1" |> List.find (fun r -> r.Step = 3)
+        Expect.stringContains (text read) "the host restarted" "a new kernel"
+        Expect.stringContains (text read) "[3, 3]" $"Out and recall give the value back: {seen f}"
+    }
+
 [<Tests>]
 let tests =
     testList
@@ -270,5 +323,9 @@ let tests =
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {
                 do! live "live-finish" [] rejected ()
+            }
+
+            testTask "a host stopped during a TypeScript cell: a decision with its output, then values back" {
+                do! live "live-crash" [] crashed ()
             }
         ]
