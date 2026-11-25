@@ -62,6 +62,7 @@
     <Compile Include="Scenarios\Environments.fs" />
     <Compile Include="Scenarios\Identity.fs" />
     <Compile Include="Scenarios\Keyring.fs" />
+    <Compile Include="Scenarios\CodeAct.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -99,5 +100,6 @@
     <ProjectReference Include="..\..\..\src\Fx.Identity.Host\Fx.Identity.Host.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Keyring\Fx.Keyring.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.CodeAct\Fx.CodeAct.fsproj" />
   </ItemGroup>
 </Project>
