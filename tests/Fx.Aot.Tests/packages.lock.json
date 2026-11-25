@@ -104,7 +104,8 @@
           "Fx.Pty": "[0.0.0, )",
           "Fx.Sqlite": "[0.0.0, )",
           "Fx.Store.Live": "[0.0.0, )",
-          "Fx.Transport.Http": "[0.0.0, )"
+          "Fx.Transport.Http": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
         }
       },
       "fx.contracts": {
@@ -180,6 +181,14 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.variants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )"
         }
       }
     }
