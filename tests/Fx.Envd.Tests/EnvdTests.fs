@@ -262,7 +262,13 @@ let processes =
                 child.Emit(Stderr "e"B)
                 child.Exit 0
                 let second = connect envd
-                let status = ok (wait (EnvClient.status second.Client started.Id none))
+                let mutable status = ok (wait (EnvClient.status second.Client started.Id none))
+
+                // The output pump and the exit run on their own: wait until both are seen.
+                while not (status.Out.Ended && status.Err.Ended && status.ExitCode.IsSome) do
+                    Thread.Sleep 10
+                    status <- ok (wait (EnvClient.status second.Client started.Id none))
+
                 Expect.equal status.Out.Total 17L "all output was kept"
                 Expect.equal status.ExitCode (Some 0) "exited"
                 let resumed = ok (wait (EnvClient.attach second.Client started.Id next 0L none))

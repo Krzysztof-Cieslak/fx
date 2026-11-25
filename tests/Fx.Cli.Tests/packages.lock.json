@@ -90,8 +90,61 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
+          "Fx.Envd.Live": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Sqlite": "[0.0.0, )"
+        }
+      },
+      "fx.contracts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.effects": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.effects.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
+      },
+      "fx.envd": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Pty": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.envd.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Envd": "[0.0.0, )",
+          "Fx.Store.Live": "[0.0.0, )"
+        }
+      },
+      "fx.machines": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.machines.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )"
         }
       },
       "fx.prelude": {
@@ -100,10 +153,42 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.pty": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
+      },
+      "fx.rpc": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
       "fx.sqlite": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.store": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )"
+        }
+      },
+      "fx.store.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sqlite": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
         }
       }
     }

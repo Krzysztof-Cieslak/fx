@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The capability suites, shared: envd's proxies pass the same tests as the interpreters they stand for. -->
+    <Compile Include="..\Fx.Effects.Tests\Conformance\FsConformance.fs" Link="Conformance\FsConformance.fs" />
+    <Compile Include="..\Fx.Effects.Live.Tests\Conformance\ShellConformance.fs" Link="Conformance\ShellConformance.fs" />
+    <Compile Include="..\Fx.Pty.Tests\Conformance\TerminalConformance.fs" Link="Conformance\TerminalConformance.fs" />
+    <Compile Include="..\Fx.Store.Tests\Conformance\BlobsConformance.fs" Link="Conformance\BlobsConformance.fs" />
+    <Compile Include="..\Fx.Envd.Tests\Conformance\FsOpsConformance.fs" Link="Conformance\FsOpsConformance.fs" />
+    <Compile Include="Harness.fs" />
+    <Compile Include="SnapshotsConformance.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
+    <!-- The fx binary: its apphost and assembly are copied next to the tests, which start its envd mode. -->
+    <ProjectReference Include="..\..\src\Fx.Cli\Fx.Cli.fsproj" />
+  </ItemGroup>
+</Project>
