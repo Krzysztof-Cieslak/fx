@@ -94,6 +94,101 @@ let private projectReferences (project: string) : string list * string list =
 
     projects, includes "PackageReference"
 
+/// A method of an assembly: its name and the names of the types that declare it, outermost first.
+type MethodSite =
+    {
+        Types: string list
+        Name: string
+    }
+
+    override this.ToString() =
+        String.Join("/", this.Types) + "::" + this.Name
+
+/// What an assembly's IL says about some of its own methods: which methods call them (`call`,
+/// `callvirt`, `newobj`) or take their address (`ldftn`, `ldvirtftn`), generic instantiations
+/// included. The IL is scanned for the instructions' bytes, so it may report a caller too many,
+/// never one too few.
+let callersIn (assembly: string) (isTarget: MetadataReader -> MethodDefinition -> bool) : MethodSite list =
+    use stream = File.OpenRead assembly
+    use pe = new PEReader(stream)
+    let reader = pe.GetMetadataReader()
+
+    let rec typeNames (handle: TypeDefinitionHandle) : string list =
+        let typeDef = reader.GetTypeDefinition handle
+        let name = reader.GetString typeDef.Name
+        let outer = typeDef.GetDeclaringType()
+        if outer.IsNil then [ name ] else typeNames outer @ [ name ]
+
+    // Rows of the method table are numbered from 1 in the order `MethodDefinitions` lists them.
+    let targets =
+        [
+            for row, handle in Seq.indexed reader.MethodDefinitions do
+                if isTarget reader (reader.GetMethodDefinition handle) then
+                    row + 1
+        ]
+
+    let tokens =
+        [
+            for row in targets do
+                0x06000000 ||| row
+
+            for row in 1 .. Ecma335.MetadataReaderExtensions.GetTableRowCount(reader, Ecma335.TableIndex.MethodSpec) do
+                let specified =
+                    reader.GetMethodSpecification(Ecma335.MetadataTokens.MethodSpecificationHandle row)
+
+                if
+                    specified.Method.Kind = HandleKind.MethodDefinition
+                    && List.contains (Ecma335.MetadataTokens.GetRowNumber specified.Method) targets
+                then
+                    0x2B000000 ||| row
+        ]
+        |> List.map (fun token -> BitConverter.GetBytes(token: int))
+
+    let refers (il: byte array) =
+        let at (i: int) (token: byte array) =
+            i + 4 <= il.Length
+            && il[i] = token[0]
+            && il[i + 1] = token[1]
+            && il[i + 2] = token[2]
+            && il[i + 3] = token[3]
+
+        seq {
+            for i in 0 .. il.Length - 5 do
+                match il[i] with
+                | 0x28uy
+                | 0x6Fuy
+                | 0x73uy -> yield tokens |> List.exists (at (i + 1))
+                | 0xFEuy when i + 6 <= il.Length && (il[i + 1] = 0x06uy || il[i + 1] = 0x07uy) ->
+                    yield tokens |> List.exists (at (i + 2))
+                | _ -> ()
+        }
+        |> Seq.exists id
+
+    [
+        for handle in reader.MethodDefinitions do
+            let methodDef = reader.GetMethodDefinition handle
+
+            if methodDef.RelativeVirtualAddress <> 0 then
+                let il =
+                    match pe.GetMethodBody(methodDef.RelativeVirtualAddress).GetILBytes() with
+                    | null -> [||]
+                    | il -> il
+
+                if refers il then
+                    {
+                        Types = typeNames (methodDef.GetDeclaringType())
+                        Name = reader.GetString methodDef.Name
+                    }
+    ]
+
+/// Whether a method is a member of the type of this name (namespace and name).
+let isMemberOf (ns: string) (typeName: string) (name: string) (reader: MetadataReader) (methodDef: MethodDefinition) =
+    let declaring = reader.GetTypeDefinition(methodDef.GetDeclaringType())
+
+    reader.GetString declaring.Namespace = ns
+    && reader.GetString declaring.Name = typeName
+    && reader.GetString methodDef.Name = name
+
 /// Every extension package: extensions/<Name>/<Name>.fsproj.
 let private extensionProjects () : (string * string) list =
     [
@@ -182,6 +277,73 @@ let tests =
                         (violationsOf processSdkSurface (Path.Combine(AppContext.BaseDirectory, assembly + ".dll")))
                         []
                         $"{assembly}: assembly references"
+            }
+
+            test "only ModelAccess reaches a wire, and only through the model-egress hooks" {
+                // Wires take only WireRequests (spec §18): the SDK must make them in ModelEgress.clear
+                // alone, after the transforms and gates, and only ModelAccess.stream may call that.
+                let sdk = Path.Combine(AppContext.BaseDirectory, "Fx.Sdk.dll")
+                use stream = File.OpenRead sdk
+                use pe = new PEReader(stream)
+                let reader = pe.GetMetadataReader()
+
+                let wireRequest =
+                    reader.TypeDefinitions
+                    |> Seq.map reader.GetTypeDefinition
+                    |> Seq.find (fun t ->
+                        reader.GetString t.Namespace = "Fx.Sdk"
+                        && reader.GetString t.Name = "WireRequest")
+
+                Expect.equal (int wireRequest.Attributes &&& 0x100) 0x100 "WireRequest is sealed"
+
+                for handle in wireRequest.GetMethods() do
+                    let methodDef = reader.GetMethodDefinition handle
+                    let name = reader.GetString methodDef.Name
+
+                    if name = ".ctor" then
+                        // Member access 3 is `assembly`: internal.
+                        Expect.equal (int methodDef.Attributes &&& 0x7) 3 "its constructor is internal"
+                    else
+                        // 0x10 is `static`: a static member could be a factory.
+                        Expect.equal (int methodDef.Attributes &&& 0x10) 0 $"{name} is an instance member"
+
+                let internalsVisibleTo =
+                    reader.GetAssemblyDefinition().GetCustomAttributes()
+                    |> Seq.map reader.GetCustomAttribute
+                    |> Seq.filter (fun a ->
+                        match a.Constructor.Kind with
+                        | HandleKind.MemberReference ->
+                            let ctor =
+                                reader.GetMemberReference(MemberReferenceHandle.op_Explicit a.Constructor)
+
+                            ctor.Parent.Kind = HandleKind.TypeReference
+                            && reader.GetString(
+                                reader.GetTypeReference(TypeReferenceHandle.op_Explicit ctor.Parent).Name
+                            )
+                                =
+                                "InternalsVisibleToAttribute"
+                        | _ -> false)
+                    |> Seq.length
+
+                Expect.equal internalsVisibleTo 0 "Fx.Sdk shows its internals to no one"
+
+                // A positive control: the scan sees generic calls made inside state machines.
+                Expect.exists
+                    (callersIn sdk (isMemberOf "Fx.Sdk" "Hooks" "transform"))
+                    (fun site -> List.head site.Types = "ModelEgress")
+                    "clear's call of Hooks.transform"
+
+                let makers = callersIn sdk (isMemberOf "Fx.Sdk" "WireRequest" ".ctor")
+                Expect.isNonEmpty makers "the constructor is used"
+
+                for site in makers do
+                    Expect.equal (List.head site.Types) "ModelEgress" $"{site} makes a WireRequest"
+
+                let clearing = callersIn sdk (isMemberOf "Fx.Sdk" "ModelEgress" "clear")
+                Expect.isNonEmpty clearing "clear is used"
+
+                for site in clearing do
+                    Expect.stringStarts (List.head site.Types) "ModelAccess" $"{site} runs the egress hooks"
             }
 
             test "the core references no extension package" {
