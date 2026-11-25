@@ -292,8 +292,12 @@ stays language-neutral and checks everything through the protocol. Version 1 cov
 
 Subjects launched through a runtime's launch spec also start with every kind of injection vector in
 the launcher's own environment (`StartFromLauncher`), and none may reach the kernel; the positive
-controls that show the vectors work are `fx.runtime.bun`'s (tests/Fx.Ext.RuntimeBun.Tests). Pending,
-with its reason in the suite: content exclusions (T124: model-egress hooks).
+controls that show the vectors work are `fx.runtime.bun`'s (tests/Fx.Ext.RuntimeBun.Tests).
+
+**Content exclusions** are enforced by the host ([egress.md](egress.md)): bindings refuse excluded
+files, and the egress hooks redact by provenance. The suite checks the kernel's part: a read the host
+refuses as excluded (`test.read` of a `*.env` file, failing like `fs.read` with code `excluded`) fails
+in the cell with the reason and no content, and other reads still work.
 
 The suite runs against three kernels: the **script kernel** (F#, `tests/aot/Fx.Aot.Scenarios/Scenarios/Kernel`)
 in process and as a child process (`Fx.Aot.Scenarios kernel-peer`), and the **bun-ts kernel**
@@ -315,5 +319,4 @@ a refused launch, a snapshot and a killed kernel).
 - **T205:** kernel-side wrappers reporting activity. **Later:** packages (interpreters.md).
 - **T201:** blobs for large values and output overflow; handles inside data; how kernels read blobs;
   `fx.recall(callId)` and handles in the journal.
-- **T124:** content exclusions on output and previews.
 - **T128:** journaling cell results and outputs for `recall` after a restart.

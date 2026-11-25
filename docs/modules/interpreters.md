@@ -117,7 +117,7 @@ environment, `EnvClient`'s proxies.
 | Binding | Does | Returns |
 |---|---|---|
 | `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`, killed after `options.timeoutMs` | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut}`; a non-zero exit is data |
-| `fs.read(path)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`); a byte order mark dropped; not UTF-8: `notText` | `FileText {path, text, lines, size, digest}` |
+| `fs.read(path)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`); a byte order mark dropped; not UTF-8: `notText`; a file content exclusions keep from models: `excluded` (origin and pattern as data; nothing is read, [egress.md](egress.md)) | `FileText {path, text, lines, size, digest}` |
 | `fs.write(path, text)` | creates the directories, then writes atomically (`FsOps.WriteAtomic`) | `Written {path, digest, lines}` |
 | `fs.list(path = ".")` | a directory's entries, by name | `FileEntry[] {path, name, kind, size}` |
 | `fs.stat(path)` | one entry; `notFound` if none | `FileEntry` |
@@ -250,7 +250,7 @@ environment, a missing runtime).
 | `repo.*` bindings, anchored edits (`fs.edit`), smart previews | T202, T204, T203 |
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
-| Content exclusions on output and previews (model-egress hooks) | T124 |
+| `CoreSettings.Exclusions` from the session's variants; provenance of cell results for the egress hooks | T127, T205 |
 | Where assets and owned directories live per environment; installing `Requires` in the environment; launching over a remote envd (the same capability records through `EnvClient`); killing stale kernels when envd starts (a pid file in the owned directory) | T112, T129 |
 | Per-session packages through the egress proxy (`caps.packages`), `process`/`Bun` as globals (a variant), cells on a `Worker` so busy loops can be stopped without a kill | later |
 | A data form of `InterpreterProvider` for declarative interpreters | T602 |
