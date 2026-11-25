@@ -132,7 +132,8 @@ A request is opened with `OpenRequest spec` (a `RequestSpec`):
 - `Fork(child, upTo)` (default: the head) records `Forked(child, upTo, by)` with the profile in effect. `react`
   asks the host to start the child: its first event is `Started` with `Parent = Some(session/<id>#upTo)`, keyed
   by the fork event, so a retry is deduplicated. `ChildStarted` / `ChildFailed` mark the fork `Ready` or
-  `Failed`. The child refers to its parent instead of copying its history (T126 renders the chain).
+  `Failed`. The child refers to its parent instead of copying its history (the prompt render folds the chain:
+  [prompt.md](prompt.md)).
 - `Close` (refused while a turn runs: interrupt first) cancels open requests and drops the queue and inbox;
   a closed session refuses input. `Reopen` opens it again; `Archive` closes and archives it.
 
@@ -230,7 +231,6 @@ type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, strin
 | `SnapshotEvery`, `MaxGap` and `ProfileAttempts` as variant slots | T129 |
 | Principals behind `Attribution`, roles; epoch-fenced takeover | T122, T507 |
 | The strategy behind `TurnRunner`, `TurnResult` validation (`Ensure`), richer `Evidence` | T127 |
-| Rendering a session (and a fork's parent chain) into a prompt | T126 |
 | In-flight tool calls become `OutcomeUnknown` on recovery, with a decision | T128 |
 | Decision cards, grant requests, gates, auth flows, installs as request kinds | T301, T123, T306, T121, T110 |
 | Attachments (blob references) in prompts | when the TUI sends files |

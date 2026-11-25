@@ -62,7 +62,8 @@ type InterpreterProvider =
 - **Program templates:** `${asset.<name>}` (an asset's absolute path once extracted) and `${bindings}`
   (the directory with the binding files); nothing else, joined by the target's rules.
 - `PromptPack.render pack files`: the instructions, the declarations in a code block, then the
-  examples; deterministic, `\n` line ends. The prompt render (T126) places it.
+  examples; deterministic, `\n` line ends. The prompt render places it in the
+  prefix (`Sections.interpreter`, [prompt.md](prompt.md)).
 - **Contribution type:** `InterpreterProviders.contributionType` (`interpreter`), code
   (`ContributionType.inProcess`: `Bindings` is a function), privileged (spec §16.5), in the core
   catalog. So interpreters are native extensions; a data form for declarative interpreters (spec

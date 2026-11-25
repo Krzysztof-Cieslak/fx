@@ -254,6 +254,10 @@ The code that reads them comes with later tasks (T127, T201, T203, T204, T111, T
 extensions add their own model roles with `Slots.modelRole role |> Slot.ownedBy id`. Slots of a feature that
 lives in an extension belong to that extension.
 
+Core modules above `Fx.Variants` define their slots next to the code that reads them and list them for the
+host, which registers them with `Slots.all`: `PromptSlots.all` (`prompt.views`, `prompt.cache.breakpoints`,
+`prompt.cache.prefixTtl`, `prompt.repoMap`; [prompt.md](prompt.md)).
+
 ## Extensions contribute slots
 
 Slots are values and `SlotInfo` is their erased form, as `Contribution` is for contribution types (T108), so

@@ -219,6 +219,8 @@ let render cfg (s: SessionState) =
 ```
 
   Stable receipts keep the prefix cacheable (mapped to provider cache breakpoints). **Content exclusions** filter render inputs. `SeenRanges` records which file ranges/versions entered context.
+  - **Append-only:** providers check that what came before a reasoning block is unchanged, and caches hit only on an unchanged prefix. So the prefix is recorded once per conversation (`Framed`) and later changes are stated as updates at the end of the history; the suffix a call showed is recorded with the model's reply and stays before it, so every request is a prefix of the next. Views show only what changed since they last showed it.
+  - Collapses, a new frame and content excluded after it was recorded are the documented rewrite boundaries: replies after one lose their reasoning. Details: `docs/modules/prompt.md`.
 - **Compaction:** `Collapsed(range, summary)` with originals addressable; cache-sharing summary request; background preparation; model-driven via `fx.context.*` / `fx.history.*`.
 - **Snapshots:** `SnapshotRef` per step; two-phase undo reverting only agent-attributed changes.
 
