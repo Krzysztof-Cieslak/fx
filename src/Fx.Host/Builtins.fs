@@ -25,6 +25,11 @@ module Builtins =
     let candidates (exclusions: Eff<IExtensionEnv, ExclusionSettings>) : Candidate list =
         [
             Package.Native Fx.Ext.EnvLocal.EnvLocal.extension
+            // Sandbox drivers: `auto` takes the first that confines processes on an environment's OS,
+            // so the confining ones come before `none`.
+            Package.Native Fx.Ext.SandboxBubblewrap.Bubblewrap.extension
+            Package.Native Fx.Ext.SandboxSeatbelt.Seatbelt.extension
+            Package.Native Fx.Ext.SandboxNone.SandboxNone.extension
             Package.Native Fx.Ext.IdentityLocalOsUser.LocalOsUser.extension
             Package.Native Fx.Ext.StoreKeyring.StoreKeyring.extension
             Package.Native Fx.Ext.StoreFile.StoreFile.extension

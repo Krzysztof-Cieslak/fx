@@ -233,6 +233,27 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.ext.sandboxbubblewrap": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.sandboxnone": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.sandboxseatbelt": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.storeephemeral": {
         "type": "Project",
         "dependencies": {
@@ -301,6 +322,9 @@
           "Fx.Ext.ModelAnthropic": "[0.0.0, )",
           "Fx.Ext.ModelOpenAI": "[0.0.0, )",
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
+          "Fx.Ext.SandboxBubblewrap": "[0.0.0, )",
+          "Fx.Ext.SandboxNone": "[0.0.0, )",
+          "Fx.Ext.SandboxSeatbelt": "[0.0.0, )",
           "Fx.Ext.StoreEphemeral": "[0.0.0, )",
           "Fx.Ext.StoreFile": "[0.0.0, )",
           "Fx.Ext.StoreKeyring": "[0.0.0, )",

@@ -201,6 +201,9 @@ let tests =
                                 "store.keyring"
                                 "store.file"
                                 "store.ephemeral"
+                                "sandbox.bubblewrap"
+                                "sandbox.seatbelt"
+                                "sandbox.none"
                              ]
                              |> List.map Product.extensionId
                              |> List.sort)

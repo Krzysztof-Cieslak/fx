@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.sandbox.bubblewrap package (spec §9.1, §16.4): the Linux sandbox driver. Wraps
+    every process the agent starts in bwrap (namespaces, a read-only system with the policy's paths
+    mounted over it, the network only when allowed) and a seccomp filter built here as data. A
+    native extension: like every package under extensions/, it references the public SDK
+    (src/Fx.Sdk) and nothing else. See README.md and docs/modules/sandbox.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Seccomp.fs" />
+    <Compile Include="Bubblewrap.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

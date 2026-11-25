@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.sandbox.none package (spec §9.1, §16.4): the sandbox driver that confines
+    nothing. The only driver on Windows in v1 (AppContainer is T511), and where a host turned
+    sandboxing off; environments using it carry a persistent "unsandboxed" warning. A native
+    extension: like every package under extensions/, it references the public SDK (src/Fx.Sdk) and
+    nothing else. See README.md and docs/modules/sandbox.md.
+  -->
+  <ItemGroup>
+    <Compile Include="SandboxNone.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>
