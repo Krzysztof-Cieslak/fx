@@ -51,7 +51,7 @@ type Hands<'K> =
         CommandEnv: EnvVars
         Interpreter: Interpreter<'K>
         /// Checked before every host call, from cells and direct tools alike: `Error` refuses it (e.g.
-        /// `Denied`). Where grants plug in (T127b).
+        /// `Denied`). `GrantGuard.attach` adds the grants log's checks for the turn.
         Guard: HostCall -> Eff<'K, Result<unit, HostCallError>>
         /// The workspace's snapshots (envd's), if the environment has them: each step records the
         /// workspace before its actions, so a call in doubt after a crash shows what changed.
@@ -232,6 +232,10 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     let mutable checks: (TurnResult -> Issue list) list = [ Ensure.summary ]
     let mutable running: RunningCell option = None
 
+    // The current turn's guard: a kernel outlives the turn that started it.
+    let mutable guard: HostCall -> Eff<'K, Result<unit, HostCallError>> =
+        fun _ -> EffResult.error (HostCallError.Denied "no turn is running in this session")
+
     let finishing: Finishing<'K> =
         {
             Schema = Codecs.turnResult.Schema
@@ -313,6 +317,11 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     /// The surface the bridge declares (for the interpreter's prompt), with these settings.
     member _.Surface(core: CoreSettings) : BindingSurface = Bridge.surface (bridge core)
 
+    /// The guard the kernel's host calls pass: the running turn's (its hands'), set before each action.
+    member _.Guard
+        with get () = lock gate (fun () -> guard)
+        and set (value: HostCall -> Eff<'K, Result<unit, HostCallError>>) = lock gate (fun () -> guard <- value)
+
     /// A host call, from a cell or a direct tool: the guard, then the binding with the turn's settings.
     member _.Call
         (guard: HostCall -> Eff<'K, Result<unit, HostCallError>>)
@@ -377,7 +386,10 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                 | [] ->
                     let host: KernelHost<'K> =
                         {
-                            HostCall = this.Call hands.Guard
+                            HostCall =
+                                this.Call(fun call ->
+                                    let current = this.Guard
+                                    current call)
                             Finish = finishing.Validate
                             Output = watch.Output
                             Activity = fun _ -> Eff.unit

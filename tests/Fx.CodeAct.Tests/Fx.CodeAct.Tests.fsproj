@@ -24,12 +24,14 @@
     <!-- T127b: the grants guard (command parsers, host calls as grants, the guard, turns that ask). -->
     <Compile Include="ShellSyntaxTests.fs" />
     <Compile Include="PermissionTests.fs" />
+    <Compile Include="GrantTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.CodeAct\Fx.CodeAct.fsproj" />
     <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
     <ProjectReference Include="..\..\src\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
     <!-- The bun-ts kernel, launched as the product launches it. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
