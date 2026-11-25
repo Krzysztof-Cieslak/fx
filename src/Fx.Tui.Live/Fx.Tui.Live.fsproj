@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The TUI's imperative shell (spec §3 embedded mode, §19, §20): the controlling terminal in raw mode
+    (LocalTty: termios on Linux and macOS, the console's virtual terminal modes and UTF-8 code pages on
+    Windows, given back on exit and on a crash), the TUI as a client of the client protocol
+    (TuiClient), and its composition roots (TuiMain: `fx` with a host in this process, `fx attach`).
+    The native modules and LocalTty have reviewed entries in analyzers.json. Spec: docs/modules/tui.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Native\Posix.fs" />
+    <Compile Include="Native\Windows.fs" />
+    <Compile Include="LocalTty.fs" />
+    <Compile Include="TuiClient.fs" />
+    <Compile Include="TuiMain.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Tui\Fx.Tui.fsproj" />
+    <ProjectReference Include="..\Fx.Host\Fx.Host.fsproj" />
+  </ItemGroup>
+</Project>

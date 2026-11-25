@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/b… ● turn 2
+ ! runs unsandboxed: co…
+    1m39s
+
+› now update the
+  changelog
+  Updating CHANGELOG.md.
+  ◇ Cell     add… ⠹ 4.2s
+  ▸ 1 c… [Ctrl+O expand]
+
+  ↳ steering (next step…
+  ⋯ queued: then bump t…
+⠹ turn 2 · Cell add the…
+›
+────────────────────────
+cursor 13,2

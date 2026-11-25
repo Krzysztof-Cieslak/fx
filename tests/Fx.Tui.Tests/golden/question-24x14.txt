@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/… ● needs input
+ ! runs unsandboxed: co…
+  ? The agent asks
+
+  ? Needs input  3.0s
+    Deploy to staging or
+    production?
+
+┃ Question
+┃ Deploy to staging or
+┃ production?
+┃ Type the answer below…
+Enter answer · Esc inte…
+›
+────────────────────────
+cursor 13,2

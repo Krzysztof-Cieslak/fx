@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · en… ● needs input
+ ! runs unsandboxed: commands can read …
+
+
+
+
+
+
+
+› deploy it
+  ? The agent asks
+
+  ? Needs input  3.0s
+    Deploy to staging or production?
+
+┃ Question
+┃ Deploy to staging or production?
+┃ Type the answer below; Enter sends it.
+Enter answer · Esc interrupt
+›
+────────────────────────────────────────
+cursor 19,2

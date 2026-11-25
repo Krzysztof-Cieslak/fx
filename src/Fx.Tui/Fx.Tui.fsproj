@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The TUI's pure core (spec §19.1–19.5, §20: an Elm-style F# TUI): the model, its update and view
+    over the client protocol's events (sessions, their context log, grants, environments); text
+    width, rows and frames, VT output as the difference between frames, key decoding, the prompt
+    editor; the `Tty` capability with its fake (`FakeTty` over `VtScreen`) and the loop that runs it
+    all (`Runtime`). No I/O: the terminal and the connection to the host are the shell's
+    (src/Fx.Tui.Live). Spec: docs/modules/tui.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Text.fs" />
+    <Compile Include="Ui.fs" />
+    <Compile Include="Vt.fs" />
+    <Compile Include="VtScreen.fs" />
+    <Compile Include="Keys.fs" />
+    <Compile Include="Editor.fs" />
+    <Compile Include="Timeline.fs" />
+    <Compile Include="App.fs" />
+    <Compile Include="View.fs" />
+    <Compile Include="Tty.fs" />
+    <Compile Include="Runtime.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+    <ProjectReference Include="..\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Models\Fx.Models.fsproj" />
+    <ProjectReference Include="..\Fx.Prompt\Fx.Prompt.fsproj" />
+    <ProjectReference Include="..\Fx.Sessions\Fx.Sessions.fsproj" />
+    <ProjectReference Include="..\Fx.Grants\Fx.Grants.fsproj" />
+  </ItemGroup>
+</Project>

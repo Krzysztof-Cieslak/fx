@@ -96,6 +96,8 @@ const PLATFORM_PATHS = [
   "src/Fx.Keyring/**",
   "src/Fx.Sqlite/**",
   "src/Fx.Transport.Http/**",
+  "src/Fx.Tui.Live/Native/**",
+  "src/Fx.Tui.Live/LocalTty.fs",
   "extensions/Fx.Ext.RuntimeBun/**",
   // Sandbox drivers: what confines a process differs per OS, kernel and architecture (bwrap's
   // namespaces, the seccomp program per architecture, Seatbelt).

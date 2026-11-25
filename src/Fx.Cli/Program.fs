@@ -13,6 +13,7 @@ open Fx.Contracts
 open Fx.Envd.Live
 open Fx.Grants
 open Fx.Host
+open Fx.Tui.Live
 
 let private console = obj ()
 
@@ -332,6 +333,40 @@ let private serve (tcp: int option) : int =
             finally
                 (Host.stop host).Wait(TimeSpan.FromSeconds 60.0) |> ignore
 
+/// `fx`: the TUI on a host in this process. Without a terminal (input or output redirected), `fx`
+/// alone prints the usage, as it did before the TUI.
+let private tui (bare: bool) (args: TuiArgs) (selections: (string * Json) list) : int =
+    if not (TuiMain.canRun ()) then
+        if bare then
+            stdout.Write Cli.usage
+            0
+        else
+            fail
+                [
+                    "the interactive interface needs a terminal; `run -p <prompt>` runs one prompt without one"
+                ]
+            |> ignore
+
+            2
+    else
+        let facts = facts ()
+
+        match hostOptions facts selections with
+        | Error e -> fail [ e ]
+        | Ok options -> TuiMain.embedded options args show
+
+/// `attach`: the TUI of the host `fx serve` runs.
+let private attach (args: TuiArgs) : int =
+    if not (TuiMain.canRun ()) then
+        fail [ "the interactive interface needs a terminal" ] |> ignore
+        2
+    else
+        let facts = facts ()
+
+        match hostOptions facts [] with
+        | Error e -> fail [ e ]
+        | Ok options -> TuiMain.attach options.Paths facts.CurrentDirectory args show
+
 [<EntryPoint>]
 let main argv =
     match Cli.parse (List.ofArray argv) with
@@ -349,3 +384,5 @@ let main argv =
     | Cli.Auth command -> auth command
     | Cli.Serve tcp -> serve tcp
     | Cli.Replay args -> replay args
+    | Cli.Tui(args, selections) -> tui (argv.Length = 0) args selections
+    | Cli.Attach args -> attach args

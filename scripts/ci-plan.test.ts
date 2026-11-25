@@ -49,6 +49,8 @@ describe("ci plan", () => {
       "src/Fx.Pty/UnixPty.fs",
       "src/Fx.Keyring/Native/Windows.fs",
       "src/Fx.Transport.Http/PeerCredentials.fs",
+      "src/Fx.Tui.Live/Native/Posix.fs",
+      "src/Fx.Tui.Live/LocalTty.fs",
       "extensions/Fx.Ext.RuntimeBun/RuntimeBun.fs",
       "extensions/Fx.Ext.SandboxBubblewrap/Seccomp.fs",
       "extensions/Fx.Ext.SandboxSeatbelt/Profile.fs",
@@ -61,6 +63,7 @@ describe("ci plan", () => {
     }
     expect(pr("src/Fx.Sqlite.Tests.fs").platform).toEqual([]);
     expect(plan({ event: "pull_request", labels: ["ci:full"], files: ["global.json"] }).platform).toEqual([]);
+    expect(pr("src/Fx.Tui/View.fs").platform).toEqual([]);
   });
 
   test("an area's steps run when the area changes", () => {

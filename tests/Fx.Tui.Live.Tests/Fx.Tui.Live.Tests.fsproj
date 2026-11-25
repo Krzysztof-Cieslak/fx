@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of src/Fx.Tui.Live: the TUI end to end on an embedded host through the client protocol, on
+    a fake terminal (no network; with the bun-ts kernel when the network is there, required in CI);
+    and the real terminal backend, the fx binary on a PTY (ConPTY on Windows).
+  -->
+  <ItemGroup>
+    <Compile Include="..\Fx.Kernel.Tests\Repo.fs" Link="Bun\Repo.fs" />
+    <Compile Include="..\Fx.Kernel.Tests\PinnedBun.fs" Link="Bun\PinnedBun.fs" />
+    <Compile Include="..\Fx.Host.Tests\Support.fs" Link="Host\Support.fs" />
+    <Compile Include="EmbeddedTests.fs" />
+    <Compile Include="TerminalTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Tui.Live\Fx.Tui.Live.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Pty\Fx.Pty.fsproj" />
+    <!-- The fx binary: its apphost and assembly are copied next to the tests, which run it on a PTY. -->
+    <ProjectReference Include="..\..\src\Fx.Cli\Fx.Cli.fsproj" />
+  </ItemGroup>
+</Project>

@@ -63,6 +63,21 @@
       "reason": "The P/Invoke layer of the ITerminal interpreter: `ioctl` picks the declaration for the platform's variadic calling convention."
     },
     {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Tui.Live/Native/Posix.fs"],
+      "reason": "The P/Invoke layer of the TUI's terminal (LocalTty): `ioctl` picks the declaration for the platform's variadic calling convention."
+    },
+    {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Tui.Live/LocalTty.fs"],
+      "reason": "ITty interpreter: the only code that changes the controlling terminal's modes (termios, the Windows console's modes and code pages) and reads and writes it directly."
+    },
+    {
+      "codes": ["EFF005"],
+      "files": ["src/Fx.Tui.Live/TuiMain.fs"],
+      "reason": "The TUI's composition root: keeps .NET's console writers off the screen while the TUI draws it, and puts them back."
+    },
+    {
       "codes": ["EFF008", "EFF009"],
       "files": ["src/Fx.Sqlite/**"],
       "reason": "The SQLite binding itself: its P/Invoke layer (EFF008) and its own API (EFF009)."

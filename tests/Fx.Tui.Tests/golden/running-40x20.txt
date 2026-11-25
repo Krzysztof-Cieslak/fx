@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · env: de… ● turn 2
+ ! runs unsandboxed: commands can read …
+  ▸ 1 cell (3 lines)     [Ctrl+O expand]
+
+  ✓ Done  Migrated 37 call sites to
+          RetryPolicy.
+    Evidence  dotnet test tests/Billing
+              → 214 passed
+    Verify    dotnet test tests/Billing
+    1m39s
+
+› now update the changelog
+  Updating CHANGELOG.md.
+  ◇ Cell     add the entry        ⠹ 4.2s
+  ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
+  ↳ steering (next step): mention the i…
+  ⋯ queued: then bump the version
+⠹ turn 2 · Cell add the entry
+›
+────────────────────────────────────────
+cursor 19,2
