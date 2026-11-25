@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Repo.fs" />
+    <Compile Include="DeclarationTests.fs" />
+    <Compile Include="Conformance\KernelConformance.fs" />
+    <Compile Include="PinnedBun.fs" />
+    <Compile Include="Subjects.fs" />
+    <Compile Include="ConformanceTests.fs" />
+    <Compile Include="FramingTests.fs" />
+    <Compile Include="ProtocolTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Kernel\Fx.Kernel.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <!-- The script kernel, and the kernel-peer child process (its apphost and assembly are copied next to the tests). -->
+    <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
+  </ItemGroup>
+</Project>
