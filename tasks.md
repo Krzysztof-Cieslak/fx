@@ -342,8 +342,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T103,T104,T105,T106,T107,T108 done
-  class T102 inprogress
+  class T001,T002,T003,T004,T005,T006,T009,T101,T102,T103,T104,T105,T106,T107,T108 done
 ```
 
 <!-- /tasks:generated -->
@@ -370,7 +369,7 @@ flowchart LR
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
 | T101 | Codecs + JSON | T002 | §4.1 | done | Own JSON AST + AOT-safe reader/writer; `Codec<'T>` combinators (record, union, list, option, refinements), `Schema` ADT, `Validation` with model-readable issues, `Preview` with limits. Property tests for round-trips. |
-| T102 | Schema→TS gen | T101 | §4.1, §17 | in-progress | Generator emitting TypeScript types/codecs (`.d.ts`) from `Schema`; golden tests. |
+| T102 | Schema→TS gen | T101 | §4.1, §17 | done | Generator emitting TypeScript types/codecs (`.d.ts`) from `Schema`; golden tests. |
 | T103 | Eff + capabilities | T002 | §4.2 | done | `Eff<'R,'T>`, `eff`/`effResult` builders, 'has' interface conventions, core capability interfaces (`IClock`, `IIds`, …) with test doubles. |
 | T104 | Machine host | T103 | §4.4 | done | `Machine` type, actor runner (single writer, serialized + attributed inputs), process managers across streams; deterministic tests. |
 | T105 | Event + blob store | T006, T101 | §5 | done | Append-only typed event streams with sequence numbers, subscribe(afterSeq), snapshots; content-addressed blob store. |
