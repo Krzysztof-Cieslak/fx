@@ -1,0 +1,83 @@
+{
+  "id": "s1",
+  "seq": 32,
+  "status": "open",
+  "title": "s1",
+  "profile": "sha256:edit.guard=\"v1\"",
+  "overrides": {
+    "edit.guard": "v1"
+  },
+  "forks": [
+    {
+      "child": "c1",
+      "upTo": 26,
+      "seq": 27,
+      "profile": "sha256:edit.guard=\"v1\"",
+      "overrides": {
+        "edit.guard": "v1"
+      },
+      "status": {
+        "kind": "ready"
+      }
+    }
+  ],
+  "turns": 6,
+  "last": {
+    "turn": 6,
+    "end": {
+      "kind": "completed",
+      "result": {
+        "kind": "needInput",
+        "requests": [
+          "d6"
+        ]
+      }
+    },
+    "at": 1767225621000000
+  },
+  "held": false,
+  "queue": [],
+  "inbox": [],
+  "awaitingRequests": [
+    "d6"
+  ],
+  "awaitingJobs": [],
+  "requests": [
+    {
+      "request": {
+        "id": "d6",
+        "kind": "choice",
+        "title": "choose d6",
+        "payload": {
+          "options": [
+            "a",
+            "b"
+          ],
+          "question": "Which?"
+        },
+        "origin": {
+          "kind": "turn",
+          "turn": 6
+        },
+        "reply": "asInput",
+        "lifetime": "session",
+        "expiry": {
+          "at": 1767226200000000,
+          "then": {
+            "kind": "answer",
+            "response": "a"
+          }
+        }
+      },
+      "capabilities": [
+        "choice"
+      ],
+      "by": {
+        "principal": "system",
+        "via": "turn"
+      },
+      "at": 1767225621000000,
+      "seq": 31
+    }
+  ]
+}
