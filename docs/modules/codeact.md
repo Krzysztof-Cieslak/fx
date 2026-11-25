@@ -329,8 +329,10 @@ directory is then unknown.
 **Listed commands.** `codeact.grants.allowCommands` (privileged; default `pwd`, `ls`, `cat`, `head`,
 `tail`, `wc`, `grep`, `echo`, `git status` and their PowerShell counterparts: commands that read, write
 nothing and start no other program) run without a person when written plainly: no word the shell
-expands, in a known working directory in the workspace, and no argument that names a path outside it
-(an option with a path or `..` attached counts). Deny grants, policy rules and gates still apply: a
+expands, in a known working directory in the workspace, and no argument or input redirection (`<`)
+that names a path outside it (an option with a path or `..` attached counts) or a file content
+exclusions keep from models (`GrantSettings.Exclusions`, the turn's): what they print goes to the
+model. Deny grants, policy rules and gates still apply: a
 listed command is allowed only when nothing but "no grant applies" stands in the way.
 
 **Deciding.** For each need, `Grants.check`: allowed, denied (the call fails `denied` with the reasons
