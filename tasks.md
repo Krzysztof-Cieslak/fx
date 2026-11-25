@@ -342,8 +342,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T103,T104,T105 done
-  class T106 inprogress
+  class T001,T002,T003,T004,T005,T006,T009,T101,T103,T104,T105,T106 done
 ```
 
 <!-- /tasks:generated -->
@@ -374,7 +373,7 @@ flowchart LR
 | T103 | Eff + capabilities | T002 | §4.2 | done | `Eff<'R,'T>`, `eff`/`effResult` builders, 'has' interface conventions, core capability interfaces (`IClock`, `IIds`, …) with test doubles. |
 | T104 | Machine host | T103 | §4.4 | done | `Machine` type, actor runner (single writer, serialized + attributed inputs), process managers across streams; deterministic tests. |
 | T105 | Event + blob store | T006, T101 | §5 | done | Append-only typed event streams with sequence numbers, subscribe(afterSeq), snapshots; content-addressed blob store. |
-| T106 | Variants + profiles | T101, T103 | §15 | in-progress | `IVariants` registry, typed variant slots, profile hashing and recording on every record. |
+| T106 | Variants + profiles | T101, T103 | §15 | done | `IVariants` registry, typed variant slots, profile hashing and recording on every record. |
 | T107 | JSON-RPC | T004, T101 | §17 | todo | Own JSON-RPC 2.0 over stdio, WebSocket and in-process; binary channels; capability negotiation; `_meta` and extension methods; backpressure. |
 | T108 | Extension system | T103, T107 | §16 | todo | Manifest schema, contribution registry (replayed transforms), hook algebra (gate/transform/contribute/observe/interpret), declarative/native/process runtimes, bootstrap order, transport-parity harness, architecture test (built-ins use public SDK only). |
 | T109 | Public SDKs | T102, T108 | §16.1 | todo | `Fx.Sdk` (F#) and `@fx/sdk` (TS) packages generated from contracts; a sample extension in each passes parity tests. |
