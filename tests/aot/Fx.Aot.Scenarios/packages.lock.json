@@ -76,6 +76,13 @@
           "Fx.Store.Live": "[0.0.0, )"
         }
       },
+      "fx.ext.interpreterbunts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.modelcanonical": {
         "type": "Project",
         "dependencies": {
@@ -105,6 +112,19 @@
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )",
           "Fx.Sdk.Process": "[0.0.0, )"
+        }
+      },
+      "fx.interpreters": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Envd": "[0.0.0, )",
+          "Fx.Kernel": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
         }
       },
       "fx.kernel": {
