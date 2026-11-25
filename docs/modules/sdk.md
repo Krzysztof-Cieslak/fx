@@ -58,9 +58,11 @@ they are packaged and versioned, and how to write an extension with them. The ex
 - `bun scripts/packages.ts` (after a Release build; CI runs it on every OS before the tests) packs every
   project with `<IsPackable>true</IsPackable>` into `artifacts/packages`, checks that each package id is
   `<FxPascalName>.<project name without "Fx.">` and that the packages depend only on each other and
-  FSharp.Core, packs `@fx/sdk` with `bun pm pack`, and builds the F# sample as a process extension
-  outside the solution from those packages alone (`artifacts/package-consumer`). The extension tests
-  run that binary through the parity and server conformance suites (`PACKAGE_TESTS=1` requires it).
+  FSharp.Core, packs `@fx/sdk` with `bun pm pack`, and, outside the solution from those packages alone
+  (`artifacts/package-consumer`), builds every package under `extensions/` from its sources against
+  `<Name>.Sdk` (built-ins need nothing else) and the F# sample as a process extension against
+  `<Name>.Sdk.Process`. The extension tests run that binary through the parity and server conformance
+  suites (`PACKAGE_TESTS=1` requires it).
   CI uploads the packages from Linux. Publishing to nuget.org and npm comes with releases.
 - **Package ids come from the naming constant:** `Directory.Build.targets` sets `PackageId` for packable
   projects from `FxPascalName` (`Directory.Build.props`, the same derivation as `Product.pascalName`);
@@ -188,10 +190,10 @@ await runStdio([{
 - `activationMismatches(manifest, activation)` lists what an activation provides beyond or short of its
   manifest, as the host checks it; use it in the extension's tests.
 - Until T115 provides the `bun` runtime, a TypeScript extension runs with the `process` runtime: its
-  manifest's `launch` starts the pinned Bun on its bundle (`bun build --target=bun`), as
-  `tests/Fx.Extensions.Tests/TypeScriptSample.fs` does with the Bun kernel spike's hardened flags; T114
-  provides the real `LaunchSpec`. Import the SDK by its package name; inside this repository, by a
-  relative path, so that no source hardcodes the product name.
+  manifest's `launch` starts the pinned Bun on its bundle (`bun build --target=bun`) with
+  `fx.runtime.bun`'s hardened launch (flags, untrusted overrides, files, environment; T114), as
+  `tests/Fx.Extensions.Tests/TypeScriptSample.fs` does. Import the SDK by its package name; inside this
+  repository, by a relative path, so that no source hardcodes the product name.
 
 ## Testing
 
@@ -207,7 +209,8 @@ await runStdio([{
 - **The samples' contract:** the TypeScript sample's manifest is the F# sample's, member for member and
   hash for hash (`packages/sample-extension/test/fixtures/manifest.json`).
 - **The pinned Bun** comes from `tests/Fx.Kernel.Tests/PinnedBun.fs` (linked into the extension tests);
-  CI caches it. Offline, those tests are skipped locally and fail in CI.
+  CI caches it. Offline, those tests are skipped locally and fail in CI. The launch is
+  `fx.runtime.bun`'s (`RuntimeBun.launch`), with its owned directories under the package directory.
 - CI: `bun check --no-script` and `bun test` in `packages/sdk` and `packages/sample-extension` (Lint),
   `bun scripts/packages.ts` and the suites on Linux, macOS and Windows (Build and test).
 

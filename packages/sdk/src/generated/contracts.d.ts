@@ -151,7 +151,7 @@ export interface Issue {
   message: string;
 }
 
-/** How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}. */
+/** How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}. */
 export interface LaunchSpec {
   /** Non-empty. */
   exe: string;
@@ -173,6 +173,8 @@ export interface LaunchSpec {
   envDeny?: string[];
   /** @default "owned" */
   cwd?: "owned" | "workspace";
+  /** Runtime flags (--name=value) added before the program while the project is not trusted. */
+  untrustedOverrides?: string[];
 }
 
 /** An extension package's manifest. */

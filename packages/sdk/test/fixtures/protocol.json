@@ -216,10 +216,23 @@
                       "kind": "defaulted",
                       "value": "owned"
                     }
+                  },
+                  {
+                    "name": "untrustedOverrides",
+                    "schema": {
+                      "kind": "array",
+                      "items": {
+                        "kind": "string"
+                      },
+                      "description": "Runtime flags (--name=value) added before the program while the project is not trusted."
+                    },
+                    "presence": {
+                      "kind": "optional"
+                    }
                   }
                 ],
                 "unknownFields": "reject",
-                "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+                "description": "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
               }
             },
             "presence": {
@@ -754,10 +767,23 @@
                               "kind": "defaulted",
                               "value": "owned"
                             }
+                          },
+                          {
+                            "name": "untrustedOverrides",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string"
+                              },
+                              "description": "Runtime flags (--name=value) added before the program while the project is not trusted."
+                            },
+                            "presence": {
+                              "kind": "optional"
+                            }
                           }
                         ],
                         "unknownFields": "reject",
-                        "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+                        "description": "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
                       }
                     },
                     "presence": {
@@ -1176,10 +1202,23 @@
                               "kind": "defaulted",
                               "value": "owned"
                             }
+                          },
+                          {
+                            "name": "untrustedOverrides",
+                            "schema": {
+                              "kind": "array",
+                              "items": {
+                                "kind": "string"
+                              },
+                              "description": "Runtime flags (--name=value) added before the program while the project is not trusted."
+                            },
+                            "presence": {
+                              "kind": "optional"
+                            }
                           }
                         ],
                         "unknownFields": "reject",
-                        "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+                        "description": "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
                       }
                     },
                     "presence": {
@@ -2057,6 +2096,136 @@
           "message": "does not match the manifest's content; its hash is \"sha256:6c653352a0025f34167df77dbf0ad682aa9a05432a4dabfb95f5d553abd98e85\""
         }
       ]
+    },
+    {
+      "input": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/run",
+          "untrustedOverrides": [
+            "--tsconfig-override=${root}/tsconfig.json"
+          ],
+          "envSet": {
+            "HOME": "${root}/home"
+          }
+        }
+      },
+      "output": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "host",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/run",
+          "args": [],
+          "envAllowlist": [],
+          "envSet": {
+            "HOME": "${root}/home"
+          },
+          "envDeny": [],
+          "cwd": "owned",
+          "untrustedOverrides": [
+            "--tsconfig-override=${root}/tsconfig.json"
+          ]
+        },
+        "requires": [],
+        "capabilities": [],
+        "contributions": [],
+        "rpc": {
+          "methods": []
+        },
+        "replaces": []
+      },
+      "hash": "sha256:50341683f096ae16befa353e18d73a4594fa91b4d187892891bdb31e4fca2c92"
+    },
+    {
+      "input": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/run",
+          "untrustedOverrides": [
+            "tsconfig-override"
+          ],
+          "envSet": {
+            "NODE_PATH": "x",
+            "ok": "1",
+            "BUN_JSC_useJIT": "0"
+          }
+        }
+      },
+      "issues": [
+        {
+          "path": [
+            "launch",
+            "envSet",
+            0
+          ],
+          "message": "NODE_PATH is denied: it can inject code into the runtime"
+        },
+        {
+          "path": [
+            "launch",
+            "envSet",
+            2
+          ],
+          "message": "BUN_JSC_useJIT is denied: it can inject code into the runtime"
+        },
+        {
+          "path": [
+            "launch",
+            "untrustedOverrides",
+            0
+          ],
+          "message": "an override is a runtime flag, written --name=value"
+        }
+      ]
+    },
+    {
+      "input": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/run",
+          "untrustedOverrides": []
+        }
+      },
+      "output": {
+        "id": "acme.proc",
+        "version": "1.0.0",
+        "sdk": "0.1",
+        "protocol": "1",
+        "placement": "host",
+        "runtime": "process",
+        "launch": {
+          "exe": "${root}/run",
+          "args": [],
+          "envAllowlist": [],
+          "envSet": {},
+          "envDeny": [],
+          "cwd": "owned"
+        },
+        "requires": [],
+        "capabilities": [],
+        "contributions": [],
+        "rpc": {
+          "methods": []
+        },
+        "replaces": []
+      },
+      "hash": "sha256:1179122b3c98e8f7e3fa72f2e2b371ecde66148e553cc5d6efafe0d3ae66b371"
     }
   ]
 }

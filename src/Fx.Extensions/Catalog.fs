@@ -16,8 +16,9 @@ type Catalog =
 
 [<RequireQualifiedAccess>]
 module Catalog =
-    /// The extension system's own types, and component definitions (spec §6.1) and runtimes (spec
-    /// §6.2), which declarative extensions such as `fx.runtime.bun` contribute.
+    /// The extension system's own types; component definitions (spec §6.1) and runtimes (spec §6.2),
+    /// which declarative extensions such as `fx.runtime.bun` contribute; and variant slots (spec §15),
+    /// which every kind of extension may contribute.
     let core: ContributionTypeInfo list =
         [
             ContributionType.info VariantSlots.contributionType
