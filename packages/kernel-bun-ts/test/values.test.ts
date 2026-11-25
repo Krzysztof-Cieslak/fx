@@ -67,6 +67,13 @@ describe("encoding", () => {
     expect(() => values.encode(cycle, 1000)).toThrow(values.NotEncodable);
   });
 
+  test("arguments leave out members that are undefined, and nothing else", () => {
+    expect(values.encode({ a: 1, b: undefined, c: { d: undefined } }, 1000, true)).toEqual({ kind: "inline", value: { a: 1, c: {} } });
+    expect(() => values.encode({ b: undefined }, 1000)).toThrow(values.NotEncodable);
+    expect(() => values.encode([undefined], 1000, true)).toThrow(values.NotEncodable);
+    expect(() => values.encode({ f: () => 1 }, 1000, true)).toThrow(values.NotEncodable);
+  });
+
   test("dates encode as JSON.stringify writes them", () => {
     expect(values.encode(new Date(0), 1000)).toEqual({ kind: "inline", value: "1970-01-01T00:00:00.000Z" });
   });

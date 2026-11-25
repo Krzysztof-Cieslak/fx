@@ -84,8 +84,11 @@ function at(path: string): string {
   return path === "" ? "" : ` at ${path}`;
 }
 
-/** Strict JSON: what `JSON.stringify` would write, or `NotEncodable` where it would lose data. */
-function toJson(value: unknown, path: string, seen: Set<object>): unknown {
+/**
+ * Strict JSON: what `JSON.stringify` would write, or `NotEncodable` where it would lose data. With
+ * `omitUndefined`, object members that are `undefined` are left out (optional fields of arguments).
+ */
+function toJson(value: unknown, path: string, seen: Set<object>, omitUndefined: boolean): unknown {
   switch (typeof value) {
     case "string":
     case "boolean":
@@ -109,28 +112,36 @@ function toJson(value: unknown, path: string, seen: Set<object>): unknown {
   }
   if (seen.has(object)) throw new NotEncodable(typeName(object), `a cycle${at(path)}`);
   const toJSON = (object as { toJSON?: unknown }).toJSON;
-  if (typeof toJSON === "function") return toJson(toJSON.call(object), path, seen);
+  if (typeof toJSON === "function") return toJson(toJSON.call(object), path, seen, omitUndefined);
   seen.add(object);
   try {
-    if (Array.isArray(object)) return object.map((item, i) => toJson(item, `${path}[${i}]`, seen));
+    if (Array.isArray(object)) return object.map((item, i) => toJson(item, `${path}[${i}]`, seen, omitUndefined));
     if (!isPlainObject(object)) throw new NotEncodable(typeName(object), `a ${typeName(object)} has no JSON form${at(path)}`);
     const result: Record<string, unknown> = {};
-    for (const key of Object.keys(object)) result[key] = toJson((object as Record<string, unknown>)[key], path === "" ? key : `${path}.${key}`, seen);
+    for (const key of Object.keys(object)) {
+      const member = (object as Record<string, unknown>)[key];
+      if (member === undefined && omitUndefined) continue;
+      result[key] = toJson(member, path === "" ? key : `${path}.${key}`, seen, omitUndefined);
+    }
     return result;
   } finally {
     seen.delete(object);
   }
 }
 
-/** A value as the protocol carries it: a reference as it came, or inline JSON within `maxBytes`. */
-export function encode(value: unknown, maxBytes: number): Value {
+/**
+ * A value as the protocol carries it: a reference as it came, or inline JSON within `maxBytes`.
+ * `omitUndefined` leaves out object members that are `undefined`, as arguments of host calls and
+ * results of `finish` are written (`{ verify: undefined }` is `{}`); `value/encode` stays strict.
+ */
+export function encode(value: unknown, maxBytes: number, omitUndefined = false): Value {
   if (typeof value === "object" && value !== null) {
     const handle = handles.get(value);
     if (handle) return { kind: "handle", handle: handle.handle, type: handle.type, preview: handle.preview };
     const blob = blobs.get(value);
     if (blob) return { kind: "blob", blob: blob.blob, preview: blob.preview };
   }
-  const json = toJson(value, "", new Set());
+  const json = toJson(value, "", new Set(), omitUndefined);
   const bytes = Buffer.byteLength(JSON.stringify(json));
   if (bytes > maxBytes) throw new TooLarge(bytes, maxBytes);
   return { kind: "inline", value: json };
