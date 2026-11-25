@@ -26,16 +26,17 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
-- **Wave 6:** T109b Extension host capabilities, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T129 Host server, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
-- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T130 Minimal TUI, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T507 Multi-client + inbox, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T606 ACP adapter, T607 LSP components
-- **Wave 8:** T127 CodeAct strategy, T201 Values & references, T303 Decisions panel, T508 Web client, T510 First cloud env (E2B)
-- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge, T609 Desktop
-- **Wave 10:** T132 Milestone: fx builds fx, T212 Run kernel, T217 Eval harness, T608 Agent teams
-- **Wave 11:** T214 Goals, T215 Runs panel (timeline), T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
-- **Wave 12:** T305 Markdown workflows, T306 Wait gates, T307 Runs panel (graph), T403 TS workflow worker, T404 Triggers, T405 Safe outputs
-- **Wave 13:** T406 Templates
+- **Wave 6:** T109b Extension host capabilities, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
+- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
+- **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
+- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
+- **Wave 10:** T129a Host composition + headless run, T212 Run kernel, T217 Eval harness, T608 Agent teams
+- **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
+- **Wave 12:** T130 Minimal TUI, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
+- **Wave 13:** T132 Milestone: fx builds fx, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
+- **Wave 14:** T307 Runs panel (graph), T609 Desktop
 
-**Critical path to dogfooding (T132):** T001 → T003 → T004 → T107 → T108 → T110 → T114 → T117 → T127 → T127b → T132
+**Critical path to dogfooding (T132):** T001 → T003 → T004 → T107 → T108 → T110 → T114 → T117 → T127 → T128 → T129a → T129b → T130 → T132
 
 ## Graph
 
@@ -87,7 +88,8 @@ flowchart LR
     T127["T127 CodeAct strategy"]
     T127b["T127b CodeAct grants"]
     T128["T128 Crash recovery"]
-    T129["T129 Host server"]
+    T129a["T129a Host composition + headless run"]
+    T129b["T129b Client protocol + `fx serve`"]
     T130["T130 Minimal TUI"]
     T131["T131 Record + replay"]
     T132["T132 Milestone: fx builds fx"]
@@ -229,10 +231,14 @@ flowchart LR
   T127 --> T127b
   T125 --> T128
   T127 --> T128
-  T112 --> T129
-  T122 --> T129
-  T125 --> T129
-  T129 --> T130
+  T112 --> T129a
+  T121 --> T129a
+  T122 --> T129a
+  T125 --> T129a
+  T127 --> T129a
+  T128 --> T129a
+  T129a --> T129b
+  T129b --> T130
   T105 --> T131
   T106 --> T131
   T127 --> T131
@@ -325,7 +331,7 @@ flowchart LR
   T111 --> T504
   T122 --> T505
   T122 --> T506
-  T129 --> T507
+  T129b --> T507
   T505 --> T507
   T507 --> T508
   T118 --> T509
@@ -343,7 +349,7 @@ flowchart LR
   T127 --> T604
   T108 --> T605
   T127 --> T605
-  T129 --> T606
+  T129b --> T606
   T202 --> T607
   T211 --> T607
   T213 --> T608
@@ -352,6 +358,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T128 done
+  class T129a inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -408,8 +415,9 @@ flowchart LR
 | T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | done | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
 | T127b | CodeAct grants | T127 | §6.9, §13, §18 | todo | Sensitive host calls of cells and the hybrid tools ask `IGrants` through `Hands.Guard` with keys from the tool call (`shell.exec` with compound commands split for sh and PowerShell, `fs.write`/`fs.patch` outside the workspace, `net.connect`); a pending grant request is shown in the turn and withdrawn by an interrupt; denials come back as `denied` errors; tests for both surfaces. |
 | T128 | Crash recovery | T125, T127 | §5 | done | Journaled steps; in-flight tool calls become `OutcomeUnknown`, run pauses and opens a session decision with evidence; `fx.recall`. |
-| T129 | Host server | T112, T122, T125 | §3, §17 | todo | Host process + embedded mode wiring; `session/*` client protocol over WebSocket; `fx` CLI entry points. |
-| T130 | Minimal TUI | T129 | §19.2 | todo | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
+| T129a | Host composition + headless run | T112, T121, T122, T125, T127, T128 | §3, §11.3–11.4, §16.1, §16.4–16.5, §18, §19.5 | in-progress | The host's composition root (`src/Fx.Host`): data directory with a single-host lock, SQLite event and blob stores, host/project config and policy into variant layers, host-local project trust (`fx trust`), the static list of built-ins bootstrapped with the component installer (approvals via the grants log), grants, identity, environments, `ModelAccess` with egress exclusions, replay policies and credentials from T121's `AuthService` (`fx auth login\|list\|logout\|status`), the session host with the CodeAct runner and T128's step journal and recovery (sessions with work in flight started at boot); embedded mode; `fx run -p … [--json]` runs a turn headless in the current directory; `fx variants`; e2e tests with a scripted model and the bun-ts kernel, restart and resume. |
+| T129b | Client protocol + `fx serve` | T129a | §3, §17, §18, §19.5 | todo | `session/*` (create, list, get, prompt steer/queue, interrupt, answer with capability checks, subscribe(afterSeq) replay-then-live, fork, overrides, close), `grants/*`, `identity/*`, `env/*`, `ext/<id>/*` with least roles per group over Fx.Rpc on WebSocket (local listener: Unix socket/named pipe, loopback with the token file) and in process for embedded mode; connections end on token revocation; generated TypeScript declarations (golden); `fx serve`; e2e over the protocol (reconnect with afterSeq, a grant answered, host restart); JIT-vs-native scenarios. |
+| T130 | Minimal TUI | T129b | §19.2 | todo | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
 | T131 | Record + replay | T105, T106, T127 | §15 | todo | Journal by blob hash, `ReplayEnv`, exact replay of recorded sessions; replay test harness. |
 | T132 | Milestone: fx builds fx | T113, T121, T127b, T128, T130, T131 | §21 | todo | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
 
@@ -471,7 +479,7 @@ flowchart LR
 | T504 | Relay + Dialback | T107, T111 | §3, §17 | todo | Relay service, Dialback transport, Noise end-to-end encryption. |
 | T505 | Device pairing | T122 | §11.2 | todo | `fx.identity.device-pairing` (QR / one-time code, per-device keys). |
 | T506 | GitHub OAuth + OIDC | T122 | §11.2 | todo | Identity plugins for GitHub OAuth and generic OIDC. |
-| T507 | Multi-client + inbox | T129, T505 | §17, §19.5 | todo | Roles, epoch-fenced takeover, attention inbox across sessions and runs. |
+| T507 | Multi-client + inbox | T129b, T505 | §17, §19.5 | todo | Roles, epoch-fenced takeover, attention inbox across sessions and runs. |
 | T508 | Web client | T507 | §3 | todo | Fable web client sharing `Evolve` projections. |
 | T509 | Cloud model routes | T118, T121 | §11.3 | todo | `command` + `sigv4` auth, Bedrock / Agent Platform / Azure routes, auth-flow forwarding, mTLS gateways. |
 | T510 | First cloud env (E2B) | T112, T115, T503 | §9.1 | todo | E2B environment provider as a Bun extension. |
@@ -486,7 +494,7 @@ flowchart LR
 | T603 | python + monty | T116, T211 | §6.2 | todo | Python (python-build-standalone) and Monty interpreters as eval candidates. |
 | T604 | Memory | T108, T127 | §16.4 | todo | `fx.memory` extension (agent-written, decaying; distinct from the ledger). |
 | T605 | MCP bridge | T108, T127 | §16.4 | todo | `fx.mcp`: MCP servers exposed as capabilities (deferred by default). |
-| T606 | ACP adapter | T129 | §17 | todo | `fx.acp` adapter for editors (Zed, JetBrains). |
+| T606 | ACP adapter | T129b | §17 | todo | `fx.acp` adapter for editors (Zed, JetBrains). |
 | T607 | LSP components | T202, T211 | §6.7 | todo | Language servers installed as components; diagnostics in activity. |
 | T608 | Agent teams | T213 | §7.4 | todo | Peer messaging and shared task board between agents. |
 | T609 | Desktop | T508 | §3 | todo | Tauri desktop shell around the web client. |
