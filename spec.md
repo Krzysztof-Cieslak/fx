@@ -207,7 +207,7 @@ type TurnResult =
   - The control path cancels work in flight at once and goes before queued commands.
 - **Durable pending requests:** decision cards, grant requests, workflow gates, forms, auth flows, installs — re-offered to capable clients, expiry policy.
 - **Reconnect:** `subscribe(id, afterSeq)` replays then goes live; large gaps get snapshot + tail.
-- **Crash recovery:** step results journaled; **in-flight tool calls become `OutcomeUnknown` → the run pauses and opens a session-scoped decision with evidence**; nothing auto-resumes. `fx.recall(callId)` / `Out[n]` restore values.
+- **Crash recovery:** step results journaled; **in-flight tool calls become `OutcomeUnknown` → the run pauses and opens a session-scoped decision with evidence**; nothing auto-resumes. `fx.recall(callId)` / `Out[n]` restore values. A call's start is journaled before it acts and its receipt is its end; the decision's answer (completed, failed, run again, inspect) becomes the call's receipt. Details: `docs/modules/codeact.md`.
 - **Prompt = pure render:**
 
 ```fsharp

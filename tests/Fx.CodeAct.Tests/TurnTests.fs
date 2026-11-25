@@ -364,7 +364,7 @@ let tests =
                                 Expect.equal (completed ending) (TurnResult.Done("x is still there", [], None)) "done"
 
                                 let after = receipts f "s1" |> List.filter (fun r -> r.Turn = 2) |> List.head
-                                Expect.stringContains (text after) "Value (number): 1" "the kernel kept x"
+                                Expect.stringContains (text after) "(number): 1" "the kernel kept x"
                                 Expect.isFalse ((text after).Contains "A new kernel") "the same kernel"
                             })
                         ()

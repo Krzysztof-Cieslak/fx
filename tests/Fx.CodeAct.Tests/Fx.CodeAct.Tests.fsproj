@@ -2,7 +2,8 @@
   <!--
     Tests of src/Fx.CodeAct: its pure parts; turns end to end on the session host with the F# script
     kernel in process and a scripted model (both action surfaces, finishing, steering, interrupts,
-    restarts, the loop guard, the policies, budgets, content exclusions); replay of the recorded logs
+    restarts, the loop guard, the policies, budgets, content exclusions); crash recovery (a host
+    stopped mid-cell, the decision, each answer, recall); replay of the recorded logs
     into the requests sent; and the bun-ts kernel on the pinned Bun (skipped offline, required in CI).
   -->
   <ItemGroup>
@@ -11,9 +12,12 @@
     <!-- fx.env.local as the composition root wires it (envd embedded). -->
     <Compile Include="..\Fx.Environments.Tests\Conformance\ProviderConformance.fs" Link="Environments\ProviderConformance.fs" />
     <Compile Include="..\Fx.Environments.Tests\Local.fs" Link="Environments\Local.fs" />
+    <Compile Include="Golden.fs" />
     <Compile Include="Support.fs" />
     <Compile Include="UnitTests.fs" />
+    <Compile Include="RecoveryUnitTests.fs" />
     <Compile Include="TurnTests.fs" />
+    <Compile Include="CrashTests.fs" />
     <Compile Include="ReplayTests.fs" />
     <Compile Include="ProviderTests.fs" />
     <Compile Include="LiveTests.fs" />

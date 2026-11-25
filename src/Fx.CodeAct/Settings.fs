@@ -185,6 +185,31 @@ module CodeActSlots =
             [ EvidencePolicy.Optional, "optional"; EvidencePolicy.Required, "required" ]
             EvidencePolicy.Optional
 
+    /// `codeact.journal.snapshots`: whether each step records the workspace before its actions.
+    let snapshots: Slot<bool> =
+        Slot.create
+            "codeact.journal.snapshots"
+            "Whether each step records a snapshot of the workspace before its actions, where the environment has snapshots, so that a call in doubt after the host stopped shows what it changed."
+            Codec.bool
+            true
+        |> Slot.withChoices [ true; false ]
+
+    /// `codeact.recall.maxBytes`: the largest value (its JSON) the journal keeps for `recall`.
+    let recallMaxBytes: Slot<int> =
+        Slot.create
+            "codeact.recall.maxBytes"
+            "The most bytes of JSON of a cell's value the journal keeps for recall after a kernel restart (values beyond values.inlineMaxBytes go to the host's blob store); 0 keeps none."
+            (count 0)
+            1048576
+
+    /// `codeact.recall.restore`: how many kept values a new kernel gets back as `Out[cell]`.
+    let recallRestore: Slot<int> =
+        Slot.create
+            "codeact.recall.restore"
+            "How many of the latest kept values a new kernel gets back as Out[cell] when it starts after another (fx.recall gives back any kept value)."
+            (count 0)
+            20
+
     /// The strategy's slots, for the host's registry.
     let all: SlotInfo list =
         [
@@ -204,6 +229,9 @@ module CodeActSlots =
             Slot.info receiptChars
             Slot.info readLines
             Slot.info evidence
+            Slot.info snapshots
+            Slot.info recallMaxBytes
+            Slot.info recallRestore
         ]
 
     /// Every slot a turn reads: the core's, the render's, content exclusions' and the strategy's.
@@ -239,6 +267,12 @@ type CodeActSettings =
         PreviewLimits: Limits
         /// `values.inlineMaxBytes`: the largest value a kernel copies inline.
         InlineBytes: int
+        /// `codeact.journal.snapshots`.
+        Snapshots: bool
+        /// `codeact.recall.maxBytes`.
+        RecallMaxBytes: int
+        /// `codeact.recall.restore`.
+        RecallRestore: int
     }
 
     override this.ToString() =
@@ -270,6 +304,9 @@ module CodeActSettings =
             let! readLines = Variants.get CodeActSlots.readLines
             let! evidence = Variants.get CodeActSlots.evidence
             let! inlineBytes = Variants.get Slots.inlineValueMaxBytes
+            let! snapshots = Variants.get CodeActSlots.snapshots
+            let! recallMaxBytes = Variants.get CodeActSlots.recallMaxBytes
+            let! recallRestore = Variants.get CodeActSlots.recallRestore
 
             return
                 {
@@ -295,6 +332,9 @@ module CodeActSettings =
                     Evidence = evidence
                     PreviewLimits = prompt.Limits
                     InlineBytes = inlineBytes
+                    Snapshots = snapshots
+                    RecallMaxBytes = recallMaxBytes
+                    RecallRestore = recallRestore
                 }
         }
 

@@ -53,9 +53,61 @@ type Hands<'K> =
         /// Checked before every host call, from cells and direct tools alike: `Error` refuses it (e.g.
         /// `Denied`). Where grants plug in (T127b).
         Guard: HostCall -> Eff<'K, Result<unit, HostCallError>>
+        /// The workspace's snapshots (envd's), if the environment has them: each step records the
+        /// workspace before its actions, so a call in doubt after a crash shows what changed.
+        Snapshots: Snapshots option
     }
 
     override this.ToString() = $"hands ({this.Workspace})"
+
+/// What the step journal sees of a session's kernel (docs/modules/codeact.md, "Crash recovery"): host
+/// calls before they run and how they ended, and the output cells stream.
+[<NoEquality; NoComparison>]
+type Watch<'K> =
+    {
+        /// Before a host call runs (after the guard allowed it): a number for `Called`, if it was
+        /// journaled.
+        Calling: HostCall -> Eff<'K, int option>
+        Called: int -> Result<Value, HostCallError> -> Eff<'K, unit>
+        Output: CellOutput -> Eff<'K, unit>
+    }
+
+    override _.ToString() = "watch"
+
+/// What a session's kernels need from the step journal: launch numbers that go on after the host
+/// restarted, and the values kept for `recall`.
+[<NoEquality; NoComparison>]
+type KernelJournal<'K> =
+    {
+        /// The last launch the session journaled (0: none): read before its first launch here.
+        LastLaunch: Eff<'K, int>
+        /// Journals a launch before the kernel starts.
+        Launching: int -> Eff<'K, unit>
+        /// Puts at most this many kept values back into a new kernel (`Out[cell]`); the cells restored.
+        Restore: int -> Kernel -> Eff<'K, string list>
+    }
+
+    override _.ToString() = "kernel journal"
+
+[<RequireQualifiedAccess>]
+module Watch =
+    /// Sees nothing.
+    let none<'K> : Watch<'K> =
+        {
+            Calling = fun _ -> Eff.ret None
+            Called = fun _ _ -> Eff.unit
+            Output = fun _ -> Eff.unit
+        }
+
+[<RequireQualifiedAccess>]
+module KernelJournal =
+    /// No journal: launches count from 1 in this process, nothing is restored.
+    let none<'K> : KernelJournal<'K> =
+        {
+            LastLaunch = Eff.ret 0
+            Launching = fun _ -> Eff.unit
+            Restore = fun _ _ -> Eff.ret []
+        }
 
 /// Interpreters from providers (`fx.interpreter.bun-ts`, …).
 [<RequireQualifiedAccess>]
@@ -170,11 +222,12 @@ type private RunningCell(id: string) =
 /// `finish` validated by the turn result's codec and the turn's checks. One turn at a time uses it.
 [<Sealed>]
 type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IClock and 'K :> IScopeWith<'K>>
-    (session: string) =
+    (session: string, watch: Watch<'K>, journal: KernelJournal<'K>, extra: HostBinding<'K> list) =
     let gate = obj ()
     let turns = new SemaphoreSlim(1, 1)
     let mutable kernel: Kernel option = None
-    let mutable launches = 0
+    // The last launch's number: from the journal before the first launch in this process.
+    let mutable launches: int option = None
     let mutable settings: CoreSettings option = None
     let mutable checks: (TurnResult -> Issue list) list = [ Ensure.summary ]
     let mutable running: RunningCell option = None
@@ -204,7 +257,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                             }
         }
 
-    let bindings (current: CoreSettings) : HostBinding<'K> list = CoreBindings.all current
+    let bindings (current: CoreSettings) : HostBinding<'K> list = CoreBindings.all current @ extra
 
     let bridge (current: CoreSettings) : Bridge<'K> =
         Bridge.create finishing |> Bridge.add CoreBindings.groups (bindings current)
@@ -227,10 +280,13 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
             | Error _ -> ()
         | _ -> ()
 
+    /// A session's kernel without a step journal (launches count from 1 in this process).
+    new(session: string) = SessionKernel<'K>(session, Watch.none, KernelJournal.none, [])
+
     member _.Session = session
 
-    /// How many kernels this session started.
-    member _.Launches = lock gate (fun () -> launches)
+    /// The number of the last kernel this session started (journaled launches included).
+    member _.Launches = lock gate (fun () -> launches |> Option.defaultValue 0)
 
     /// The live kernel, if any.
     member _.Kernel = lock gate (fun () -> kernel)
@@ -266,14 +322,24 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                 match! guard call with
                 | Error e -> return Error e
                 | Ok() ->
+                    let! journaled = watch.Calling call
                     let! result = HostBinding.dispatch (bindings (current ())) call
+
+                    match journaled with
+                    | Some index -> do! watch.Called index result
+                    | None -> ()
+
                     record call result
                     return result
             }
 
-    /// The live kernel, or a new one (`Restarted` when an earlier one died). Runs in the hands'
+    /// The live kernel, or a new one (`Restarted` when an earlier one died, here or before the host
+    /// restarted: then at most `restore` kept values come back as `Out[cell]`). Launches are journaled
+    /// before they start, so their numbers (and owned directories) are never reused. Runs in the hands'
     /// environment, so the kernel lives in its scope rather than the turn's.
-    member this.Acquire(hands: Hands<'K>, limits: KernelLimits) : Eff<'K, Result<Kernel * KernelNote, string>> =
+    member this.Acquire
+        (hands: Hands<'K>, limits: KernelLimits, restore: int)
+        : Eff<'K, Result<Kernel * KernelNote, string>> =
         eff {
             let alive =
                 lock gate (fun () ->
@@ -284,12 +350,20 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
             match alive with
             | Some k -> return Ok(k, KernelNote.Same)
             | None ->
-                let previous, launch =
+                let! known =
+                    match lock gate (fun () -> launches) with
+                    | Some last -> Eff.ret last
+                    | None -> journal.LastLaunch
+
+                let previous, launch, here =
                     lock gate (fun () ->
                         let previous = kernel
+                        // Whether an earlier kernel of this session started in this process.
+                        let here = launches |> Option.exists (fun last -> last > 0)
+                        let last = launches |> Option.defaultValue known
                         kernel <- None
-                        launches <- launches + 1
-                        previous, launches)
+                        launches <- Some(last + 1)
+                        previous, last + 1, here)
 
                 match previous with
                 | Some dead -> do! Eff.shield (Kernel.close dead |> Eff.ignore)
@@ -305,7 +379,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                         {
                             HostCall = this.Call hands.Guard
                             Finish = finishing.Validate
-                            Output = fun _ -> Eff.unit
+                            Output = watch.Output
                             Activity = fun _ -> Eff.unit
                         }
 
@@ -317,18 +391,25 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                             Launch = launch
                         }
 
+                    do! journal.Launching launch
+
                     match! hands.Interpreter.Start start with
                     | Error e -> return Error e
                     | Ok started ->
                         lock gate (fun () -> kernel <- Some started)
 
-                        let note =
-                            if launch > 1 then
-                                KernelNote.Restarted "the previous kernel stopped"
-                            else
-                                KernelNote.Same
+                        if launch > 1 then
+                            let! restored = journal.Restore restore started
 
-                        return Ok(started, note)
+                            let why =
+                                if here then
+                                    "the previous kernel stopped"
+                                else
+                                    "the host restarted"
+
+                            return Ok(started, KernelNote.Restarted(why, restored))
+                        else
+                            return Ok(started, KernelNote.Same)
         }
 
     /// Runs a cell, shielded from the turn: if the turn is cancelled (an interrupt), the cell is

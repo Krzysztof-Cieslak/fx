@@ -4,7 +4,9 @@
     from the log, calls the model through ILlm, runs the actions it asks for (cells in the session's
     kernel, and on the hybrid surface direct read/edit/bash tools over the same bindings), records
     replies and receipts as context events, validates how a turn ends (TurnResult + Ensure), and
-    applies the text-only, length-cut and empty-reply policies, the loop guard and budgets. Pure
+    applies the text-only, length-cut and empty-reply policies, the loop guard and budgets; journals
+    each step so that a call in flight when the host stopped becomes a decision (crash recovery), and
+    keeps cells' values for recall. Pure
     apart from the capabilities it is handed: the EFF analyzers apply to every file.
     Spec: docs/modules/codeact.md.
   -->
@@ -13,11 +15,14 @@
     <Compile Include="Settings.fs" />
     <Compile Include="ContextLog.fs" />
     <Compile Include="Tools.fs" />
+    <Compile Include="Journal.fs" />
+    <Compile Include="Recovery.fs" />
     <Compile Include="Questions.fs" />
     <Compile Include="LoopGuard.fs" />
     <Compile Include="Instructions.fs" />
     <Compile Include="Receipts.fs" />
     <Compile Include="Kernels.fs" />
+    <Compile Include="Recall.fs" />
     <Compile Include="Hybrid.fs" />
     <Compile Include="CodeAct.fs" />
     <Compile Include="Environment.fs" />

@@ -33,13 +33,14 @@ module Reads =
 type KernelNote =
     /// Nothing worth saying.
     | Same
-    /// A new kernel started for this cell: what earlier cells declared is gone.
-    | Restarted of why: string
+    /// A new kernel started for this cell: what earlier cells declared is gone; the values of these
+    /// cells were restored from the journal (`Out[cell]`).
+    | Restarted of why: string * restored: string list
 
     override this.ToString() =
         match this with
         | Same -> "same kernel"
-        | Restarted why -> "restarted: " + why
+        | Restarted(why, restored) -> $"restarted: {why} ({restored.Length} values restored)"
 
 /// Receipts (spec §5: stable, bounded when made, never re-rendered): what the model sees of an action's
 /// result. Pure.
@@ -60,17 +61,29 @@ module Receipts =
         | piece -> piece
 
     let private restarted (note: KernelNote) : Piece list =
+        let g = Fx.Product.kernelGlobal
+
         match note with
         | KernelNote.Same -> []
-        | KernelNote.Restarted why ->
+        | KernelNote.Restarted(why, []) ->
             [
                 Piece.Text
-                    $"[A new kernel started for this cell ({why}): names and values from earlier cells are gone.]"
+                    $"[A new kernel started for this cell ({why}): names and values from earlier cells are gone; `{g}.recall(id)` gives back a value an earlier cell returned, if it was kept.]"
+            ]
+        | KernelNote.Restarted(why, restored) ->
+            let outs =
+                restored
+                |> List.map (fun cell -> "Out[" + Json.quote cell + "]")
+                |> String.concat ", "
+
+            [
+                Piece.Text
+                    $"[A new kernel started for this cell ({why}): names from earlier cells are gone. The values earlier cells returned are back as {outs}; `{g}.recall(id)` gives back others that were kept.]"
             ]
 
-    let private outcomeText (outcome: CellOutcome) : string =
+    let private outcomeText (cellId: string) (outcome: CellOutcome) : string =
         match outcome with
-        | CellOutcome.Completed(Some value) -> $"Value ({value.Type}): {value.Preview.Text}"
+        | CellOutcome.Completed(Some value) -> $"Value of Out[{Json.quote cellId}] ({value.Type}): {value.Preview.Text}"
         | CellOutcome.Completed None -> ""
         | CellOutcome.SyntaxError failure ->
             let at =
@@ -128,7 +141,7 @@ module Receipts =
             lines
                 [
                     result.Output.Text.TrimEnd()
-                    outcomeText result.Outcome
+                    outcomeText result.CellId result.Outcome
                     (if result.Declared.IsEmpty then
                          ""
                      else

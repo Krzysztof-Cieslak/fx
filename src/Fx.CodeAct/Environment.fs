@@ -106,4 +106,5 @@ module EnvHands =
             CommandEnv = Inherit []
             Interpreter = Interpreter.ofProvider plan.Options interpreterSession
             Guard = plan.Guard
+            Snapshots = Some handle.Client.Snapshots
         }

@@ -248,8 +248,8 @@ environment, a missing runtime).
 
 | What | Task |
 |---|---|
-| A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels (done: [codeact.md](codeact.md)); restoring the journal | T128 |
-| Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, `recall`, …) | their tasks (T201, T301, T213, …) |
+| A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores kept values with `recall` (done: [codeact.md](codeact.md)) | T127, T128 |
+| Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, …; `recall` is the CodeAct strategy's, T128) | their tasks (T201, T301, T213, …) |
 | `repo.*` bindings, anchored edits (`fs.edit`), smart previews | T202, T204, T203 |
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |

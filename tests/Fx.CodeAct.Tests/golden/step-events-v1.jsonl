@@ -1,0 +1,8 @@
+{"kind":"kernelLaunched","launch":1}
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"cell":"t1-s2-1","fingerprint":"e37be8a76299b00bf7d7548140841f34ef581d9599688596225413224e8bac0c","intent":"run the migration","kind":"callStarted","snapshot":{"commit":"c0ffee","tree":"7ree"},"tool":"cell"}
+{"args":"[\"dotnet test\"]","binding":"shell.run","call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"index":1,"kind":"hostCallStarted"}
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"failed":false,"index":1,"kind":"hostCallEnded","summary":"{\"exitCode\":0}"}
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"kind":"printed","text":"migrating…\n"}
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"cell":"t1-s2-1","kind":"valueKept","type":"Object","value":{"json":{"rows":3},"kind":"inline"}}
+{"call":{"attempt":2,"id":"call-1","index":1,"step":2,"turn":1},"cell":"t1-s2-1-2","kind":"valueKept","type":"Array","value":{"blob":{"hash":"sha256:a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4","size":7},"kind":"stored"}}
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"cell":"t1-s2-1","kind":"valueLost","reason":"a Function has no JSON form","type":"Function"}

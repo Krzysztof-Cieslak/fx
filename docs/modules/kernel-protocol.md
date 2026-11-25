@@ -319,4 +319,6 @@ a refused launch, a snapshot and a killed kernel).
 - **T205:** kernel-side wrappers reporting activity. **Later:** packages (interpreters.md).
 - **T201:** blobs for large values and output overflow; handles inside data; how kernels read blobs;
   `fx.recall(callId)` and handles in the journal.
-- **T128:** journaling cell results and outputs for `recall` after a restart.
+- **Done in T128** ([codeact.md](codeact.md#kept-values-and-recall-spec-65-durability)): cells' values
+  journaled (`value/encode`) and restored into new kernels with `recall`; their streamed output journaled
+  as evidence for calls in doubt.
