@@ -13,6 +13,7 @@ let private render (command: SimpleCommand) : string =
 
     String.Join(" ", command.Words |> List.map word)
     + (command.Writes |> List.map (fun w -> " > " + word w) |> String.concat "")
+    + (command.Reads |> List.map (fun w -> " < " + word w) |> String.concat "")
 
 let private split (dialect: ShellDialect) (line: string) : Result<string list, string> =
     match ShellSyntax.parse dialect line with
@@ -98,9 +99,11 @@ let tests =
 
                         sh
                             "cmd &> log; cmd &>> log2; cmd >> log3; cmd >| log4; cmd <> rw"
-                            [ "cmd > log"; "cmd > log2"; "cmd > log3"; "cmd > log4"; "cmd > rw" ]
+                            [ "cmd > log"; "cmd > log2"; "cmd > log3"; "cmd > log4"; "cmd > rw < rw" ]
 
-                        sh "cmd < in.txt <<< \"$(id)\"" [ "id"; "cmd" ]
+                        sh "cmd < in.txt <<< \"$(id)\"" [ "id"; "cmd < in.txt" ]
+                        sh "< in.txt" [ " < in.txt" ]
+                        sh "cat < $f" [ "cat < ⟨$f⟩" ]
                         sh "exec 3>file" [ "exec > file" ]
                         sh "echo >&2 hi" [ "echo hi" ]
                         sh "echo hi >& out" [ "echo hi > out" ]
@@ -377,7 +380,9 @@ let tests =
                                 | CommandLine.Opaque reason -> Expect.isNotEmpty reason line
                                 | CommandLine.Parsed commands ->
                                     for command in commands do
-                                        Expect.isFalse (command.Words.IsEmpty && command.Writes.IsEmpty) line
+                                        Expect.isFalse
+                                            (command.Words.IsEmpty && command.Writes.IsEmpty && command.Reads.IsEmpty)
+                                            line
 
                                         match ShellSyntax.resource command.Words with
                                         | Some resource ->

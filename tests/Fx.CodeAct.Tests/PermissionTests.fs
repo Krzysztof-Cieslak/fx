@@ -94,6 +94,44 @@ let tests =
                 Expect.equal (runIn unix "sub" "ls") [ "shell.exec ls (listed)" ] "run in the workspace"
             }
 
+            test "a listed command that reads outside the workspace or an excluded file is not listed" {
+                Expect.equal (run unix "cat < a.txt") [ "shell.exec cat (listed)" ] "an input in the workspace"
+                Expect.equal (run unix "cat < /etc/shadow") [ "shell.exec cat" ] "an input outside"
+                Expect.equal (run unix "cat < $F") [ "shell.exec cat" ] "an input the shell names"
+
+                let excluding =
+                    match
+                        ContentExclusions.compile
+                            { ContentExclusions.none with
+                                Lists =
+                                    [
+                                        {
+                                            Origin = "host"
+                                            Patterns = [ ".env"; "secrets/" ]
+                                        }
+                                    ]
+                            }
+                    with
+                    | Ok exclusions ->
+                        { GrantSettings.defaults with
+                            Exclusions = exclusions
+                        }
+                    | Error issues -> failtest $"{issues}"
+
+                let runWith (line: string) =
+                    show (Permissions.needs Permissions.core excluding unix (call "shell.run" [ Json.String line ]))
+
+                Expect.equal (runWith "cat .env") [ "shell.exec cat .env" ] "an excluded file"
+
+                Expect.equal
+                    (runWith "grep -r key secrets/a.txt")
+                    [ "shell.exec grep -r key secrets/a.txt" ]
+                    "under an excluded directory"
+
+                Expect.equal (runWith "cat < .env") [ "shell.exec cat" ] "an excluded input"
+                Expect.equal (runWith "cat README.md") [ "shell.exec cat README.md (listed)" ] "other files"
+            }
+
             test "redirections write files: outside the workspace and to protected paths they need fs.write" {
                 Expect.equal
                     (run unix "echo hi > out.txt 2>/dev/null")
