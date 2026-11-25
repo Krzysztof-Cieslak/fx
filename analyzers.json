@@ -18,6 +18,11 @@
       "reason": "Process entry point: writes the outcome of the pure Cli.run to stdout and stderr."
     },
     {
+      "codes": ["EFF005"],
+      "files": ["src/Fx.Sdk.Process/ExtensionProcess.fs"],
+      "reason": "Entry point of an F# extension process: serves the extension protocol on standard input and output, and sends what extensions write to Console.Out to standard error."
+    },
+    {
       "codes": ["EFF001"],
       "files": ["src/Fx.Effects.Live/SystemClock.fs"],
       "reason": "IClock interpreter: the only reader of the system clock and the only real delay."

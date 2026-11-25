@@ -3,14 +3,14 @@
 /// host (`native` runtime) or out of it (`process` runtime). The transport-parity tests run one
 /// sample extension both ways.
 [<RequireQualifiedAccess>]
-module Fx.Extensions.ExtensionServer
+module Fx.Sdk.Process.ExtensionServer
 
 open System.Collections.Generic
 open Fx.Contracts
 open Fx.Effects
 open Fx.Rpc
 open Fx.Sdk
-open Fx.Extensions.ExtensionProtocol
+open Fx.Sdk.Process.ExtensionProtocol
 
 [<NoEquality; NoComparison>]
 type private Served =

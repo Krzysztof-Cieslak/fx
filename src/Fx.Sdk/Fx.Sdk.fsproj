@@ -17,6 +17,7 @@
     <Compile Include="Hooks.fs" />
     <Compile Include="Methods.fs" />
     <Compile Include="Extension.fs" />
+    <Compile Include="BasicExtensionEnv.fs" />
     <Compile Include="Semver.fs" />
     <Compile Include="Component.fs" />
     <Compile Include="Runtime.fs" />

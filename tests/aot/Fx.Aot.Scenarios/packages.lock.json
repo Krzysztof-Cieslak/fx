@@ -95,7 +95,8 @@
           "FSharp.Core": "[11.0.101, )",
           "Fx.Machines": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
-          "Fx.Sdk": "[0.0.0, )"
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Sdk.Process": "[0.0.0, )"
         }
       },
       "fx.kernel": {
@@ -154,6 +155,15 @@
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Effects": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.sdk.process": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.sqlite": {

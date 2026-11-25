@@ -2,23 +2,21 @@
   <!--
     The extension system's core (spec §16): the registry (a machine whose state is a fold of its
     events), admission and trust checks, the catalog of contribution types, the declarative, native and
-    process runtimes, the extension protocol and its F# server, and the bootstrap. Extensions see only
+    process runtimes, the host's side of the extension protocol, and the bootstrap. Extensions see only
     Fx.Sdk. No I/O of its own: processes start through the shell capability and talk over Fx.Rpc.
     Spec: docs/modules/extensions.md.
   -->
   <ItemGroup>
     <Compile Include="Registry.fs" />
-    <Compile Include="BasicExtensionEnv.fs" />
     <Compile Include="Catalog.fs" />
-    <Compile Include="Protocol.fs" />
     <Compile Include="Launch.fs" />
     <Compile Include="RpcRemote.fs" />
-    <Compile Include="ExtensionServer.fs" />
     <Compile Include="ProcessRuntime.fs" />
     <Compile Include="ExtensionHost.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Sdk.Process\Fx.Sdk.Process.fsproj" />
     <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
     <ProjectReference Include="..\Fx.Rpc\Fx.Rpc.fsproj" />
   </ItemGroup>
