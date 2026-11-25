@@ -33,6 +33,7 @@
     <Project Path="src/Fx.Sessions/Fx.Sessions.fsproj" />
     <Project Path="src/Fx.Sessions.Host/Fx.Sessions.Host.fsproj" />
     <Project Path="src/Fx.Prompt/Fx.Prompt.fsproj" />
+    <Project Path="src/Fx.Grants/Fx.Grants.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -98,6 +99,7 @@
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
+    <Project Path="tests/Fx.Grants.Tests/Fx.Grants.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="PatternTests.fs" />
+    <Compile Include="RulesTests.fs" />
+    <Compile Include="GrantLogTests.fs" />
+    <Compile Include="CodecTests.fs" />
+    <Compile Include="DeclarationTests.fs" />
+    <Compile Include="ArchitectureTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="golden\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Grants\Fx.Grants.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
+  </ItemGroup>
+</Project>
