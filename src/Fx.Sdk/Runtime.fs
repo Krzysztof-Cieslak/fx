@@ -350,10 +350,11 @@ module RuntimeSpec =
         |> Codec.named "RuntimeSpec"
 
     /// The process that runs `program` (the program and its arguments, as they are) on the runtime:
-    /// templates expanded; untrusted overrides added if the project is not trusted; the working
-    /// directory the policy says; a fresh environment (`LaunchSpec.environment`, with the component's
-    /// exported variables before `EnvSet`), never the launcher's. Refused if the spec is invalid, if
-    /// `installed` is another component, or if the program would not be an absolute path.
+    /// templates expanded; while the project is not trusted, the untrusted overrides after the
+    /// runtime's flags, before `program`; the working directory the policy says; a fresh environment
+    /// (`LaunchSpec.environment`, with the component's exported variables before `EnvSet`), never
+    /// the launcher's. Refused if the spec is invalid, if `installed` is another component, or if
+    /// the program would not be an absolute path.
     let launch
         (spec: RuntimeSpec)
         (installed: InstalledComponent)
@@ -415,7 +416,7 @@ module RuntimeSpec =
             else
                 Ok
                     {
-                        Program = Exec(exe, LaunchSpec.arguments session.ProjectTrusted overrides (args @ program))
+                        Program = Exec(exe, LaunchSpec.arguments session.ProjectTrusted overrides args @ program)
                         Cwd = cwd
                         Env =
                             Exactly(
