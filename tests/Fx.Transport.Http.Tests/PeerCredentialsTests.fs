@@ -145,6 +145,17 @@ let tests =
                     let connecting = client.ConnectAsync endpoint
                     use server = listener.Accept()
                     connecting.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+
+                    if OperatingSystem.IsWindows() then
+                        let pid = Array.zeroCreate<byte> 4
+                        let length = server.IOControl(0x58000100, null, pid)
+                        let reported = BitConverter.ToUInt32(pid, 0)
+
+                        Expect.equal
+                            (int reported)
+                            Environment.ProcessId
+                            $"SIO_AF_UNIX_GETPEERPID gives this process (reported {length} bytes)"
+
                     let peer = ofUnixSocket server
                     Expect.equal (peer |> Option.map _.Account) (Some(currentAccount ())) "the same account"
                     Expect.equal (peer |> Option.bind _.Process) (Some Environment.ProcessId) "this process"
