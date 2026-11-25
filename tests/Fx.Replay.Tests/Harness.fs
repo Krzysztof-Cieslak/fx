@@ -14,6 +14,27 @@ let expectMatched (report: ReplayReport) =
     | None -> ()
     | Some _ -> failtest (string report)
 
+/// With `REPLAY_DUMP=<directory>`, a diverging replay writes the recording's journal there, one entry a
+/// line in `Seq` order, to compare with the report's last steps.
+let dump (f: Fixture) (session: string) (report: ReplayReport) =
+    match Environment.GetEnvironmentVariable "REPLAY_DUMP", report.Divergence with
+    | null, _
+    | "", _
+    | _, None -> ()
+    | directory, Some _ ->
+        let lines =
+            f.Store.Events(JournalLog.stream session)
+            |> List.map (Fx.Store.EventLog.decode JournalLog.schema)
+            |> List.collect (fun r ->
+                match r.Event with
+                | JournalEvent.Recorded(segment, entries) -> entries |> List.map (fun e -> segment, e)
+                | _ -> [])
+            |> List.sortBy (fun (segment, e) -> segment, e.Seq)
+            |> List.map (fun (segment, e) -> $"{segment} {e}")
+
+        IO.Directory.CreateDirectory directory |> ignore
+        IO.File.WriteAllLines(IO.Path.Combine(directory, $"journal-{DateTime.UtcNow.Ticks}.txt"), lines)
+
 /// A test that replays `session` of a recording exactly.
 let replays (name: string) (recording: unit -> RecordedSession) (session: string) : Test =
     testTask name {
@@ -33,9 +54,25 @@ let recordsAndReplays
         let f = fixture ()
 
         try
-            let! session = (record f).WaitAsync(TimeSpan.FromSeconds 120.0)
+            let! session =
+                task {
+                    try
+                        return! (record f).WaitAsync(TimeSpan.FromSeconds 120.0)
+                    with :? TimeoutException ->
+                        return failtest "recording the session timed out"
+                }
+
             do! close f
-            let! report = replay f.Recording session
+
+            let! report =
+                task {
+                    try
+                        return! replay f.Recording session
+                    with :? TimeoutException ->
+                        return failtest "replaying the session timed out"
+                }
+
+            dump f session report
             expectMatched report
             check f report
         finally

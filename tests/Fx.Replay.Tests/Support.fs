@@ -358,11 +358,13 @@ let baseSelections: (string * Json) list =
         "codeact.journal.snapshots", Json.Bool false
     ]
 
-/// A recorded fixture with these selections, commands and the variables commands get.
-let createWith
+/// A recorded fixture with these selections, commands, the variables commands get, and a model (the
+/// scripted one by default).
+let createFull
     (selections: (string * Json) list)
     (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
     (commandEnv: EnvVars)
+    (llm: Llm option)
     : Fixture =
     let fsClock = FakeClock(Instant.ofUnixMicroseconds 1_700_000_000_000_000L)
 
@@ -376,7 +378,7 @@ let createWith
         {
             Clock = SystemClock.clock
             Trace = Trace.none
-            Llm = model.Llm
+            Llm = llm |> Option.defaultValue model.Llm
             Scope = Scope.root
         }
 
@@ -451,6 +453,14 @@ let createWith
         Process = start ()
         Start = start
     }
+
+/// A recorded fixture with these selections, commands and the variables commands get.
+let createWith
+    (selections: (string * Json) list)
+    (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
+    (commandEnv: EnvVars)
+    : Fixture =
+    createFull selections commands commandEnv None
 
 let create (selections: (string * Json) list) : Fixture = createWith selections ran (Inherit [])
 

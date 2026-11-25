@@ -293,6 +293,7 @@ let tests =
                     let! session = (recovered f deploying).WaitAsync(TimeSpan.FromSeconds 120.0)
                     do! close f
                     let! report = replay f.Recording session
+                    dump f session report
                     expectMatched report
                     Expect.equal report.Segments 2 "two host processes"
                     Expect.equal report.Turns 3 "a turn, its recovery, another turn"
