@@ -558,11 +558,13 @@ module SessionReplay =
                 let context = contextOf start lane
                 let label = $"turn {start.Turn} ({Markers.mode recover})"
 
+                // Turns start at the root flow, as recorded turns did.
                 let run: Task<Result<TurnResult, string> option> =
-                    if recover then
-                        Eff.run env (codeact.Runner.Recover context)
-                    else
-                        Eff.run env (codeact.Runner.Run context |> Eff.map Some)
+                    Flow.root (fun () ->
+                        if recover then
+                            Eff.run env (codeact.Runner.Recover context)
+                        else
+                            Eff.run env (codeact.Runner.Run context |> Eff.map Some))
 
                 let finished =
                     run.ContinueWith(fun (ran: Task<Result<TurnResult, string> option>) ->
@@ -578,17 +580,18 @@ module SessionReplay =
                                     Error aggregate.InnerExceptions[0]
                                 | aggregate -> Error(aggregate :> exn)
 
-                        verifyEnd segment marker.Entry.Input label outcome)
+                        Flow.root (fun () -> verifyEnd segment marker.Entry.Input label outcome))
 
                 work.Add finished
 
             let close () =
                 let closing =
-                    (codeact.Close())
+                    (Flow.root (fun () -> codeact.Close()))
                         .ContinueWith(fun (_: Task) ->
-                            match segment.Find(Markers.Host, Markers.Closed, Inputs.none) with
-                            | Found.Entry item -> segment.Complete item
-                            | _ -> ())
+                            Flow.root (fun () ->
+                                match segment.Find(Markers.Host, Markers.Closed, Inputs.none) with
+                                | Found.Entry item -> segment.Complete item
+                                | _ -> ()))
 
                 work.Add closing
 
@@ -627,7 +630,8 @@ module SessionReplay =
 
             if not loaded.Ended then
                 // The host stopped without closing: its kernels died with it.
-                let! _ = Eff.timeout settings.StallAfter (within (codeact.Close()))
+                let! _ =
+                    Eff.timeout settings.StallAfter (within (Flow.root (fun () -> codeact.Close())))
 
                 ()
 

@@ -243,13 +243,15 @@ type SessionJournal
                 else
                     None
 
+            let flow = Fx.Effects.Flow.path ()
+
             let call =
                 {
                     Lane = lane
                     Index = index
                     Op = op
-                    Input = input
-                    Summary = Digest.bound 160 summary
+                    Input = Digest.inFlow input
+                    Summary = Digest.bound 160 (if flow = "" then summary else $"{summary} (flow {flow})")
                     Seq = reserved
                 }
 

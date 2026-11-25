@@ -96,6 +96,13 @@ module Digest =
     /// The digest of bytes.
     let bytes (bytes: byte array) : string = hex bytes
 
+    /// An input as journaled in the current structured child (`Flow.path`): the same input in two
+    /// children of an `Eff.all` is two inputs, so each child is answered what it was answered.
+    let inFlow (input: string) : string =
+        match Fx.Effects.Flow.path () with
+        | "" -> input
+        | flow -> json (Json.Array [ Json.String input; Json.String flow ])
+
     /// Text cut to at most `max` characters (for summaries).
     let bound (max: int) (text: string) : string =
         let text = text.Replace("\r", "").Replace('\n', ' ')
