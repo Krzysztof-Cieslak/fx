@@ -10,6 +10,7 @@ let private usage =
     + "  platform           print the detected platform\n"
     + "  rpc-peer           serve the JSON-RPC test service on stdin and stdout\n"
     + "  ext-peer           serve the sample extension on stdin and stdout (extension protocol)\n"
+    + "  kernel-peer        serve the script kernel on stdin and stdout (kernel protocol)\n"
 
 let private writeLines (lines: string seq) =
     for line in lines do
@@ -53,6 +54,7 @@ let main argv =
         0
     | [ "rpc-peer" ] -> Rpc.Peer.serve ()
     | [ "ext-peer" ] -> Extensions.SampleHost.servePeer ()
+    | [ "kernel-peer" ] -> Kernel.ScriptKernel.serve ()
     | _ ->
         stderr.Write usage
         2
