@@ -52,6 +52,7 @@
     <Compile Include="Scenarios\Envd.fs" />
     <Compile Include="..\..\Fx.Models.Tests\Samples.fs" Link="Scenarios\ModelsSamples.fs" />
     <Compile Include="Scenarios\Models.fs" />
+    <Compile Include="Scenarios\Interpreters.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -76,5 +77,7 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.Sample\Fx.Ext.Sample.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.ModelCanonical\Fx.Ext.ModelCanonical.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Interpreters\Fx.Interpreters.fsproj" />
   </ItemGroup>
 </Project>
