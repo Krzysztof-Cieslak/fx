@@ -90,7 +90,8 @@ let fsMiddle  : ContributionType<Middleware<Fs>> = Hook.interpret "fs" "…"    
 - `Contribution.create t id value` erases the type (a `Contribution`); `Contribution.tryValue t` gets it
   back. Two types with one name and different value types are a defect.
 - **Catalog:** the host's table of types by name: the core's (`extension-runtime`,
-  `contribution-type`, `variant-slot`, `component`, `runtime`, `interpreter`, `environment-provider`), the host's own hook points (`HostSettings.Catalog`), and types native
+  `contribution-type`, `variant-slot`, `component`, `runtime`, `interpreter`, `environment-provider`,
+  `sandbox-driver`), the host's own hook points (`HostSettings.Catalog`), and types native
   extensions define by contributing a `ContributionTypes.contributionType` (so later extensions,
   declarative manifests and extension processes can contribute to them). Admission refuses types the
   catalog does not know.
@@ -265,7 +266,7 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 Left to later tasks: deciding project trust and reading pins from host config (T106/T129), bundled
 packages extracted with hash checks (T115; `fx.runtime.bun` is declarative, so its package is its
 manifest, a value in the binary, with nothing to extract), sandboxing extension
-processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension processes.
+processes with the sandbox drivers ([sandbox.md](sandbox.md); Windows v1 runs them unsandboxed), restarting crashed extension processes.
 
 ## Left to later tasks
 

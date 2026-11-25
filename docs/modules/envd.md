@@ -126,7 +126,11 @@ brackets; all definitions in `EnvProtocol`):
   `Proc` proxy releases a process once it has read the output to its end and seen the exit code; the
   `Pty` proxy's `Close` kills, waits for the exit and releases.
 - Processes envd started die with it only if it stops cleanly (end of input on stdio): a killed envd
-  leaves them running. Containment is the sandbox drivers' (T113).
+  leaves them running. Containment is the sandbox drivers' ([sandbox.md](sandbox.md)): with bubblewrap
+  a sandboxed process dies with envd (`--die-with-parent`, a pid namespace per process).
+- envd does not sandbox: the host wraps each process it asks envd to start for an agent
+  (`EnvHandle.Client`, [sandbox.md](sandbox.md)); envd's own processes (git) and file operations run
+  as envd does.
 
 ### Terminals
 
@@ -208,7 +212,9 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
   variant passed as `--shell`, and the base environment of envd's processes (`EnvdOptions.Environment`,
   `BaseEnvironment`: the host's variables without credentials). Reconnecting transports (WebSocket,
   Dialback) are T501 and T504.
-- **T113**: sandboxes; containment of escaped processes; stopping children when envd is killed.
+- **T113** (done, [sandbox.md](sandbox.md)): sandbox drivers wrap the processes the host starts for
+  agents; with bubblewrap they die with envd. Resolving the file operations' paths beneath their roots
+  (no symbolic links; the bindings check them before each call) is follow-up work (T113b).
 - **T131**: journaling capability calls (process output is journaled as `Read` results); a
   deterministic `ScriptedTerminal` fake.
 - **T202**: ripgrep semantics for search; **T204**: anchored edits on `FsOps.ApplyPatch`; **T205**:

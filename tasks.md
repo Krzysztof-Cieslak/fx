@@ -26,7 +26,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
-- **Wave 6:** T109b Extension host capabilities, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
+- **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
@@ -72,6 +72,7 @@ flowchart LR
     T111["T111 envd core"]
     T112["T112 Env provider + local"]
     T113["T113 Sandbox drivers"]
+    T113b["T113b envd paths beneath roots"]
     T114["T114 fx.runtime.bun"]
     T115["T115 fx.exthost.bun"]
     T116["T116 Kernel protocol"]
@@ -192,6 +193,7 @@ flowchart LR
   T111 --> T112
   T108 --> T113
   T111 --> T113
+  T113 --> T113b
   T009 --> T114
   T110 --> T114
   T109 --> T115
@@ -399,6 +401,7 @@ flowchart LR
 | T111 | envd core | T005, T104, T107 | §3, §9 | done | envd mode: exec/PTY with sequenced resumable output, fs ops (batch stat, read/write, apply-patch, search, watch), blob store, shadow-git snapshots, environment protocol. |
 | T112 | Env provider + local | T108, T111 | §9.1–9.2 | done | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |
 | T113 | Sandbox drivers | T108, T111 | §9.1 | in-progress | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
+| T113b | envd paths beneath roots | T113 | §9.1, §18 | todo | envd's file operations take a root and resolve paths beneath it without following symbolic links (`openat2` `RESOLVE_BENEATH` on Linux, `O_NOFOLLOW_ANY` on macOS, reparse-point checks on Windows), so the bindings' sandbox check (`SandboxGuard`) cannot be raced by a sandboxed process swapping a directory for a link; the fs conformance suites cover links. |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
 | T116 | Kernel protocol | T101, T107 | §6.4 | done | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
