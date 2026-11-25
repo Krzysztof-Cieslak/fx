@@ -362,7 +362,12 @@ module Scripts =
         Gen.choose (0, 6) |> Gen.map (fun n -> GrantId("g" + string n))
 
     let private principal =
-        Gen.frequency [ 4, Gen.constant alice; 1, Gen.constant "system" ]
+        Gen.frequency
+            [
+                4, Gen.constant alice
+                1, Gen.constant "system"
+                1, Gen.constant "device:device-pairing:k1"
+            ]
 
     let private scopeChoice =
         Gen.elements

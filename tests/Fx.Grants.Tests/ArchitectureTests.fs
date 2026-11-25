@@ -1,5 +1,5 @@
 /// Fx.Grants is shared with Fable clients (spec §17): they fold the grants log with the same `GrantLog.evolve`. It
-/// may use FSharp.Core, the Fable-compatible Fx.Contracts, and the few base types every
+/// may use FSharp.Core, the Fable-compatible Fx.Contracts and Fx.Identity, and the few base types every
 /// F# program compiles to, and nothing else: no tasks, threads, I/O or reflection.
 module Fx.Grants.Tests.ArchitectureTests
 
@@ -122,13 +122,13 @@ let tests =
     testList
         "Architecture"
         [
-            test "Fx.Grants references only FSharp.Core, the runtime and Fx.Contracts" {
+            test "Fx.Grants references only FSharp.Core, the runtime, Fx.Contracts and Fx.Identity" {
                 let assemblies, _ = references ()
 
                 Expect.equal
                     (assemblies
                      |> List.filter (fun name ->
-                         not (List.contains name [ "FSharp.Core"; "System.Runtime"; "Fx.Contracts" ])))
+                         not (List.contains name [ "FSharp.Core"; "System.Runtime"; "Fx.Contracts"; "Fx.Identity" ])))
                     []
                     "assemblies"
             }
@@ -138,7 +138,7 @@ let tests =
                 let _, types = references ()
 
                 let ours (name: string) =
-                    [ "Fx.Grants."; "Fx.Contracts." ]
+                    [ "Fx.Grants."; "Fx.Contracts."; "Fx.Identity." ]
                     |> List.exists (fun prefix -> name.StartsWith(prefix, StringComparison.Ordinal))
 
                 let foreign =

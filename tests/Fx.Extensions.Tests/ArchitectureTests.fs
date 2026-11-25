@@ -33,6 +33,7 @@ let sdkSurface =
             "Fx.Variants"
             "Fx.Models"
             "Fx.Grants"
+            "Fx.Identity"
             "FSharp.Core"
         ]
 
@@ -247,6 +248,7 @@ let tests =
                         "Fx.Contracts.TypeScript"
                         "Fx.Effects"
                         "Fx.Grants"
+                        "Fx.Identity"
                         "Fx.Models"
                         "Fx.Prelude"
                         "Fx.Variants"

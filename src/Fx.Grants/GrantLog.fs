@@ -1,5 +1,7 @@
 namespace Fx.Grants
 
+open Fx.Identity
+
 /// The grants log as a machine (spec §4.4, §13.2): `initial`, `evolve`, `decide` (the machine's
 /// `Handle`, with typed errors), `react` and `recover`. Pure; the host assembles the `Machine` value
 /// (Fx.Grants.Host) and clients fold the same events with `evolve`.
@@ -35,10 +37,10 @@ module GrantLog =
     [<Literal>]
     let SystemPrincipal = "system"
 
-    /// Whether a principal may grant, answer and revoke: a person, not the host itself. (Agents act
-    /// through `IGrants`, which can only request; T122's principal kinds will refine this.)
-    let isPerson (principal: string) : bool =
-        not (System.String.IsNullOrWhiteSpace principal) && principal <> SystemPrincipal
+    /// Whether a principal may grant, answer and revoke: a person, as its id says
+    /// (`Fx.Identity.PrincipalId.isPerson`: `user:…`), never a device, a service or the host itself.
+    /// The capability split is the first line: agents act through `IGrants`, which can only request.
+    let isPerson (principal: string) : bool = PrincipalId.isPerson principal
 
     let private scopeOrder =
         [ ScopeKind.Once; ScopeKind.Session; ScopeKind.Repo; ScopeKind.Host ]

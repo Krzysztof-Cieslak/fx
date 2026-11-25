@@ -339,6 +339,40 @@ let tests =
                     "unknown action"
             }
 
+            test "devices, services and ids without a kind are not people (T122)" {
+                let _, state = requested ()
+
+                for principal in
+                    [
+                        "device:device-pairing:k1"
+                        "service:ci:runner"
+                        "system"
+                        "alice"
+                        "user:"
+                        ""
+                    ] do
+                    Expect.equal
+                        (decideError
+                            state
+                            (command principal later (answerOp (answer GrantEffect.Allow ScopeChoice.Once))))
+                            .Code
+                        "grants.not-a-person"
+                        principal
+
+                let _, state =
+                    decideOk
+                        state
+                        (command
+                            "user:local-os-user:m1/1000"
+                            later
+                            (answerOp (answer GrantEffect.Allow ScopeChoice.Host)))
+
+                Expect.equal
+                    (decideError state (command "service:ci:runner" later (GrantOp.Revoke(GrantId "g1", None)))).Code
+                    "grants.not-a-person"
+                    "a service does not revoke"
+            }
+
             test "revoking stops a grant; only people revoke" {
                 let request, state = requested ()
 

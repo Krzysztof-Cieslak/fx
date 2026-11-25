@@ -19,6 +19,13 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
         }
+      },
+      "fx.identity": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
       }
     }
   }

@@ -3,10 +3,10 @@
     The grants log's pure core (spec §13): actions, resources and patterns, grants, requests and
     answers, events and state, the effective-rules projection, the machine's functions and every
     codec, including the `grants/*` client protocol's messages. Clients fold the log with the same
-    `GrantLog.evolve` (Fable, spec §17), so this project references only FSharp.Core and
-    Fx.Contracts; Fx.Grants.Tests checks the compiled assembly. Fx.Sdk exposes it (the IGrants
-    capability and the GrantStore contribution type are there); the actor, the host-local store,
-    the service and the protocol's methods are Fx.Grants.Host. Spec: docs/modules/grants.md.
+    `GrantLog.evolve` (Fable, spec §17), so this project references only FSharp.Core, Fx.Contracts
+    and Fx.Identity (a principal's kind, from its id); Fx.Grants.Tests checks the compiled assembly.
+    Fx.Sdk exposes it (the IGrants capability and the GrantStore contribution type are there); the
+    actor, the host-local store, the service and the protocol's methods are Fx.Grants.Host. Spec: docs/modules/grants.md.
   -->
   <PropertyGroup Label="Package">
     <IsPackable>true</IsPackable>
@@ -24,5 +24,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Identity\Fx.Identity.fsproj" />
   </ItemGroup>
 </Project>
