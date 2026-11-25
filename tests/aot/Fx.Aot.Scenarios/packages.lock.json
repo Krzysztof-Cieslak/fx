@@ -206,6 +206,23 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.sessions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )"
+        }
+      },
+      "fx.sessions.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
+        }
+      },
       "fx.sqlite": {
         "type": "Project",
         "dependencies": {
