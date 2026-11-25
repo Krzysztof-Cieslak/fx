@@ -23,7 +23,7 @@ declare namespace fx {
     /** Applies changes to files: every change is checked first, then all are written; nothing is written if one fails (e.g. data.code stale: a file changed since it was read). */
     patch(patches: FilePatch[]): Promise<Written[]>;
     /**
-     * Reads a text file (UTF-8).
+     * Reads a text file (UTF-8). Fails (data.code excluded) for files content exclusions keep from models.
      *
      * @param path Relative to the workspace.
      */

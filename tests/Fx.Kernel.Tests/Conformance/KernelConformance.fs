@@ -180,6 +180,21 @@ let blobValue =
     )
 
 /// The host side of a test: answers the test bindings and records what the kernel reports.
+/// What `test.read` refuses: a secret file's content must never reach a cell.
+let private excludedFiles: Fx.Models.Exclusions =
+    match
+        Fx.Models.Exclusions.create
+            Fx.Models.PathCase.Insensitive
+            [
+                {
+                    Origin = "host"
+                    Patterns = [ "*.env" ]
+                }
+            ]
+    with
+    | Ok e -> e
+    | Error issues -> failwith (string issues)
+
 type Recorder() =
     let handles = HandleTable<string>()
 
@@ -264,6 +279,14 @@ type Recorder() =
                     | "test.signal" ->
                         this.Signalled.TrySetResult() |> ignore
                         return Ok(Value.Inline Json.Null)
+                    | "test.read" ->
+                        // A file read as the core bindings do it, with content exclusions (T124).
+                        match first with
+                        | Some(Value.Inline(Json.String path)) ->
+                            match Fx.Models.Exclusions.test excludedFiles path with
+                            | Some found -> return Error(Fx.Interpreters.CoreBindings.excluded path found)
+                            | None -> return Ok(Value.Inline(Json.String("the content of " + path)))
+                        | _ -> return Error(HostCallError.InvalidArguments [ Issue.create "expected a path" ])
                     | other -> return Error(HostCallError.UnknownBinding other)
                 }
 
@@ -292,6 +315,7 @@ let bindings =
         "test.inspect"
         "test.slow"
         "test.signal"
+        "test.read"
     ]
 
 /// Small limits, so that bounds are cheap to reach.
@@ -1499,6 +1523,31 @@ let private hygiene (subject: KernelSubject) =
                     }
             ]
 
+/// Content exclusions (spec §6.4, §6.5): the host refuses excluded files, and the kernel reports
+/// the refusal in the cell, with no content, and carries on.
+let private contentExclusions (subject: KernelSubject) =
+    let s = subject.Snippets
+
+    testList
+        "content exclusions"
+        [
+            case subject "a read the host refuses as excluded fails in the cell, and nothing of the file reaches it"
+            <| fun c ->
+                task {
+                    let! refused = c.Run(s.Call "secret" "test.read" [ Json.String "deploy/prod.env" ])
+                    let failure = runtimeError refused
+                    Expect.equal failure.Code (Some "failed") "a host failure"
+                    Expect.stringContains failure.Message "is excluded" "says why"
+                    Expect.isFalse (failure.Message.Contains "the content of") "no content"
+                    Expect.isFalse ((c.Recorder.OutputOf refused.CellId).Contains "the content of") "no output"
+
+                    let! allowed = c.Run(s.Call "readme" "test.read" [ Json.String "README.md" ])
+                    completed allowed |> ignore
+                    let! readme = c.EncodeVariable "readme"
+                    expectJson readme (Json.String "the content of README.md") "other files are read"
+                }
+        ]
+
 /// The suite for one kernel implementation.
 let tests (subject: KernelSubject) : Test =
     testList
@@ -1517,5 +1566,5 @@ let tests (subject: KernelSubject) : Test =
             recall subject
             optional subject
             hygiene subject
-            ptestCase "content exclusions filter output and previews (T124: model-egress hooks)" ignore
+            contentExclusions subject
         ]
