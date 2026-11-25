@@ -617,6 +617,42 @@ let within (name: string) (selections: (string * Json) list) (body: Fixture -> T
             do! body(f).WaitAsync(TimeSpan.FromSeconds 120.0)
         }
 
+/// The session's step journal, decoded.
+let journal (f: Fixture) (session: string) : Recorded<StepEvent> list =
+    f.Store.Events(StepJournal.stream session)
+    |> List.map (EventLog.decode StepJournal.schema)
+
+/// Waits until a condition holds.
+let until (what: string) (condition: unit -> bool) : Task =
+    task {
+        let deadline = DateTime.UtcNow.AddSeconds 60.0
+
+        while not (condition ()) do
+            if DateTime.UtcNow > deadline then
+                failtest $"timed out waiting: {what}"
+
+            do! Task.Delay 10
+    }
+
+/// Waits until the session has the open request.
+let opened (f: Fixture) (session: string) (id: string) : Task<PendingRequest> =
+    task {
+        let deadline = DateTime.UtcNow.AddSeconds 60.0
+        let mutable found = None
+
+        while found.IsNone do
+            let! state = state f session
+            found <- state.Requests |> List.tryFind (fun r -> r.Request.Id = id)
+
+            if found.IsNone then
+                if DateTime.UtcNow > deadline then
+                    failtest $"no request {id}: {state}"
+
+                do! Task.Delay 10
+
+        return found.Value
+    }
+
 let private canonicalRequest (request: ChatRequest) =
     Json.serializeCanonical (ChatRequest.codec.Encode request)
 
