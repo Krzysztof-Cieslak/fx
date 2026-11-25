@@ -88,6 +88,22 @@
           "long"
         ]
       },
+      "ContentSource": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lines": {
+            "$ref": "#/$defs/LineRange"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "description": "A file whose content a part quotes, relative to the workspace (with /) when inside it."
+      },
       "Effort": {
         "type": "string",
         "enum": [
@@ -99,6 +115,24 @@
           "max"
         ],
         "description": "How hard a model reasons."
+      },
+      "LineRange": {
+        "type": "object",
+        "properties": {
+          "first": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "last": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "first",
+          "last"
+        ],
+        "description": "Lines of a file, 1-based and inclusive."
       },
       "MediaKind": {
         "type": "string",
@@ -235,6 +269,13 @@
               },
               "state": {
                 "$ref": "#/$defs/ProviderState"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentSource"
+                },
+                "description": "The files its content quotes (provenance for content exclusions; never sent)."
               }
             },
             "required": [
@@ -260,6 +301,13 @@
               },
               "name": {
                 "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentSource"
+                },
+                "description": "The files its content quotes (provenance for content exclusions; never sent)."
               }
             },
             "required": [
@@ -337,6 +385,13 @@
               "isError": {
                 "type": "boolean",
                 "default": false
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentSource"
+                },
+                "description": "The files its content quotes (provenance for content exclusions; never sent)."
               }
             },
             "required": [
@@ -543,6 +598,13 @@
               },
               "name": {
                 "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ContentSource"
+                },
+                "description": "The files its content quotes (provenance for content exclusions; never sent)."
               }
             },
             "required": [

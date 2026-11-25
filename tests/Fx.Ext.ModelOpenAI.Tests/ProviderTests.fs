@@ -243,6 +243,7 @@ let tests =
                                         {
                                             Text = "Done."
                                             State = Some(state astra Request.PhaseKind "final_answer")
+                                            Sources = []
                                         }
                                 ]
                         ]

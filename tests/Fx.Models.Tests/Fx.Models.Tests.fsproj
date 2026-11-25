@@ -8,6 +8,7 @@
     <Compile Include="CassetteTests.fs" />
     <Compile Include="ProviderTests.fs" />
     <Compile Include="FitReplayTests.fs" />
+    <Compile Include="ExclusionTests.fs" />
     <Compile Include="AccessTests.fs" />
     <!-- The wire-conformance suite: adapters' test projects link this file. -->
     <Compile Include="Conformance\WireConformance.fs" />

@@ -18,6 +18,7 @@ let image: MediaPart =
     {
         Kind = MediaKind.Image
         MediaType = "image/png"
+        Sources = []
         Source = MediaSource.Base64 "iVBORw0KGgo="
         Name = None
     }
@@ -41,6 +42,7 @@ let request: ChatRequest =
                             {
                                 Kind = MediaKind.Pdf
                                 MediaType = "application/pdf"
+                                Sources = []
                                 Source = MediaSource.Blob "sha256:00ff"
                                 Name = Some "spec.pdf"
                             }
@@ -52,7 +54,7 @@ let request: ChatRequest =
                                 Text = "A cat; then the tool."
                                 State = Some(state "EqQBCgIYAhIM\u00e9+/=")
                             }
-                        Part.Text { Text = "A cat."; State = None }
+                        Part.text "A cat."
                         Part.ToolCall
                             {
                                 Id = "toolu_01"
@@ -69,6 +71,7 @@ let request: ChatRequest =
                                 Name = "get_weather"
                                 Content = [ ToolContent.Text "12 °C"; ToolContent.Media image ]
                                 IsError = false
+                                Sources = []
                             }
                         Part.CacheBreakpoint CacheTtl.Short
                     ]
@@ -171,6 +174,7 @@ let response: ChatResponse =
                     {
                         Text = "Checking Kraków."
                         State = None
+                        Sources = []
                     }
                 Part.ToolCall
                     {

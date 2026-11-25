@@ -136,6 +136,7 @@ let tests =
                                         {
                                             Kind = MediaKind.Image
                                             MediaType = "image/png"
+                                            Sources = []
                                             Source = MediaSource.Url "https://example.com/a.png"
                                             Name = None
                                         }
@@ -217,6 +218,7 @@ let tests =
                                         {
                                             Text = "Looking."
                                             State = Some(state sol Request.PhaseKind "commentary")
+                                            Sources = []
                                         }
                                     Part.ToolCall
                                         {
@@ -236,6 +238,7 @@ let tests =
                                                         Kind = Request.PhaseKind
                                                         Data = "commentary"
                                                     }
+                                            Sources = []
                                         }
                                     Part.Refusal "No."
                                     Part.text ""
@@ -257,6 +260,7 @@ let tests =
                     {
                         Kind = MediaKind.Image
                         MediaType = "image/jpeg"
+                        Sources = []
                         Source = MediaSource.Base64 "AAAA"
                         Name = None
                     }
@@ -274,6 +278,7 @@ let tests =
                                             Name = "a"
                                             Content = [ ToolContent.Text "one" ]
                                             IsError = false
+                                            Sources = []
                                         }
                                     Part.ToolResult
                                         {
@@ -281,6 +286,7 @@ let tests =
                                             Name = "b"
                                             Content = [ ToolContent.Text "shot:"; ToolContent.Media image ]
                                             IsError = true
+                                            Sources = []
                                         }
                                     Part.ToolResult
                                         {
@@ -288,6 +294,7 @@ let tests =
                                             Name = "c"
                                             Content = []
                                             IsError = false
+                                            Sources = []
                                         }
                                 ]
                         ]
@@ -310,6 +317,7 @@ let tests =
                         {
                             Kind = kind
                             MediaType = mediaType
+                            Sources = []
                             Source = source
                             Name = name
                         }
@@ -571,6 +579,7 @@ let tests =
                                               Name = "t"
                                               Content = [ ToolContent.Text "out" ]
                                               IsError = false
+                                              Sources = []
                                           }
                                       Part.CacheBreakpoint CacheTtl.Short
                                       Part.text "q"

@@ -259,6 +259,7 @@ let replay =
                                                 Name = "get_weather"
                                                 Content = [ ToolContent.Text "4 °C" ]
                                                 IsError = false
+                                                Sources = []
                                             }
                                     ]
                             ]
@@ -502,6 +503,7 @@ let requests =
                                   {
                                       Kind = MediaKind.Pdf
                                       MediaType = "application/pdf"
+                                      Sources = []
                                       Source = MediaSource.Url "https://example.com/a.pdf"
                                       Name = Some "a.pdf"
                                   }

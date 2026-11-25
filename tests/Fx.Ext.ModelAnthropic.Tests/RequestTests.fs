@@ -375,12 +375,14 @@ let tests =
                                                                     {
                                                                         Kind = MediaKind.Image
                                                                         MediaType = "image/gif"
+                                                                        Sources = []
                                                                         Source =
                                                                             MediaSource.Url "https://example.com/a.gif"
                                                                         Name = None
                                                                     }
                                                             ]
                                                         IsError = true
+                                                        Sources = []
                                                     }
                                                 Part.ToolResult
                                                     {
@@ -388,6 +390,7 @@ let tests =
                                                         Name = "a"
                                                         Content = []
                                                         IsError = false
+                                                        Sources = []
                                                     }
                                             ]
                                     ]
@@ -503,6 +506,7 @@ let tests =
                                 {
                                     Kind = kind
                                     MediaType = mediaType
+                                    Sources = []
                                     Source = source
                                     Name = name
                                 }
@@ -549,6 +553,7 @@ let tests =
                                                     {
                                                         Kind = kind
                                                         MediaType = "x/y"
+                                                        Sources = []
                                                         Source = source
                                                         Name = None
                                                     }

@@ -180,7 +180,13 @@ module ChatAggregate =
 
     let private toPart (part: OpenPart) : Part =
         match part.Start with
-        | PartStart.Text -> Part.Text { Text = text part; State = part.State }
+        | PartStart.Text ->
+            Part.Text
+                {
+                    Text = text part
+                    State = part.State
+                    Sources = []
+                }
         | PartStart.Reasoning -> Part.Reasoning { Text = text part; State = part.State }
         | PartStart.ToolCall(id, name) ->
             Part.ToolCall

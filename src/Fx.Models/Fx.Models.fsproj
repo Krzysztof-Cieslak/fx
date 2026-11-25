@@ -24,6 +24,7 @@
     <Compile Include="Cassette.fs" />
     <Compile Include="Replay.fs" />
     <Compile Include="Fit.fs" />
+    <Compile Include="Exclusions.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />

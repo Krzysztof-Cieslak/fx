@@ -111,6 +111,7 @@ let private toolCall: WireCase =
                             Name = "echo"
                             Content = [ ToolContent.Text "pong" ]
                             IsError = false
+                            Sources = []
                         }
                 ]
         ]
