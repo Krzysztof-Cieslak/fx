@@ -20,6 +20,7 @@ module Catalog =
     /// §6.2), which declarative extensions such as `fx.runtime.bun` contribute.
     let core: ContributionTypeInfo list =
         [
+            ContributionType.info VariantSlots.contributionType
             ContributionType.info ExtensionRuntimes.contributionType
             ContributionType.info ContributionTypes.contributionType
             ContributionType.info ComponentDefinitions.contributionType
