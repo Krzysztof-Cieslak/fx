@@ -46,7 +46,7 @@ type SecretServiceSettings =
 /// Items are generic passwords in the default collection with the attributes `service` and
 /// `account` (what `secret-tool lookup service <s> account <a>` finds). Every operation opens its
 /// own connection and session, and closes them when done: keyring operations are rare, and nothing
-/// stays open to be reconnected after the service restarts.
+/// stays open to be reconnected after the service restarts. Each connection's first call is `greet`.
 module SecretServiceKeyring =
     [<Literal>]
     let private Bus = "org.freedesktop.secrets"
@@ -151,6 +151,21 @@ module SecretServiceKeyring =
                 | [ DBusValue.Variant value ] -> Some value
                 | _ -> None)
             cancellation
+
+    /// The first call on every connection, so the service knows the caller before anything depends
+    /// on it. gnome-keyring creates its record of a caller from an idle callback that its D-Bus
+    /// message filter queues, and can dispatch a new connection's first call before that callback
+    /// has run: `OpenSession` then aborts the daemon (GNOME/gnome-keyring#190 and #206) and
+    /// `ReadAlias` answers "/" as if there were no default collection. Under concurrent operations
+    /// that happened about once per thousand connections. The service's `Collections` property does
+    /// not depend on the caller; its value is ignored, its errors (no service) are not.
+    let private greet settings connection cancellation : Task<Result<unit, KeyringError>> =
+        task {
+            let! reply =
+                property settings connection ServicePath ServiceInterface "Collections" cancellation
+
+            return reply |> Result.map ignore
+        }
 
     /// Runs a prompt (`Prompts.Allow`) and returns its result, or dismisses it (`Prompts.Never`).
     let private prompt
@@ -396,7 +411,14 @@ module SecretServiceKeyring =
                     use connection = connection
 
                     try
-                        match! openSession settings connection cancellation with
+                        let! session =
+                            task {
+                                match! greet settings connection cancellation with
+                                | Error e -> return Error e
+                                | Ok() -> return! openSession settings connection cancellation
+                            }
+
+                        match session with
                         | Error e -> return Error e
                         | Ok session ->
                             let! result =
@@ -612,18 +634,24 @@ module SecretServiceKeyring =
 
                     try
                         let! alias =
-                            ask
-                                settings
-                                connection
-                                ServicePath
-                                ServiceInterface
-                                "ReadAlias"
-                                [ DBusValue.String "default" ]
-                                (fun reply ->
-                                    match reply with
-                                    | [ DBusValue.ObjectPath path ] -> Some path
-                                    | _ -> None)
-                                cancellation
+                            task {
+                                match! greet settings connection cancellation with
+                                | Error e -> return Error e
+                                | Ok() ->
+                                    return!
+                                        ask
+                                            settings
+                                            connection
+                                            ServicePath
+                                            ServiceInterface
+                                            "ReadAlias"
+                                            [ DBusValue.String "default" ]
+                                            (fun reply ->
+                                                match reply with
+                                                | [ DBusValue.ObjectPath path ] -> Some path
+                                                | _ -> None)
+                                            cancellation
+                            }
 
                         match alias with
                         | Error(KeyringError.Unavailable reason) -> return KeyringStatus.Unavailable reason

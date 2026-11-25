@@ -100,6 +100,19 @@ module private SecretServiceHelpers =
         | Ok connection ->
             use connection = connection
 
+            // gnome-keyring may answer a connection's first call before it knows the caller
+            // (SecretServiceKeyring.greet): ReadAlias would then say "/".
+            call
+                connection
+                "/org/freedesktop/secrets"
+                "org.freedesktop.DBus.Properties"
+                "Get"
+                [
+                    DBusValue.String "org.freedesktop.Secret.Service"
+                    DBusValue.String "Collections"
+                ]
+            |> ignore
+
             match
                 call
                     connection
