@@ -23,7 +23,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 0:** T001 Scaffold
 - **Wave 1:** T002 Analyzers, T003 AOT gates, T009 Spike: Bun kernel
 - **Wave 2:** T004 Spike: Kestrel/WS/SSE, T005 Spike: PTY, T006 Spike: SQLite, T007 Spike: keychains, T008 Spike: tree-sitter, T010 Spike: envd bootstrap, T101 Codecs + JSON, T103 Eff + capabilities
-- **Wave 3:** T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
+- **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
 - **Wave 6:** T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T129 Host server, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
@@ -57,6 +57,7 @@ flowchart LR
   end
   subgraph P1["Phase 1 — Core (usable for building fx with fx)"]
     T101["T101 Codecs + JSON"]
+    T101b["T101b Codec AOT limits"]
     T102["T102 Schema→TS gen"]
     T103["T103 Eff + capabilities"]
     T104["T104 Machine host"]
@@ -162,6 +163,7 @@ flowchart LR
   T001 --> T009
   T003 --> T010
   T002 --> T101
+  T101 --> T101b
   T101 --> T102
   T002 --> T103
   T103 --> T104
@@ -196,6 +198,7 @@ flowchart LR
   T114 --> T117
   T116 --> T117
   T101 --> T118
+  T101b --> T118
   T108 --> T118
   T118 --> T119
   T118 --> T120
@@ -207,6 +210,7 @@ flowchart LR
   T108 --> T123
   T108 --> T124
   T118 --> T124
+  T101b --> T125
   T104 --> T125
   T105 --> T125
   T107 --> T125
@@ -343,6 +347,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T009,T101,T102,T103,T104,T105,T106,T107,T108 done
+  class T101b inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -369,6 +374,7 @@ flowchart LR
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
 | T101 | Codecs + JSON | T002 | §4.1 | done | Own JSON AST + AOT-safe reader/writer; `Codec<'T>` combinators (record, union, list, option, refinements), `Schema` ADT, `Validation` with model-readable issues, `Preview` with limits. Property tests for round-trips. |
+| T101b | Codec AOT limits | T101 | §4.1 | in-progress | Codec.union and Codec.record compile and run under Native AOT for any realistic number of cases/fields (≥ 16 cases, ≥ 24 fields, nested unions/records); JIT-vs-native scenarios prove it; the documented limits are removed. |
 | T102 | Schema→TS gen | T101 | §4.1, §17 | done | Generator emitting TypeScript types/codecs (`.d.ts`) from `Schema`; golden tests. |
 | T103 | Eff + capabilities | T002 | §4.2 | done | `Eff<'R,'T>`, `eff`/`effResult` builders, 'has' interface conventions, core capability interfaces (`IClock`, `IIds`, …) with test doubles. |
 | T104 | Machine host | T103 | §4.4 | done | `Machine` type, actor runner (single writer, serialized + attributed inputs), process managers across streams; deterministic tests. |
@@ -385,14 +391,14 @@ flowchart LR
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
 | T116 | Kernel protocol | T101, T107 | §6.4 | todo | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
 | T117 | bun-ts kernel | T109, T111, T114, T116 | §6.3–6.5 | todo | `fx.interpreter.bun-ts`: persistent cells, transpile, bounded output, host bridge (`fx.*` stubs from codecs), `fx.finish`; passes kernel conformance. |
-| T118 | Canonical model | T101, T108 | §10.2–10.3 | todo | Canonical chat model (typed parts, `ProviderState`), `ChatWire` contract, typed errors, wire-conformance harness over recorded streams. |
+| T118 | Canonical model | T101, T101b, T108 | §10.2–10.3 | todo | Canonical chat model (typed parts, `ProviderState`), `ChatWire` contract, typed errors, wire-conformance harness over recorded streams. |
 | T119 | anthropic.messages | T118 | §10.1 | todo | Anthropic Messages adapter (streaming, thinking signatures, cache_control mapping); passes wire conformance. |
 | T120 | openai.responses | T118 | §10.1 | todo | OpenAI Responses adapter (streaming, encrypted reasoning replay, prompt_cache_key); passes wire conformance. |
 | T121 | Auth + credential stores | T007, T108 | §11.3–11.4 | todo | `AuthMethod` contract with `api_key`/`env`; `fx.store.keyring|file|ephemeral`; `secret:` references; credential-store conformance. |
 | T122 | Identity + tokens | T108 | §11.2 | todo | `IdentityProvider` contract, `fx.identity.local-os-user`, principals, host-issued session tokens. |
 | T123 | Grants log | T104, T105, T108 | §13 | todo | Grant machine, host-local `GrantStore`, effective-rules projection (deny wins, most specific, else ask), grant request/answer protocol. |
 | T124 | Egress hooks | T108, T118 | §18 | todo | Model-egress hook kind (transform + gate) on every model-bound payload; built-in `fx.egress.exclusions` (path/glob content exclusions). |
-| T125 | Session machine | T104, T105, T107 | §5 | todo | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
+| T125 | Session machine | T101b, T104, T105, T107 | §5 | todo | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
 | T126 | Prompt render | T118, T125 | §5 | todo | Pure render (prefix/history/suffix), stable receipts, cache-breakpoint mapping, `SeenRanges`, content-exclusion filtering; prefix-stability property tests. |
 | T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | todo | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
 | T128 | Crash recovery | T125, T127 | §5 | todo | Journaled steps; in-flight tool calls become `OutcomeUnknown`, run pauses and opens a session decision with evidence; `fx.recall`. |
