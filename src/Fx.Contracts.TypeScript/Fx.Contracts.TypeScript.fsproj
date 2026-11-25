@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    TypeScript declarations (`.d.ts`) generated from contract schemas (spec §4.1, §17): the types of
+    `@fx/sdk` (T109) and the kernel's `<global>.d.ts` host bridge (T117). Pure text generation, no I/O
+    or reflection, so the host can generate declarations at run time in the Native AOT binary.
+    Spec: docs/modules/typescript.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Names.fs" />
+    <Compile Include="Declarations.fs" />
+    <Compile Include="Docs.fs" />
+    <Compile Include="Emit.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+  </ItemGroup>
+</Project>

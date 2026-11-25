@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Samples.fs" />
+    <Compile Include="Fixtures.fs" />
+    <Compile Include="MappingTests.fs" />
+    <Compile Include="FileTests.fs" />
+    <Compile Include="GoldenTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TypeScript files that `bun scripts/declarations.ts` type-checks against the golden files. -->
+    <None Include="typescript\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+    <!-- Real contracts that exist today, declared in the golden files. -->
+    <ProjectReference Include="..\..\src\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Variants\Fx.Variants.fsproj" />
+  </ItemGroup>
+</Project>

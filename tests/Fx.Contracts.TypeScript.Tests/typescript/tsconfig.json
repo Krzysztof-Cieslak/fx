@@ -1,0 +1,30 @@
+{
+  // The generated declarations (../golden) must type-check, with the shared fixtures and usage.ts,
+  // under the strictest options a user may set. skipLibCheck stays off: it would skip the .d.ts files.
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": false,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": []
+  },
+  "files": [
+    "../golden/contracts.d.ts",
+    "../golden/domain.d.ts",
+    "../golden/kernel.d.ts",
+    "../golden/naming.d.ts",
+    "../golden/store.d.ts",
+    "../golden/variants.d.ts",
+    "../golden/fixtures.ts",
+    "usage.ts"
+  ]
+}

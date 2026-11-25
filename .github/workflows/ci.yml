@@ -36,6 +36,9 @@ jobs:
           bun-version: 1.4.5
       - name: Task graph is current
         run: bun scripts/tasks.ts check
+      # The golden declarations are the generator's output (the build job's tests keep them current).
+      - name: Generated TypeScript declarations type-check
+        run: bun scripts/declarations.ts
       - name: Restore tools
         run: dotnet tool restore
       - name: Formatting
