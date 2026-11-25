@@ -89,6 +89,28 @@ let outputLogs =
                 Expect.equal log.Status.Available 4L "available"
             }
 
+            test "once output overflowed, every later byte goes to the spill file too" {
+                let created = ResizeArray<SpillFile>()
+                let inner = Spill.inMemory "/spill"
+
+                let spill =
+                    {
+                        Create =
+                            fun name cancellation ->
+                                task {
+                                    let! file = inner.Create name cancellation
+                                    created.Add file
+                                    return file
+                                }
+                    }
+
+                let log = new OutputLog("x", 4, Some spill)
+                wait (log.Append("abcdef"B, none))
+                wait (log.Append("g"B, none))
+                log.Finish()
+                Expect.equal (wait (created[0].ReadAt 0L 100 none)) "abcdefg"B "the whole stream"
+            }
+
             test "with a spill, everything stays readable, and disposing deletes the spill" {
                 let spill = Spill.inMemory "/spill"
                 let log = new OutputLog("p.out", 4, Some spill)

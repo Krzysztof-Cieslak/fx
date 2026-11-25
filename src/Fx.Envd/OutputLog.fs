@@ -107,6 +107,7 @@ type OutputLog(name: string, retain: int, spill: Spill option) =
     let mutable total = 0L
     let mutable ended = false
     let mutable spillFile: SpillFile option = None
+    let mutable spilling = false
     let mutable spilledUntil = 0L
 
     let mutable signal =
@@ -156,7 +157,10 @@ type OutputLog(name: string, retain: int, spill: Spill option) =
                     total <- total + int64 bytes.Length
                     wake ()
 
-                    if memoryBytes > int64 retain && spill.IsSome then
+                    // Once output has overflowed, every byte goes to the spill file, which then holds
+                    // the whole stream.
+                    if spill.IsSome && (spilling || memoryBytes > int64 retain) then
+                        spilling <- true
                         // Everything not yet in the spill file is still in memory.
                         memory
                         |> Seq.filter (fun (struct (offset, _)) -> offset >= spilledUntil)
