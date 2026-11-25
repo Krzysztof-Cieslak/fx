@@ -747,28 +747,28 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                     return [ finish (id, result) ]
         }
 
-    let reconcile (leases: (string * EnvSpec * Lease) list) : Eff<'R, EnvCommand list> =
+    let reconcile (leases: (string * int * EnvSpec * Lease) list) : Eff<'R, EnvCommand list> =
         eff {
-            let present = ResizeArray<string>()
+            let present = ResizeArray<string * int>()
             let missing = ResizeArray<string * string>()
 
-            for kind in leases |> List.map (fun (_, spec, _) -> spec.Provider) |> List.distinct do
-                let ofKind = leases |> List.filter (fun (_, spec, _) -> spec.Provider = kind)
+            for kind in leases |> List.map (fun (_, _, spec, _) -> spec.Provider) |> List.distinct do
+                let ofKind = leases |> List.filter (fun (_, _, spec, _) -> spec.Provider = kind)
 
                 match provider kind with
                 | None ->
                     // Its extension is not loaded: the environment may well exist; it stays detached.
-                    for id, _, _ in ofKind do
-                        present.Add id
+                    for id, attempt, _, _ in ofKind do
+                        present.Add(id, attempt)
                 | Some(provider, providerEnv) ->
                     match! call providerEnv provider.List with
                     | Error _ ->
-                        for id, _, _ in ofKind do
-                            present.Add id
+                        for id, attempt, _, _ in ofKind do
+                            present.Add(id, attempt)
                     | Ok held ->
-                        for id, _, _ in ofKind do
+                        for id, attempt, _, _ in ofKind do
                             if held |> List.exists (fun l -> l.Id = id) then
-                                present.Add id
+                                present.Add(id, attempt)
                             else
                                 missing.Add(id, $"the {kind} provider no longer has it")
 

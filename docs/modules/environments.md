@@ -139,7 +139,7 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
 | `Destroy` | `started` (from any phase, over any step), nothing if destroyed | — |
 | results: `Provisioned`, `Bootstrapped`, `Connected`, `Installed`, `Suspended`, `Resumed`, `Destroyed` | the next phase, or `failed` (a failed suspend or resume keeps the phase) | `environment.stale`: another step or attempt |
 | `Disconnected(id, attempt)` | `detached` | `environment.stale` |
-| `Reconciled(present, missing)` | `detached` (the host restarted) / `lost` | — |
+| `Reconciled(present, missing)` | `detached` (the host restarted; only the attempt recovery saw) / `lost` | — |
 
 - **Attempts.** Every provisioning or attach is an attempt; results of another attempt are stale, so a
   late result changes nothing. Connections (`Live`) are per attempt; releasing an attempt also refuses
@@ -148,7 +148,8 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
 - **Restart** (`Lifecycle.recover`, intents are not durable): steps safe to run again run again
   (`provision`, since `Create` is idempotent; `destroy`; `suspend`; `resume`), and every other lease
   is reconciled with its provider's `List`: held ones are `detached`, missing ones `lost`. A detached
-  environment starts envd again when it is next opened.
+  environment starts envd again when it is next opened. The answer carries the attempt each lease had
+  at recovery: an environment a session opened again meanwhile (a new attempt) is not detached.
 - A lost connection (envd ended, the host did not close it) detaches the environment the same way.
 - Keys: the host's commands get keys from new ids; results from the actor (`<event>/<i>.<j>`);
   disconnections `disconnected:<id>:<attempt>`.

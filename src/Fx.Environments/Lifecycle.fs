@@ -277,8 +277,9 @@ type EnvCommand =
     | Destroyed of id: string * result: Result<unit, string>
     /// The connection of an attempt ended without the host closing it.
     | Disconnected of id: string * attempt: int * reason: string
-    /// What the providers still hold, after a restart: ids present, and ids missing with why.
-    | Reconciled of present: string list * missing: (string * string) list
+    /// What the providers still hold, after a restart: ids present (with the attempt recovery saw:
+    /// an environment attached again since is not detached), and ids missing with why.
+    | Reconciled of present: (string * int) list * missing: (string * string) list
 
     override this.ToString() =
         let result (r: Result<'T, string>) =
@@ -320,8 +321,8 @@ type EnvIntent =
     | Destroy of id: string * spec: EnvSpec * lease: Lease option
     /// Closes the host's connections of attempts up to this one (and any started later for them).
     | Release of id: string * upTo: int
-    /// Asks the providers which of these leases they still hold.
-    | Reconcile of leases: (string * EnvSpec * Lease) list
+    /// Asks the providers which of these leases they still hold (with each environment's attempt).
+    | Reconcile of leases: (string * int * EnvSpec * Lease) list
 
     override this.ToString() =
         match this with
@@ -648,15 +649,16 @@ module Lifecycle =
         | EnvCommand.Reconciled(present, missing) ->
             let detached =
                 present
-                |> List.choose (fun id ->
+                |> List.choose (fun (id, attempt) ->
                     match state.Environments.TryFind id with
                     | Some record when
-                        (match record.Phase with
-                         | Phase.Provisioning
-                         | Phase.Bootstrapped
-                         | Phase.Connected
-                         | Phase.Ready -> true
-                         | _ -> false)
+                        record.Attempt = attempt
+                        && (match record.Phase with
+                            | Phase.Provisioning
+                            | Phase.Bootstrapped
+                            | Phase.Connected
+                            | Phase.Ready -> true
+                            | _ -> false)
                         && (match record.Step with
                             | None
                             | Some(Step.Bootstrap | Step.Connect | Step.Install) -> true
@@ -728,7 +730,7 @@ module Lifecycle =
                 match record.Phase, record.Step, record.Lease with
                 | (Phase.Provisioning | Phase.Bootstrapped | Phase.Connected | Phase.Ready | Phase.Suspended),
                   (None | Some(Step.Bootstrap | Step.Connect | Step.Install)),
-                  Some lease -> Some(record.Id, record.Spec, lease)
+                  Some lease -> Some(record.Id, record.Attempt, record.Spec, lease)
                 | _ -> None)
 
         if leases.IsEmpty then

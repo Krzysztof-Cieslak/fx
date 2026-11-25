@@ -295,16 +295,53 @@ let tests =
 
                 match Lifecycle.recover state |> List.last with
                 | EnvIntent.Reconcile leases ->
-                    Expect.equal (leases |> List.map (fun (id, _, _) -> id)) [ "ready"; "attaching" ] "leases"
+                    Expect.equal
+                        (leases |> List.map (fun (id, attempt, _, _) -> id, attempt))
+                        [ "ready", 1; "attaching", 1 ]
+                        "leases, with their attempts"
                 | other -> failtest (string other)
 
                 let _, events =
-                    Machine.run Lifecycle.machine state [ EnvCommand.Reconciled([ "ready" ], [ "attaching", "gone" ]) ]
+                    Machine.run
+                        Lifecycle.machine
+                        state
+                        [ EnvCommand.Reconciled([ "ready", 1 ], [ "attaching", "gone" ]) ]
 
                 Expect.equal
                     (events |> List.map string)
                     [ $"ready detached: {Lifecycle.Restarted}"; "attaching lost: gone" ]
                     "detached and lost"
+            }
+
+            test "an environment attached again before the reconciliation arrives stays attached" {
+                // After a restart, a session may open its environment (an attach, attempt 2) before
+                // the providers have answered: their answer is about attempt 1.
+                let state =
+                    after (
+                        toReady "ready"
+                        @ [
+                            EnvCommand.Attach "ready"
+                            EnvCommand.Bootstrapped("ready", 2, Ok(TransportKind.Piped, machine))
+                        ]
+                    )
+
+                let attaching, events =
+                    Machine.run Lifecycle.machine state [ EnvCommand.Reconciled([ "ready", 1 ], []) ]
+
+                Expect.isEmpty events "not detached"
+
+                Expect.equal
+                    ((record "ready" attaching).Attempt, (record "ready" attaching).Phase)
+                    (2, Phase.Bootstrapped)
+                    "attaching"
+
+                let _, events =
+                    Machine.run Lifecycle.machine state [ EnvCommand.Reconciled([ "ready", 2 ], []) ]
+
+                Expect.equal
+                    (events |> List.map string)
+                    [ $"ready detached: {Lifecycle.Restarted}" ]
+                    "the same attempt is"
             }
 
             test "every event round-trips through its JSON" {
