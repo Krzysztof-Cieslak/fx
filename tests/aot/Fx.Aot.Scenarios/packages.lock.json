@@ -102,6 +102,13 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.ext.identitylocalosuser": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.interpreterbunts": {
         "type": "Project",
         "dependencies": {
@@ -179,6 +186,16 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Contracts": "[0.0.0, )"
+        }
+      },
+      "fx.identity.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Identity": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.interpreters": {
