@@ -235,6 +235,6 @@ How it works:
 | What | Task |
 |---|---|
 | Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | when tuned |
-| Journaling intents for exact replay of a session | T131 |
+| Re-running a session's machine with its inputs re-delivered (T131 replays the strategy, with the session's log as input: [replay.md](replay.md)) | T217 |
 | Epoch-fenced takeover leases; the actor already stops on a conflicting append | T507 |
 | Bounding the key index (an actor could forget old keys and look them up with `FindCommit`, as after a snapshot); evicting idle actors from a registry | when a long-lived stream needs it |

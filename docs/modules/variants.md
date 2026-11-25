@@ -304,7 +304,7 @@ reflection; slots are generic records of closures, and SHA-256 comes from the ba
 | Reading an extension's slots from its code (`IVariants` in `IExtensionEnv`, and over the extension protocol) | T109b |
 | Batch and page sizes and actor retry delays as slots (durability and the subscribe gap are the host's: [host.md](host.md)) | when tuned |
 | Binding profiles in run streams (sessions bind theirs: [sessions.md](sessions.md)) | T212 |
-| Journaling reads with step results, `ReplayEnv` | T131 |
+| Journaling reads with step results, `ReplayEnv` | done: T131, [replay.md](replay.md) |
 | Eval profiles over matrices, API-key-only routes, results keyed by profile | T217 |
 | A TOML reader producing `Json`, if config files move to TOML | when needed |
 | Allowlists in policies (only these values) for open slots such as model roles | when policies need them |
