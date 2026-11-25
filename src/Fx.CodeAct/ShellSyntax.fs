@@ -41,11 +41,14 @@ type SimpleCommand =
         /// Where its output redirections write (`>`, `>>`, `>|`, `&>`, `<>`, `>&file`; `>`, `>>`, `2>`,
         /// `*>` in PowerShell), as written: the null device and duplicated descriptors left out.
         Writes: Word list
+        /// What its input redirections read (`<`, `<>`), as written.
+        Reads: Word list
     }
 
     override this.ToString() =
         String.Join(" ", this.Words |> List.map (fun w -> w.Text))
         + (this.Writes |> List.map (fun w -> " > " + w.Text) |> String.concat "")
+        + (this.Reads |> List.map (fun w -> " < " + w.Text) |> String.concat "")
 
 /// A command line, split so that each part can be checked (docs/modules/codeact.md, "Grants").
 [<RequireQualifiedAccess>]
@@ -422,8 +425,8 @@ module ShellSyntax =
                 None
             | _ -> Some(this.Word())
 
-        /// A redirection, at its operator (after any descriptor number); adds what it writes.
-        member this.Redirect(writes: ResizeArray<Word>) =
+        /// A redirection, at its operator (after any descriptor number); adds what it writes and reads.
+        member this.Redirect(writes: ResizeArray<Word>, reads: ResizeArray<Word>) =
             let write (target: Word option) =
                 match target with
                 | Some target when
@@ -471,7 +474,12 @@ module ShellSyntax =
             | '<', '<', _ -> cursor.Fail "a here-document"
             | '<', '>', _ ->
                 cursor.Pos <- cursor.Pos + 2
-                write (this.Target())
+
+                match this.Target() with
+                | Some target ->
+                    reads.Add target
+                    write (Some target)
+                | None -> ()
             | '<', '&', _ ->
                 cursor.Pos <- cursor.Pos + 2
 
@@ -480,7 +488,7 @@ module ShellSyntax =
                 | None -> ()
             | '<', _, _ ->
                 cursor.Pos <- cursor.Pos + 1
-                this.Target() |> ignore
+                this.Target() |> Option.iter reads.Add
             | _ -> cursor.Fail "an unexpected redirection"
 
         /// Whether a redirection starts here: an operator, or digits right before one.
@@ -503,6 +511,7 @@ module ShellSyntax =
         member this.Simple() =
             let words = ResizeArray<Word>()
             let writes = ResizeArray<Word>()
+            let reads = ResizeArray<Word>()
             let mutable go = true
 
             while go && cursor.Ok do
@@ -515,7 +524,7 @@ module ShellSyntax =
                     while Char.IsAsciiDigit(cursor.Peek 0) do
                         cursor.Pos <- cursor.Pos + 1
 
-                    this.Redirect writes
+                    this.Redirect(writes, reads)
                 | c when shEnds c -> go <- false
                 | _ ->
                     let word = this.Word()
@@ -526,13 +535,14 @@ module ShellSyntax =
                         words.Add word
 
             if cursor.Ok then
-                if words.Count = 0 && writes.Count = 0 then
+                if words.Count = 0 && writes.Count = 0 && reads.Count = 0 then
                     cursor.Fail "an empty command"
                 else
                     cursor.Add
                         {
                             Words = List.ofSeq words
                             Writes = List.ofSeq writes
+                            Reads = List.ofSeq reads
                         }
 
         /// After a subshell or a group: redirections of the whole group are not followed.
@@ -1039,6 +1049,7 @@ module ShellSyntax =
                         {
                             Words = List.ofSeq words
                             Writes = List.ofSeq writes
+                            Reads = []
                         }
 
         member this.Pipeline() =

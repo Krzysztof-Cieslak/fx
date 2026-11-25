@@ -39,6 +39,9 @@ type GrantSettings =
         ProtectedPaths: string list
         /// `codeact.grants.timeoutMs`: how long a request waits for a person.
         Timeout: TimeSpan option
+        /// The turn's content exclusions (`ContentExclusions.read`): a listed command that names an
+        /// excluded file asks, as its output goes to the model.
+        Exclusions: Exclusions
     }
 
     override this.ToString() =
@@ -142,6 +145,7 @@ module GrantSettings =
             AllowCommands = GrantSlots.allowCommands.Default
             ProtectedPaths = GrantSlots.protectedPaths.Default
             Timeout = None
+            Exclusions = Exclusions.none
         }
 
     /// Reads the settings through `IVariants`.
@@ -151,6 +155,7 @@ module GrantSettings =
             let! commands = Variants.get GrantSlots.allowCommands
             let! paths = Variants.get GrantSlots.protectedPaths
             let! timeout = Variants.get GrantSlots.timeoutMs
+            let! exclusions = ContentExclusions.read
 
             return
                 {
@@ -158,6 +163,11 @@ module GrantSettings =
                     AllowCommands = commands
                     ProtectedPaths = paths
                     Timeout = timeout |> Option.map (fun ms -> TimeSpan.FromMilliseconds(float ms))
+                    // Settings that do not compile fail the turn (the strategy checks them first).
+                    Exclusions =
+                        match ContentExclusions.compile exclusions with
+                        | Ok compiled -> compiled
+                        | Error _ -> Exclusions.none
                 }
         }
 
@@ -440,8 +450,15 @@ module Permissions =
                     "pop-location"
                 ]
 
-    /// Whether an argument of a listed command may name something outside the workspace.
-    let private escapes (place: Workplace) (cwd: string) (argument: string) : bool =
+    /// Whether a path is out of a listed command's reach: outside the workspace, unnamed, or a file
+    /// content exclusions keep from models.
+    let private hidden (settings: GrantSettings) (place: Workplace) (cwd: string) (path: string) : bool =
+        match locate place cwd path with
+        | Location.Inside relative -> (Exclusions.test settings.Exclusions relative).IsSome
+        | _ -> true
+
+    /// Whether an argument of a listed command may name something out of its reach.
+    let private escapes (settings: GrantSettings) (place: Workplace) (cwd: string) (argument: string) : bool =
         if argument = "" then
             false
         elif argument.StartsWith '-' then
@@ -450,9 +467,7 @@ module Permissions =
         elif place.Os = Os.Windows && argument.Contains ':' then
             true
         else
-            match locate place cwd argument with
-            | Location.Inside _ -> false
-            | _ -> true
+            hidden settings place cwd argument
 
     /// The whole line as one command for a person to judge.
     let private opaque (command: string) (reason: string) (cwdNote: Evidence list) : CallNeeds =
@@ -530,7 +545,10 @@ module Permissions =
                                              | _ -> false)
                                             && simple.Words
                                                |> List.tail
-                                               |> List.forall (fun w -> not (escapes place dir w.Text))
+                                               |> List.forall (fun w -> not (escapes settings place dir w.Text))
+                                            && simple.Reads
+                                               |> List.forall (fun w ->
+                                                   not w.Expands && not (hidden settings place dir w.Text))
                                         | None -> false)
 
                                 let multi = commands.Length > 1 || resource <> ShellSyntax.normalize line

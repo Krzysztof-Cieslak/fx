@@ -31,7 +31,8 @@ let private render (line: CommandLine) : string =
                 command.Words
                 |> List.map (fun w -> if w.Expands then "<" + w.Text + ">" else w.Text)
             )
-            + (command.Writes |> List.map (fun w -> " > " + w.Text) |> String.concat ""))
+            + (command.Writes |> List.map (fun w -> " > " + w.Text) |> String.concat "")
+            + (command.Reads |> List.map (fun w -> " < " + w.Text) |> String.concat ""))
         |> String.concat " ; "
         |> fun text -> "parsed: " + text
 
@@ -41,7 +42,7 @@ let syntax =
         let sh =
             [
                 "git status && npm test || echo failed"
-                "cat a.txt | grep -n \"x y\" > out.txt 2>&1"
+                "cat a.txt | grep -n \"x y\" > out.txt 2>&1 < in.txt"
                 "echo $(git rev-parse HEAD) `date` \"$HOME\" ~/x {a,b}"
                 "(cd src && make) ; { a; b; }"
                 "FOO=1 make all >/dev/null"

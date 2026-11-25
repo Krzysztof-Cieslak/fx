@@ -649,7 +649,13 @@ let private turnTests =
                             Expect.equal (completed ending) (TurnResult.Done("Both made", [], None)) "done"
                             Expect.isTrue (Directory.Exists(g.F.File "one")) "one"
                             Expect.isTrue (Directory.Exists(g.F.File "two")) "two"
-                            Expect.equal (requestCount g.Service) 1 "asked once"
+
+                            let asked =
+                                (GrantsService.snapshot g.Service).State.Requests
+                                |> Map.toList
+                                |> List.map (fun (_, e) -> string e)
+
+                            Expect.equal (requestCount g.Service) 1 $"asked once: {asked}"
                             let all = receipts g.F "s1"
                             Expect.stringContains (text all[3]) "hello" "the listed command ran"
 
