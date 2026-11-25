@@ -35,6 +35,7 @@
     <Project Path="src/Fx.Prompt/Fx.Prompt.fsproj" />
     <Project Path="src/Fx.Grants/Fx.Grants.fsproj" />
     <Project Path="src/Fx.Grants.Host/Fx.Grants.Host.fsproj" />
+    <Project Path="src/Fx.Environments/Fx.Environments.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -51,6 +52,7 @@
     <Project Path="extensions/Fx.Ext.InterpreterBunTs/Fx.Ext.InterpreterBunTs.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelAnthropic/Fx.Ext.ModelAnthropic.fsproj" />
     <Project Path="extensions/Fx.Ext.EgressExclusions/Fx.Ext.EgressExclusions.fsproj" />
+    <Project Path="extensions/Fx.Ext.EnvLocal/Fx.Ext.EnvLocal.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -83,6 +85,7 @@
     <Project Path="tests/Fx.Sessions.Tests/Fx.Sessions.Tests.fsproj" />
     <Project Path="tests/Fx.Sessions.Host.Tests/Fx.Sessions.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Prompt.Tests/Fx.Prompt.Tests.fsproj" />
+    <Project Path="tests/Fx.Environments.Tests/Fx.Environments.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/support/">
     <File Path="tests/support/Directory.Build.props" />

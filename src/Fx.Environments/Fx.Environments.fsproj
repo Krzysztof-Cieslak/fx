@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Environments on the host's side (spec §9): environment specs from config and the capability
+    negotiation with their provider, the layout of an environment, the host's variables as an
+    environment on its machine gets them, the lifecycle machine (§9.5), and the host that runs it:
+    envd's bootstrap through the providers, the connections to it, components and setup,
+    reconciliation of leases, and the IEnvs capability. The provider contract itself is in Fx.Sdk,
+    so that extensions can contribute providers. Pure apart from the Eff capabilities it is handed:
+    the EFF analyzers apply to every file. Spec: docs/modules/environments.md.
+  -->
+  <ItemGroup>
+    <Compile Include="HostEnvironment.fs" />
+    <Compile Include="EnvSpecs.fs" />
+    <Compile Include="Layout.fs" />
+    <Compile Include="Lifecycle.fs" />
+    <Compile Include="Envs.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Envd\Fx.Envd.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+    <ProjectReference Include="..\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Components\Fx.Components.fsproj" />
+  </ItemGroup>
+</Project>
