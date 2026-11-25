@@ -765,24 +765,22 @@ module Session =
                     )
         ]
 
+    /// The running turn, as its strategy gets it.
+    let private turnStart (state: SessionState) (running: RunningTurn) : TurnStart =
+        {
+            Session = state.Id
+            Turn = running.Turn
+            Profile = running.Profile
+            Inputs = running.Inputs
+            Seq = running.Seq
+        }
+
     /// What should happen after an event, given the state after it.
     let react (state: SessionState) (event: Event) : Intent list =
         match event with
         | Event.TurnStarted _ ->
             match state.Running with
-            | Some running ->
-                [
-                    Intent.RunTurn(
-                        {
-                            Session = state.Id
-                            Turn = running.Turn
-                            Profile = running.Profile
-                            Inputs = running.Inputs
-                            Seq = running.Seq
-                        }
-                        : TurnStart
-                    )
-                ]
+            | Some running -> [ Intent.RunTurn(turnStart state running) ]
             | None -> []
         | Event.RequestOpened pending ->
             match pending.Request.Expiry with
@@ -799,14 +797,15 @@ module Session =
         | _ -> []
 
     /// What an actor picks up when it starts on a log: a turn that was running when the host stopped
-    /// is abandoned (nothing auto-resumes, spec §5), and the background work restarts.
+    /// is recovered (its strategy abandons it, or asks people about a tool call in doubt; nothing
+    /// auto-resumes, spec §5), and the background work restarts.
     let recover (state: SessionState) : Intent list =
-        let abandoned =
+        let recovered =
             match state.Running with
-            | Some running -> [ Intent.Abandon running.Turn ]
+            | Some running -> [ Intent.RecoverTurn(turnStart state running) ]
             | None -> []
 
-        abandoned @ background state
+        recovered @ background state
 
     /// The session machine. `kinds` are the request kinds it accepts.
     let machine (kinds: RequestKinds) : Machine<SessionCommand, Event, SessionState, Intent> =

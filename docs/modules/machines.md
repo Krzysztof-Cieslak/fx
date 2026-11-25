@@ -131,7 +131,7 @@ Each input goes through the shell loop of §4.4, one at a time, in mailbox order
   - `React` runs when an event is appended, never when a log is replayed.
   - Work in flight when an actor stops is lost unless the state records it.
   - **`Recover: 'S -> 'Intent list`** runs once when an actor starts, with the rebuilt state. Its results are keyed `<stream>#<head>/recover/<i>.<j>`.
-  - Nothing auto-resumes (§5). A session's `Recover` turns an interrupted tool call into `OutcomeUnknown` (T128); it does not re-run the call.
+  - Nothing auto-resumes (§5). A session's `Recover` hands a running turn to its strategy's recovery, which turns a tool call in flight into `OutcomeUnknown` and asks a person ([codeact.md](codeact.md#crash-recovery-spec-5-65-121-191)); it never re-runs the call by itself.
 
 ### Failures
 
@@ -234,7 +234,6 @@ How it works:
 
 | What | Task |
 |---|---|
-| `OutcomeUnknown` through `Recover` | T128 |
 | Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | T129 |
 | Journaling intents for exact replay of a session | T131 |
 | Epoch-fenced takeover leases; the actor already stops on a conflicting append | T507 |

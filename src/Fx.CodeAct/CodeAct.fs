@@ -493,7 +493,7 @@ type CodeAct<'R, 'K
         }
 
     /// The turn runner sessions run their turns with.
-    member _.Runner: TurnRunner<'R> = { Run = run }
+    member _.Runner: TurnRunner<'R> = TurnRunner.create run
 
     /// The kernel of a session, if it has one.
     member _.Kernel(session: string) : Kernel option =

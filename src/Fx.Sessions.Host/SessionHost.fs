@@ -168,20 +168,29 @@ type SessionHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IScopeWith<'R>>
             Await = fun request after -> SessionLog.resolution log stream after request
         }
 
-    let runTurn (turn: TurnStart) : Eff<'R, SessionCommand list> =
+    /// Runs a turn's effect (`Run`, or `Recover` after a restart); `None` is a recovery that found
+    /// nothing in doubt: the turn is abandoned.
+    let turnOf (turn: TurnStart) (run: Eff<'R, Result<TurnResult, string> option>) : Eff<'R, SessionCommand list> =
         eff {
             let! cancellation = Eff.cancellation
-            let! outcome = Eff.catch (runner.Run(context turn))
+            let! outcome = Eff.catch run
 
             match outcome with
-            | Ok(Ok finished) -> return! result (Command.EndTurn(turn.Turn, finished))
-            | Ok(Error reason) -> return! result (Command.FailTurn(turn.Turn, reason))
+            | Ok(Some(Ok finished)) -> return! result (Command.EndTurn(turn.Turn, finished))
+            | Ok(Some(Error reason)) -> return! result (Command.FailTurn(turn.Turn, reason))
+            | Ok None -> return! result (Command.AbandonTurn(turn.Turn, "the host stopped during the turn"))
             | Error(:? OperationCanceledException as e) when cancellation.IsCancellationRequested ->
                 // Interrupted or stopped: the actor knows, and nothing is reported.
                 ExceptionDispatchInfo.Throw e
                 return []
             | Error e -> return! result (Command.FailTurn(turn.Turn, "the turn runner failed: " + e.GetType().Name))
         }
+
+    let runTurn (turn: TurnStart) : Eff<'R, SessionCommand list> =
+        turnOf turn (runner.Run(context turn) |> Eff.map Some)
+
+    let recoverTurn (turn: TurnStart) : Eff<'R, SessionCommand list> =
+        turnOf turn (runner.Recover(context turn))
 
     let expire (request: string) (at: int64) : Eff<'R, SessionCommand list> =
         eff {
@@ -222,7 +231,7 @@ type SessionHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IScopeWith<'R>>
         | Intent.RunTurn turn -> runTurn turn
         | Intent.Expire(request, at) -> expire request at
         | Intent.StartFork fork -> startFork fork
-        | Intent.Abandon turn -> result (Command.AbandonTurn(turn, "the host stopped during the turn"))
+        | Intent.RecoverTurn turn -> recoverTurn turn
 
     let start (stream: StreamId) : Eff<'R, Actor<SessionCommand, Event, SessionState>> =
         eff {

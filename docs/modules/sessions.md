@@ -1,6 +1,7 @@
 # Sessions (`Fx.Sessions`, `Fx.Sessions.Host`)
 
-Spec: §5 (with §4.4–4.5, §8.1, §12.1–12.2, §13, §15, §17 and §19.2, §19.5). Task: T125. Builds on
+Spec: §5 (with §4.4–4.5, §8.1, §12.1–12.2, §13, §15, §17 and §19.2, §19.5). Tasks: T125, T128 (recovering
+turns). Builds on
 [machines.md](machines.md), [store.md](store.md), [variants.md](variants.md) and [contracts.md](contracts.md).
 Code: [`src/Fx.Sessions`](../../src/Fx.Sessions) (the machine and its JSON; shared with clients) and
 [`src/Fx.Sessions.Host`](../../src/Fx.Sessions.Host) (actors on the event store, the turn-runner boundary,
@@ -170,15 +171,22 @@ let! outcome = SessionHost.send host "s1" (IdempotencyKey "k1") alice (Command.P
   (`Attribution`: the principal id and client id of the connection's session, [identity.md](identity.md);
   epoch-fenced takeover T507).
 - **Intents.** `RunTurn` runs the turn runner; `Expire` sleeps until the deadline on the wall clock (looping, as
-  delays run on the monotonic clock) and sends `ExpireRequest`; `StartFork` starts the child; `Abandon` (from
-  recovery) ends a turn the host stopped during.
+  delays run on the monotonic clock) and sends `ExpireRequest`; `StartFork` starts the child; `RecoverTurn`
+  (from recovery) asks the runner's `Recover` about a turn the host stopped during.
 - **Keys** of the host's commands derive from events, never from the clock or ids: a turn's commands from its
   `TurnStarted` event (`<stream>#<seq>/step/<n>`, `/request/<id>`), a fork's start from its `Forked` event
   (`/fork`), intent results as in [machines.md](machines.md).
-- **Recovery.** Intents are not durable. An actor that starts on a log with a running turn abandons it
-  (`AbandonTurn`; T128 turns in-flight tool calls into `OutcomeUnknown` and opens a decision) and arms request
-  timers and fork starts again. Actors start on first use: the host server activates sessions with work in
-  flight at start (T129), e.g. with `SessionHost.state`.
+- **Recovery.** Intents are not durable. An actor that starts on a log with a running turn recovers it
+  (`Intent.RecoverTurn` with the turn's `TurnStart`) and arms request timers and fork starts again. The
+  runner's `Recover` (same context as `Run`) says what happens to the turn: `None` when nothing it did is
+  in doubt, and the turn is abandoned (`AbandonTurn`, keyed `<stream>#<head>/recover/0.0`; held: nothing
+  auto-resumes); otherwise its result, as from `Run`. A strategy whose turn stopped in the middle of a tool
+  call opens a request through the context, awaits a person's answer, and only then goes on (the CodeAct
+  strategy's decision `decision.outcomeUnknown`: [codeact.md](codeact.md#crash-recovery-spec-5-65-121-191)).
+  The turn stays running meanwhile: steers wait in the inbox, an interrupt ends it. Recovering again (the
+  host stops again before the answer) re-opens nothing, since the turn's requests are keyed by its start
+  event. Actors start on first use: the host server activates sessions with work in flight at start
+  (T129), e.g. with `SessionHost.state`.
 - **Subscriptions** (spec §5 `subscribe(afterSeq)`): `SessionHost.subscribe host id after handle` replays the
   events after `after`, then follows live; a subscriber more than `MaxGap` events behind gets the latest
   snapshot first (`Feed.Reset`). `SessionLog.feed` is its JSON (`{"kind": "reset", "seq", "state"}` or
@@ -198,7 +206,9 @@ type TurnContext<'R> =
       Boundary: int -> Eff<'R, Input list>              // steers delivered at step n, exactly once
       Open: RequestSpec -> Eff<'R, Result<int64, Rejection>>
       Await: string -> int64 -> Eff<'R, Resolution> }
-type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, string>> }
+type TurnRunner<'R> =
+    { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, string>>
+      Recover: TurnContext<'R> -> Eff<'R, Result<TurnResult, string> option> }   // after a restart
 ```
 
 - `Boundary n` sends `TakeInputs(turn, n)` keyed by the turn and step, then reads the delivered inputs from the
@@ -207,8 +217,10 @@ type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, strin
   id after` follows the log after it for the resolution. `TurnContext.ask` does both.
 - An `Error reason` ends the turn `Failed reason`; an exception ends it `Failed` with the exception's type, never
   its message; an interrupt or a stop cancels the effect's scope, and nothing is reported.
+- `Recover` runs instead of `Run` for a turn the host stopped during (above); `TurnRunner.create run` gives a
+  runner whose turns are then abandoned.
 - `ScriptedTurnRunner` plays scripts (`Think`, `Boundary`, `Ask`, `Post`, `Finish`, `Fail`, `Throw`) and keeps a
-  transcript of what each turn saw.
+  transcript of what each turn saw; its `Recovery` scripts what a recovered turn does.
 
 ## Testing
 
@@ -218,7 +230,7 @@ type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, strin
   work it could start); version 1's events read back; the Fable architecture test.
 - `tests/Fx.Sessions.Host.Tests`: one scenario per guarantee (steer and queue, concurrent clients serialized and
   attributed, duplicates after restarts and from before a snapshot, interrupts, requests answered once, expiry,
-  restart mid-turn, forks, subscribers with snapshot + tail, overrides and their races, runner failures); replay
+  restart mid-turn (abandoned, or recovered by a strategy that asks first, once over two restarts), forks, subscribers with snapshot + tail, overrides and their races, runner failures); replay
   tests (a conversation and random scripts give the same logs, outcomes, turns, snapshots and trace on every run;
   the recorded conversation replays to its recorded state, kept as golden files); SQLite; the declarations.
 - **Native AOT**: `sessions-machine`, `sessions-host` and `sessions-sqlite` run on the JIT and as a native binary
@@ -232,7 +244,6 @@ type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, strin
 | `SnapshotEvery`, `MaxGap` and `ProfileAttempts` as variant slots | T129 |
 | Each method's least role ([identity.md](identity.md#roles)); epoch-fenced takeover | T129, T507 |
 | The strategy behind `TurnRunner` and `TurnResult` validation (`Ensure`) are the CodeAct strategy's ([codeact.md](codeact.md)); richer `Evidence` | T201, T205 |
-| In-flight tool calls become `OutcomeUnknown` on recovery, with a decision | T128 |
 | Decision cards, grant requests, gates, auth flows, installs as request kinds | T301, T123, T306, T121, T110 |
 | Attachments (blob references) in prompts | when the TUI sends files |
 | Whether queued prompts run one per turn or together, and whether a session holds after an interrupt, as variants | when evals or users ask |

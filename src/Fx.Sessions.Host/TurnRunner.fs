@@ -30,9 +30,23 @@ type TurnContext<'R> =
 type TurnRunner<'R> =
     {
         Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, string>>
+        /// A turn that was running when the host stopped (spec §5, crash recovery), with the same
+        /// context as `Run`. `None`: nothing the turn did is in doubt, and the session abandons it
+        /// (nothing auto-resumes). `Some`: the turn's result, as `Run` gives it: a strategy whose
+        /// turn stopped in the middle of a tool call asks people what happened (a request it opens
+        /// and awaits) and goes on only with their answer.
+        Recover: TurnContext<'R> -> Eff<'R, Result<TurnResult, string> option>
     }
 
     override _.ToString() = "TurnRunner"
+
+module TurnRunner =
+    /// A runner whose turns are abandoned when the host stopped during them.
+    let create<'R> (run: TurnContext<'R> -> Eff<'R, Result<TurnResult, string>>) : TurnRunner<'R> =
+        {
+            Run = run
+            Recover = fun _ -> Eff.ret None
+        }
 
 module TurnContext =
     /// Opens a request and waits for its resolution: a tool call waiting for a grant, a form the agent

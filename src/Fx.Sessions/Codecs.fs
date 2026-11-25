@@ -806,7 +806,8 @@ module Codecs =
             and! startFork =
                 Codec.case1 "startFork" Intent.StartFork (Field.required "fork" forkStart)
 
-            and! abandon = Codec.case1 "abandon" Intent.Abandon (Field.required "turn" positive)
+            and! recoverTurn =
+                Codec.case1 "recoverTurn" Intent.RecoverTurn (Field.required "turn" turnStart)
 
             return
                 fun value ->
@@ -814,7 +815,7 @@ module Codecs =
                     | Intent.RunTurn turn -> runTurn turn
                     | Intent.Expire(request, at) -> expire request at
                     | Intent.StartFork fork -> startFork fork
-                    | Intent.Abandon turn -> abandon turn
+                    | Intent.RecoverTurn turn -> recoverTurn turn
         }
         |> Codec.describe "What a session asks its host to do after an event."
         |> Codec.named "SessionIntent"

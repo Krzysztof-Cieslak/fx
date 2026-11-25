@@ -382,6 +382,54 @@ let tests =
                 runIn f.Env (SessionHost.stop f.Host)
             }
 
+            test
+                "after a restart mid-turn a strategy that finds a call in doubt asks first; another restart asks nothing new" {
+                let f = create [ 1, [ TurnStep.Think(seconds 60.0); done' "never" ] ]
+
+                f.Runner.Recovery <-
+                    fun turn ->
+                        Some
+                            [
+                                TurnStep.Ask(
+                                    confirm "unknown-1" (RequestOrigin.Turn turn.Turn) Reply.ToOpener Lifetime.Turn
+                                )
+                                done' "went on"
+                            ]
+
+                start f "s1" |> ignore
+                steer f "s1" "p1" alice "work" |> ignore
+                let f = restart f
+                let recovered = state f "s1"
+                Expect.isSome recovered.Running "the turn still runs, waiting"
+
+                Expect.equal
+                    (recovered.Requests |> List.map (fun r -> r.Request.Id))
+                    [ "unknown-1" ]
+                    "it asks what happened"
+
+                let f = restart f
+                let again = state f "s1"
+                Expect.isSome again.Running "still waiting"
+
+                let opened =
+                    events f "s1"
+                    |> List.filter (fun r ->
+                        match r.Event with
+                        | Event.RequestOpened _ -> true
+                        | _ -> false)
+
+                Expect.equal opened.Length 1 "one request, however often the host restarts"
+                Expect.isTrue (isAccepted (send f "s1" "a1" alice (Command.Answer("unknown-1", yes)))) "answered"
+
+                Expect.equal
+                    (lines f "s1" |> List.last)
+                    "#6 turn 1 ended: done (0 evidence): went on"
+                    "the answer resumed the turn, which ended with its result"
+
+                Expect.contains f.Runner.Transcript "turn 1 asked unknown-1: answered true" "it waited for the answer"
+                runIn f.Env (SessionHost.stop f.Host)
+            }
+
             test "a fork starts a child session whose history is its parent's up to an event" {
                 let f = create []
                 start f "s1" |> ignore
