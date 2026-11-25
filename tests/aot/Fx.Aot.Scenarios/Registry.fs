@@ -22,6 +22,7 @@ let all: Scenario list =
             Kestrel.Transports.scenarios
             Kestrel.Builders.scenarios
             Contracts.scenarios
+            ContractsLarge.scenarios
             Sqlite.scenarios
             Pty.scenarios
             Store.scenarios
