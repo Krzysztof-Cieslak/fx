@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="VtTextTests.fs" />
+    <Compile Include="Conformance\TerminalConformance.fs" />
     <Compile Include="LocalTerminalTests.fs" />
   </ItemGroup>
 

@@ -3,6 +3,7 @@
     <!-- The conformance suites are shared with Fx.Effects.Tests: the fakes and the real interpreters pass the same tests. -->
     <Compile Include="..\Fx.Effects.Tests\Conformance\FsConformance.fs" Link="Conformance\FsConformance.fs" />
     <Compile Include="..\Fx.Effects.Tests\Conformance\IdsConformance.fs" Link="Conformance\IdsConformance.fs" />
+    <Compile Include="Conformance\ShellConformance.fs" />
     <Compile Include="LiveEnv.fs" />
     <Compile Include="SystemClockTests.fs" />
     <Compile Include="SystemIdsTests.fs" />
