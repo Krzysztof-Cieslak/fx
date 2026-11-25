@@ -116,6 +116,7 @@
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Envd.Live": "[0.0.0, )",
           "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
+          "Fx.Ext.ModelAnthropic": "[0.0.0, )",
           "Fx.Ext.ModelCanonical": "[0.0.0, )",
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
@@ -196,6 +197,13 @@
         }
       },
       "fx.ext.interpreterbunts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.modelanthropic": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
