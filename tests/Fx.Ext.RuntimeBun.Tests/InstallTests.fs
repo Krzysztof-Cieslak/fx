@@ -61,8 +61,12 @@ let localFs: FsEnv =
 /// Installs the components a lockfile pins for this machine with an installer on `root`, and
 /// returns Bun as the installer hands it over.
 let install (env: InstallerEnv) (root: string) (lockfile: Lockfile) (target: TargetTriple) : InstalledComponent =
+    // GitHub's release downloads answer 503 now and then: retry for about a minute.
     let settings =
-        InstallerSettings.create root "test" (fun _ -> Eff.ret (ApprovalAnswer.Approved "test"))
+        { InstallerSettings.create root "test" (fun _ -> Eff.ret (ApprovalAnswer.Approved "test")) with
+            DownloadAttempts = 6
+            RetryDelay = TimeSpan.FromSeconds 2.0
+        }
 
     let actor =
         runIn env (ComponentInstaller.start settings (InMemoryEventLog<InstallerEvent>()).Log)
@@ -87,7 +91,8 @@ let install (env: InstallerEnv) (root: string) (lockfile: Lockfile) (target: Tar
                 .GetResult()
         with
         | Ok [ installed ] -> installed
-        | other -> failtest $"{other}"
+        | Ok installed -> failtest $"expected Bun alone, got {installed.Length} components"
+        | Error e -> failtest $"the install failed: {e}"
     finally
         runIn env (Actor.stop actor)
 
