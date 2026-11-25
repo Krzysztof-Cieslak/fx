@@ -108,11 +108,15 @@
           "Fx.Ext.ModelOpenAI": "[0.0.0, )",
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
+          "Fx.Ext.SandboxBubblewrap": "[0.0.0, )",
+          "Fx.Ext.SandboxNone": "[0.0.0, )",
+          "Fx.Ext.SandboxSeatbelt": "[0.0.0, )",
           "Fx.Ext.StoreEphemeral": "[0.0.0, )",
           "Fx.Ext.StoreFile": "[0.0.0, )",
           "Fx.Ext.StoreKeyring": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
           "Fx.Grants.Host": "[0.0.0, )",
+          "Fx.Host": "[0.0.0, )",
           "Fx.Identity.Host": "[0.0.0, )",
           "Fx.Interpreters": "[0.0.0, )",
           "Fx.Kernel": "[0.0.0, )",
@@ -291,6 +295,27 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.ext.sandboxbubblewrap": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.sandboxnone": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.sandboxseatbelt": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.storeephemeral": {
         "type": "Project",
         "dependencies": {
@@ -340,6 +365,37 @@
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )",
           "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Auth": "[0.0.0, )",
+          "Fx.CodeAct": "[0.0.0, )",
+          "Fx.Components.Live": "[0.0.0, )",
+          "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Envd.Live": "[0.0.0, )",
+          "Fx.Ext.AuthStandard": "[0.0.0, )",
+          "Fx.Ext.EgressExclusions": "[0.0.0, )",
+          "Fx.Ext.EnvLocal": "[0.0.0, )",
+          "Fx.Ext.IdentityLocalOsUser": "[0.0.0, )",
+          "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
+          "Fx.Ext.ModelAnthropic": "[0.0.0, )",
+          "Fx.Ext.ModelOpenAI": "[0.0.0, )",
+          "Fx.Ext.RuntimeBun": "[0.0.0, )",
+          "Fx.Ext.SandboxBubblewrap": "[0.0.0, )",
+          "Fx.Ext.SandboxNone": "[0.0.0, )",
+          "Fx.Ext.SandboxSeatbelt": "[0.0.0, )",
+          "Fx.Ext.StoreEphemeral": "[0.0.0, )",
+          "Fx.Ext.StoreFile": "[0.0.0, )",
+          "Fx.Ext.StoreKeyring": "[0.0.0, )",
+          "Fx.Extensions": "[0.0.0, )",
+          "Fx.Grants.Host": "[0.0.0, )",
+          "Fx.Identity.Host": "[0.0.0, )",
+          "Fx.Keyring": "[0.0.0, )",
+          "Fx.Store.Live": "[0.0.0, )",
+          "Fx.Transport.Http": "[0.0.0, )"
         }
       },
       "fx.identity": {
