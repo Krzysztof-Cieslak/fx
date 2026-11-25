@@ -124,8 +124,8 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
   - Standard input is always closed after `Run` writes it, so programs that read it never hang.
   - Output is pumped into one bounded channel, so reading one stream never blocks the other.
   - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes (T113) use process groups or job objects.
-  - Pipes only. Terminals (PTY, ConPTY) have their own capability shape, `Terminal` in `src/Fx.Pty` ([`docs/spikes/pty.md`](../spikes/pty.md)); T111 completes it.
-- **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes and patches belong to envd's filesystem operations (T111). Reads and writes are whole files.
+  - Pipes only. Terminals (PTY, ConPTY) have their own capability, `Terminal` in `src/Fx.Pty` ([`docs/spikes/pty.md`](../spikes/pty.md)), with a conformance suite in `tests/Fx.Pty.Tests` and a proxy over the environment protocol ([envd.md](envd.md)).
+- **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes, ranged reads, patches, search and watching are envd's `FsOps` ([envd.md](envd.md)). Reads and writes here are whole files.
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
 - **Tracing.** Spec §4.2 names this capability `ITelemetry`; it is `ITrace` because "telemetry" suggests data leaving the machine, and fx has none of that (§18). Traces stay local. Exporting them to a local file or viewer is future work (spec §15, `fx trace`).
@@ -142,8 +142,8 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 | `ILlm` | T118 |
 | `IGrants` | T123 |
 | `IContext` | T126 |
-| `ISnapshots` | T111, T205 |
-| `ITerminal` (fake, conformance suite, journaling; the shape and the local interpreter are in `src/Fx.Pty`) | T111 |
+| `ISnapshots`: per-step snapshots, retention, two-phase undo (the capability and `GitSnapshots` are in `src/Fx.Envd`, [envd.md](envd.md)) | T205 |
+| `ITerminal`: a deterministic fake and journaling (the shape and the local interpreter are in `src/Fx.Pty`, the conformance suite in `tests/Fx.Pty.Tests`, the proxy in `src/Fx.Envd`) | T131 |
 | `IRepo` | T202 |
 | `IRuns` | T212 |
 | `IAgents` | T213 |

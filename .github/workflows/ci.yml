@@ -183,6 +183,19 @@ jobs:
           echo "$version"
           [[ "$version" == "$name "* ]]
           $IN "$bin" --help
+      - name: Smoke test envd mode
+        run: |
+          bin="artifacts/publish/Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}"
+          dir="artifacts/envd-smoke"
+          rm -rf "$dir" && mkdir -p "$dir/workspace" "$dir/state"
+          request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersions":["1"],"peer":{"name":"ci","version":"0"},"capabilities":{"maxMessageSize":1048576},"environmentProtocol":"1"}}'
+          # Standard input must reach the container: `docker exec -i`.
+          run=""
+          [[ -n "$IN" ]] && run="docker exec -i alpine"
+          reply=$(echo "$request" | $run "$bin" envd --stdio --workspace "$dir/workspace" --state "$dir/state" | tr -d '\r')
+          echo "$reply"
+          grep -q '"environmentProtocol":"1"' <<< "$reply"
+          grep -q '"platform":{' <<< "$reply"
       - name: SQLite is linked into the binary
         run: |
           dir="artifacts/publish/Fx.Cli/release_$RID"
