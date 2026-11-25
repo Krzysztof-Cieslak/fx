@@ -21,15 +21,15 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Package | Project | Who uses it | Contents |
 |---|---|---|---|
-| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)) |
-| `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes |
+| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)), the grants capability (`IGrants`), `GrantStore` and the grants' contribution types ([grants.md](grants.md)) |
+| `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models`, `.Grants` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes; the grants log's model (actions, patterns, grants, requests, the effective rules) |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
 | `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host) | codecs, the generated contract types, the extension API, the protocol's server |
 
 - **Built-ins** (`extensions/`) reference `src/Fx.Sdk` and nothing else, and their compiled assemblies
   reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Contracts.TypeScript`,
-  `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
+  `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
   `Fx.Sdk.Process` reference only their surfaces (`processSdkSurface` adds `Fx.Sdk.Process`, `Fx.Rpc`,
   `Fx.Effects.Live`). Widening a surface is a deliberate edit of those sets and of this table.
 - **Not public:** `Fx.Extensions` (the registry, catalog, runtimes, bootstrap), `Fx.Machines(.Host)`,
@@ -54,6 +54,11 @@ they are packaged and versioned, and how to write an extension with them. The ex
 - **The bun-ts kernel keeps its own JSON-RPC peer** rather than `@fx/sdk`'s: the kernel protocol frames
   every message on a line of its own after stray bytes, and the kernel ships as a few flat TypeScript
   files carried in the binary, without dependencies.
+- **`Fx.Grants` is exposed** (T123): extensions request permissions (`IGrants`), add actions to the
+  vocabulary and contribute grant stores and policy (spec §13.2, §16.2), so the grants log's model is
+  public. It is pure, references only Contracts (Fable: clients fold the log with it), and its host side
+  (the actor, the host-local store, the service, the `grants/*` methods) stays in `Fx.Grants.Host`, which
+  is not public.
 - **`Fx.Variants` is exposed**: extensions define slots (`VariantSlots.contributionType`, `variant-slot`,
   in the core catalog) and will read them through `IVariants` (T109b). It is pure and references only
   Contracts and Effects.
