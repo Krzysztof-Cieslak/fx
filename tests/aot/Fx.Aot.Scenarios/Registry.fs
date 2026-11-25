@@ -40,6 +40,7 @@ let all: Scenario list =
             Interpreters.scenarios
             Sessions.scenarios
             ModelsAnthropic.scenarios
+            Prompt.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
