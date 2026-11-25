@@ -110,6 +110,7 @@
           "Fx.Identity.Host": "[0.0.0, )",
           "Fx.Interpreters": "[0.0.0, )",
           "Fx.Kernel": "[0.0.0, )",
+          "Fx.Keyring": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Prompt": "[0.0.0, )",
@@ -330,6 +331,13 @@
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )",
           "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.keyring": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
         }
       },
       "fx.machines": {
