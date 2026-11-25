@@ -14,6 +14,8 @@ open Fx.Store
 open Fx.Store.Fakes
 open Fx.Envd
 open Fx.Kernel
+open Fx.Interpreters
+open Fx.Sdk
 open Fx.Sessions
 open Fx.Sessions.Host
 open Fx.CodeAct
@@ -35,7 +37,14 @@ type RecordedSession =
 [<NoEquality; NoComparison>]
 type ReplaySettings =
     {
+        /// The interpreter of hands whose launches were not journaled (`HandsInfo.Interpreter` is
+        /// `None`: not an interpreter from a provider).
         Interpreter: HandsInfo -> Interpreter<ReplayHandsEnv>
+        /// The interpreter provider of an id and its runtime, as the host has them: a kernel whose
+        /// launch was journaled (`LaunchInfo`) starts with them, from what the launch recorded.
+        Provider: string -> Result<InterpreterProvider * RuntimeSpec, string>
+        /// The options kernels start with (the host's).
+        KernelOptions: KernelOptions
         Catalog: ModelRef -> ModelInfo option
         StallAfter: TimeSpan
     }
@@ -405,6 +414,46 @@ module SessionReplay =
                         None)
                 |> Option.defaultValue true
 
+            // An interpreter from a provider: each launch starts from what its recording journaled.
+            let launched (provider: InterpreterProvider) : Interpreter<ReplayHandsEnv> =
+                {
+                    Language = provider.Language
+                    Prompt = Fx.CodeAct.Interpreter.prompt provider
+                    Start =
+                        fun start ->
+                            fun env ->
+                                task {
+                                    let! info =
+                                        segment.Answer(
+                                            segment.Claim(
+                                                Markers.Hands,
+                                                Markers.Launch,
+                                                Inputs.int start.Launch,
+                                                $"launch {start.Launch}"
+                                            ),
+                                            Gate.Immediate,
+                                            Decode.using LaunchInfo.codec,
+                                            env.Scope.Cancellation
+                                        )
+
+                                    match settings.Provider info.Provider with
+                                    | Error e -> return Error e
+                                    | Ok(provider, runtime) ->
+                                        let session = LaunchInfo.session provider runtime info
+
+                                        let interpreter =
+                                            Fx.CodeAct.Interpreter.ofProvider settings.KernelOptions (fun _ -> session)
+
+                                        return! interpreter.Start start env
+                                }
+                    Launches = None
+                }
+
+            let interpreterOf (info: HandsInfo) : Result<Interpreter<ReplayHandsEnv>, string> =
+                match info.Interpreter with
+                | None -> Ok(settings.Interpreter info)
+                | Some id -> settings.Provider id |> Result.map (fst >> launched)
+
             let config: CodeActConfig<ReplayTurnEnv, ReplayHandsEnv> =
                 {
                     Sessions = SessionLog.typed store
@@ -449,13 +498,15 @@ module SessionReplay =
 
                                     return
                                         info
-                                        |> Result.map (fun info ->
+                                        |> Result.bind (fun info ->
+                                            interpreterOf info |> Result.map (fun interpreter -> info, interpreter))
+                                        |> Result.map (fun (info, interpreter) ->
                                             {
                                                 Env = handsEnv
                                                 Workspace = info.Workspace
                                                 Os = info.Os
                                                 CommandEnv = HandsInfo.commandEnv info
-                                                Interpreter = settings.Interpreter info
+                                                Interpreter = interpreter
                                                 Guard =
                                                     fun call ->
                                                         fun env ->

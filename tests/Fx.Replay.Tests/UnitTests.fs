@@ -355,4 +355,53 @@ let tests =
                     Expect.stringContains divergence.Actual b "what replay asked"
                 | None -> failtest "no divergence"
             }
+
+            test "a kernel launch's journaled description reads back as it was" {
+                let info: LaunchInfo =
+                    {
+                        Provider = "bun-ts"
+                        Installed =
+                            [
+                                {
+                                    Id = "bun"
+                                    Version = Fx.Sdk.SemVer.create 1 4 5
+                                    Dir = "/data/runtimes/bun/1.4.5"
+                                    Bin = [ "bun", "/data/runtimes/bun/1.4.5/bin/bun" ]
+                                    Env = [ "BUN_INSTALL", "/data/runtimes/bun/1.4.5" ]
+                                }
+                            ]
+                        AssetsRoot = "/env/assets"
+                        Target =
+                            {
+                                Os = Fx.Sdk.Os.Linux
+                                Arch = Fx.Sdk.Arch.X64
+                                Libc = Some Fx.Sdk.Libc.Glibc
+                            }
+                        Owned = Fx.Sdk.OwnedDirs.under "/env/owned/kernel-1"
+                        Workspace = Some "/work"
+                        ProjectTrusted = false
+                        HostEnvironment = [ "HOME"; "PATH" ]
+                    }
+
+                let json = LaunchInfo.codec.Encode info
+                Expect.equal (LaunchInfo.codec.Decode json) (Ok info) "the same launch"
+            }
+
+            testTask "terminals are refused in recorded hands" {
+                let terminal = Record.terminal { Spawn = fun _ _ -> failwith "spawned" }
+
+                let! spawned =
+                    terminal.Spawn
+                        {
+                            Program = Exec("sh", [])
+                            Cwd = None
+                            Env = Inherit []
+                            Size = { Cols = 80; Rows = 24 }
+                        }
+                        CancellationToken.None
+
+                match spawned with
+                | Error(Fx.Pty.NotStarted(_, reason)) -> Expect.stringContains reason "not recorded" "why"
+                | other -> failtest $"{other}"
+            }
         ]

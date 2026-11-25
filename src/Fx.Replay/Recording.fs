@@ -12,6 +12,7 @@ open Fx.Models
 open Fx.Store
 open Fx.Envd
 open Fx.Kernel
+open Fx.Interpreters
 open Fx.Sdk
 open Fx.Sessions
 open Fx.Sessions.Host
@@ -60,6 +61,8 @@ type HandsTaps =
         FsRead: FsRead -> FsRead
         Fs: Fs -> Fs
         FsOps: FsOps -> FsOps
+        /// Refuses: terminals are not recorded.
+        Terminal: Fx.Pty.Terminal -> Fx.Pty.Terminal
     }
 
     override _.ToString() = "HandsTaps"
@@ -76,6 +79,129 @@ type Wraps<'R, 'K> =
 
     override _.ToString() = "Wraps"
 
+/// What a kernel launch of an interpreter from a provider started from (its `InterpreterSession`), as
+/// journaled before the launch: what replay needs to start the same kernel, the provider and its
+/// runtime by id (never the values of the launcher's variables).
+type LaunchInfo =
+    {
+        /// The interpreter provider's id.
+        Provider: string
+        Installed: InstalledComponent list
+        AssetsRoot: string
+        Target: TargetTriple
+        Owned: OwnedDirs
+        Workspace: string option
+        ProjectTrusted: bool
+        /// The launcher's variables, by name.
+        HostEnvironment: string list
+    }
+
+    override this.ToString() =
+        $"launch of {this.Provider} in {this.Owned.Root}"
+
+[<RequireQualifiedAccess>]
+module LaunchInfo =
+    let private pairs: Codec<(string * string) list> =
+        Codec.list (Codec.tuple2 Codec.string Codec.string)
+
+    let private installed: Codec<InstalledComponent> =
+        Codec.record {
+            let! id = Codec.field "id" (fun (c: InstalledComponent) -> c.Id) Codec.string
+            and! version = Codec.field "version" (fun c -> c.Version) SemVer.codec
+            and! dir = Codec.field "dir" (fun c -> c.Dir) Codec.string
+            and! bin = Codec.field "bin" (fun c -> c.Bin) pairs
+            and! env = Codec.field "env" (fun c -> c.Env) pairs
+
+            return
+                {
+                    Id = id
+                    Version = version
+                    Dir = dir
+                    Bin = bin
+                    Env = env
+                }
+        }
+
+    let private owned: Codec<OwnedDirs> =
+        Codec.record {
+            let! root = Codec.field "root" (fun (o: OwnedDirs) -> o.Root) Codec.string
+            and! cwd = Codec.field "cwd" (fun o -> o.Cwd) Codec.string
+            and! home = Codec.field "home" (fun o -> o.Home) Codec.string
+            and! config = Codec.field "config" (fun o -> o.Config) Codec.string
+            and! cache = Codec.field "cache" (fun o -> o.Cache) Codec.string
+            and! temp = Codec.field "temp" (fun o -> o.Temp) Codec.string
+
+            return
+                {
+                    Root = root
+                    Cwd = cwd
+                    Home = home
+                    Config = config
+                    Cache = cache
+                    Temp = temp
+                }
+        }
+
+    let codec: Codec<LaunchInfo> =
+        Codec.record {
+            let! provider =
+                Codec.field "provider" (fun (l: LaunchInfo) -> l.Provider) Codec.string
+
+            and! components =
+                Codec.field "installed" (fun l -> l.Installed) (Codec.list installed)
+
+            and! assets = Codec.field "assetsRoot" (fun l -> l.AssetsRoot) Codec.string
+            and! target = Codec.field "target" (fun l -> l.Target) TargetTriple.codec
+            and! dirs = Codec.field "owned" (fun l -> l.Owned) owned
+            and! workspace = Codec.optionalField "workspace" (fun l -> l.Workspace) Codec.string
+            and! trusted = Codec.field "projectTrusted" (fun l -> l.ProjectTrusted) Codec.bool
+
+            and! names =
+                Codec.field "hostEnvironment" (fun l -> l.HostEnvironment) (Codec.list Codec.string)
+
+            return
+                {
+                    Provider = provider
+                    Installed = components
+                    AssetsRoot = assets
+                    Target = target
+                    Owned = dirs
+                    Workspace = workspace
+                    ProjectTrusted = trusted
+                    HostEnvironment = names
+                }
+        }
+
+    let ofSession (session: InterpreterSession) : LaunchInfo =
+        {
+            Provider = session.Provider.Id
+            Installed = session.Installed
+            AssetsRoot = session.AssetsRoot
+            Target = session.Launch.Target
+            Owned = session.Launch.Owned
+            Workspace = session.Launch.Workspace
+            ProjectTrusted = session.Launch.ProjectTrusted
+            HostEnvironment = session.Launch.HostEnvironment |> List.map fst
+        }
+
+    /// The session to start the same kernel with, from the provider and its runtime: the launcher's
+    /// variables have empty values (replay starts no process).
+    let session (provider: InterpreterProvider) (runtime: RuntimeSpec) (info: LaunchInfo) : InterpreterSession =
+        {
+            Provider = provider
+            Runtime = runtime
+            Installed = info.Installed
+            AssetsRoot = info.AssetsRoot
+            Launch =
+                {
+                    Target = info.Target
+                    Owned = info.Owned
+                    Workspace = info.Workspace
+                    ProjectTrusted = info.ProjectTrusted
+                    HostEnvironment = info.HostEnvironment |> List.map (fun name -> name, "")
+                }
+        }
+
 /// What a session's hands were, as journaled: what replay needs to build the same hands (never the
 /// values of the variables commands get).
 type HandsInfo =
@@ -86,6 +212,9 @@ type HandsInfo =
         CommandEnv: string * string list
         Language: string
         Snapshots: bool
+        /// The interpreter provider whose launches are journaled (`LaunchInfo`), for an interpreter
+        /// from a provider.
+        Interpreter: string option
     }
 
     override this.ToString() =
@@ -110,6 +239,9 @@ module HandsInfo =
             and! language = Codec.field "language" (fun h -> h.Language) Codec.string
             and! snapshots = Codec.field "snapshots" (fun h -> h.Snapshots) Codec.bool
 
+            and! interpreter =
+                Codec.optionalField "interpreter" (fun h -> h.Interpreter) Codec.string
+
             return
                 {
                     Workspace = workspace
@@ -117,6 +249,7 @@ module HandsInfo =
                     CommandEnv = mode, names
                     Language = language
                     Snapshots = snapshots
+                    Interpreter = interpreter
                 }
         }
 
@@ -135,6 +268,9 @@ module HandsInfo =
             CommandEnv = env
             Language = hands.Interpreter.Language
             Snapshots = hands.Snapshots.IsSome
+            Interpreter =
+                hands.Interpreter.Launches
+                |> Option.map (fun session -> (session 1).Provider.Id)
         }
 
     /// The variables commands get, by name, with empty values (replay runs no command).
@@ -218,6 +354,10 @@ module Markers =
     [<Literal>]
     let Guard = "Hands.Guard"
 
+    /// What a kernel launch starts from (`LaunchInfo`), before the launch.
+    [<Literal>]
+    let Launch = "Kernel.Launch"
+
     /// The lane of a turn: its host environment's clock and model, and its calls to the session.
     let turn (n: int) = $"turn/{n}"
 
@@ -294,12 +434,37 @@ type RecordedCodeAct<'R, 'K
                 FsRead = Record.fsRead journal lane
                 Fs = Record.fs journal lane
                 FsOps = Record.fsOps journal lane
+                Terminal = Record.terminal
             }
 
         let original = hands.Env
 
+        let interpreter = hands.Interpreter
+
         { hands with
             Env = wraps.Hands taps hands.Env
+            Interpreter =
+                match interpreter.Launches with
+                | None -> interpreter
+                | Some session ->
+                    { interpreter with
+                        Start =
+                            fun start ->
+                                fun env ->
+                                    task {
+                                        let! _ =
+                                            journal.Run(
+                                                lane,
+                                                Markers.Launch,
+                                                Inputs.int start.Launch,
+                                                $"launch {start.Launch}",
+                                                LaunchInfo.codec.Encode,
+                                                fun () -> Task.FromResult(LaunchInfo.ofSession (session start.Launch))
+                                            )
+
+                                        return! interpreter.Start start env
+                                    }
+                    }
             Snapshots = hands.Snapshots |> Option.map (Record.snapshots journal lane)
             Guard =
                 fun call ->

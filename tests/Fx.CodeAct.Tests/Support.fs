@@ -269,6 +269,7 @@ let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
                             let! _ = terminate ()
                             return Error(string e)
                     }
+        Launches = None
     }
 
 /// What a host process holds: the session host, the strategy's kernels, and how to close them.

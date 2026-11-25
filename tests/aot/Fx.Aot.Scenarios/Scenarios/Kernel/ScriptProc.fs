@@ -144,4 +144,5 @@ let interpreter<'K when 'K :> IShell and 'K :> IClock and 'K :> IScopeWith<'K>>
                     | Ok kernel -> return Ok kernel
                     | Error e -> return Error(string e)
                 }
+        Launches = None
     }

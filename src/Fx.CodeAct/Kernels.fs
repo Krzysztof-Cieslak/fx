@@ -22,6 +22,9 @@ type Interpreter<'K> =
         /// Starts a kernel: the host's side of the protocol, the `initialize` setup and the bridge's
         /// surface, and the launch's number in the session (each launch gets fresh owned directories).
         Start: StartKernel<'K> -> Eff<'K, Result<Kernel, string>>
+        /// What each launch's kernel starts from, for an interpreter from a provider (`ofProvider`):
+        /// record and replay journal it, so that replay starts the same kernels (docs/modules/replay.md).
+        Launches: (int -> InterpreterSession) option
     }
 
     override this.ToString() = $"interpreter ({this.Language})"
@@ -112,6 +115,10 @@ module KernelJournal =
 /// Interpreters from providers (`fx.interpreter.bun-ts`, …).
 [<RequireQualifiedAccess>]
 module Interpreter =
+    /// An interpreter provider's prompt for a binding surface.
+    let prompt (provider: InterpreterProvider) (surface: BindingSurface) : string =
+        PromptPack.render provider.PromptPack (provider.Bindings surface)
+
     /// An interpreter provider's kernels, prepared and started in the environment (`Interpreter.start`):
     /// `session` gives each launch its own owned directories.
     let ofProvider<'K when 'K :> IFs and 'K :> IShell and 'K :> IClock and 'K :> IScopeWith<'K>>
@@ -122,7 +129,7 @@ module Interpreter =
 
         {
             Language = provider.Language
-            Prompt = fun surface -> PromptPack.render provider.PromptPack (provider.Bindings surface)
+            Prompt = prompt provider
             Start =
                 fun start ->
                     Fx.Interpreters.Interpreter.start
@@ -132,6 +139,7 @@ module Interpreter =
                         (session start.Launch)
                         start.Surface
                     |> EffResult.mapError string
+            Launches = Some session
         }
 
 /// The checks a turn's result must pass besides its codec (spec §4.3 `Ensure`, §4.5).
