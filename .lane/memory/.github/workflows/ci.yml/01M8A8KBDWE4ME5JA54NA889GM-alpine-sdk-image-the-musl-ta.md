@@ -3,6 +3,10 @@ id: 01M8A8KBDWE4ME5JA54NA889GM
 anchor: '@file'
 created: 2026-11-25T21:08:16Z
 norm: '1'
+sig: 8e7430f31889b761
+body_hash: 6edbb096b79ef51c
+raw_hash: 20ef222f9126be06
+lines: 1-519
 supersedes: 01M87TWQ4X72K6QZX9BQ5CRBAM
 ---
 
