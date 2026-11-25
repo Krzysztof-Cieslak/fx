@@ -116,19 +116,19 @@ module private Windows =
     [<Literal>]
     let SioAfUnixGetPeerPid = 0x58000100
 
-    [<DllImport("kernel32.dll", SetLastError = true)>]
+    [<DllImport("kernel32.dll")>]
     extern nativeint OpenProcess(uint32 access, int inheritHandle, uint32 processId)
 
-    [<DllImport("kernel32.dll", SetLastError = true)>]
+    [<DllImport("kernel32.dll")>]
     extern int CloseHandle(nativeint handle)
 
-    [<DllImport("kernel32.dll", SetLastError = true)>]
+    [<DllImport("kernel32.dll")>]
     extern int GetNamedPipeClientProcessId(nativeint pipe, nativeint processId)
 
-    [<DllImport("advapi32.dll", SetLastError = true)>]
+    [<DllImport("advapi32.dll")>]
     extern int OpenProcessToken(nativeint processHandle, uint32 desiredAccess, nativeint tokenHandle)
 
-    [<DllImport("advapi32.dll", SetLastError = true)>]
+    [<DllImport("advapi32.dll")>]
     extern int GetTokenInformation(nativeint token, int infoClass, nativeint info, uint32 length, nativeint returned)
 
     /// The SID of the user a process runs as; `None` if the process is gone or not ours to query.
@@ -202,12 +202,9 @@ module private Windows =
     let socketPeer (socket: Socket) : PeerAccount option =
         let pid = Array.zeroCreate<byte> 4
 
-        try
-            if socket.IOControl(SioAfUnixGetPeerPid, null, pid) = 4 then
-                ofProcess (BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan pid))
-            else
-                None
-        with :? SocketException ->
+        if socket.IOControl(SioAfUnixGetPeerPid, null, pid) = 4 then
+            ofProcess (BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan pid))
+        else
             None
 
 /// The account this process runs as, in the form peers are reported in: the effective user id on

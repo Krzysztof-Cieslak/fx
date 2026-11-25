@@ -5,6 +5,8 @@ module Fx.Transport.Http.Tests.PeerCredentialsTests
 open System
 open System.Diagnostics
 open System.IO
+open System.IO.Pipes
+open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open Expecto
@@ -121,6 +123,60 @@ let tests =
                     | Some peer ->
                         Expect.equal peer.Account (currentAccount ()) "the same account"
                         Expect.equal peer.Process (Some Environment.ProcessId) "this process"
+                else
+                    skiptest "named pipes are Windows only"
+            }
+
+            test "the peer of a raw Unix socket" {
+                let dir = ownDirectory ()
+
+                try
+                    let endpoint = UnixDomainSocketEndPoint(Path.Combine(dir, "raw.sock"))
+
+                    use listener =
+                        new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)
+
+                    listener.Bind endpoint
+                    listener.Listen 1
+
+                    use client =
+                        new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)
+
+                    let connecting = client.ConnectAsync endpoint
+                    use server = listener.Accept()
+                    connecting.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                    let peer = ofUnixSocket server
+                    Expect.equal (peer |> Option.map _.Account) (Some(currentAccount ())) "the same account"
+                    Expect.equal (peer |> Option.bind _.Process) (Some Environment.ProcessId) "this process"
+                finally
+                    try
+                        Directory.Delete(dir, true)
+                    with _ ->
+                        ()
+            }
+
+            test "the client of a raw named pipe (Windows)" {
+                if OperatingSystem.IsWindows() then
+                    let name = "fxpc-" + Guid.NewGuid().ToString("N").Substring(0, 10)
+
+                    use server =
+                        new NamedPipeServerStream(
+                            name,
+                            PipeDirection.InOut,
+                            1,
+                            PipeTransmissionMode.Byte,
+                            PipeOptions.Asynchronous
+                        )
+
+                    use client =
+                        new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous)
+
+                    let waiting = server.WaitForConnectionAsync()
+                    client.Connect(30000)
+                    waiting.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                    let peer = ofNamedPipe server
+                    Expect.equal (peer |> Option.map _.Account) (Some(currentAccount ())) "the same account"
+                    Expect.equal (peer |> Option.bind _.Process) (Some Environment.ProcessId) "this process"
                 else
                     skiptest "named pipes are Windows only"
             }
