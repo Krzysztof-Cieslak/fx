@@ -160,16 +160,18 @@ export function plan(input: Input): Plan {
     (input.event === "workflow_dispatch" && input.fullInput !== "false") ||
     (pr && input.labels.includes("ci:full"));
   const code = !pr || full || input.files.length === 0 || !input.files.every((f) => f.endsWith(".md"));
-  const area = (paths: string[]) => code && (full || (pr && anyMatch(paths, input.files)));
+  // Lane's notes (.lane/memory/<path>/…) name the files they are about but change nothing in them.
+  const files = input.files.filter((f) => !f.startsWith(".lane/"));
+  const area = (paths: string[]) => code && (full || (pr && anyMatch(paths, files)));
   return {
     full,
     code,
     keyring: area(KEYRING_PATHS),
     sandbox: area(SANDBOX_PATHS),
     bun: area(BUN_PATHS),
-    spike: full || (pr && anyMatch(SPIKE_PATHS, input.files)),
+    spike: full || (pr && anyMatch(SPIKE_PATHS, files)),
     targets: full ? TARGETS : [],
-    platform: pr && !full ? matching(PLATFORM_PATHS, input.files) : [],
+    platform: pr && !full ? matching(PLATFORM_PATHS, files) : [],
   };
 }
 

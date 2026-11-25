@@ -83,6 +83,9 @@ describe("ci plan", () => {
     expect(pr("spikes/bun-kernel/src/kernel.ts").spike).toBe(true);
     // Areas never add jobs on a pull request.
     expect(pr("src/Fx.Auth/KeyringStore.fs", "src/Fx.Environments/Envs.fs").targets).toEqual([]);
+    // A lane note is about a file, not a change to it.
+    const note = pr("src/Fx.Sessions/Machine.fs", ".lane/memory/src/Fx.Keyring/Native/Apple.fs/01M8-note.md");
+    expect([note.keyring, note.platform]).toEqual([false, []]);
   });
 
   test("a Markdown-only pull request runs no builds", () => {
