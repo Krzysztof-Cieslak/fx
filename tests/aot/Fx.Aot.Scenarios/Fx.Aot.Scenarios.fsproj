@@ -47,6 +47,7 @@
     <Compile Include="..\..\Fx.Components.Tests\Support.fs" Link="Scenarios\ComponentsSupport.fs" />
     <Compile Include="Scenarios\Components.fs" />
     <Compile Include="Scenarios\Kernel\ScriptKernel.fs" />
+    <Compile Include="Scenarios\Kernel\Kernel.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />

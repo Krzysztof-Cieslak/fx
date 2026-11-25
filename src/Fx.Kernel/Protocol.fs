@@ -43,7 +43,8 @@ type InterpreterCaps =
             | Some p -> " packages " + p.Manager
             | None -> ""
 
-        $"snapshot {this.Snapshot}, host calls {this.AsyncHostCalls}, deterministic {this.Deterministic}{packages}"
+        let yes (flag: bool) = if flag then "yes" else "no"
+        $"snapshot {yes this.Snapshot}, host calls {this.AsyncHostCalls}, deterministic {yes this.Deterministic}{packages}"
 
 /// The bounds a host sets for a kernel's output and previews. Their values are variants.
 type KernelLimits =
