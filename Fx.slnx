@@ -39,6 +39,7 @@
     <Project Path="src/Fx.Identity/Fx.Identity.fsproj" />
     <Project Path="src/Fx.Identity.Host/Fx.Identity.Host.fsproj" />
     <Project Path="src/Fx.Keyring/Fx.Keyring.fsproj" />
+    <Project Path="src/Fx.CodeAct/Fx.CodeAct.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -107,6 +108,7 @@
     <Project Path="tests/Fx.Ext.ModelOpenAI.Tests/Fx.Ext.ModelOpenAI.Tests.fsproj" />
     <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
+    <Project Path="tests/Fx.CodeAct.Tests/Fx.CodeAct.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
     <Project Path="tests/Fx.Grants.Tests/Fx.Grants.Tests.fsproj" />

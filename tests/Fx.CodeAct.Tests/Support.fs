@@ -1,0 +1,527 @@
+/// The CodeAct strategy on a real session host: an in-memory store of payloads (every event goes through
+/// its JSON), a scripted model, and a kernel: the F# script kernel in process (deterministic; its language
+/// is `ScriptKernel`'s), acting on a scratch workspace through the local filesystem and shell.
+module Fx.CodeAct.Tests.Support
+
+open System
+open System.Collections.Generic
+open System.IO
+open System.Threading
+open System.Threading.Tasks
+open Expecto
+open Fx
+open Fx.Contracts
+open Fx.Effects
+open Fx.Effects.Live
+open Fx.Envd
+open Fx.Envd.Live
+open Fx.Machines
+open Fx.Machines.Host
+open Fx.Models
+open Fx.Rpc
+open Fx.Store
+open Fx.Store.Fakes
+open Fx.Sessions
+open Fx.Sessions.Host
+open Fx.Kernel
+open Fx.Prompt
+open Fx.Variants
+open Fx.Variants.Fakes
+open Fx.Sdk
+open Fx.CodeAct
+
+/// The host's side: the clock, traces, the model and the turn's scope.
+type HostEnv =
+    {
+        Clock: Clock
+        Trace: Trace
+        Llm: Llm
+        Scope: Scope
+    }
+
+    interface IClock with
+        member env.Clock = env.Clock
+
+    interface ITrace with
+        member env.Trace = env.Trace
+
+    interface ILlm with
+        member env.Llm = env.Llm
+
+    interface IScopeWith<HostEnv> with
+        member env.Scope = env.Scope
+        member env.WithScope scope = { env with Scope = scope }
+
+    override env.ToString() = $"HostEnv({env.Scope})"
+
+/// The hands: the workspace's files and shell.
+type HandsEnv =
+    {
+        Clock: Clock
+        FsRead: FsRead
+        Fs: Fs
+        FsOps: FsOps
+        Shell: Shell
+        Scope: Scope
+    }
+
+    interface IClock with
+        member env.Clock = env.Clock
+
+    interface IFs with
+        member env.FsRead = env.FsRead
+        member env.Fs = env.Fs
+
+    interface IFsOps with
+        member env.FsOps = env.FsOps
+
+    interface IShell with
+        member env.Shell = env.Shell
+
+    interface IScopeWith<HandsEnv> with
+        member env.Scope = env.Scope
+        member env.WithScope scope = { env with Scope = scope }
+
+    override env.ToString() = $"HandsEnv({env.Scope})"
+
+let alice = Attribution.create "user:alice" "test"
+let g = Product.kernelGlobal
+
+let usage =
+    { Usage.zero with
+        Input = 100
+        Output = 10
+    }
+
+/// A model's replies, in order: each answers the next request.
+[<RequireQualifiedAccess>]
+type Reply =
+    | Events of ChatEvent list
+    /// Parts and a stop reason; tool calls get ids `call-<n>` in order.
+    | Parts of Part list * StopReason
+
+/// A scripted model: answers requests in order with its replies, records every request, and can hold
+/// a request until the test lets it go (to steer or interrupt while a turn runs).
+[<Sealed>]
+type Model() =
+    let gate = obj ()
+    let requests = ResizeArray<ChatRequest>()
+    let replies = Queue<Reply>()
+    let holds = Dictionary<int, TaskCompletionSource>()
+    let asked = Dictionary<int, TaskCompletionSource>()
+    let mutable calls = 0
+
+    let signal (n: int) =
+        match asked.TryGetValue n with
+        | true, s -> s
+        | _ ->
+            let s = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+            asked[n] <- s
+            s
+
+    let events (reply: Reply) : ChatEvent list =
+        match reply with
+        | Reply.Events events -> events
+        | Reply.Parts(parts, stop) ->
+            let parts =
+                parts
+                |> List.map (fun part ->
+                    match part with
+                    | Part.ToolCall call when call.Id = "" ->
+                        calls <- calls + 1
+                        Part.ToolCall { call with Id = $"call-{calls}" }
+                    | part -> part)
+
+            ChatEvents.ofResponse
+                {
+                    Id = None
+                    Model = Some "model"
+                    Parts = parts
+                    Stop = stop
+                    Usage = usage
+                }
+
+    let stream (request: ChatRequest) (cancellation: CancellationToken) : Task<ChatStream> =
+        task {
+            let n, hold, reply =
+                lock gate (fun () ->
+                    requests.Add request
+                    let n = requests.Count
+                    (signal n).TrySetResult() |> ignore
+
+                    let hold =
+                        match holds.TryGetValue n with
+                        | true, h -> Some h.Task
+                        | _ -> None
+
+                    let reply = if replies.Count > 0 then Some(replies.Dequeue()) else None
+                    n, hold, reply)
+
+            match hold with
+            | Some hold -> do! hold.WaitAsync cancellation
+            | None -> ()
+
+            match reply with
+            | Some reply -> return lock gate (fun () -> ChatStream.ofEvents (events reply))
+            | None ->
+                return ChatStream.failed (ChatError.InvalidRequest $"the test's model has no reply for request {n}")
+        }
+
+    member _.Llm: Llm = { Stream = stream }
+
+    member _.Add(reply: Reply) =
+        lock gate (fun () -> replies.Enqueue reply)
+
+    member this.AddAll(items: Reply list) =
+        for reply in items do
+            this.Add reply
+
+    /// Holds request `n` (1-based) until the returned source is set.
+    member _.Hold(n: int) : TaskCompletionSource =
+        lock gate (fun () ->
+            let h = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+            holds[n] <- h
+            h)
+
+    /// Completes when request `n` has been made.
+    member _.Asked(n: int) : Task = lock gate (fun () -> (signal n).Task)
+
+    member _.Requests: ChatRequest list = lock gate (fun () -> List.ofSeq requests)
+
+    override _.ToString() = "Model"
+
+/// Replies, as a model writes them.
+[<RequireQualifiedAccess>]
+module Say =
+    let call (name: string) (arguments: Json) : Part =
+        Part.ToolCall
+            {
+                Id = ""
+                Name = name
+                Arguments = Json.serialize arguments
+                State = None
+            }
+
+    /// A reply with one cell.
+    let cell (code: string) : Reply =
+        Reply.Parts([ call "cell" (Json.Object [ "code", Json.String code ]) ], StopReason.ToolUse)
+
+    /// A reply with one call of a tool.
+    let tool (name: string) (arguments: (string * Json) list) : Reply =
+        Reply.Parts([ call name (Json.Object arguments) ], StopReason.ToolUse)
+
+    let text (text: string) : Reply =
+        Reply.Parts([ Part.text text ], StopReason.EndTurn)
+
+    let failed (error: ChatError) : Reply = Reply.Events [ ChatEvent.Failed error ]
+
+    let empty: Reply = Reply.Parts([], StopReason.EndTurn)
+
+    /// A cell that ends the turn `done`.
+    let finish (summary: string) : Reply =
+        cell $"// intent: finish\nfinish {{\"kind\":\"done\",\"summary\":{Json.quote summary}}}"
+
+/// A scratch directory under artifacts/.
+let scratch (name: string) : string =
+    let dir =
+        Fx.Kernel.Tests.Repo.path
+            [
+                "artifacts"
+                "codeact-tests"
+                $"{Environment.ProcessId}-{name}-{Guid.NewGuid():N}"
+            ]
+
+    Directory.CreateDirectory dir |> ignore
+    dir
+
+/// The script kernel in this process, over the in-process transport: a fresh one for each launch.
+let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
+    {
+        Language = "script"
+        Prompt =
+            fun surface ->
+                let names = surface.Bindings |> List.map (fun b -> $"{surface.Global}.{b.Path}")
+                "Cells are scripts. Bindings: " + String.concat ", " names
+        Start =
+            fun start ->
+                fun env ->
+                    task {
+                        let kernel = Fx.Aot.Scenarios.Kernel.ScriptKernel.Kernel ignore
+                        let frames = ConnectionLimits.frames options.Limits
+                        let clientEnd, serverEnd = InProcess.pair (1 <<< 20) frames frames
+
+                        let serverEnv: Fx.Aot.Scenarios.Rpc.TestService.Env =
+                            {
+                                Clock = SystemClock.clock
+                                Scope = Scope.root
+                            }
+
+                        Eff.run serverEnv (Rpc.accept kernel.Service serverEnd) |> ignore
+
+                        let terminate () =
+                            serverEnd.Abort()
+                            kernel.Kill()
+                            Task.FromResult()
+
+                        match! Eff.run env (Kernel.connect options start.Host start.Setup terminate clientEnd) with
+                        | Ok k -> return Ok k
+                        | Error e ->
+                            let! _ = terminate ()
+                            return Error(string e)
+                    }
+    }
+
+/// A CodeAct session host on fakes and a scratch workspace.
+type Fixture =
+    {
+        Env: HostEnv
+        Store: InMemoryEventLog<Payload>
+        Host: SessionHost<HostEnv>
+        CodeAct: CodeAct<HostEnv, HandsEnv>
+        Model: Model
+        Root: string
+        Workspace: string
+        Hands: HandsEnv
+        Variants: Variants
+    }
+
+    member this.File(name: string) = Path.Combine(this.Workspace, name)
+
+    member this.Write(name: string, text: string) =
+        let path = this.File name
+        Directory.CreateDirectory(Path.GetDirectoryName path |> nonNull) |> ignore
+        File.WriteAllText(path, text)
+
+    member this.Read(name: string) = File.ReadAllText(this.File name)
+
+    interface IDisposable with
+        member this.Dispose() =
+            (this.CodeAct.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+
+            (Eff.run this.Env (SessionHost.stop this.Host)).Wait(TimeSpan.FromSeconds 30.0)
+            |> ignore
+
+            try
+                Directory.Delete(this.Root, true)
+            with _ ->
+                ()
+
+    override _.ToString() = "Fixture"
+
+let private os =
+    if OperatingSystem.IsWindows() then Os.Windows
+    elif OperatingSystem.IsMacOS() then Os.MacOs
+    else Os.Linux
+
+/// Variant selections every test starts from: a model, and no waiting between retries.
+let baseSelections: (string * Json) list =
+    [
+        "model.role.main", Json.String "test/model"
+        "codeact.policy.retryDelayMs", Json.int 0
+    ]
+
+/// A fixture with these variant selections (on top of `baseSelections`) and this interpreter.
+let createWith (name: string) (selections: (string * Json) list) (interpreter: Interpreter<HandsEnv>) : Fixture =
+    let root = scratch name
+    let workspace = Path.Combine(root, "workspace")
+    Directory.CreateDirectory workspace |> ignore
+    let clock = SystemClock.clock
+    let model = Model()
+
+    let env: HostEnv =
+        {
+            Clock = clock
+            Trace = Trace.none
+            Llm = model.Llm
+            Scope = Scope.root
+        }
+
+    let hands: HandsEnv =
+        {
+            Clock = clock
+            FsRead = LocalFs.read
+            Fs = LocalFs.write
+            FsOps = LocalFsOps.create clock (SystemIds.create clock)
+            Shell = LocalShell.create (LocalShell.defaultShell ()) workspace
+            Scope = Scope.root
+        }
+
+    let overrides = selections |> List.map fst
+
+    let chosen =
+        (baseSelections |> List.filter (fun (k, _) -> not (List.contains k overrides)))
+        @ selections
+
+    let variants = FakeVariants.create CodeActSlots.read chosen
+    let store = InMemoryEventLog<Payload>()
+    let sessions = SessionLog.typed store.Log
+
+    let codeact =
+        CodeAct.create
+            {
+                Sessions = sessions
+                Contexts = ContextLog.typed store.Log
+                Profile = fun _ -> Eff.ret variants
+                Hands =
+                    fun _ ->
+                        Eff.ret (
+                            Ok
+                                {
+                                    Env = hands
+                                    Workspace = workspace
+                                    Os = os
+                                    CommandEnv = Inherit []
+                                    Interpreter = interpreter
+                                    Guard = fun _ -> EffResult.ok ()
+                                }
+                        )
+                Catalog = fun _ -> None
+            }
+
+    let settings =
+        { SessionSettings.defaults with
+            Kinds = Questions.kinds
+        }
+
+    let host =
+        (Eff.run env (SessionHost.create sessions (InMemorySnapshots()).Store codeact.Runner settings))
+            .GetAwaiter()
+            .GetResult()
+
+    {
+        Env = env
+        Store = store
+        Host = host
+        CodeAct = codeact
+        Model = model
+        Root = root
+        Workspace = workspace
+        Hands = hands
+        Variants = variants
+    }
+
+let kernelOptions =
+    { KernelOptions.defaults with
+        ExitGrace = TimeSpan.FromSeconds 1.0
+    }
+
+/// A fixture with the script kernel.
+let create (name: string) (selections: (string * Json) list) : Fixture =
+    createWith name selections (scriptKernel kernelOptions)
+
+let run (f: Fixture) (effect: Eff<HostEnv, 'T>) : Task<'T> =
+    (Eff.run f.Env effect).WaitAsync(TimeSpan.FromSeconds 60.0)
+
+let send (f: Fixture) (session: string) (key: string) (command: Command) : Task<Fx.Machines.Outcome> =
+    run f (SessionHost.send f.Host session (IdempotencyKey key) alice command)
+
+/// Starts a session.
+let start (f: Fixture) (session: string) : Task =
+    task {
+        let! outcome =
+            run f (SessionHost.start f.Host session (IdempotencyKey(session + "/start")) alice "p1" None)
+
+        match outcome with
+        | Accepted _ -> ()
+        | other -> failtest $"the session did not start: {other}"
+    }
+
+let prompt (f: Fixture) (session: string) (key: string) (text: string) : Task =
+    task {
+        match! send f session key (Command.Prompt(text, PromptMode.Steer)) with
+        | Accepted _ -> ()
+        | other -> failtest $"the prompt was not taken: {other}"
+    }
+
+/// The session's events, decoded.
+let events (f: Fixture) (session: string) : Recorded<Event> list =
+    f.Store.Events(Session.stream session)
+    |> List.map (EventLog.decode SessionLog.schema)
+
+/// The session's context events, decoded.
+let contextEvents (f: Fixture) (session: string) : Recorded<ContextEvent> list =
+    f.Store.Events(ContextLog.stream session)
+    |> List.map (EventLog.decode ContextLog.schema)
+
+/// Waits until turn `n` ended, and gives how.
+let ended (f: Fixture) (session: string) (n: int) : Task<TurnEnd> =
+    task {
+        let deadline = DateTime.UtcNow.AddSeconds 60.0
+        let mutable result = None
+
+        while result.IsNone do
+            result <-
+                events f session
+                |> List.tryPick (fun r ->
+                    match r.Event with
+                    | Event.TurnEnded(turn, ending, _) when turn = n -> Some ending
+                    | _ -> None)
+
+            if result.IsNone then
+                if DateTime.UtcNow > deadline then
+                    let lines = events f session |> List.map (fun r -> string r.Event)
+                    failtest ($"turn {n} did not end:\n" + String.concat "\n" lines)
+
+                do! Task.Delay 10
+
+        return result.Value
+    }
+
+/// The session's state.
+let state (f: Fixture) (session: string) : Task<SessionState> =
+    task {
+        let! snapshot = run f (SessionHost.state f.Host session)
+        return snapshot.State
+    }
+
+/// The receipts recorded, in order.
+let receipts (f: Fixture) (session: string) : Receipt list =
+    contextEvents f session
+    |> List.choose (fun r ->
+        match r.Event with
+        | ContextEvent.Returned receipt -> Some receipt
+        | _ -> None)
+
+/// A receipt's text, as the model reads it.
+let text (receipt: Receipt) : string =
+    receipt.Pieces |> List.map Piece.render |> String.concat "\n"
+
+/// Everything a request says to the model, as text (system parts, messages and tool results).
+let requestText (request: ChatRequest) : string =
+    let partText (part: Part) =
+        match part with
+        | Part.Text t -> t.Text
+        | Part.ToolResult r ->
+            r.Content
+            |> List.map (fun c ->
+                match c with
+                | ToolContent.Text t -> t
+                | ToolContent.Media _ -> "[media]")
+            |> String.concat "\n"
+        | Part.ToolCall c -> c.Name + " " + c.Arguments
+        | Part.Refusal t -> t
+        | _ -> ""
+
+    (request.System @ (request.Messages |> List.collect (fun m -> m.Parts)))
+    |> List.map partText
+    |> String.concat "\n"
+
+/// The result of a turn that completed.
+let completed (ending: TurnEnd) : TurnResult =
+    match ending with
+    | TurnEnd.Completed result -> result
+    | other -> failtest $"the turn did not complete: {other}"
+
+/// The reason of a turn that failed.
+let failedWith (ending: TurnEnd) : string =
+    match ending with
+    | TurnEnd.Failed reason -> reason
+    | other -> failtest $"the turn did not fail: {other}"
+
+/// Runs a test on a fixture, and disposes it.
+let within (name: string) (selections: (string * Json) list) (body: Fixture -> Task<unit>) : unit -> Task =
+    fun () ->
+        task {
+            use f = create name selections
+            do! body(f).WaitAsync(TimeSpan.FromSeconds 120.0)
+        }

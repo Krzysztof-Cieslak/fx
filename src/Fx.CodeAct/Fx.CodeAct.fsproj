@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The CodeAct strategy (spec §4.4–4.5, §5, §6.5, §6.9): the turn runner that renders the prompt
+    from the log, calls the model through ILlm, runs the actions it asks for (cells in the session's
+    kernel, and on the hybrid surface direct read/edit/bash tools over the same bindings), records
+    replies and receipts as context events, validates how a turn ends (TurnResult + Ensure), and
+    applies the text-only, length-cut and empty-reply policies, the loop guard and budgets. Pure
+    apart from the capabilities it is handed: the EFF analyzers apply to every file.
+    Spec: docs/modules/codeact.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Settings.fs" />
+    <Compile Include="ContextLog.fs" />
+    <Compile Include="Tools.fs" />
+    <Compile Include="Questions.fs" />
+    <Compile Include="LoopGuard.fs" />
+    <Compile Include="Instructions.fs" />
+    <Compile Include="Receipts.fs" />
+    <Compile Include="Kernels.fs" />
+    <Compile Include="Hybrid.fs" />
+    <Compile Include="CodeAct.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sessions.Host\Fx.Sessions.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Prompt\Fx.Prompt.fsproj" />
+    <ProjectReference Include="..\Fx.Interpreters\Fx.Interpreters.fsproj" />
+  </ItemGroup>
+</Project>
