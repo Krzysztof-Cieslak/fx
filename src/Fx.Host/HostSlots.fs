@@ -77,12 +77,13 @@ module HostSlots =
         ]
 
     /// Every core slot a host registers: the variants module's, the prompt render's, the CodeAct
-    /// strategy's, identity's, service credentials', the sandbox's and the host's. Extensions
+    /// strategy's and its grants guard's, identity's, service credentials', the sandbox's and the host's. Extensions
     /// contribute theirs (content exclusions among them, from `fx.egress.exclusions`).
     let core: SlotInfo list =
         Slots.all
         @ PromptSlots.all
         @ CodeActSlots.all
+        @ GrantSlots.all
         @ IdentitySlots.all
         @ AuthSlots.all
         @ Fx.Environments.SandboxSlots.all

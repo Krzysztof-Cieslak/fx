@@ -604,11 +604,17 @@ module Host =
                                     }
                                 ProjectTrusted = config.ProjectTrusted
                                 Launcher = launcher
+                                // The grants log's checks come per turn (GrantGuard.attach, below).
                                 Guard = fun _ -> EffResult.ok ()
                                 // The session's agent's overrides come with agents (T213).
                                 Sandbox = SandboxOverrides.none
                             }
 
+            let sessionLog = SessionLog.typed stores.Log
+            let grantsCapability = GrantsService.grants grants
+
+            // Each turn's hands ask the grants log before sensitive host calls (T127b), with the
+            // settings of the turn's profile: kernels outlive turns, and use the running turn's guard.
             let hands (turn: TurnStart) : Eff<HostEnv, Result<Hands<EnvHands>, string>> =
                 effResult {
                     let! variants = profileOf turn.Profile
@@ -620,13 +626,17 @@ module Host =
 
                     let! plan = kernelPlan variants
                     let! handle = Envs.openEnv environment |> EffResult.mapError string
-                    return EnvHands.ofHandle options.Clock hostScope plan turn.Session handle
+                    let! grantSettings = GrantSettings.ofVariants variants
+                    let guarded = GrantSetup.create grantsCapability sessionLog turn grantSettings
+
+                    return
+                        GrantGuard.attach guarded (EnvHands.ofHandle options.Clock hostScope plan turn.Session handle)
                 }
 
             let codeact =
                 CodeAct.create
                     {
-                        Sessions = SessionLog.typed stores.Log
+                        Sessions = sessionLog
                         Contexts = ContextLog.typed stores.Log
                         Steps = StepJournal.typed stores.Log
                         Blobs = Some stores.Blobs
