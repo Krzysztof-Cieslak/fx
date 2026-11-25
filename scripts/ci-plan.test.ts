@@ -11,6 +11,7 @@ describe("ci plan", () => {
     expect(p.code).toBe(true);
     expect(rids(p.aot)).toEqual(["linux-x64", "linux-musl-x64", "osx-arm64", "win-x64"]);
     expect(p.keyring).toEqual([]);
+    expect(p.sandbox).toEqual([]);
     expect(p.bunMusl).toEqual([]);
     expect(p.networkOnAllOs).toBe(false);
     expect(p.spike).toBe(false);
@@ -22,6 +23,7 @@ describe("ci plan", () => {
       expect(p.full).toBe(true);
       expect(p.aot).toHaveLength(8);
       expect(p.keyring).toHaveLength(4);
+      expect(p.sandbox).toHaveLength(4);
       expect(p.bunMusl).toHaveLength(2);
       expect(p.networkOnAllOs).toBe(true);
     }
@@ -42,6 +44,9 @@ describe("ci plan", () => {
       "src/Fx.Keyring/Native/Windows.fs",
       "src/Fx.Transport.Http/PeerCredentials.fs",
       "extensions/Fx.Ext.RuntimeBun/RuntimeBun.fs",
+      "extensions/Fx.Ext.SandboxBubblewrap/Seccomp.fs",
+      "extensions/Fx.Ext.SandboxSeatbelt/Profile.fs",
+      "src/Fx.Sdk/Sandbox.fs",
     ]) {
       expect(pr(f).full).toBe(true);
     }
@@ -58,6 +63,10 @@ describe("ci plan", () => {
     expect(bun.bunMusl.map((t) => t.arch)).toEqual(["x64"]);
     expect(bun.networkOnAllOs).toBe(true);
     expect(pr("spikes/bun-kernel/src/kernel.ts").spike).toBe(true);
+    expect(rids(pr("src/Fx.Environments/Envs.fs").sandbox)).toEqual(["linux-x64", "osx-arm64"]);
+    expect(rids(pr("tests/Fx.Environments.Tests/SandboxTests.fs").sandbox)).toHaveLength(2);
+    expect(rids(pr("src/Fx.CodeAct/SandboxGuard.fs").sandbox)).toHaveLength(2);
+    expect(pr("src/Fx.Sessions/Machine.fs").sandbox).toEqual([]);
   });
 
   test("a Markdown-only pull request runs no builds", () => {
