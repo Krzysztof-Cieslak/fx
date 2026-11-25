@@ -320,9 +320,11 @@ let baseSelections: (string * Json) list =
         "codeact.policy.retryDelayMs", Json.int 0
     ]
 
-/// A fixture with these variant selections (on top of `baseSelections`) and this interpreter.
-let createWith (name: string) (selections: (string * Json) list) (interpreter: Interpreter<HandsEnv>) : Fixture =
+/// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
+/// for the fixture's root directory.
+let createWith (name: string) (selections: (string * Json) list) (make: string -> Interpreter<HandsEnv>) : Fixture =
     let root = scratch name
+    let interpreter = make root
     let workspace = Path.Combine(root, "workspace")
     Directory.CreateDirectory workspace |> ignore
     let clock = SystemClock.clock
@@ -407,7 +409,7 @@ let kernelOptions =
 
 /// A fixture with the script kernel.
 let create (name: string) (selections: (string * Json) list) : Fixture =
-    createWith name selections (scriptKernel kernelOptions)
+    createWith name selections (fun _ -> scriptKernel kernelOptions)
 
 let run (f: Fixture) (effect: Eff<HostEnv, 'T>) : Task<'T> =
     (Eff.run f.Env effect).WaitAsync(TimeSpan.FromSeconds 60.0)
