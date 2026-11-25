@@ -33,7 +33,7 @@ let secrets =
 
 /// The patterns of the tests: host, project and policy lists.
 let host = [ "*.env"; "secrets/" ]
-let project = [ "/config/private-*.json"; "!config/private-ok.json" ]
+let project = [ "/config/private-*.json" ]
 let policy = [ "**/*.{pem,key}" ]
 
 /// Settings as the host would read them from variants.
@@ -98,7 +98,7 @@ let sessionRequest (model: ModelRef) : ChatRequest =
                       Part.quoting
                           [
                               {
-                                  Path = @"config\private-ok.json"
+                                  Path = @"config\public.json"
                                   Lines = Some { First = 1; Last = 3 }
                               }
                           ]
@@ -261,42 +261,41 @@ let private globs =
     Scenario.lines "egress-globs" (fun () ->
         let cases =
             [
-                [ "*.env" ], [ ".env"; "a/b.env"; @"C:\p\.env"; "a/env"; "/home/u/x.env" ]
-                [ "secrets/" ], [ "secrets/a"; "a/secrets/b"; "secrets" ]
-                [ "/config/*.json"; "!config/ok.json" ], [ "config/a.json"; "config/ok.json"; "x/config/a.json" ]
+                [ "*.env" ], [ ".env"; "a/b.env"; @"C:\p\.env"; "a/env"; "/home/u/x.env"; "PROD.ENV" ]
+                [ "secrets/" ], [ "secrets/a"; "a/secrets/b"; "secrets"; @"Secrets\b" ]
+                [ "/config/*.json"; "config\\keys\\*" ], [ "config/a.json"; "x/config/a.json"; "config/keys/k" ]
                 [ "a/**/b"; "logs/**" ], [ "a/b"; "a/x/y/b"; "logs"; "logs/1/2" ]
                 [ "**/*.{pem,key}"; "id_[rd]sa" ], [ "k.pem"; "d/e/k.key"; "id_rsa"; "id_dsa"; "id_ecdsa" ]
-                [ "Docs/[!a-c]*.MD" ], [ "Docs/d.MD"; "docs/D.md"; "Docs/a.MD" ]
+                [ "Docs/[!a-c]*.MD"; "a[b"; "x{y" ], [ "Docs/d.MD"; "docs/D.md"; "Docs/a.MD"; "a[b"; "x{y" ]
             ]
 
         [
             for patterns, paths in cases do
-                for case in [ PathCase.Sensitive; PathCase.Insensitive ] do
-                    match Exclusions.create case [ { Origin = "t"; Patterns = patterns } ] with
-                    | Error issues -> yield $"{patterns}: {issues}"
-                    | Ok e ->
-                        for path in paths do
-                            let verdict =
-                                match Exclusions.test e path with
-                                | Some m -> $"excluded by {m.Pattern}"
-                                | None -> "kept"
+                match Exclusions.create [ { Origin = "t"; Patterns = patterns } ] with
+                | Error issues -> yield $"{patterns}: {issues}"
+                | Ok e ->
+                    for path in paths do
+                        let verdict =
+                            match Exclusions.test e path with
+                            | Some m -> $"excluded by {m.Pattern}"
+                            | None -> "kept"
 
-                            yield $"""{String.Join(" ", patterns)} [{case}] {path}: {verdict}"""
+                        yield $"""{String.Join(" ", patterns)}: {path}: {verdict}"""
 
             for pattern in
                 [
-                    "[abc"
-                    "{a,b"
-                    "a\\"
-                    "!"
+                    ""
+                    "!keep.env"
                     "/"
+                    "./"
+                    "[z-a]"
                     String.replicate 9 "{a,b}"
                     "# comment"
                     "ok/"
                 ] do
                 match Glob.parse pattern with
-                | Ok None -> yield $"{pattern}: blank"
-                | Ok(Some glob) -> yield $"{pattern}: ok (negated {glob.Negated}, directories {glob.DirectoryOnly})"
+                | Ok None -> yield $"{pattern}: a comment"
+                | Ok(Some glob) -> yield $"{pattern}: ok (directories {glob.DirectoryOnly})"
                 | Error message -> yield $"{pattern}: {message}"
 
             for path in [ @"src\a\..\b\.\c.txt"; "./x//y/"; @"C:\..\x"; @"\\srv\share\f"; "../../up" ] do
@@ -309,7 +308,7 @@ let private redaction =
 
         [
             for style in [ PlaceholderStyle.Plain; PlaceholderStyle.WithPath ] do
-                match ContentExclusions.compile PathCase.Insensitive (settings ExclusionAction.Redact style) with
+                match ContentExclusions.compile (settings ExclusionAction.Redact style) with
                 | Error issues -> yield string issues
                 | Ok e ->
                     let redacted, found = ExclusionRedaction.redact (Placeholder.text style) e request
@@ -352,7 +351,7 @@ let private modelAccess =
                         [
                             {
                                 Origin = "host"
-                                Patterns = [ "[bad" ]
+                                Patterns = [ "[z-a]" ]
                             }
                         ]
                 }

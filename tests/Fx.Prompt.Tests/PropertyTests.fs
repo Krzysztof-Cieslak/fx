@@ -100,6 +100,7 @@ let private apply (sim: Sim) (op: Op) : Sim =
                             MediaType = "image/png"
                             Source = MediaSource.Base64 "AAAA"
                             Name = None
+                            Sources = []
                         }
                 ]
 

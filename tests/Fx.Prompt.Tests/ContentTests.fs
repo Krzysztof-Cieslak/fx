@@ -59,13 +59,14 @@ let content =
                 | other -> failtest (string other)
             }
 
-            test "pieces join into text parts, media apart" {
+            test "pieces join into text parts, media apart; a text part quotes the files it shows" {
                 let image: MediaPart =
                     {
                         Kind = MediaKind.Image
                         MediaType = "image/png"
                         Source = MediaSource.Base64 "AAAA"
                         Name = Some "shot.png"
+                        Sources = []
                     }
 
                 let parts =
@@ -81,7 +82,14 @@ let content =
                 Expect.equal
                     parts
                     [
-                        Part.text ("one\nsrc/a.fs:2-3 (" + (digestOf "src/a.fs").Substring(0, 19) + ")\ntwo\nthree")
+                        Part.quoting
+                            [
+                                {
+                                    Path = "src/a.fs"
+                                    Lines = Some(LineRange.create 2 3)
+                                }
+                            ]
+                            ("one\nsrc/a.fs:2-3 (" + (digestOf "src/a.fs").Substring(0, 19) + ")\ntwo\nthree")
                         Part.Media image
                         Part.text "[secrets/key: withheld by content exclusions]"
                     ]
@@ -171,17 +179,17 @@ let exclusions =
             }
 
             test "invalid patterns are errors, not ignored" {
-                Expect.isError (Exclusions.create [ "ok"; "" ]) "empty"
-                Expect.isError (Exclusions.create [ "!keep.txt" ]) "a negation"
-                Expect.isError (Exclusions.create [ "/" ]) "no path"
-                Expect.isOk (Exclusions.create []) "none"
+                Expect.isError (exclusionsFrom [ "ok"; "" ]) "empty"
+                Expect.isError (exclusionsFrom [ "!keep.txt" ]) "a negation"
+                Expect.isError (exclusionsFrom [ "/" ]) "no path"
+                Expect.isOk (exclusionsFrom []) "none"
             }
 
             test "filtering withholds excluded files only" {
                 let ex = exclusionsOf [ "secret*" ]
 
                 let pieces, changed =
-                    Exclusions.filter
+                    Withhold.pieces
                         ex
                         [
                             Piece.File(file "src/a.fs" [] "fine")
@@ -201,7 +209,7 @@ let exclusions =
                     "withheld"
 
                 let same = [ Piece.Text "x" ]
-                Expect.isFalse (snd (Exclusions.filter ex same)) "unchanged"
+                Expect.isFalse (snd (Withhold.pieces ex same)) "unchanged"
             }
         ]
 

@@ -85,10 +85,14 @@ let sections: Block list =
 let config (exclusions: Exclusions) (caching: CachingCaps) : RenderConfig =
     PromptSettings.config PromptSettings.defaults sections exclusions caching
 
+/// Exclusions with one list of patterns (the shared matcher, `Fx.Models.Exclusions`).
+let exclusionsFrom (patterns: string list) =
+    Exclusions.create [ { Origin = "test"; Patterns = patterns } ]
+
 let exclusionsOf (patterns: string list) : Exclusions =
-    match Exclusions.create patterns with
+    match exclusionsFrom patterns with
     | Ok exclusions -> exclusions
-    | Error errors -> failtest (String.concat "; " errors)
+    | Error issues -> failtest (String.concat "; " (issues |> List.map string))
 
 /// A digest that depends on the text only (string hash codes differ between processes).
 let digestOf (text: string) : string =

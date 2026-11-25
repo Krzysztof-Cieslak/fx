@@ -30,10 +30,13 @@ let private caching (key: bool) : CachingCaps =
         LongTtl = true
     }
 
+let private exclusionsOf (patterns: string list) =
+    Exclusions.create [ { Origin = "test"; Patterns = patterns } ]
+
 let private exclusions =
-    match Exclusions.create [ ".env"; "secrets/" ] with
+    match exclusionsOf [ ".env"; "secrets/" ] with
     | Ok exclusions -> exclusions
-    | Error errors -> failwith (String.concat "; " errors)
+    | Error issues -> failwith (String.concat "; " (issues |> List.map string))
 
 let private sections =
     [
@@ -361,9 +364,9 @@ let scenarios: Scenario list =
                 [ ".env"; "/secrets"; "**/keys/*.pem"; "build/"; "id_[rd]sa"; "log?.txt" ]
 
             let compiled =
-                match Exclusions.create patterns with
+                match exclusionsOf patterns with
                 | Ok exclusions -> exclusions
-                | Error errors -> failwith (String.concat "; " errors)
+                | Error issues -> failwith (String.concat "; " (issues |> List.map string))
 
             let paths =
                 [
@@ -385,9 +388,9 @@ let scenarios: Scenario list =
             [
                 for path in paths do
                     $"{path}: {Exclusions.excludes compiled path}"
-                match Exclusions.create [ "ok"; "!neg"; "" ] with
+                match exclusionsOf [ "ok"; "!neg"; "" ] with
                 | Ok _ -> "accepted"
-                | Error errors -> "refused: " + String.concat " | " errors
+                | Error issues -> "refused: " + String.concat " | " (issues |> List.map string)
             ])
 
         Scenario.lines "prompt-settings" (fun () ->

@@ -184,7 +184,6 @@ let blobValue =
 let private excludedFiles: Fx.Models.Exclusions =
     match
         Fx.Models.Exclusions.create
-            Fx.Models.PathCase.Insensitive
             [
                 {
                     Origin = "host"

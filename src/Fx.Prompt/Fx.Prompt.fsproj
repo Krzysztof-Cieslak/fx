@@ -8,7 +8,7 @@
   -->
   <ItemGroup>
     <Compile Include="Content.fs" />
-    <Compile Include="Exclusions.fs" />
+    <Compile Include="Withhold.fs" />
     <Compile Include="SeenRanges.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Transcript.fs" />

@@ -102,7 +102,7 @@ let tests =
                                     layer Layer.Host [ Selections.select ContentExclusions.hostPatterns [ "*.env" ] ]
                                     layer
                                         Layer.Project
-                                        [ Selections.select ContentExclusions.projectPatterns [ "!*.env"; "tmp/" ] ]
+                                        [ Selections.select ContentExclusions.projectPatterns [ "tmp/" ] ]
                                 ]
                                 [
                                     Policy.empty "org.json"
@@ -124,14 +124,14 @@ let tests =
                                 }
                                 {
                                     Origin = "project"
-                                    Patterns = [ "!*.env"; "tmp/" ]
+                                    Patterns = [ "tmp/" ]
                                 }
                             ]
                             "three lists"
 
-                        match ContentExclusions.compile PathCase.Insensitive settings with
+                        match ContentExclusions.compile settings with
                         | Ok e ->
-                            Expect.isSome (Exclusions.test e ".env") "the project's ! cannot re-include the host's"
+                            Expect.isSome (Exclusions.test e ".env") "host"
                             Expect.isSome (Exclusions.test e "k.pem") "policy"
                             Expect.isSome (Exclusions.test e "tmp/x") "project"
                         | Error issues -> failtest (string issues)
@@ -151,12 +151,16 @@ let tests =
                                 []
                                 [
                                     layer
-                                        Layer.Host
-                                        [ ContentExclusions.hostPatterns.Id.Value, Json.Array [ Json.String "[bad" ] ]
+                                        Layer.Project
+                                        [
+                                            ContentExclusions.projectPatterns.Id.Value,
+                                            Json.Array [ Json.String "!.env" ]
+                                        ]
                                 ]
                         with
-                        | Ok _ -> failtest "an invalid pattern was accepted"
-                        | Error issues -> Expect.stringContains (string issues) "unclosed [" "the pattern's issue"
+                        | Ok _ -> failtest "a negation was accepted"
+                        | Error issues ->
+                            Expect.stringContains (string issues) "negations are not supported" "the pattern's issue"
                     }
 
                     test "without the slots registered (the extension disabled), nothing is excluded" {
@@ -180,11 +184,6 @@ let tests =
                         Expect.isEmpty settings.Lists "no patterns"
                     }
 
-                    test "case follows the environment's filesystem" {
-                        Expect.equal (ContentExclusions.caseOf Fx.Sdk.Os.Linux) PathCase.Sensitive "Linux"
-                        Expect.equal (ContentExclusions.caseOf Fx.Sdk.Os.MacOs) PathCase.Insensitive "macOS"
-                        Expect.equal (ContentExclusions.caseOf Fx.Sdk.Os.Windows) PathCase.Insensitive "Windows"
-                    }
                 ]
 
             testList
@@ -203,7 +202,7 @@ let tests =
                             "SECRET-SYSTEM-9907 is in an unattributed part: exclusions cannot see it."
                             "parts without sources are left alone"
 
-                        Expect.contains (texts redacted) """{"region": "eu-central"}""" "a re-included file stays"
+                        Expect.contains (texts redacted) """{"region": "eu-central"}""" "other files stay"
                         Expect.equal (run (gate.Check redacted)) Decision.Allow "nothing left"
                         Expect.equal transform.Priority ContentExclusions.Priority "runs first"
 
@@ -239,7 +238,7 @@ let tests =
                                     [
                                         {
                                             Origin = "host"
-                                            Patterns = [ "[bad" ]
+                                            Patterns = [ "[z-a]" ]
                                         }
                                     ]
                             }

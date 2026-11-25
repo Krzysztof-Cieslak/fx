@@ -226,7 +226,7 @@ let tests =
                                 [
                                     {
                                         Origin = "host"
-                                        Patterns = [ "[bad" ]
+                                        Patterns = [ "[z-a]" ]
                                     }
                                 ]
                         }
@@ -239,6 +239,97 @@ let tests =
                 Expect.isEmpty sent.Bodies "nothing sent"
             }
 
+            test
+                "the prompt render records what it quotes, so the egress hooks redact files excluded after they were recorded" {
+                // A log recorded before `prod.env` and the key were excluded (the render withholds only
+                // what the exclusions it is given name; here none).
+                let context = global.Fx.Machines.StreamId "context/e1"
+
+                let view (path: string) (text: string) : Fx.Prompt.Piece =
+                    Fx.Prompt.Piece.File
+                        {
+                            Path = path
+                            Digest = "sha256:00"
+                            Lines = [ LineRange.create 1 2 ]
+                            Text = text
+                        }
+
+                let sections =
+                    [
+                        Fx.Prompt.Block.create "instructions" [ Fx.Prompt.Piece.Text "Be careful." ]
+                        Fx.Prompt.Block.create "env" [ view "prod.env" "API_TOKEN=SECRET-ENV-7731" ]
+                    ]
+
+                let transcript =
+                    Fx.Prompt.Transcript.ofItems
+                        [
+                            Fx.Prompt.LogItem.Context(
+                                global.Fx.Machines.EventRef.create context 1L,
+                                Fx.Prompt.ContextEvent.Framed sections
+                            )
+                            Fx.Prompt.LogItem.Context(
+                                global.Fx.Machines.EventRef.create context 2L,
+                                Fx.Prompt.ContextEvent.Returned
+                                    {
+                                        Turn = 1
+                                        Step = 0
+                                        Call = None
+                                        Name = "cell"
+                                        Pieces =
+                                            [
+                                                Fx.Prompt.Piece.Text "read a key"
+                                                view "deploy/keys/prod.key" "SECRET-KEY-0419"
+                                            ]
+                                        IsError = false
+                                    }
+                            )
+                            Fx.Prompt.LogItem.Context(
+                                global.Fx.Machines.EventRef.create context 3L,
+                                Fx.Prompt.ContextEvent.Returned
+                                    {
+                                        Turn = 1
+                                        Step = 1
+                                        Call = None
+                                        Name = "cell"
+                                        Pieces = [ view "README.md" "hello" ]
+                                        IsError = false
+                                    }
+                            )
+                        ]
+
+                let caching: CachingCaps =
+                    {
+                        Mode = CacheMode.Breakpoints
+                        MaxBreakpoints = 4
+                        Key = false
+                        LongTtl = false
+                    }
+
+                let cfg =
+                    Fx.Prompt.PromptSettings.config Fx.Prompt.PromptSettings.defaults sections Exclusions.none caching
+
+                let model = List.last Egress.models
+
+                let request =
+                    Fx.Prompt.Render.request
+                        cfg
+                        (ChatRequest.create model [])
+                        (Fx.Prompt.Render.render cfg transcript Fx.Prompt.Live.none)
+
+                Expect.contains
+                    (ChatRequest.sources request |> List.map (fun s -> s.Path))
+                    "deploy/keys/prod.key"
+                    "the receipt's file is recorded"
+
+                let host = Egress.bootstrap redact Egress.modelExtensions
+                let sent = Egress.send host request
+
+                for body in sent.Bodies do
+                    Expect.isEmpty (Egress.leaked body) "no excluded content leaves"
+                    Expect.stringContains body "hello" "the rest does"
+                    Expect.stringContains body "[content excluded" "placeholders"
+            }
+
             test "the hooks behave the same over the extension protocol as in process" {
                 for settings in
                     [
@@ -249,7 +340,7 @@ let tests =
                                 [
                                     {
                                         Origin = "host"
-                                        Patterns = [ "[bad" ]
+                                        Patterns = [ "[z-a]" ]
                                     }
                                 ]
                         }

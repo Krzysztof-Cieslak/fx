@@ -23,18 +23,18 @@ let private glob (pattern: string) : Glob =
     | Ok None -> failtest $"{pattern} is blank"
     | Error e -> failtest $"{pattern}: {e}"
 
-let private exclusions (case: PathCase) (lists: (string * string list) list) : Exclusions =
+let private exclusions (lists: (string * string list) list) : Exclusions =
     match
-        Exclusions.create
-            case
-            (lists
-             |> List.map (fun (origin, patterns) -> { Origin = origin; Patterns = patterns }))
+        Exclusions.create (
+            lists
+            |> List.map (fun (origin, patterns) -> { Origin = origin; Patterns = patterns })
+        )
     with
     | Ok e -> e
     | Error issues -> failtest (String.Join("; ", issues |> List.map string))
 
 let private excludedBy (patterns: string list) (path: string) : bool =
-    (Exclusions.test (exclusions PathCase.Sensitive [ "test", patterns ]) path).IsSome
+    Exclusions.excludes (exclusions [ "test", patterns ]) path
 
 /// Cases: patterns, then paths excluded and paths not.
 let private table: (string list * string list * string list) list =
@@ -61,13 +61,17 @@ let private table: (string list * string list * string list) list =
         [ "a?c" ], [ "abc" ], [ "a/c" ]
         [ "a*c" ], [ "ac"; "abbc" ], [ "a/c"; "ab/c" ]
         [ "a**c" ], [ "ac"; "abc" ], [ "a/b/c" ]
-        [ @"\*.txt" ], [ "*.txt" ], [ "a.txt" ]
-        [ @"\#notes" ], [ "#notes" ], [ "notes" ]
-        [ @"\!important" ], [ "!important" ], [ "important" ]
-        [ "*.log"; "!keep.log" ], [ "a.log"; "x/b.log" ], [ "keep.log"; "x/keep.log" ]
-        [ "logs/"; "!logs/keep.log" ], [ "logs/keep.log"; "logs/a" ], [ "keep.log" ]
-        [ "!x"; "x" ], [ "x" ], []
-        [ "# a comment"; ""; "  "; "real" ], [ "real" ], [ "# a comment"; "a" ]
+        [ "[*].txt" ], [ "*.txt" ], [ "a.txt" ]
+        [ "[#]notes" ], [ "#notes" ], [ "notes" ]
+        [ "a!b" ], [ "a!b" ], [ "ab" ]
+        [ "a[b" ], [ "a[b"; "x/A[B" ], [ "ab" ]
+        [ "x{y" ], [ "x{y" ], [ "xy" ]
+        [ @"keys\*.pem" ], [ "keys/a.pem"; @"keys\b.pem" ], [ "x/keys/a.pem" ]
+        [ @"\secrets" ], [ "secrets/a" ], [ "a/secrets/b" ]
+        [ "./a/./b" ], [ "a/b" ], [ "x/a/b" ]
+        [ "# a comment"; "real" ], [ "real" ], [ "# a comment"; "a" ]
+        [ "Secrets/*.ENV" ], [ "secrets/prod.env"; @"SECRETS\X.Env" ], [ "secret/prod.env" ]
+        [ "[a-c]x" ], [ "Bx"; "ax" ], [ "dx" ]
         [ "  padded.txt  " ], [ "padded.txt" ], [ "  padded.txt  "; "padded" ]
         [ "/a/b" ], [ "a/b"; "a/b/c" ], [ "x/a/b" ]
         [ ".git" ], [ ".git"; ".git/config"; "sub/.git/HEAD" ], [ ".gitignore" ]
@@ -196,7 +200,7 @@ let tests =
 
                     testPropertyWithConfig config "a path excludes the same with / and \\"
                     <| Prop.forAll (Arb.fromGen (Gen.zip patternGen pathGen)) (fun (pattern, path) ->
-                        let e = exclusions PathCase.Sensitive [ "t", [ pattern ] ]
+                        let e = exclusions [ "t", [ pattern ] ]
 
                         Expect.equal (Exclusions.test e (path.Replace('/', '\\'))) (Exclusions.test e path) "the same")
                 ]
@@ -213,45 +217,45 @@ let tests =
                                 Expect.isFalse (excludedBy patterns path) $"{patterns} keeps {path}"
                     }
 
-                    test "patterns that cannot be read say why" {
+                    test "patterns that cannot be used are errors, never ignored" {
                         for pattern, reason in
                             [
-                                "[abc", "unclosed ["
-                                "{a,b", "unclosed {"
-                                @"a\", "at the end"
-                                "!", "needs a pattern"
-                                "/", "matches nothing"
-                                "{a,/}", "matches nothing"
+                                "", "empty"
+                                "   ", "empty"
+                                "!keep.txt", "negations are not supported"
+                                "!", "negations are not supported"
+                                "/", "names no path"
+                                @"\", "names no path"
+                                ".", "names no path"
+                                "{a,/}", "names no path"
                                 "[z-a]", "reversed"
                                 String.replicate 9 "{a,b}", "alternatives"
                             ] do
                             match Glob.parse pattern with
-                            | Error message -> Expect.stringContains message reason pattern
+                            | Error message -> Expect.stringContains message reason $"{Json.quote pattern}"
                             | Ok glob -> failtest $"{pattern} parsed as {glob}"
                     }
 
-                    test "blank lines and comments are not patterns" {
-                        for pattern in [ ""; "   "; "# secret"; "\t#x" ] do
+                    test "comments are not patterns" {
+                        for pattern in [ "# secret"; "\t#x" ] do
                             Expect.equal (Glob.parse pattern) (Ok None) pattern
                     }
 
                     testPropertyWithConfig config "the matcher agrees with a regular-expression model"
                     <| Prop.forAll (Arb.fromGen (Gen.zip patternGen pathGen)) (fun (pattern, path) ->
                         let expected = (oracle pattern).IsMatch path
-                        let actual = Glob.isMatch PathCase.Sensitive (glob pattern) path false
+                        let actual = Glob.isMatch (glob pattern) path false
                         Expect.equal actual expected $"{pattern} on {path}")
 
                     testPropertyWithConfig config "* and ? never cross a separator"
                     <| Prop.forAll (Arb.fromGen pathGen) (fun path ->
                         let slashes = path |> Seq.filter (fun c -> c = '/') |> Seq.length
                         let stars = String.Join("/", Array.create (slashes + 1) "*")
-                        Expect.isTrue (Glob.isMatch PathCase.Sensitive (glob ("/" + stars)) path false) "as deep"
+                        Expect.isTrue (Glob.isMatch (glob ("/" + stars)) path false) "as deep"
 
-                        Expect.isFalse
-                            (Glob.isMatch PathCase.Sensitive (glob ("/" + stars + "/*")) path false)
-                            "deeper"
+                        Expect.isFalse (Glob.isMatch (glob ("/" + stars + "/*")) path false) "deeper"
 
-                        Expect.isFalse (Glob.isMatch PathCase.Sensitive (glob "/?") (path + "/x") false) "?")
+                        Expect.isFalse (Glob.isMatch (glob "/?") (path + "/x") false) "?")
 
                     testPropertyWithConfig config "a path excludes itself and everything below it"
                     <| Prop.forAll (Arb.fromGen (Gen.zip pathGen pathGen)) (fun (dir, below) ->
@@ -270,23 +274,15 @@ let tests =
             testList
                 "case"
                 [
-                    test "case-sensitive lists match case exactly, insensitive ones any case" {
-                        let sensitive = exclusions PathCase.Sensitive [ "t", [ "Secrets/*.ENV"; "[a-c]x" ] ]
-
-                        let insensitive =
-                            exclusions PathCase.Insensitive [ "t", [ "Secrets/*.ENV"; "[a-c]x" ] ]
-
-                        Expect.isSome (Exclusions.test sensitive "Secrets/prod.ENV") "same case"
-                        Expect.isNone (Exclusions.test sensitive "secrets/prod.env") "other case"
-                        Expect.isNone (Exclusions.test sensitive "Bx") "class"
-                        Expect.isSome (Exclusions.test insensitive "secrets/prod.env") "insensitive"
-                        Expect.isSome (Exclusions.test insensitive @"SECRETS\PROD.env") "and \\"
-                        Expect.isSome (Exclusions.test insensitive "Bx") "class, insensitive"
-                    }
-
-                    testPropertyWithConfig config "insensitive matching ignores the path's case"
+                    testPropertyWithConfig config "matching ignores the case of the path and of the pattern"
                     <| Prop.forAll (Arb.fromGen (Gen.zip patternGen pathGen)) (fun (pattern, path) ->
-                        let e = exclusions PathCase.Insensitive [ "t", [ pattern ] ]
+                        let e = exclusions [ "t", [ pattern ] ]
+                        let upper = exclusions [ "t", [ pattern.ToUpperInvariant() ] ]
+
+                        Expect.equal
+                            (Exclusions.excludes upper path)
+                            (Exclusions.excludes e path)
+                            "an upper-case pattern"
 
                         Expect.equal
                             (Exclusions.test e (path.ToUpperInvariant()) |> Option.isSome)
@@ -300,7 +296,6 @@ let tests =
                     test "the first list that excludes a path is named, with its deciding pattern" {
                         let e =
                             exclusions
-                                PathCase.Sensitive
                                 [
                                     "policy", [ "*.pem" ]
                                     "host", [ "secrets/"; "*.pem" ]
@@ -328,32 +323,49 @@ let tests =
                         Expect.isNone (Exclusions.testDirectory e "x/notes") "another directory"
                     }
 
-                    test "a list cannot re-include what another excludes" {
-                        let e =
-                            exclusions PathCase.Sensitive [ "host", [ "*.env" ]; "project", [ "!*.env"; "!prod.env" ] ]
-
-                        Expect.isSome (Exclusions.test e "prod.env") "still excluded"
+                    test "nothing can re-include: negations are errors, in any list" {
+                        match
+                            Exclusions.create
+                                [
+                                    {
+                                        Origin = "host"
+                                        Patterns = [ "*.env" ]
+                                    }
+                                    {
+                                        Origin = "project"
+                                        Patterns = [ "!prod.env" ]
+                                    }
+                                ]
+                        with
+                        | Error [ issue ] -> Expect.stringContains issue.Message "negations are not supported" "why"
+                        | other -> failtest (string other)
                     }
 
-                    testPropertyWithConfig config "adding a list only excludes more"
+                    testPropertyWithConfig config "adding a list or a pattern only excludes more, in any order"
                     <| Prop.forAll
                         (Arb.fromGen (Gen.zip3 (Gen.listOf patternGen) (Gen.listOf patternGen) pathGen))
                         (fun (first, second, path) ->
-                            let one = exclusions PathCase.Sensitive [ "a", first ]
-                            let two = exclusions PathCase.Sensitive [ "a", first; "b", second ]
+                            let one = exclusions [ "a", first ]
+                            let two = exclusions [ "a", first; "b", second ]
+                            let merged = exclusions [ "a", second @ first ]
 
-                            if (Exclusions.test one path).IsSome then
-                                Expect.isSome (Exclusions.test two path) "still excluded")
+                            if Exclusions.excludes one path then
+                                Expect.isTrue (Exclusions.excludes two path) "still excluded"
+                                Expect.isTrue (Exclusions.excludes merged path) "in one list, in another order"
+
+                            Expect.equal
+                                (Exclusions.excludes merged path)
+                                (Exclusions.excludes two path)
+                                "one list or two")
 
                     test "invalid patterns are issues at their list and index" {
                         match
                             Exclusions.create
-                                PathCase.Sensitive
                                 [
                                     { Origin = "a"; Patterns = [ "ok" ] }
                                     {
                                         Origin = "b"
-                                        Patterns = [ "fine"; "[bad" ]
+                                        Patterns = [ "fine"; "[z-a]" ]
                                     }
                                 ]
                         with
@@ -369,13 +381,13 @@ let tests =
                             )
 
                         Expect.isOk (decode """["*.env", "secrets/", "# note"]""") "valid"
-                        Expect.isError (decode """["ok", "[bad"]""") "invalid"
+                        Expect.isError (decode """["ok", "!neg"]""") "invalid"
                     }
 
                     test "nothing is excluded without patterns" {
                         Expect.isTrue Exclusions.none.IsEmpty "none"
                         Expect.isNone (Exclusions.test Exclusions.none "a/.env") "none"
-                        Expect.isNone (Exclusions.test (exclusions PathCase.Sensitive [ "x", [ "*" ] ]) "") "the root"
+                        Expect.isNone (Exclusions.test (exclusions [ "x", [ "*" ] ]) "") "the root"
                     }
 
                     test "absolute paths match unanchored patterns only" {
@@ -389,7 +401,7 @@ let tests =
                 "requests"
                 [
                     test "parts quoting excluded files become placeholders; the rest is left alone" {
-                        let e = exclusions PathCase.Insensitive [ "host", [ "secrets/"; "*.env" ] ]
+                        let e = exclusions [ "host", [ "secrets/"; "*.env" ] ]
                         let secret = [ ContentSource.file "secrets/key.txt" ]
 
                         let media (sources: ContentSource list) : MediaPart =

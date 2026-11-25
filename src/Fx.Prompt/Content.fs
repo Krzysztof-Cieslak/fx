@@ -5,19 +5,6 @@ open System.Text
 open Fx.Contracts
 open Fx.Models
 
-/// Lines of a file, 1-based and inclusive.
-type LineRange =
-    {
-        First: int
-        Last: int
-    }
-
-    override this.ToString() =
-        if this.First = this.Last then
-            string this.First
-        else
-            string this.First + "-" + string this.Last
-
 /// A file's content as one piece of context shows it (spec §5, §6.7): what entered the context, so
 /// `SeenRanges` can record it and content exclusions can withhold it.
 type FileView =
@@ -98,50 +85,6 @@ module Paths =
         path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries)
         |> Array.filter (fun segment -> segment <> ".")
         |> String.concat "/"
-
-[<RequireQualifiedAccess>]
-module LineRange =
-    let create (first: int) (last: int) : LineRange = { First = first; Last = last }
-
-    /// Sorted, overlapping and adjacent ranges merged, empty and invalid ones (before line 1, or
-    /// ending before they start) left out.
-    let normalize (ranges: LineRange list) : LineRange list =
-        ranges
-        |> List.choose (fun r ->
-            let first = max 1 r.First
-
-            if r.Last < first then
-                None
-            else
-                Some { First = first; Last = r.Last })
-        |> List.sortBy (fun r -> r.First, r.Last)
-        |> List.fold
-            (fun merged r ->
-                match merged with
-                | last :: rest when int64 r.First <= int64 last.Last + 1L ->
-                    { last with
-                        Last = max last.Last r.Last
-                    }
-                    :: rest
-                | _ -> r :: merged)
-            []
-        |> List.rev
-
-    let codec: Codec<LineRange> =
-        Codec.record {
-            let! first =
-                Codec.field "first" (fun (r: LineRange) -> r.First) (Codec.int |> Codec.atLeast 1)
-
-            and! last = Codec.field "last" (fun r -> r.Last) (Codec.int |> Codec.atLeast 1)
-            return { First = first; Last = last }
-        }
-        |> Codec.refine (fun r ->
-            if r.Last < r.First then
-                Error "a range ends at or after its first line"
-            else
-                Ok())
-        |> Codec.describe "Lines of a file, 1-based and inclusive."
-        |> Codec.named "LineRange"
 
 [<RequireQualifiedAccess>]
 module FileView =
@@ -300,18 +243,35 @@ module Piece =
 
             $"[{m.Kind} {m.MediaType}{name}]"
 
+    /// The files a piece quotes (provenance for the model-egress hooks, docs/modules/egress.md): a
+    /// file's lines (each range, or the whole file), media's own sources; nothing for text, withheld
+    /// files and references.
+    let sources (piece: Piece) : ContentSource list =
+        match piece with
+        | Piece.File view ->
+            match LineRange.normalize view.Lines with
+            | [] -> [ ContentSource.file view.Path ]
+            | ranges -> ranges |> List.map (fun range -> { Path = view.Path; Lines = Some range })
+        | Piece.Media media -> media.Sources
+        | Piece.Text _
+        | Piece.Withheld _
+        | Piece.Ref _ -> []
+
     /// Pieces as parts of a message: consecutive pieces joined by line breaks into one text part, media
-    /// as media parts. Empty text pieces are left out.
+    /// as media parts. Empty text pieces are left out. A text part quotes (`Sources`) the files of the
+    /// pieces it joins.
     let parts (pieces: Piece list) : Part list =
         let result = ResizeArray<Part>()
         let text = StringBuilder()
+        let quoted = ResizeArray<ContentSource>()
         let mutable pending = false
 
         let flush () =
             if pending && text.Length > 0 then
-                result.Add(Part.text (text.ToString()))
+                result.Add(Part.quoting (List.ofSeq quoted) (text.ToString()))
 
             text.Clear() |> ignore
+            quoted.Clear()
             pending <- false
 
         for piece in pieces do
@@ -325,6 +285,7 @@ module Piece =
                     text.Append('\n') |> ignore
 
                 text.Append(render piece) |> ignore
+                quoted.AddRange(sources piece)
                 pending <- true
 
         flush ()
