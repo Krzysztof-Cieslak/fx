@@ -12,6 +12,35 @@ export interface Activated {
   methods: string[];
 }
 
+export interface AuthMethodRef {
+  /** Non-empty. */
+  kind: string;
+  /** @default {} */
+  settings?: unknown;
+}
+
+export interface CacheHints {
+  key?: string;
+  tools?: CacheTtl;
+}
+
+export type CacheTtl = "short" | "long";
+
+export interface CachingCaps {
+  /** @default "none" */
+  mode?: "none" | "automatic" | "breakpoints";
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  maxBreakpoints?: number;
+  /** @default false */
+  key?: boolean;
+  /** @default false */
+  longTtl?: boolean;
+}
+
 export interface CallParams {
   extension: string;
   method: string;
@@ -28,6 +57,12 @@ export interface Capabilities {
   methods?: string[];
 }
 
+export interface Catalog {
+  /** @default [] */
+  models?: ModelInfo[];
+  discover?: string;
+}
+
 export interface ChannelSettings {
   /** Integer, at least 1. */
   initialWindow: number;
@@ -35,6 +70,166 @@ export interface ChannelSettings {
   maxFramePayload: number;
   /** Integer, at least 0. */
   maxChannels: number;
+}
+
+/** Why a model call failed. */
+export type ChatError =
+  | {
+      kind: "rateLimited";
+      /** Integer. */
+      retryAfterMs?: number;
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "quotaExhausted";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "contextOverflow";
+      /** Integer. */
+      tokens?: number;
+      /** Integer. */
+      limit?: number;
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "refused";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "authFailed";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "permissionDenied";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "notFound";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "invalidRequest";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "overloaded";
+      /** Integer. */
+      retryAfterMs?: number;
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "serverError";
+      /** Integer. */
+      status: number;
+      /** @default "" */
+      message?: string;
+    }
+  | { kind: "transport"; error: HttpError }
+  | {
+      kind: "cancelled";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "invalidResponse";
+      /** @default "" */
+      message?: string;
+    }
+  | {
+      kind: "egressBlocked";
+      ask: boolean;
+      /** @default [] */
+      reasons?: string[];
+    }
+  | {
+      kind: "unavailable";
+      /** @default "" */
+      message?: string;
+    };
+
+/** One event of a streamed model response. */
+export type ChatEvent =
+  | { kind: "started"; id?: string; model?: string }
+  | {
+      kind: "partStarted";
+      /** Integer, at least 0. */
+      index: number;
+      part: PartStart;
+    }
+  | {
+      kind: "delta";
+      /** Integer, at least 0. */
+      index: number;
+      text: string;
+    }
+  | {
+      kind: "partState";
+      /** Integer, at least 0. */
+      index: number;
+      state: ProviderState;
+    }
+  | {
+      kind: "partEnded";
+      /** Integer, at least 0. */
+      index: number;
+    }
+  | { kind: "usage"; usage: Usage }
+  | { kind: "finished"; stop: StopReason }
+  | { kind: "failed"; error: ChatError };
+
+/** A failed model response and what arrived before the failure. */
+export interface ChatFailure {
+  error: ChatError;
+  id?: string;
+  model?: string;
+  /** @default [] */
+  parts?: Part[];
+  /** @default {"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0} */
+  usage?: Usage;
+}
+
+/** A request to a chat model, in no provider's terms. */
+export interface ChatRequest {
+  model: ModelRef;
+  /** @default [] */
+  system?: Part[];
+  messages: Message[];
+  /** @default [] */
+  tools?: ToolSpec[];
+  /** @default {"kind":"auto"} */
+  toolChoice?: ToolChoice;
+  parallelToolCalls?: boolean;
+  /** @default {"stop":[]} */
+  sampling?: Sampling;
+  reasoning?: ReasoningRequest;
+  /** Integer. */
+  maxOutputTokens?: number;
+  /** @default {"kind":"text"} */
+  output?: OutputFormat;
+  /** @default {} */
+  cache?: CacheHints;
+  /** @default {} */
+  metadata?: { [key: string]: string };
+}
+
+/** A complete model response. */
+export interface ChatResponse {
+  id?: string;
+  model?: string;
+  parts: Part[];
+  stop: StopReason;
+  /** @default {"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0} */
+  usage?: Usage;
 }
 
 /** A component to install before the extension starts: its id and a version range. */
@@ -60,11 +255,22 @@ export interface ContributionDecl {
   value?: unknown;
 }
 
+/** Prices in US dollars per million tokens. */
+export interface Cost {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
 /** What a gate decides: allow, ask a human, or deny. */
 export type Decision =
   | { decision: "allow" }
   | { decision: "ask"; reason: string }
   | { decision: "deny"; reason: string };
+
+/** How hard a model reasons. */
+export type Effort = "off" | "minimal" | "low" | "medium" | "high" | "max";
 
 /** The JSON-RPC error codes (docs/modules/rpc.md). */
 export interface ErrorCodes {
@@ -124,6 +330,13 @@ export interface ExtensionRequests {
   /** Deactivates an extension. */
   "extension/deactivate": { params: ExtensionRef; result: null; error: ExtensionProtocolError };
 }
+
+export type HttpError =
+  | { kind: "invalidRequest"; reason: string }
+  | { kind: "refused"; reason: string }
+  | { kind: "connectFailed"; reason: string }
+  | { kind: "reset"; reason: string }
+  | { kind: "timedOut"; phase: "response" | "body" };
 
 export interface InitializeParams {
   /** Non-empty. */
@@ -230,6 +443,18 @@ export interface Manifest {
   hash?: string;
 }
 
+export type MediaKind = "image" | "pdf" | "audio" | "video";
+
+export type MediaSource =
+  | { kind: "base64"; data: string }
+  | { kind: "url"; url: string }
+  | { kind: "blob"; digest: string };
+
+export interface Message {
+  role: Role;
+  parts: Part[];
+}
+
 /** A method of the extension's RPC contract; params and result are JSON Schemas. */
 export interface MethodDecl {
   /**
@@ -242,19 +467,205 @@ export interface MethodDecl {
   result?: unknown;
 }
 
+/** What a model can do. */
+export interface ModelCaps {
+  reasoning?: ReasoningCaps;
+  /** @default {"calls":false,"parallel":false,"forced":false,"strict":false} */
+  tools?: ToolCaps;
+  /** @default false */
+  structuredOutput?: boolean;
+  /** @default false */
+  logprobs?: boolean;
+  /** @default {"mode":"none","maxBreakpoints":0,"key":false,"longTtl":false} */
+  caching?: CachingCaps;
+  /** @default [] */
+  media?: MediaKind[];
+  /** @default {"temperature":false,"topP":false,"topK":false,"seed":false,"stop":false} */
+  sampling?: SamplingCaps;
+  /** @default ["sse"] */
+  transports?: ("sse" | "websocket" | "http")[];
+}
+
+/** A model in a catalog: its limits, capabilities and prices. */
+export interface ModelInfo {
+  ref: ModelRef;
+  /** @default "chat" */
+  kind?: ModelKind;
+  family?: string;
+  name?: string;
+  limits: ModelLimits;
+  /** @default {"tools":{"calls":false,"parallel":false,"forced":false,"strict":false},"structuredOutput":false,"logprobs":false,"caching":{"mode":"none","maxBreakpoints":0,"key":false,"longTtl":false},"media":[],"sampling":{"temperature":false,"topP":false,"topK":false,"seed":false,"stop":false},"transports":["sse"]} */
+  caps?: ModelCaps;
+  cost?: Cost;
+  /** @default false */
+  planBacked?: boolean;
+}
+
+export type ModelKind = "chat" | "decision" | "embedding";
+
+/** Token limits: the context window and the most output tokens per response. */
+export interface ModelLimits {
+  /** Integer, at least 1. */
+  context: number;
+  /** Integer, at least 1. */
+  output: number;
+}
+
+/** A model: `provider/model`. */
+export type ModelRef = string;
+
 /** What extension/invoke and extension/call answer: the output, wrapped so that null and scalars travel as results too. */
 export interface Output {
   output: unknown;
 }
+
+export type OutputFormat =
+  | { kind: "text" }
+  | {
+      kind: "json";
+      name: string;
+      schema: unknown;
+      /** @default false */
+      strict?: boolean;
+    };
+
+/** A typed part of a message. */
+export type Part =
+  | { kind: "text"; text: string; state?: ProviderState }
+  | {
+      kind: "media";
+      media: MediaKind;
+      mediaType: string;
+      source: MediaSource;
+      name?: string;
+    }
+  | { kind: "reasoning"; text: string; state?: ProviderState }
+  | {
+      kind: "toolCall";
+      id: string;
+      name: string;
+      arguments: string;
+      state?: ProviderState;
+    }
+  | {
+      kind: "toolResult";
+      callId: string;
+      name: string;
+      content: ToolContent[];
+      /** @default false */
+      isError?: boolean;
+    }
+  | { kind: "refusal"; text: string }
+  | {
+      kind: "cacheBreakpoint";
+      /** @default "short" */
+      ttl?: CacheTtl;
+    };
+
+export type PartStart =
+  | { kind: "text" }
+  | { kind: "reasoning" }
+  | { kind: "toolCall"; id: string; name: string }
+  | { kind: "refusal" };
 
 export interface PeerInfo {
   name: string;
   version: string;
 }
 
+/** A model provider: endpoints per wire family, catalog, auth methods and quirks. */
+export interface ProviderDef {
+  /** Matches /^[a-z0-9][a-z0-9.-]*$/. */
+  id: string;
+  name: string;
+  endpoints: { [key: string]: string };
+  /** @default {"models":[]} */
+  catalog?: Catalog;
+  /** @default [] */
+  auth?: AuthMethodRef[];
+  /** @default {} */
+  quirks?: { [key: string]: unknown };
+  transform?: RequestTransform;
+}
+
+/** Opaque provider state, replayed byte for byte. */
+export interface ProviderState {
+  family: string;
+  model: ModelRef;
+  kind: string;
+  data: string;
+}
+
+export interface ReasoningCaps {
+  /** @default [] */
+  efforts?: Effort[];
+  budget?: TokenRange;
+  /** @default false */
+  visible?: boolean;
+  /** @default false */
+  replay?: boolean;
+}
+
+export interface ReasoningRequest {
+  effort?: Effort;
+  /** Integer. */
+  budgetTokens?: number;
+  /** @default false */
+  visible?: boolean;
+}
+
+export interface RequestTransform {
+  /** @default {} */
+  setHeaders?: { [key: string]: string };
+  /** @default [] */
+  removeHeaders?: string[];
+  /** @default {} */
+  setQuery?: { [key: string]: string };
+  /** @default [] */
+  body?: (
+    | {
+        kind: "set";
+        /** Non-empty. */
+        path: string[];
+        value: unknown;
+      }
+    | {
+        kind: "remove";
+        /** Non-empty. */
+        path: string[];
+      }
+  )[];
+}
+
+export type Role = "user" | "assistant";
+
 export interface RpcContract {
   /** @default [] */
   methods?: MethodDecl[];
+}
+
+export interface Sampling {
+  temperature?: number;
+  topP?: number;
+  /** Integer. */
+  topK?: number;
+  /** Integer. */
+  seed?: number;
+  /** @default [] */
+  stop?: string[];
+}
+
+export interface SamplingCaps {
+  /** @default false */
+  temperature?: boolean;
+  /** @default false */
+  topP?: boolean;
+  /** @default false */
+  topK?: boolean;
+  /** @default false */
+  seed?: boolean;
+  /** @default false */
+  stop?: boolean;
 }
 
 /** The JSON shape of a value (a codec's schema), tagged by kind; every node may carry a description. */
@@ -378,6 +789,63 @@ export interface SlotDecl {
   privileged?: boolean;
 }
 
+/** Why a response ended normally. */
+export type StopReason =
+  | { kind: "endTurn" }
+  | { kind: "toolUse" }
+  | { kind: "maxTokens" }
+  | { kind: "stopSequence"; sequence?: string }
+  | { kind: "refusal" }
+  | { kind: "contentFilter" }
+  | { kind: "contextWindow" }
+  | { kind: "pause" }
+  | { kind: "other"; reason: string };
+
+export interface TokenRange {
+  /** Integer. */
+  min: number;
+  /** Integer. */
+  max: number;
+}
+
+export interface ToolCaps {
+  /** @default false */
+  calls?: boolean;
+  /** @default false */
+  parallel?: boolean;
+  /** @default false */
+  forced?: boolean;
+  /** @default false */
+  strict?: boolean;
+}
+
+export type ToolChoice =
+  | { kind: "auto" }
+  | { kind: "none" }
+  | { kind: "required" }
+  | { kind: "tool"; name: string };
+
+export type ToolContent =
+  | { kind: "text"; text: string }
+  | {
+      kind: "media";
+      media: MediaKind;
+      mediaType: string;
+      source: MediaSource;
+      name?: string;
+    };
+
+/** A tool the model may call, with the JSON Schema of its input. */
+export interface ToolSpec {
+  /** Matches /^[A-Za-z0-9_-]{1,64}$/. */
+  name: string;
+  /** @default "" */
+  description?: string;
+  parameters: unknown;
+  /** @default false */
+  strict?: boolean;
+}
+
 /** A transform's settings: its priority. */
 export interface TransformSettings {
   /**
@@ -386,4 +854,38 @@ export interface TransformSettings {
    * @default 0
    */
   priority?: number;
+}
+
+/** Tokens used: input (cached included), output (reasoning included), and their parts. */
+export interface Usage {
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  input?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  output?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  cacheRead?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  cacheWrite?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  reasoning?: number;
 }

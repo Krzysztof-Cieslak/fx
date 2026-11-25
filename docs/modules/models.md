@@ -25,7 +25,11 @@ canonical model.
 | `extensions/Fx.Ext.ModelCanonical` | the `canonical` wire, written like any adapter | tests, a future fx-served model |
 
 `Fx.Models` references only `Fx.Prelude`, `Fx.Contracts` and `Fx.Effects`, so `Fx.Sdk` exposes it
-(the architecture tests' SDK surface includes it). The EFF analyzers apply to all of it.
+(the architecture tests' SDK surface includes it). The EFF analyzers apply to all of it. It is packed
+as `<Name>.Models` with the other SDK packages (`bun scripts/packages.ts` builds the canonical wire's
+package from the SDK package alone), and `@fx/sdk`'s generated `contracts.d.ts` has the TypeScript
+types of `ChatRequest`, `ChatEvent`, `ChatResponse`, `ChatFailure`, `ModelInfo` and `ProviderDef`
+([sdk.md](sdk.md)).
 
 ## Contracts (spec §10.2)
 
@@ -338,3 +342,4 @@ for tests and scenarios.
 | Journaling streams for exact replay | T131 |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |
 | Decision and embedding wires (`DecisionWire`, `EmbedWire`) | T401 and later |
+| Runtime codecs of the canonical model in `@fx/sdk` (the types are generated now), for TypeScript extensions that call models through `ILlm` or wires written in TypeScript | T109b, or the first TypeScript wire |
