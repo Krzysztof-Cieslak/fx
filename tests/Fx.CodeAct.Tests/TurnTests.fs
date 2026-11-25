@@ -392,8 +392,12 @@ let tests =
                                 do! kickoff f "Keep z"
                                 let! _ = ended f "s1" 1
 
+                                // A crash, observed: the connection to the kernel has ended.
                                 match f.CodeAct.Kernel "s1" with
-                                | Some kernel -> do! Eff.run f.Hands (Kernel.kill kernel)
+                                | Some kernel ->
+                                    do! Eff.run f.Hands (Kernel.kill kernel)
+                                    let! _ = (Kernel.exited kernel).WaitAsync(TimeSpan.FromSeconds 10.0)
+                                    ()
                                 | None -> failtest "no kernel"
 
                                 f.Model.AddAll [ Say.cell "// intent: check\nz"; Say.finish "z is gone" ]

@@ -155,7 +155,8 @@ type CellRecord =
 [<RequireQualifiedAccess>]
 type private Ran =
     | Answered of Result<CellResult, KernelFailure>
-    | Interrupted
+    /// The turn was cancelled; how the cell was stopped.
+    | Interrupted of Interruption
 
 /// The cell running in a session's kernel: what its host calls and `finish` are attributed to.
 type private RunningCell(id: string) =
@@ -352,8 +353,8 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
             let interrupt: Eff<'K, Ran> =
                 eff {
                     do! untilCancelled
-                    let! _ = Kernel.interrupt k
-                    return Ran.Interrupted
+                    let! how = Kernel.interrupt k
+                    return Ran.Interrupted how
                 }
 
             try
@@ -362,7 +363,8 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
 
                 let exited =
                     match outcome with
-                    | Ran.Answered(Error(KernelFailure.Exited _)) -> true
+                    | Ran.Answered(Error(KernelFailure.Exited _))
+                    | Ran.Interrupted Interruption.Killed -> true
                     | _ -> (Kernel.exited k).IsCompleted
 
                 if exited then
@@ -374,7 +376,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                     do! Eff.shield (Kernel.close k |> Eff.ignore)
 
                 match outcome with
-                | Ran.Interrupted -> return raise (OperationCanceledException turn)
+                | Ran.Interrupted _ -> return raise (OperationCanceledException turn)
                 | Ran.Answered result ->
                     return
                         lock gate (fun () ->
