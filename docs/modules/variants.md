@@ -300,7 +300,7 @@ reflection; slots are generic records of closures, and SHA-256 comes from the ba
 | Reading an extension's slots from its code (`IVariants` in `IExtensionEnv`, and over the extension protocol) | T109b |
 | Reading config files, policy files and flags into layers; a data directory from `Fx.Product`; `fx variants` (list, explain, schema) | T129 |
 | The store's `Durability`, batch and page sizes, the subscribe gap, actor retry delays as slots, read by the host when it opens the stores | T129 |
-| Binding profiles in session and run streams | T125, T212 |
+| Binding profiles in run streams (sessions bind theirs: [sessions.md](sessions.md)) | T212 |
 | Journaling reads with step results, `ReplayEnv` | T131 |
 | Eval profiles over matrices, API-key-only routes, results keyed by profile | T217 |
 | A TOML reader producing `Json`, if config files move to TOML | when needed |
