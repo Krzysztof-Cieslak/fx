@@ -61,6 +61,8 @@ type Command =
     | Variants of VariantsView
     /// Log in to model providers, or show the credentials the host uses (`auth …`).
     | Auth of AuthCommand
+    /// Run the host and serve the client protocol on its local listener; `Some port`: loopback TCP.
+    | Serve of tcp: int option
 
     override this.ToString() =
         match this with
@@ -70,6 +72,8 @@ type Command =
         | Trust args -> string args
         | Variants view -> "variants " + string view
         | Auth command -> "auth " + string command
+        | Serve None -> "serve"
+        | Serve(Some port) -> $"serve --tcp {port}"
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
@@ -91,6 +95,8 @@ let usage =
     + "      Lists the variant slots, explains their values here, or prints the config schema.\n"
     + $"  {bin} auth login <provider> [--method <kind>] | logout <provider> | list | status\n"
     + "      Stores a model provider's credential, removes it, lists them, or shows how each resolves.\n"
+    + $"  {bin} serve [--tcp [<port>]]\n"
+    + "      Runs the host for the current directory and serves clients on its local listener.\n"
     + $"  {bin} --help | --version | --build-info\n"
     + "\nThe interactive interface is not there yet.\n"
 
@@ -232,6 +238,13 @@ let parse (args: string list) : Command =
         match AuthCommand.parse rest with
         | Ok command -> Auth command
         | Error e -> failure e authUsage
+    | [ "serve" ] -> Serve None
+    | [ "serve"; "--tcp" ] -> Serve(Some 0)
+    | [ "serve"; "--tcp"; port ] ->
+        match Int32.TryParse(port, Globalization.NumberStyles.None, Globalization.CultureInfo.InvariantCulture) with
+        | true, n when n > 0 && n < 65536 -> Serve(Some n)
+        | _ -> failure $"invalid port: {port}" usage
+    | "serve" :: _ -> failure "serve takes --tcp [<port>]" usage
     | other ->
         let given = String.concat " " other
         failure $"unknown arguments: {given}" usage

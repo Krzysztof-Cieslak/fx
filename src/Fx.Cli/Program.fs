@@ -307,6 +307,40 @@ let private auth (command: AuthCommand) : int =
 
             code
 
+/// `serve`: the host for the current directory, serving clients until Ctrl+C.
+let private serve (tcp: int option) : int =
+    let facts = facts ()
+
+    match hostOptions facts [] with
+    | Error e -> fail [ e ]
+    | Ok options ->
+        use interrupt = interrupts ()
+
+        match (Host.start options).GetAwaiter().GetResult() with
+        | Error errors -> fail errors
+        | Ok host ->
+            try
+                for warning in host.Warnings do
+                    show $"warning: {warning}"
+
+                let listener =
+                    match tcp with
+                    | Some port -> Fx.Transport.Http.LocalServer.Loopback port
+                    | None -> Listening.preferred options.Paths host.Authenticator.Host.Machine
+
+                match (Serve.start host listener).GetAwaiter().GetResult() with
+                | Error e -> fail [ e ]
+                | Ok served ->
+                    show $"serving {options.Workspace} on {served.Listener} (Ctrl+C stops)"
+
+                    try
+                        interrupt.Token.WaitHandle.WaitOne() |> ignore
+                        0
+                    finally
+                        (Serve.stop served).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+            finally
+                (Host.stop host).Wait(TimeSpan.FromSeconds 60.0) |> ignore
+
 [<EntryPoint>]
 let main argv =
     match Cli.parse (List.ofArray argv) with
@@ -322,3 +356,4 @@ let main argv =
     | Cli.Trust args -> trust args
     | Cli.Variants view -> variants view
     | Cli.Auth command -> auth command
+    | Cli.Serve tcp -> serve tcp

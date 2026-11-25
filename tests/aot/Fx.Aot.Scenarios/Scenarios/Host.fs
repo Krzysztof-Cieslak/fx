@@ -271,6 +271,262 @@ let private composition () : string list =
             $"slot {slot.Id} = {Json.serialize slot.Default} privileged {slot.Privileged}"
     ]
 
+/// A client's environment.
+type private ClientEnv =
+    {
+        Clock: Clock
+        Scope: Scope
+    }
+
+    interface IClock with
+        member env.Clock = env.Clock
+
+    interface IScopeWith<ClientEnv> with
+        member env.Scope = env.Scope
+        member env.WithScope scope = { env with Scope = scope }
+
+    override _.ToString() = "ClientEnv"
+
+/// The client protocol: in process (embedded mode), then over the local listener on loopback TCP with
+/// the token file: sign-in, sessions created, prompted and followed with subscribe(afterSeq), the
+/// typed errors, environments, the codecs' JSON.
+let private protocol () : Task<string list> =
+    task {
+        let lines = ResizeArray<string>()
+        let say (line: string) = lines.Add(Show.escape line)
+        let root = temporary ()
+
+        try
+            let data = Path.Combine(root, "data")
+            Directory.CreateDirectory data |> ignore
+
+            File.WriteAllText(
+                Path.Combine(data, "config.json"),
+                """{"extensions": {"disabled": ["fx.interpreter.bun-ts"]}}"""
+            )
+
+            match! Host.start (options root [ "model.role.main", Json.String "anthropic/claude-sonnet-5-5" ]) with
+            | Error errors -> say ("start failed: " + String.concat "; " errors)
+            | Ok host ->
+                use lifetime = new CancellationTokenSource()
+
+                let env =
+                    {
+                        Clock = SystemClock.clock
+                        Scope = Scope.ofCancellation lifetime.Token
+                    }
+
+                let events = Collections.Concurrent.ConcurrentQueue<SessionNotice>()
+
+                let service =
+                    Fx.Rpc.Service.create
+                        { Name = "scenario"; Version = "0" }
+                        [
+                            Fx.Rpc.Handler.notification ClientProtocol.event (fun _ e -> Eff.ret (events.Enqueue e))
+                        ]
+
+                let call
+                    (peer: Fx.Rpc.Peer)
+                    (m: Fx.Rpc.Method<'P, 'R, 'E>)
+                    (value: 'P)
+                    : Task<Result<'R, Fx.Rpc.CallError<'E>>> =
+                    Eff.run env (Fx.Rpc.Rpc.call peer m value)
+
+                let ended () =
+                    events
+                    |> Seq.exists (fun e ->
+                        match e.Item with
+                        | Fx.Store.Feed.Next recorded ->
+                            match recorded.Event with
+                            | Event.TurnEnded _ -> true
+                            | _ -> false
+                        | Fx.Store.Feed.Reset _ -> false)
+
+                try
+                    match! Eff.run env (HostClient.embedded host service [ "agent.question" ]) with
+                    | Error e -> say $"embedded connection failed: {e}"
+                    | Ok peer ->
+                        match! call peer ClientProtocol.whoami () with
+                        | Ok me ->
+                            let roles = me.Roles |> List.map string |> String.concat ", "
+
+                            say
+                                $"whoami: {me.Principal.Kind} via {me.Principal.Provider}, roles {roles}, token shown {me.Token.IsSome}"
+                        | Error e -> say $"whoami failed: {e}"
+
+                        match!
+                            call
+                                peer
+                                ClientProtocol.create
+                                {
+                                    Session = Some "s1"
+                                    Title = Some "scenario"
+                                }
+                        with
+                        | Ok entry ->
+                            let titled = entry.Title = Some "scenario"
+                            say $"created: {entry.Session}, titled {titled}"
+                        | Error e -> say $"create failed: {e}"
+
+                        let subscription = call peer ClientProtocol.subscribe { Session = "s1"; After = 0L }
+
+                        match!
+                            call
+                                peer
+                                ClientProtocol.prompt
+                                {
+                                    Session = "s1"
+                                    Key = "p1"
+                                    Text = "hello"
+                                    Mode = PromptMode.Steer
+                                }
+                        with
+                        | Ok committed -> say $"prompted: {committed.Count > 0}"
+                        | Error e -> say $"prompt failed: {e}"
+
+                        let mutable waited = 0
+
+                        while not (ended ()) && waited < 3000 do
+                            do! Task.Delay 20
+                            waited <- waited + 1
+
+                        let first =
+                            events
+                            |> Seq.tryHead
+                            |> Option.map (fun e ->
+                                match e.Item with
+                                | Fx.Store.Feed.Next recorded -> recorded.Seq
+                                | Fx.Store.Feed.Reset snapshot -> snapshot.Seq)
+                            |> Option.defaultValue 0L
+
+                        say $"subscription: turn ended {ended ()}, first event #{first}"
+
+                        match! call peer ClientProtocol.get { Session = "nope" } with
+                        | Error(Fx.Rpc.CallError.Failed e) ->
+                            say $"unknown session: {Json.serialize (Codec.encode ClientProtocol.clientError e)}"
+                        | Ok _ -> say "unknown session: found"
+                        | Error e -> say $"unknown session: {e}"
+
+                        match! call peer ClientProtocol.envList () with
+                        | Ok envs ->
+                            for e in envs do
+                                let transport = e.Transport |> Option.defaultValue "-"
+                                say $"environment: {e.Provider} {e.Phase} {transport} warnings {e.Warnings.Length}"
+                        | Error e -> say $"env/list failed: {e}"
+
+                        lifetime.Cancel()
+
+                        try
+                            let! _ = subscription
+                            ()
+                        with _ ->
+                            ()
+
+                        let! _ = peer.CloseAsync()
+                        ()
+
+                    // Over loopback TCP, with the listener's token.
+                    match! Serve.start host (Fx.Transport.Http.LocalServer.Loopback 0) with
+                    | Error e -> say $"serve failed: {e}"
+                    | Ok served ->
+                        try
+                            let! located = Eff.run host.Env (HostClient.locate host.Options.Paths)
+
+                            match located with
+                            | Error e -> say $"locate failed: {e}"
+                            | Ok(listener, token) ->
+                                say
+                                    $"listener: {(Listening.info listener).Kind}, the one served {listener = served.Listener}"
+
+                                let env = { env with Scope = Scope.root }
+
+                                match!
+                                    Eff.run env (HostClient.connect listener token service (HostClient.members []))
+                                with
+                                | Error e -> say $"remote connection failed: {e}"
+                                | Ok peer ->
+                                    match! Eff.run env (Fx.Rpc.Rpc.call peer ClientProtocol.list ()) with
+                                    | Ok sessions ->
+                                        let ids = sessions |> List.map _.Session |> String.concat ", "
+                                        say $"remote list: {ids}"
+                                    | Error e -> say $"remote list failed: {e}"
+
+                                    let! _ = peer.CloseAsync()
+                                    ()
+
+                                match!
+                                    Eff.run
+                                        env
+                                        (HostClient.connect
+                                            listener
+                                            "wrong-token-0123456789abcdefghijklmnopq"
+                                            service
+                                            [])
+                                with
+                                | Error e -> say $"wrong token: {e}"
+                                | Ok _ -> say "wrong token: connected"
+                        finally
+                            (Serve.stop served).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                finally
+                    (Host.stop host).Wait(TimeSpan.FromSeconds 60.0) |> ignore
+        finally
+            remove root
+
+        return List.ofSeq lines
+    }
+
+/// The protocol's codecs: the JSON of its messages.
+let private protocolCodecs () : string list =
+    [
+        let show (codec: Codec<'T>) (value: 'T) =
+            let json = Codec.encode codec value
+            let text = Json.serialize json
+            let back = Codec.decode codec json = Ok value
+            $"{text} (reads back {back})"
+
+        show
+            ClientProtocol.promptSession
+            {
+                Session = "s1"
+                Key = "k1"
+                Text = "fix it"
+                Mode = PromptMode.Queue
+            }
+
+        show
+            ClientProtocol.overrideSession
+            {
+                Session = "s1"
+                Key = "k2"
+                Set = [ "agent.actionSurface", Json.String "hybrid" ]
+                Unset = [ "edit.guard" ]
+            }
+
+        show ClientProtocol.createSession { Session = None; Title = Some "t" }
+        show ClientProtocol.committed { After = 4L; Count = 2 }
+
+        show ClientProtocol.clientError (ClientError.Forbidden(Fx.Identity.IdentityFailure.NoRole "user:p:s"))
+
+        show ClientProtocol.clientError (ClientError.Rejected("session.busy", "a turn is running"))
+        show ClientProtocol.extCallError (ExtCallError.Failed(Fx.Sdk.MethodFailure.Crashed "IOException"))
+
+        show
+            ClientProtocol.envSummary
+            {
+                Id = "e1"
+                Name = "default"
+                Provider = "local"
+                Phase = "ready"
+                Transport = Some "in-process"
+                Workspace = Some "/w"
+                Reason = None
+                Warnings = [ "unsandboxed" ]
+            }
+
+        for name in [ "session/get"; "session/prompt"; "identity/revoke"; "ext/x/y" ] do
+            $"least role of {name}: {ClientProtocol.leastRole name}"
+    ]
+
 let private bounded (run: unit -> Task<string list>) () : Task<string list> =
     run().WaitAsync(TimeSpan.FromSeconds 240.0)
 
@@ -278,4 +534,6 @@ let scenarios: Scenario list =
     [
         Scenario.lines "host-composition" composition
         Scenario.task "host-embedded" (bounded embedded)
+        Scenario.lines "host-protocol-codecs" protocolCodecs
+        Scenario.task "host-protocol" (bounded protocol)
     ]

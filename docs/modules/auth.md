@@ -180,7 +180,7 @@ stored ([host.md](host.md#service-credentials-and-fx-auth)).
 ### Logins and flows
 
 A login runs in two steps, so a client can run the flow in between (spec §11.3: interactive flows run
-on a capable client and are forwarded; the client protocol's `auth/*` methods are T129b's):
+on a capable client and are forwarded; the client protocol's `auth/*` methods come later):
 
 1. `AuthService.startLogin service provider method form callback` picks the method (the one named, or the
    provider's first that stores), checks the form's required fields, and asks `Authorize` for an
@@ -295,7 +295,7 @@ files: modes, DPAPI on Windows, no staging file left) on every target, and `keyr
 
 | What | Task |
 |---|---|
-| `auth/*` over the client protocol (login forwarded to a capable client, list, logout, status) | T129b |
+| `auth/*` over the client protocol (login forwarded to a capable client, list, logout, status) | T130, T509 |
 | `command` and `sigv4` methods, auth-flow forwarding, mTLS (`ClientCert` in `ResolvedAuth`); browser logins on the command line (a loopback listener for `AuthFlow.Browser`) | T509 |
 | OAuth device and PKCE methods (`Refresh` through `Resolution.Updated`), the Copilot identity profiles | T509, `fx.model.copilot` |
 | The `command` secret source; plugin sources (vaults) | with their first user |

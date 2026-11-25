@@ -271,7 +271,7 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
 
 | What | Task |
 |---|---|
-| `ext/<id>/*` on the client protocol, recording the registry's events in the event store (the static list of built-ins and the bootstrap at startup are the host's: [host.md](host.md)) | T129b |
+| Recording the registry's events in the event store (the static list of built-ins, the bootstrap and `ext/<id>/<name>` on the client protocol are the host's: [host.md](host.md)) | with host-config extensions |
 | Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
 | `Components.installFor` as `InstallComponents` for extensions from host config (the host plans the lockfile and installs environments' components: [host.md](host.md)) | with host-config extensions |
 | The `bun` runtime (`fx.exthost.bun`, a process extension contributing `ExtensionRuntime "bun"`) | T115 |
