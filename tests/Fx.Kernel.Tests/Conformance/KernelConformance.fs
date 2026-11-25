@@ -73,8 +73,9 @@ type Snippets =
         SleepForever: string
         /// A busy loop the kernel interrupts on a timeout.
         BusyLoop: string
-        /// A busy loop the kernel cannot interrupt; it follows a host call in the same cell.
-        Freeze: string
+        /// A busy loop the kernel cannot interrupt, which prints the text once nothing but a kill can
+        /// stop the cell: the suite interrupts when it sees the text.
+        Freeze: string -> string
         /// Prints a line after the cell returned.
         LateOutput: string -> string
         /// Reports an activity (kind, title), if the kernel has kernel-side wrappers cells can use.
@@ -196,6 +197,7 @@ let private excludedFiles: Fx.Models.Exclusions =
 
 type Recorder() =
     let handles = HandleTable<string>()
+    let printedWaits = ResizeArray<string * string * TaskCompletionSource>()
 
     member val Outputs = ConcurrentQueue<CellOutput>()
     member val Activities = ConcurrentQueue<CellActivity>()
@@ -211,6 +213,31 @@ type Recorder() =
         |> Seq.filter (fun o -> o.CellId = Some cellId && not o.Late)
         |> Seq.map (fun o -> o.Text)
         |> String.concat ""
+
+    /// Completes once a cell's streamed output holds the text.
+    member this.Printed (cellId: string) (text: string) : Task =
+        let waiting =
+            TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+        lock printedWaits (fun () -> printedWaits.Add(cellId, text, waiting))
+        this.CheckPrinted()
+        waiting.Task
+
+    member private this.CheckPrinted() =
+        let reached =
+            lock printedWaits (fun () ->
+                let reached =
+                    printedWaits
+                    |> Seq.filter (fun (cellId, text, _) -> (this.OutputOf cellId).Contains text)
+                    |> List.ofSeq
+
+                for wait in reached do
+                    printedWaits.Remove wait |> ignore
+
+                reached)
+
+        for _, _, waiting in reached do
+            waiting.TrySetResult() |> ignore
 
     member this.Host: KernelHost<Env> =
         let answer (call: HostCall) : Eff<Env, Result<Value, HostCallError>> =
@@ -297,7 +324,12 @@ type Recorder() =
                         KernelProtocol.Finish.validate turnCodec [ summaryEnsure ] finish
                         |> Result.map (fun turn -> this.Finishes.Enqueue turn)
                     )
-            Output = fun output -> Eff.ret (this.Outputs.Enqueue output)
+            Output =
+                fun output ->
+                    Eff.ret (
+                        this.Outputs.Enqueue output
+                        this.CheckPrinted()
+                    )
             Activity = fun activity -> Eff.ret (this.Activities.Enqueue activity)
         }
 
@@ -1185,15 +1217,10 @@ let private cancellation (subject: KernelSubject) =
                         }
 
                     let running =
-                        Eff.run
-                            c.Env
-                            (Kernel.run
-                                c.Kernel
-                                (cell "frozen" (s.Statements [ s.Call "_s" "test.signal" []; s.Freeze ]) None))
+                        Eff.run c.Env (Kernel.run c.Kernel (cell "frozen" (s.Freeze "frozen now") None))
 
-                    do! c.Recorder.Signalled.Task |> withinTask
-                    // Let the kernel enter the loop.
-                    do! Task.Delay 300
+                    // Once the text is out, a cancel can no longer stop the cell: the interrupt must kill.
+                    do! c.Recorder.Printed "frozen" "frozen now" |> withinTask
                     let! interruption = Eff.run c.Env (Kernel.interrupt c.Kernel) |> within
                     Expect.equal interruption Interruption.Killed "killed"
 
