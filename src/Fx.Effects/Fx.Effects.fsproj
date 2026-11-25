@@ -20,8 +20,11 @@
     <Compile Include="Id.fs" />
     <Compile Include="Ids.fs" />
     <Compile Include="Fs.fs" />
+    <Compile Include="PrivateFiles.fs" />
     <Compile Include="Shell.fs" />
     <Compile Include="Secrets.fs" />
+    <Compile Include="HostVariables.fs" />
+    <Compile Include="Keyring.fs" />
     <Compile Include="Trace.fs" />
     <Compile Include="Http.fs" />
     <Compile Include="Fakes\FakeClock.fs" />
@@ -30,6 +33,8 @@
     <Compile Include="Fakes\ScriptedShell.fs" />
     <Compile Include="Fakes\InMemorySecrets.fs" />
     <Compile Include="Fakes\InMemoryHttp.fs" />
+    <Compile Include="Fakes\InMemoryKeyring.fs" />
+    <Compile Include="Fakes\InMemoryPrivateFiles.fs" />
     <Compile Include="Replay\Journal.fs" />
   </ItemGroup>
 </Project>

@@ -6,6 +6,7 @@ open System.Security.Cryptography
 open System.Text
 open System.Threading
 open System.Threading.Tasks
+open Fx.Effects
 open Fx.Keyring
 open Fx.Keyring.DBus
 
@@ -107,9 +108,9 @@ module SecretServiceKeyring =
     let private toKeyringError (e: DBusError) : KeyringError =
         match e.Name with
         | "org.freedesktop.DBus.Error.ServiceUnknown"
-        | "org.freedesktop.DBus.Error.NameHasNoOwner" -> KeyringError.Unavailable Unavailable.NoSecretService
+        | "org.freedesktop.DBus.Error.NameHasNoOwner" -> KeyringError.Unavailable KeyringUnavailable.NoSecretService
         | name when name.StartsWith("org.freedesktop.DBus.Error.Spawn.", StringComparison.Ordinal) ->
-            KeyringError.Unavailable Unavailable.NoSecretService
+            KeyringError.Unavailable KeyringUnavailable.NoSecretService
         | "org.freedesktop.Secret.Error.IsLocked" -> KeyringError.Locked
         | name -> KeyringError.Failed(name, e.Message)
 
@@ -322,7 +323,7 @@ module SecretServiceKeyring =
                                 | Some path -> return Ok path
                                 | None -> return Error(unexpected "CreateCollection" [ result ])
                     }
-                | Ok "/" -> Task.FromResult(Error(KeyringError.Unavailable Unavailable.NoDefaultCollection))
+                | Ok "/" -> Task.FromResult(Error(KeyringError.Unavailable KeyringUnavailable.NoDefaultCollection))
                 | other -> Task.FromResult other
 
             match collection with
@@ -387,10 +388,10 @@ module SecretServiceKeyring =
         : Task<Result<'T, KeyringError>> =
         task {
             match settings.Bus with
-            | None -> return Error(KeyringError.Unavailable Unavailable.NoSessionBus)
+            | None -> return Error(KeyringError.Unavailable KeyringUnavailable.NoSessionBus)
             | Some address ->
                 match! BusConnection.Connect address cancellation with
-                | Error reason -> return Error(KeyringError.Unavailable(Unavailable.BusUnreachable reason))
+                | Error reason -> return Error(KeyringError.Unavailable(KeyringUnavailable.BusUnreachable reason))
                 | Ok connection ->
                     use connection = connection
 
@@ -602,10 +603,10 @@ module SecretServiceKeyring =
     let probe (settings: SecretServiceSettings) (cancellation: CancellationToken) : Task<KeyringStatus> =
         task {
             match settings.Bus with
-            | None -> return KeyringStatus.Unavailable Unavailable.NoSessionBus
+            | None -> return KeyringStatus.Unavailable KeyringUnavailable.NoSessionBus
             | Some address ->
                 match! BusConnection.Connect address cancellation with
-                | Error reason -> return KeyringStatus.Unavailable(Unavailable.BusUnreachable reason)
+                | Error reason -> return KeyringStatus.Unavailable(KeyringUnavailable.BusUnreachable reason)
                 | Ok connection ->
                     use connection = connection
 
@@ -628,7 +629,7 @@ module SecretServiceKeyring =
                         | Error(KeyringError.Unavailable reason) -> return KeyringStatus.Unavailable reason
                         | Error(KeyringError.Failed(code, message)) -> return KeyringStatus.Failed(code, message)
                         | Error e -> return KeyringStatus.Failed("unexpected", string e)
-                        | Ok "/" -> return KeyringStatus.Unavailable Unavailable.NoDefaultCollection
+                        | Ok "/" -> return KeyringStatus.Unavailable KeyringUnavailable.NoDefaultCollection
                         | Ok path ->
                             match! property settings connection path CollectionInterface "Locked" cancellation with
                             | Ok(DBusValue.Boolean false) -> return KeyringStatus.Ready

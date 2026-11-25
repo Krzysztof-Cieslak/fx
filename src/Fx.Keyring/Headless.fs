@@ -1,6 +1,7 @@
 namespace Fx.Keyring
 
 open System
+open Fx.Effects
 
 /// The operating system families with a keyring backend.
 [<RequireQualifiedAccess>]

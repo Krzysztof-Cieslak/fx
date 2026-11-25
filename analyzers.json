@@ -38,6 +38,11 @@
       "reason": "IFs/IFsRead interpreter: the only code that touches the local filesystem."
     },
     {
+      "codes": ["EFF003"],
+      "files": ["src/Fx.Effects.Live/SystemVariables.fs"],
+      "reason": "IHostVariables interpreter: the only reader of the host process's environment variables for credentials (the env auth method and secret source)."
+    },
+    {
       "codes": ["EFF006"],
       "files": ["src/Fx.Effects.Live/LocalShell.fs"],
       "reason": "IShell interpreter: the only code that starts and controls processes."
@@ -146,6 +151,11 @@
       "codes": ["EFF002"],
       "files": ["src/Fx.Keyring/SecretService/SecretServiceKeyring.fs"],
       "reason": "IKeyring interpreter on Linux: the Diffie-Hellman private key and AES IVs of the Secret Service's encrypted session come from the OS random number generator."
+    },
+    {
+      "codes": ["EFF004"],
+      "files": ["src/Fx.Keyring/LocalPrivateFiles.fs"],
+      "reason": "IPrivateFiles interpreter: the only code that touches the file credential store's directory (0700, files 0600 or an owner-only ACL, DPAPI on Windows; staged and renamed)."
     },
     {
       "codes": ["EFF003", "EFF004"],

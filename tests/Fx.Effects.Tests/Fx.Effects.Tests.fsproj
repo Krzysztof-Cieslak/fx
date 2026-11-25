@@ -4,6 +4,8 @@
     <Compile Include="Conformance\FsConformance.fs" />
     <Compile Include="Conformance\IdsConformance.fs" />
     <Compile Include="Conformance\HttpConformance.fs" />
+    <Compile Include="Conformance\PrivateFilesConformance.fs" />
+    <Compile Include="Conformance\HostVariablesConformance.fs" />
     <Compile Include="BuilderTests.fs" />
     <Compile Include="EffResultTests.fs" />
     <Compile Include="CombinatorTests.fs" />
@@ -14,6 +16,7 @@
     <Compile Include="FsTests.fs" />
     <Compile Include="ShellTests.fs" />
     <Compile Include="SecretsTests.fs" />
+    <Compile Include="CredentialCapabilityTests.fs" />
     <Compile Include="TraceTests.fs" />
     <Compile Include="HttpTests.fs" />
     <Compile Include="ReplayTests.fs" />

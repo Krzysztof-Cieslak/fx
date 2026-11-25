@@ -1,5 +1,6 @@
 namespace Fx.Keyring
 
+open Fx.Effects
 open Fx.Keyring.SecretService
 
 /// How the host opens this machine's keyring.
@@ -36,4 +37,4 @@ module LocalKeyring =
                 { SecretServiceKeyring.defaults settings.SessionBus settings.Prompts with
                     AutoStart = settings.AutoStart
                 }
-        | HostOs.Other name -> Keyring.unavailable "none" (Unavailable.NotSupported name)
+        | HostOs.Other name -> Keyring.unavailable "none" (KeyringUnavailable.NotSupported name)

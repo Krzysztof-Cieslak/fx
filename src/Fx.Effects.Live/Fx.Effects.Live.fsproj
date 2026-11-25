@@ -16,6 +16,7 @@
     <Compile Include="LocalFs.fs" />
     <Compile Include="LocalShell.fs" />
     <Compile Include="SystemHttp.fs" />
+    <Compile Include="SystemVariables.fs" />
   </ItemGroup>
 
   <ItemGroup>

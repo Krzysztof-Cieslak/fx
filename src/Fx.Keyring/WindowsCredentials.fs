@@ -5,6 +5,7 @@ open System.Runtime.InteropServices
 open System.Text
 open System.Threading
 open System.Threading.Tasks
+open Fx.Effects
 open Fx.Keyring.Native.Windows
 
 /// The Windows Credential Manager: generic credentials (`CRED_TYPE_GENERIC`) persisted for this user
@@ -24,7 +25,7 @@ module WindowsCredentials =
 
     let private toError (error: int) : KeyringError =
         if error = ErrorNoSuchLogonSession then
-            KeyringError.Unavailable Unavailable.NoLogonSession
+            KeyringError.Unavailable KeyringUnavailable.NoLogonSession
         elif error = ErrorCancelled then
             KeyringError.Dismissed
         else
@@ -173,7 +174,7 @@ module WindowsCredentials =
             match readTarget "keyring-probe:\u0001" with
             | Ok _ -> Task.FromResult KeyringStatus.Ready
             | Error error when error = ErrorNoSuchLogonSession ->
-                Task.FromResult(KeyringStatus.Unavailable Unavailable.NoLogonSession)
+                Task.FromResult(KeyringStatus.Unavailable KeyringUnavailable.NoLogonSession)
             | Error error -> Task.FromResult(KeyringStatus.Failed(string error, describe error))
 
     let create () : Keyring =

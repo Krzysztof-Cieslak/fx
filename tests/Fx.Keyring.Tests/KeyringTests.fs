@@ -2,6 +2,8 @@ module Fx.Keyring.Tests.KeyringTests
 
 open System.Threading
 open Expecto
+open Fx.Effects
+open Fx.Effects.Fakes
 open Fx.Keyring
 open Fx.Keyring.Tests.Conformance
 
@@ -58,19 +60,24 @@ let inMemory =
 
                 fake.Status <- KeyringStatus.Locked
                 Expect.equal (attempt ()) (Error KeyringError.Locked) "locked"
-                fake.Status <- KeyringStatus.Unavailable Unavailable.NoSessionBus
-                Expect.equal (attempt ()) (Error(KeyringError.Unavailable Unavailable.NoSessionBus)) "unavailable"
+                fake.Status <- KeyringStatus.Unavailable KeyringUnavailable.NoSessionBus
+
+                Expect.equal
+                    (attempt ())
+                    (Error(KeyringError.Unavailable KeyringUnavailable.NoSessionBus))
+                    "unavailable"
+
                 Expect.equal (fake.Keyring.Probe CancellationToken.None).Result fake.Status "probe"
                 fake.Status <- KeyringStatus.Ready
                 Expect.equal (attempt ()) (Ok()) "ready"
             }
 
             test "Keyring.unavailable fails everything with its reason" {
-                let keyring = Keyring.unavailable "none" (Unavailable.NotSupported "plan9")
+                let keyring = Keyring.unavailable "none" (KeyringUnavailable.NotSupported "plan9")
 
                 Expect.equal
                     (keyring.Write (key "fx" "a") (SecretText "x") CancellationToken.None).Result
-                    (Error(KeyringError.Unavailable(Unavailable.NotSupported "plan9")))
+                    (Error(KeyringError.Unavailable(KeyringUnavailable.NotSupported "plan9")))
                     "write"
 
                 Expect.equal

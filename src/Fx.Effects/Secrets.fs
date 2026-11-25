@@ -44,6 +44,31 @@ module SecretRef =
         else
             tryCreate (text.Substring Prefix.Length)
 
+/// A secret's text: a key, a token, what a keyring or a credential store holds. It never prints its
+/// value (`ToString` and string interpolation show only `(redacted)`), so it does not leak into logs,
+/// traces or prompts by accident. Two are equal when their texts are (ordinal); keyrings store it as
+/// UTF-8.
+[<Sealed>]
+type SecretText(value: string) =
+    /// The secret itself. Call it at the one place that needs the value.
+    member _.Reveal() = value
+
+    override _.ToString() = "(redacted)"
+
+    override _.Equals(other: obj) =
+        match other with
+        | :? SecretText as other -> String.Equals(value, other.Reveal(), StringComparison.Ordinal)
+        | _ -> false
+
+    override _.GetHashCode() =
+        StringComparer.Ordinal.GetHashCode value
+
+    interface IEquatable<SecretText> with
+        member _.Equals(other: SecretText | null) =
+            match other with
+            | null -> false
+            | other -> String.Equals(value, other.Reveal(), StringComparison.Ordinal)
+
 /// A resolved secret value. It never prints its value (`ToString` and string interpolation show
 /// only the reference), so it does not leak into logs, traces or prompts by accident. Call `Reveal`
 /// at the one place that needs the value, e.g. building an HTTP header.
