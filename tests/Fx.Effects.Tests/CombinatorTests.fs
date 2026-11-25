@@ -290,4 +290,40 @@ let tests =
                 let seen = runIn env (Eff.ofCancellableTask (fun token -> Task.FromResult token))
                 Expect.equal seen cts.Token "token"
             }
+
+            testTask "structured children have their own flows, after awaits too, and the parent keeps its" {
+                let fakes = create ()
+                let flow: Eff<Env, string> = fun _ -> Task.FromResult(Flow.path ())
+
+                let child: Eff<Env, string list> =
+                    eff {
+                        let! before = flow
+                        do! Clock.sleep (seconds 1.0)
+                        let! after = flow
+                        let! inner = Eff.all [ flow; flow ]
+                        return before :: after :: inner
+                    }
+
+                let program =
+                    eff {
+                        let! children = Eff.all [ child; child ]
+                        let! raced = Eff.race [ flow; flow ]
+                        let! timed = Eff.timeout (seconds 5.0) flow
+                        let! parent = flow
+                        return children, raced, timed, parent
+                    }
+
+                let running = Flow.root (fun () -> Eff.run fakes.Env program)
+                fakes.Clock.Advance(seconds 1.0)
+                let! children, raced, timed, parent = running
+
+                Expect.equal
+                    children
+                    [ [ "0"; "0"; "0.0"; "0.1" ]; [ "1"; "1"; "1.0"; "1.1" ] ]
+                    "each child's path, also after it waited"
+
+                Expect.equal raced "0" "race's first child won"
+                Expect.equal timed (Some "0") "timeout runs the effect as its first child"
+                Expect.equal parent "" "the parent's flow is unchanged"
+            }
         ]

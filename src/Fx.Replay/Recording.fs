@@ -517,14 +517,15 @@ type RecordedCodeAct<'R, 'K
     /// The turn runner sessions run their turns with.
     member _.Runner: TurnRunner<'R> =
         {
+            // Turns start at the root flow, whatever started them, as they do in replay.
             Run =
                 fun context' ->
                     fun env ->
                         task {
-                            let! result = turn false context' env
+                            let! result = Fx.Effects.Flow.root (fun () -> turn false context' env)
                             return result.Value
                         }
-            Recover = fun context' -> fun env -> turn true context' env
+            Recover = fun context' -> fun env -> Fx.Effects.Flow.root (fun () -> turn true context' env)
         }
 
     /// The kernel of a session, if it has one.
@@ -535,17 +536,18 @@ type RecordedCodeAct<'R, 'K
 
     /// Closes every session's kernel (the host stops) and ends the journals' segments.
     member _.Close() : Task =
-        task {
-            for entry in List.ofSeq sessions do
-                match entry.Value.Journal with
-                | Some journal ->
-                    journal.Mark(Markers.Host, Markers.Closing, Inputs.none, "", Json.Null)
-                    do! entry.Value.Instance.Close()
-                    journal.Mark(Markers.Host, Markers.Closed, Inputs.none, "", Json.Null)
-                | None -> do! entry.Value.Instance.Close()
+        Fx.Effects.Flow.root (fun () ->
+            task {
+                for entry in List.ofSeq sessions do
+                    match entry.Value.Journal with
+                    | Some journal ->
+                        journal.Mark(Markers.Host, Markers.Closing, Inputs.none, "", Json.Null)
+                        do! entry.Value.Instance.Close()
+                        journal.Mark(Markers.Host, Markers.Closed, Inputs.none, "", Json.Null)
+                    | None -> do! entry.Value.Instance.Close()
 
-            do! recorder.Close()
-        }
+                do! recorder.Close()
+            })
 
     override _.ToString() = "RecordedCodeAct"
 

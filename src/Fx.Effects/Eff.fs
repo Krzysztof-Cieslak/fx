@@ -167,7 +167,11 @@ module Eff =
             | [] -> Task.FromResult []
             | _ ->
                 let source, child = childScope env
-                let tasks = effects |> List.map (start child) |> Array.ofList
+
+                let tasks =
+                    effects
+                    |> List.mapi (fun index effect -> Flow.child index (fun () -> start child effect))
+                    |> Array.ofList
 
                 task {
                     try
@@ -184,8 +188,8 @@ module Eff =
     let both<'R, 'A, 'B when 'R :> IScopeWith<'R>> (first: Eff<'R, 'A>) (second: Eff<'R, 'B>) : Eff<'R, 'A * 'B> =
         fun env ->
             let source, child = childScope env
-            let a = start child first
-            let b = start child second
+            let a = Flow.child 0 (fun () -> start child first)
+            let b = Flow.child 1 (fun () -> start child second)
 
             task {
                 try
@@ -206,7 +210,11 @@ module Eff =
             | [] -> invalidArg (nameof effects) "Eff.race needs at least one effect."
             | _ ->
                 let source, child = childScope env
-                let tasks = effects |> List.map (start child) |> Array.ofList
+
+                let tasks =
+                    effects
+                    |> List.mapi (fun index effect -> Flow.child index (fun () -> start child effect))
+                    |> Array.ofList
 
                 task {
                     try

@@ -223,6 +223,8 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
     /// The entry a call matches, claimed: the first unclaimed one of its lane with the same operation
     /// and input.
     member _.Find(lane: string, op: string, input: string) : Found =
+        let input = Digest.inFlow input
+
         lock gate (fun () ->
             match divergence with
             | Some _ -> Found.Stopped
@@ -254,7 +256,11 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
                 this.Diverge(
                     lane,
                     describe expected,
-                    op + (if actual = "" then "" else " " + actual),
+                    op
+                    + (if actual = "" then "" else " " + actual)
+                    + (match Fx.Effects.Flow.path () with
+                       | "" -> ""
+                       | flow -> $" (flow {flow})"),
                     "replay made a call the recording does not have here"
                 )
             )

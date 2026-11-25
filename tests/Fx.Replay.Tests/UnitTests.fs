@@ -164,7 +164,7 @@ let private lines (events: JournalEvent list) =
     |> String.concat "\n"
 
 /// A program whose children read the clock and sleep concurrently, waking in another order than they
-/// started.
+/// started, some at the same time (equal delays): each child's second reading depends on when it woke.
 let private concurrent: Eff<Env, (Instant * Instant) list> =
     let child (delay: int) : Eff<Env, Instant * Instant> =
         eff {
@@ -174,9 +174,36 @@ let private concurrent: Eff<Env, (Instant * Instant) list> =
             return first, second
         }
 
-    // Far apart: replay keeps the order calls completed in, but two callers that resume at the same
-    // moment may read the clock in either order (replay.md, "Limits").
-    Eff.all [ child 400; child 10; child 200 ]
+    Eff.all [ for i in 1..8 -> child (1 + (i * 7) % 5) ]
+
+/// Runs `work` while busy threads keep every core loaded, so continuations are scheduled late and in
+/// any order.
+let private underLoad (work: unit -> Task<'T>) : Task<'T> =
+    task {
+        use stop = new CancellationTokenSource()
+
+        let spinners =
+            [
+                for _ in 1 .. Environment.ProcessorCount * 2 ->
+                    Thread(
+                        (fun () ->
+                            while not stop.IsCancellationRequested do
+                                Thread.SpinWait 1000),
+                        IsBackground = true
+                    )
+            ]
+
+        for spinner in spinners do
+            spinner.Start()
+
+        try
+            return! work ()
+        finally
+            stop.Cancel()
+
+            for spinner in spinners do
+                spinner.Join()
+    }
 
 [<Tests>]
 let tests =
@@ -204,20 +231,23 @@ let tests =
                 Expect.equal (lines read) written "the same JSON"
             }
 
-            testTask "concurrent children replay with the values and wake-ups they had" {
-                let stores = Stores()
-                let fs = InMemoryFs(SystemClock.clock, false)
-                let! recorded = record stores fs concurrent
+            testTask "concurrent children replay with the values and wake-ups they had, under load" {
+                // Replay lets flows that waited go one at a time, in the order they woke when recorded,
+                // each until it waits again: so each reads the clock in its recorded turn.
+                for _ in 1..30 do
+                    let stores = Stores()
+                    let fs = InMemoryFs(SystemClock.clock, false)
+                    let! recorded = underLoad (fun () -> record stores fs concurrent)
 
-                let! (replayed: Result<_, exn>), (segment: ReplaySegment) =
-                    replayed stores concurrent
+                    let! (replayed: Result<_, exn>), (segment: ReplaySegment) =
+                        underLoad (fun () -> replayed stores concurrent)
 
-                match replayed with
-                | Ok values -> Expect.equal values recorded "the same times"
-                | Error e -> failtest $"{e}"
+                    match replayed with
+                    | Ok values -> Expect.equal values recorded "the same times"
+                    | Error e -> failtest $"{e}"
 
-                Expect.isTrue segment.Finished "every call replayed"
-                Expect.isNone segment.Divergence "no divergence"
+                    Expect.isTrue segment.Finished "every call replayed"
+                    Expect.isNone segment.Divergence "no divergence"
             }
 
             testTask "a timeout decides as it did" {
