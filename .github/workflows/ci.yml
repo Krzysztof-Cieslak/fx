@@ -4,7 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `labeled`: adding the `ci:full` label reruns a pull request in the full tier.
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+    inputs:
+      full:
+        description: Run every target (the full tier)
+        type: boolean
+        default: true
+  schedule:
+    # The full tier every night, so main is checked on every target even between merges.
+    - cron: "23 3 * * *"
 
 permissions:
   contents: read
@@ -23,6 +33,38 @@ env:
   ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
 
 jobs:
+  # What this run runs (scripts/ci-plan.ts): the full tier on main, the schedule, manual runs, the
+  # `ci:full` label and platform-sensitive changes; otherwise the fast tier, one AOT target per OS
+  # family and each area's own jobs only when it changes.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+      code: ${{ steps.plan.outputs.code }}
+      aot: ${{ steps.plan.outputs.aot }}
+      aot-run: ${{ steps.plan.outputs.aot-run }}
+      keyring: ${{ steps.plan.outputs.keyring }}
+      keyring-run: ${{ steps.plan.outputs.keyring-run }}
+      bun-musl: ${{ steps.plan.outputs.bun-musl }}
+      bun-musl-run: ${{ steps.plan.outputs.bun-musl-run }}
+      network-all-os: ${{ steps.plan.outputs.network-all-os }}
+      spike: ${{ steps.plan.outputs.spike }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          FULL_INPUT: ${{ inputs.full }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bun scripts/ci-plan.ts
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -36,6 +78,8 @@ jobs:
           bun-version: 1.4.5
       - name: Task graph is current
         run: bun scripts/tasks.ts check
+      - name: The CI plan's rules
+        run: bun test scripts/ci-plan.test.ts
       # The golden declarations are the generator's output (the build job's tests keep them current).
       - name: Generated TypeScript declarations type-check
         run: bun scripts/declarations.ts
@@ -67,6 +111,8 @@ jobs:
 
   analyzers:
     name: Analyzers
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -89,6 +135,8 @@ jobs:
 
   build:
     name: Build and test (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -139,8 +187,10 @@ jobs:
           if-no-files-found: error
       # Installs the pinned Bun (fx.runtime.bun) from GitHub through the planner and the component
       # installer, launches it hardened, and runs the positive controls. Its own step, so a network
-      # failure is told apart from a failing test.
+      # failure is told apart from a failing test. The fast tier runs it on Linux only (two minutes on
+      # Windows), unless the runtime, the installer or the kernel changed.
       - name: Install and launch the pinned Bun (network)
+        if: matrix.os == 'ubuntu-latest' || needs.plan.outputs.network-all-os == 'true'
         env:
           NETWORK_TESTS: "1"
         run: dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-build --configuration Release
@@ -148,19 +198,14 @@ jobs:
   aot:
     # Native AOT publish of the CLI and the JIT-vs-native diff (spec §20), on every target natively:
     # no cross-compilation, so each binary also runs where it was built.
+    # The targets come from the plan (scripts/ci-plan.ts holds the list): all eight in the full tier,
+    # linux-x64, linux-musl-x64, osx-arm64 and win-x64 in the fast tier.
     name: AOT (${{ matrix.rid }})
+    needs: plan
+    if: needs.plan.outputs.aot-run == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { rid: linux-x64, os: ubuntu-24.04 }
-          - { rid: linux-arm64, os: ubuntu-24.04-arm }
-          - { rid: linux-musl-x64, os: ubuntu-24.04, alpine: true }
-          - { rid: linux-musl-arm64, os: ubuntu-24.04-arm, alpine: true }
-          - { rid: osx-arm64, os: macos-26 }
-          - { rid: osx-x64, os: macos-26-intel }
-          - { rid: win-x64, os: windows-2025 }
-          - { rid: win-arm64, os: windows-11-arm }
+      matrix: ${{ fromJSON(needs.plan.outputs.aot) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     defaults:
@@ -273,15 +318,14 @@ jobs:
     # keychain on macOS. Windows needs nothing: the build job's tests and the AOT jobs' scenarios use
     # its Credential Manager. Each job proves, natively, that the probe tells every headless state
     # apart, runs the live tests, and runs the keyring scenarios of the JIT-vs-native diff.
+    # Targets from the plan: every one in the full tier; in the fast tier only when keyring or
+    # credential code changed, and then without the Intel Mac.
     name: Keyring (${{ matrix.rid }})
+    needs: plan
+    if: needs.plan.outputs.keyring-run == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { rid: linux-x64, os: ubuntu-24.04 }
-          - { rid: linux-musl-x64, os: ubuntu-24.04, alpine: true }
-          - { rid: osx-arm64, os: macos-26 }
-          - { rid: osx-x64, os: macos-26-intel }
+      matrix: ${{ fromJSON(needs.plan.outputs.keyring) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     defaults:
@@ -436,13 +480,14 @@ jobs:
     # musl build from GitHub through the component installer, launches it hardened and runs the
     # positive controls, in the Alpine container the musl AOT jobs use. Then fx.interpreter.bun-ts on
     # it: the kernel conformance suite and the interpreter's end-to-end tests.
+    # Architectures from the plan: both in the full tier; x64 in the fast tier when the runtime, the
+    # installer or the kernel changed.
     name: Pinned Bun on musl (${{ matrix.arch }})
+    needs: plan
+    if: needs.plan.outputs.bun-musl-run == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { arch: x64, os: ubuntu-24.04 }
-          - { arch: arm64, os: ubuntu-24.04-arm }
+      matrix: ${{ fromJSON(needs.plan.outputs.bun-musl) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 50
     steps:
@@ -477,8 +522,11 @@ jobs:
       - name: bun-ts interpreter on musl
         run: docker exec alpine dotnet test --project tests/Fx.Ext.InterpreterBunTs.Tests --no-restore --configuration Release
 
+  # The spike is superseded by packages/kernel-bun-ts: only when it changes, and nightly.
   bun-kernel-spike:
     name: Bun kernel spike (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.spike == 'true'
     timeout-minutes: 20
     strategy:
       fail-fast: false
