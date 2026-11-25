@@ -99,7 +99,10 @@ module Clock =
 | `IIds` | `Ids` | new sortable `Id`, random bytes | `SystemIds` (OS CSPRNG); `FakeIds` (seeded); `Record.ids` / `Replay.ids` |
 | `IFsRead` / `IFs` | `FsRead` / `Fs` | read, stat, list / write, create directory, delete, move; module: `readText`, `writeText`, `exists`, `confine` | `LocalFs.read` / `LocalFs.write`; `InMemoryFs` |
 | `IShell` | `Shell` | run a command to completion; spawn a `Proc` (write, close stdin, read chunks, wait, kill) | `LocalShell`; `ScriptedShell` |
-| `ISecrets` | `Secrets` | resolve a `secret:<name>` reference to a redacted `Secret` | `InMemorySecrets` (stores are T121) |
+| `ISecrets` | `Secrets` | resolve a `secret:<name>` reference to a redacted `Secret` | `SecretResolver` over the secret sources (`src/Fx.Auth`, [auth.md](auth.md)); `InMemorySecrets` |
+| `IKeyring` | `Keyring` | probe; read, write, delete a `SecretText` under a `KeyringKey`; list a service's accounts | `LocalKeyring` (`src/Fx.Keyring`: Keychain, Credential Manager, Secret Service; [keychains.md](../spikes/keychains.md)); `InMemoryKeyring` |
+| `IPrivateFiles` | `PrivateFiles` | read, write (atomic), delete named files only this OS user can read | `LocalPrivateFiles` (`src/Fx.Keyring`: `0600` in `0700`, an owner-only ACL and DPAPI on Windows); `InMemoryPrivateFiles` |
+| `IHostVariables` | `HostVariables` | read one of the host's environment variables as a `SecretText` (credentials only) | `SystemVariables`; `InMemoryVariables` |
 | `ITrace` | `Trace` | start and end spans, record events (local only) | `TraceCollector` (in memory), `Trace.none` |
 | `IHttp` | `Http` | send a request; the response body streams (`HttpBody`: read, close); per-request timeouts; no redirects | `SystemHttp`; `InMemoryHttp`; `CassetteHttp` and `CassetteRecorder` (Fx.Models) |
 
@@ -131,7 +134,8 @@ module Clock =
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
 - **HTTP.** A request's own timeouts (`Response`, `Idle`) fail it with `HttpError.TimedOut`; the scope's cancellation is an `OperationCanceledException`. Any status is a response. Response header names are lower case. Interpreters never follow redirects, so a payload goes only where its sender named. Failures name their kind, never an exception's message.
 - **Tracing.** Spec §4.2 names this capability `ITelemetry`; it is `ITrace` because "telemetry" suggests data leaving the machine, and fx has none of that (§18). Traces stay local. Exporting them to a local file or viewer is future work (spec §15, `fx trace`).
-- **Environment variables and process information are not a capability.** Configurable behaviour goes through `IVariants` ([variants.md](variants.md)), which records it. The composition root reads bootstrap values (home directory, `FX_*` variables) once, as values. It is an imperative shell with its own analyzers.json entry, like `src/Fx.Cli/Program.fs`.
+- **Environment variables and process information are not configuration.** Configurable behaviour goes through `IVariants` ([variants.md](variants.md)), which records it. The composition root reads bootstrap values (home directory, `FX_*` variables) once, as values. It is an imperative shell with its own analyzers.json entry, like `src/Fx.Cli/Program.fs`. The one exception is credentials: `IHostVariables` reads a variable that holds a key (`ANTHROPIC_API_KEY` for the `env` auth method, `FX_SECRET_<NAME>` for the `env` secret source) when a request needs it, as a `SecretText` that is never journaled, and only service credentials' code gets it ([auth.md](auth.md)).
+- **Secret storage.** `IKeyring`, `IPrivateFiles` and `IHostVariables` are host-only (spec §18) and exist for service credentials: the credential stores and auth methods get them through `IStoreEnv`, `ISecretSourceEnv` and `IAuthEnv` ([auth.md](auth.md)). `SecretText` is a secret's text: it never prints, and two are equal when their texts are.
 
 ### Capabilities still to come
 
@@ -150,7 +154,7 @@ module Clock =
 | `ILedger` | T301 |
 | `IJudge` | T402 |
 | `ISafeOutputs` | T405 |
-| Secret stores and sources for `ISecrets` (the OS keyrings' capability, `IKeyring`, and its interpreters are in `src/Fx.Keyring`, [`docs/spikes/keychains.md`](../spikes/keychains.md)) | T121 |
+| The `command` secret source, plugin sources | with their first user ([auth.md](auth.md)) |
 
 ## Environments
 

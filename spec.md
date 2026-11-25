@@ -783,11 +783,13 @@ type AuthMethod =
 
 - Built-in methods: `api_key`, `env`, `command`, `oauth_pkce`, `oauth_device`, `sigv4`, `mtls`.
 - Credentials live on the host; interactive flows run on a capable client and are forwarded; the host is the single refresher.
+- As built, the record's functions are effects with expected failures (`CredentialError`): `Authorize` also returns the method's own state for `Complete` (kept on the host), `Complete` is optional (a method without it, like `env`, stores nothing), and `Resolve` gets the provider's settings with the stored credential and may return a renewed one for the host to store. Methods never touch the store. Module spec: `docs/modules/auth.md`.
 
 ### 11.4 Stores and secret sources
 
 - Credential stores: `keyring` (Keychain, **CredMan/DPAPI**, Secret Service), `file`, `ephemeral`, plugins.
 - Secret references (`secret:…`) only; sources: store, env, command, plugins.
+- The host chooses the store once at startup (`credentials.store`: `auto` or a kind; privileged): `auto` takes the OS keyring when it can be used and otherwise the file, saying why; a named store that cannot be used is an error, never a silent fallback. Sources are asked in the order `secrets.sources` gives; the env source reads only the product's `SECRET_<NAME>` variables.
 
 ### 11.5 Rules
 

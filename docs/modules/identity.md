@@ -21,7 +21,7 @@ suite on the built-in, loading it, and sign-in end to end over every local trans
 JIT-vs-native diff.
 
 Two kinds of identity (spec §11.1): **principal identity** (who is connecting: this module) and
-**service credentials** (how the host authenticates to providers: T121). A client signs in once, in
+**service credentials** (how the host authenticates to providers: [auth.md](auth.md)). A client signs in once, in
 `initialize`, through an identity provider an extension contributes; the host then issues a session
 token that resumes the session on reconnects. Every input is attributed to a principal
 (`Attribution.Principal`), and only people answer, grant and revoke permissions.
@@ -108,7 +108,8 @@ type HostIdentity = { Machine: string; Account: OsAccount }
 - **`AuthError`**: `noProof` (nothing shows who the client is), `rejected` (the credential is wrong),
   `expired`, `unavailable`. Expected failures, never exceptions.
 - **`Login`** starts an interactive flow (`AuthFlow`: `Browser`, `DeviceCode`, `Paste`, spec §11.3,
-  shared with T121's auth methods) for device pairing and OAuth (T505, T506); **`Refresh`** renews a
+  shared with the auth methods; how a client runs each, the callback and the polling are in
+  [auth.md](auth.md#logins-and-flows)) for device pairing and OAuth (T505, T506); **`Refresh`** renews a
   credential the client holds. `local-os-user` has neither.
 - **Contribution:** `IdentityProviders.contributionType` (`identity.provider`): code, so native
   extensions only, and **privileged** (spec §11.5, §16.5): admission refuses a project extension that
@@ -249,6 +250,5 @@ that name another account refuse the client whatever else it presented. Its prin
 | Methods to list sessions, sign out and revoke other clients' tokens (`identity/*`) | T129, T507 |
 | Device pairing (`Login` with a one-time code, per-device keys) | T505 |
 | GitHub OAuth and OIDC providers (`Login`, `Refresh`) | T506 |
-| `AuthFlow`'s callback and polling details, shared with auth methods | T121 |
 | Roles beyond the three, sharing, epoch-fenced takeover | T507 |
 | An `ssh-key` provider (spec §11.2's third built-in) | not yet planned |
