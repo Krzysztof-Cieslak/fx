@@ -18,6 +18,7 @@
     "types": []
   },
   "files": [
+    "../../Fx.Grants.Tests/golden/grants.d.ts",
     "../golden/contracts.d.ts",
     "../golden/domain.d.ts",
     "../golden/kernel.d.ts",

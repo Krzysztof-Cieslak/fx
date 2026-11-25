@@ -41,6 +41,7 @@ let all: Scenario list =
             Sessions.scenarios
             ModelsAnthropic.scenarios
             Prompt.scenarios
+            Grants.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
