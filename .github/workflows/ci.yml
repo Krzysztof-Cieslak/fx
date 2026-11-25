@@ -266,6 +266,145 @@ jobs:
           name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
           path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
           if-no-files-found: error
+
+  keyring:
+    # The OS keyrings (src/Fx.Keyring, docs/spikes/keychains.md) where CI has to provide one: a
+    # gnome-keyring under dbus-run-session on Linux (glibc, and musl in Alpine) and a temporary
+    # keychain on macOS. Windows needs nothing: the build job's tests and the AOT jobs' scenarios use
+    # its Credential Manager. Each job proves, natively, that the probe tells every headless state
+    # apart, runs the live tests, and runs the keyring scenarios of the JIT-vs-native diff.
+    name: Keyring (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: linux-musl-x64, os: ubuntu-24.04, alpine: true }
+          - { rid: osx-arm64, os: macos-26 }
+          - { rid: osx-x64, os: macos-26-intel }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      RID: ${{ matrix.rid }}
+      IN: ${{ matrix.alpine && 'docker exec alpine' || '' }}
+      # A throwaway keyring's password, not a secret.
+      KEYRING_TEST_PASSWORD: keyring-ci-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        if: ${{ !matrix.alpine }}
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-aot-${{ matrix.rid }}-
+      - name: Cache native libraries
+        uses: actions/cache@v6
+        with:
+          path: artifacts/native
+          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
+      - name: Start the Alpine container
+        if: ${{ matrix.alpine }}
+        run: >-
+          docker run --detach --name alpine
+          --user "$(id -u):$(id -g)" --env HOME=/tmp
+          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES --env KEYRING_TEST_PASSWORD
+          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
+          "$ALPINE_SDK_IMAGE" sleep infinity
+      - name: Install D-Bus and gnome-keyring (Ubuntu)
+        if: ${{ runner.os == 'Linux' && !matrix.alpine }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dbus dbus-bin gnome-keyring libsecret-tools
+      - name: Install D-Bus and gnome-keyring (Alpine)
+        if: ${{ matrix.alpine }}
+        run: |
+          docker exec --user root alpine apk add --no-cache dbus gnome-keyring
+          docker exec --user root alpine dbus-uuidgen --ensure
+          # dbus-daemon refuses to start for a user that is not in the password database.
+          docker exec --user root alpine sh -c "echo 'ci:x:$(id -u):$(id -g)::/tmp:/bin/sh' >> /etc/passwd"
+      - name: Restore (locked)
+        run: $IN dotnet restore Fx.slnx --locked-mode
+      - name: Build the keyring tests
+        run: $IN dotnet build tests/Fx.Keyring.Tests --no-restore --configuration Release
+      - name: Publish the AOT scenarios
+        run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
+      # The probe never starts a service (no D-Bus activation), so each state below is what the
+      # machine is, told apart by the native binary.
+      - name: Headless detection, natively (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          cat > artifacts/keyring-detect.sh <<'EOF'
+          set -eu
+          bin="artifacts/publish/Fx.Aot.Scenarios/release_$1/Fx.Aot.Scenarios"
+          env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR KEYRING_EXPECT="unavailable: no-session-bus" "$bin" run keyring-detect
+          dbus-run-session -- env KEYRING_EXPECT="unavailable: no-secret-service" "$bin" run keyring-detect
+          dbus-run-session -- sh -c '
+            set -eu
+            gnome-keyring-daemon --start --components=secrets >/dev/null
+            KEYRING_EXPECT="unavailable: no-default-collection" "$0" run keyring-detect
+          ' "$bin"
+          dbus-run-session -- sh -c '
+            set -eu
+            printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            KEYRING_EXPECT=ready "$0" run keyring-detect
+            dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
+              org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null
+            KEYRING_EXPECT=locked "$0" run keyring-detect
+          ' "$bin"
+          EOF
+          $IN sh artifacts/keyring-detect.sh "$RID"
+      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          $IN dbus-run-session -- sh -c '
+            set -eu
+            printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            export KEYRING_TESTS=1
+            dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
+            dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$0" --no-publish --only keyring-
+          ' "$RID"
+      - name: Create a temporary keychain (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          bin="artifacts/publish/Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"
+          echo "The runner's own default keychain: $(security default-keychain -d user)"
+          "$bin" run keyring-detect
+          keychain="$RUNNER_TEMP/keyring-ci.keychain-db"
+          security create-keychain -p "$KEYRING_TEST_PASSWORD" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "$KEYRING_TEST_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$keychain"
+          echo "KEYRING_TEST_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        env:
+          KEYRING_TESTS: "1"
+        run: |
+          dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
+          dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only keyring-
+      - name: Headless detection, natively (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          bin="artifacts/publish/Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"
+          KEYRING_EXPECT=ready "$bin" run keyring-detect
+          security lock-keychain "$KEYRING_TEST_KEYCHAIN"
+          KEYRING_EXPECT=locked "$bin" run keyring-detect
+          security unlock-keychain -p "$KEYRING_TEST_PASSWORD" "$KEYRING_TEST_KEYCHAIN"
+      - name: Delete the temporary keychain (macOS)
+        if: ${{ always() && runner.os == 'macOS' && env.KEYRING_TEST_KEYCHAIN != '' }}
+        run: |
+          security default-keychain -d user -s login.keychain-db || true
+          security delete-keychain "$KEYRING_TEST_KEYCHAIN" || true
+
   bun-musl:
     # fx.runtime.bun on musl (the build job covers glibc, macOS and Windows): installs the pinned Bun's
     # musl build from GitHub through the component installer, launches it hardened and runs the
