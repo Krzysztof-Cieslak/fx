@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Principals (spec §11.1–11.2): principal ids and their form, principals, roles, what the host
+    establishes about a connection, credentials, identity failures, and the identity members of the
+    client protocol's `initialize` (spec §17), with every codec. Clients decode the `initialize`
+    result and show who acted from principal ids (Fable, spec §17), and the grants log reads a
+    principal's kind from its id, so this project references only FSharp.Core and Fx.Contracts;
+    Fx.Identity.Tests checks the compiled assembly. Fx.Sdk exposes it (the IdentityProvider contract
+    and its contribution type are there); session tokens and the `initialize` integration are
+    Fx.Identity.Host. Spec: docs/modules/identity.md.
+  -->
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Principals: principal ids, principals, roles, connection facts, credentials and the identity members of initialize, with their codecs.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Model.fs" />
+    <Compile Include="Codecs.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+  </ItemGroup>
+</Project>
