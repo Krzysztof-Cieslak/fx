@@ -23,7 +23,15 @@ let private root =
 /// The public SDK: Fx.Sdk and the projects it exposes. Widening it widens what every extension may
 /// depend on: change docs/modules/sdk.md with it.
 let sdkSurface =
-    set [ "Fx.Sdk"; "Fx.Prelude"; "Fx.Contracts"; "Fx.Effects"; "FSharp.Core" ]
+    set
+        [
+            "Fx.Sdk"
+            "Fx.Prelude"
+            "Fx.Contracts"
+            "Fx.Effects"
+            "Fx.Variants"
+            "FSharp.Core"
+        ]
 
 /// The SDK of extension processes: the public SDK, the extension protocol's server (Fx.Sdk.Process),
 /// the JSON-RPC engine it runs on and the real interpreters a process's composition root uses.
@@ -136,7 +144,7 @@ let tests =
 
                 Expect.equal
                     (projects |> List.map (fun p -> Path.GetFileNameWithoutExtension p) |> List.sort)
-                    [ "Fx.Contracts"; "Fx.Effects"; "Fx.Prelude" ]
+                    [ "Fx.Contracts"; "Fx.Effects"; "Fx.Prelude"; "Fx.Variants" ]
                     "project references"
 
                 Expect.equal packages [] "package references"

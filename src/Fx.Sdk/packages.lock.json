@@ -31,6 +31,14 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
         }
+      },
+      "fx.variants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
       }
     }
   }
