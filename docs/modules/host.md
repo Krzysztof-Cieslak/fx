@@ -1,10 +1,11 @@
-# Module spec: the host (`src/Fx.Host`, `fx run`, `fx serve`, `fx trust`, `fx variants`, `fx auth`)
+# Module spec: the host (`src/Fx.Host`, `fx run`, `fx serve`, `fx trust`, `fx variants`, `fx auth`, `fx replay`)
 
 Spec: §3 (the host, embedded mode), §5 (sessions persist; reconnect; crash recovery), §11 (identity;
 service credentials, §11.3–11.5), §13 (grants), §15 (variants), §16.1 (bootstrap order), §16.4–16.5
 (built-ins, trust), §17 (the client protocol), §18 (trust before execution; credentials on the host),
-§19.5 (`fx run -p … --json`). Tasks: T129a (the composition, embedded mode, `fx run`, `fx auth`),
-T129b (the client protocol, `fx serve`).
+§19.5 (`fx run -p … --json`), §15 (recorded sessions, `fx replay`). Tasks: T129a (the composition,
+embedded mode, `fx run`, `fx auth`), T129b (the client protocol, `fx serve`), T131 (recording,
+`fx replay`).
 Code: [`src/Fx.Host`](../../src/Fx.Host) (the composition root: pure apart from the capabilities it is
 handed; `Live.fs` builds the live interpreters), [`src/Fx.Cli`](../../src/Fx.Cli) (`Cli.parse` is pure,
 `Program` is the entry point).
@@ -29,7 +30,7 @@ else references the live interpreters and the built-in extensions together.
 | Activity lines and the result card (`Activity`) | `Activity.fs` |
 | Signing in, creating and prompting sessions (`HostSessions`) | `HostSessions.fs` |
 | `fx run -p` (`Headless`) | `Headless.fs` |
-| `fx trust`, `fx variants`, `fx auth` (`Commands`) | `Commands.fs` |
+| `fx trust`, `fx variants`, `fx auth`, `fx replay` (`Commands`) | `Commands.fs` |
 | The client protocol's messages (`ClientProtocol`) | `ClientProtocol.fs` |
 | Its handlers and serving a connection (`ClientServer`) | `ClientServer.fs` |
 | The local listener (`Listening`, `Serve`) and clients (`HostClient`) | `Clients.fs` |
@@ -108,9 +109,10 @@ In this order; any expected failure is an `Error` with every line, and what star
 11. **Models**: `ModelAccess` from the contributed wires and providers, the egress hooks, the
     adapters' replay scopes (`Anthropic.withReplay`, `OpenAI.withReplay`) and
     `AuthService.modelAuth`.
-12. **Sessions**: CodeAct (`CodeAct.create`: profiles loaded from the blob store, hands per turn, the
-    catalog, the step journal `steps/<session>` on the same store, the blob store for cells' values)
-    behind `SessionHost` (`Questions.kinds`, with crash recovery's `decision.outcomeUnknown`;
+12. **Sessions**: CodeAct, recorded (`Recording.codeact`, [replay.md](replay.md#recording): every
+    capability a turn and its hands reach is journaled in `journal/<session>` unless `session.record`
+    is off; profiles loaded from the blob store, hands per turn, the catalog, the step journal
+    `steps/<session>` on the same store, the blob store for cells' values) behind `SessionHost` (`Questions.kinds`, with crash recovery's `decision.outcomeUnknown`;
     `sessions.*` slots), profiles bound with `ProfileBinder.ofVariants` over the host's layers (with the
     extensions' versions and the lockfile's hash); then every indexed session's actor starts, so
     recovery runs (spec §5; [codeact.md](codeact.md#crash-recovery-spec-5-65-121-191)): a turn that
@@ -136,7 +138,10 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   hands get the grants guard (`GrantGuard.attach` with `GrantSettings.ofVariants` of the turn's
   profile, [codeact.md](codeact.md#grants-spec-13-18-t127b)): commands, writes outside the workspace
   or to protected paths, reads outside it and network bindings ask the grants log; its slots
-  (`codeact.grants.*`) are in `HostSlots.core`. Every process of a session (commands, the kernel) runs
+  (`codeact.grants.*`) are in `HostSlots.core`. The hands are recorded (`Wraps`: their clock, files,
+  envd's file operations and the sandboxed shell; terminals refused), the guard with its decisions, and
+  each kernel launch with what it starts from (replay.md); `session.record` is in `HostSlots.core`
+  (`RecordingSlots.all`). Every process of a session (commands, the kernel) runs
   in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on Linux, Seatbelt on macOS,
   none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`).
 - The workspace's **environment**: the spec named `default` in host config (or trusted project
@@ -220,6 +225,19 @@ is later). The entry point's `FlowRunner` runs a login's flow at the terminal: a
 does not echo (or a line of standard input when it is redirected), a device code to enter elsewhere;
 browser logins are not supported on the command line yet. Output never holds a secret.
 
+## `fx replay`
+
+```
+fx replay <session> [--json] [--stall <seconds>]
+```
+
+`Commands.replay` replays a session the data directory recorded, exactly ([replay.md](replay.md)): under
+the data directory's lock (as `fx auth`: beside a running host it fails), on the host's stores (only
+read), with the built-ins' interpreter providers and runtimes (`Setup.interpreter`), the host's kernel
+options (`Setup.kernelOptions`) and the model catalog. No model, kernel, file or clock is touched. The
+report goes to standard output (`--json`: one object); exit code 0 when replay matched the recording, 1
+with the first difference (or when the session was not recorded), 2 for bad arguments.
+
 ## Embedded mode and `fx run -p`
 
 ```
@@ -261,10 +279,10 @@ or abandoned, 2 bad arguments.
 `host-embedded` (on the JIT and natively: `fx auth` login, list and status on the file store, a host
 started with its lock, built-ins, SQLite stores and service credentials, the stored key resolving,
 `fx auth` refused beside it, sign-in, a headless run in an embedded environment, a restart that
-continues the session), `host-protocol-codecs` (the protocol's JSON, least roles) and `host-protocol`
+continues the session, `fx replay` of it), `host-protocol-codecs` (the protocol's JSON, least roles) and `host-protocol`
 (a client in process and over loopback with the token file: sign-in, a session created, prompted and
-followed, the typed errors, environments, a wrong token). The diff also runs `fx variants list` and
-`fx variants schema`. CI smoke-tests the
+followed, the typed errors, environments, a wrong token). The diff also runs `fx variants list`,
+`fx variants schema` and `fx replay`'s usage error. CI smoke-tests the
 published binary: `fx variants list` and `fx run -p` in an empty project, which stops at the first
 install's approval (no terminal).
 
@@ -287,7 +305,8 @@ install's approval (no terminal).
   host stopped during a model call, abandoned at the next start; a cell the host stopped during, a
   decision at the next start that `fx run` cannot make without a terminal, then a person's `failed`
   and the turn going on; a cell's command that asks the grants log and runs once a person allows it,
-  and one denied once with nobody at a terminal (the model reads the denial).
+  and one denied once with nobody at a terminal (the model reads the denial); `fx run -p` in two host
+  processes recorded and `fx replay` matching it, and nothing journaled with `session.record` off.
 - `GrantPromptTests`: what the terminal shows of a grant request, and replies as answers.
 
 ## Left to later tasks

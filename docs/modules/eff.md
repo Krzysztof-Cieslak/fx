@@ -55,6 +55,7 @@ type IScopeWith<'R> = inherit IScope; abstract WithScope: Scope -> 'R
   - `all` (fail-fast), `both`, `race` (the first to finish with a value or an exception wins) and `timeout` cancel their child scope once the outcome is decided.
   - They complete only after every child has finished. An effect that ignores cancellation therefore delays its parent, so honour the token.
   - Children start inline, on the calling thread, and run up to their first incomplete await. So a fake clock sees their delays in a fixed order. CPU-bound work does not run in parallel.
+  - Each child runs in a **flow** of its own (`Flow.child`: its parent's path and its index, `0`, `1.2`, …; an `AsyncLocal` that follows its awaits). Flows are a function of the program's structure, so record and replay key journaled calls by them (replay.md): two children that make the same call get their own answers, whichever resumes first. `Flow.root` starts a unit of work (a turn) at the root. Read `Flow.path` only to key what is recorded; never branch on it.
 - `Eff.bracket acquire release use` always runs `release`, shielded from cancellation. `Shell.withProcess` uses it to kill processes.
 
 ## Combinators
@@ -196,9 +197,9 @@ type SessionEnv =
 of calls); `ReplayDivergedException` is what replay throws. Recording and replay of sessions are
 `src/Fx.Replay` (T131, [replay.md](replay.md)):
 
-- **Concurrency.** Entries are kept per lane (a capability instance) and matched by operation and input
-  digest in start order, so concurrent calls replay whatever their order; calls whose completion depended
-  on time complete in the recorded order.
+- **Concurrency.** Entries are kept per lane (a capability instance) and matched by operation, input
+  digest and flow in start order, so concurrent calls replay whatever their order, each child getting
+  what it got; calls whose completion depended on time complete in the recorded order.
 - **Delay outcomes.** A delay's outcome is journaled (elapsed or cancelled); an elapsed one completes once
   everything recorded before it happened again, a cancelled one waits for its cancellation.
 - **Process output** is a sequence of `Read` results, journaled like any other output; writes are
