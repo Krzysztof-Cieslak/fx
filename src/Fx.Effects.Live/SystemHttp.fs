@@ -43,15 +43,15 @@ module SystemHttp =
         match e with
         | :? HttpRequestException as e ->
             match e.HttpRequestError with
-            | HttpRequestError.NameResolutionError -> ConnectFailed "name resolution failed"
-            | HttpRequestError.ConnectionError -> ConnectFailed "the connection failed"
-            | HttpRequestError.SecureConnectionError -> ConnectFailed "TLS failed"
-            | HttpRequestError.ProxyTunnelError -> ConnectFailed "the proxy tunnel failed"
-            | HttpRequestError.ResponseEnded -> Reset "the response ended early"
-            | HttpRequestError.InvalidResponse -> Reset "the response was invalid"
-            | other -> Reset $"the request failed ({other})"
-        | :? IOException -> Reset "the connection broke off"
-        | e -> Reset $"the request failed ({e.GetType().Name})"
+            | HttpRequestError.NameResolutionError -> HttpError.ConnectFailed "name resolution failed"
+            | HttpRequestError.ConnectionError -> HttpError.ConnectFailed "the connection failed"
+            | HttpRequestError.SecureConnectionError -> HttpError.ConnectFailed "TLS failed"
+            | HttpRequestError.ProxyTunnelError -> HttpError.ConnectFailed "the proxy tunnel failed"
+            | HttpRequestError.ResponseEnded -> HttpError.Reset "the response ended early"
+            | HttpRequestError.InvalidResponse -> HttpError.Reset "the response was invalid"
+            | other -> HttpError.Reset $"the request failed ({other})"
+        | :? IOException -> HttpError.Reset "the connection broke off"
+        | e -> HttpError.Reset $"the request failed ({e.GetType().Name})"
 
     /// A token source cancelled with the caller or after the limit.
     let private limited (cancellation: CancellationToken) (limit: TimeSpan option) =
@@ -115,7 +115,7 @@ module SystemHttp =
                         return raise e
                     | :? OperationCanceledException ->
                         close ()
-                        return Error(TimedOut HttpPhase.Body)
+                        return Error(HttpError.TimedOut HttpPhase.Body)
                     | :? ObjectDisposedException -> return Ok None
                     | e ->
                         close ()
@@ -145,8 +145,8 @@ module SystemHttp =
                         Ok(message request uri)
                     with
                     | :? FormatException
-                    | :? ArgumentException -> Error(InvalidRequest "the method is not a valid HTTP method")
-                | None -> Error(InvalidRequest "the URL is not an absolute http or https URL")
+                    | :? ArgumentException -> Error(HttpError.InvalidRequest "the method is not a valid HTTP method")
+                | None -> Error(HttpError.InvalidRequest "the URL is not an absolute http or https URL")
 
             match built with
             | Error e -> return Error e
@@ -183,7 +183,7 @@ module SystemHttp =
                         return raise e
                 with
                 | :? OperationCanceledException as e when cancellation.IsCancellationRequested -> return raise e
-                | :? OperationCanceledException -> return Error(TimedOut HttpPhase.Response)
+                | :? OperationCanceledException -> return Error(HttpError.TimedOut HttpPhase.Response)
                 | :? HttpRequestException as e -> return Error(failure e)
                 | :? IOException as e -> return Error(failure e)
         }

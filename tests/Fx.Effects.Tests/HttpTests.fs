@@ -29,7 +29,7 @@ let private inMemory (routes: HttpConformance.Routes) : HttpConformance.Server =
             realClock,
             fun request ->
                 if request.Url = unreachable then
-                    Some(Error(ConnectFailed "nothing listens"))
+                    Some(Error(HttpError.ConnectFailed "nothing listens"))
                 else
                     let uri = Uri request.Url
                     Some(Ok(routes { request with Url = uri.PathAndQuery }))
@@ -63,7 +63,13 @@ let tests =
                     InMemoryHttp(
                         realClock,
                         fun _ ->
-                            Some(Ok(HttpReply.create 200 [ Chunk(utf8.GetBytes "abc"); Chunk(utf8.GetBytes "def") ]))
+                            Some(
+                                Ok(
+                                    HttpReply.create
+                                        200
+                                        [ BodyStep.Chunk(utf8.GetBytes "abc"); BodyStep.Chunk(utf8.GetBytes "def") ]
+                                )
+                            )
                     )
 
                 let response =
