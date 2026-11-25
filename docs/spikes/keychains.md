@@ -118,6 +118,14 @@ KWallet (5.97 and later), KeePassXC and others. Three ways to reach it from a Na
   Keyring operations are rare (startup, sign-in), and nothing has to be reconnected after the service
   restarts. A read took 4 ms with `plain` and 15 ms with the DH session on a 2-core VM (two 1024-bit
   modular exponentiations per side), while another build ran.
+- **The first call on a connection is a greeting** (`Get` of the service's `Collections`, its value
+  ignored). gnome-keyring creates its record of a caller from an idle callback its message filter
+  queues, and can dispatch a new connection's first call before it (GNOME/gnome-keyring#190, #206,
+  Ubuntu LP#2162595): a first `OpenSession` then aborts the daemon (`g_variant_new` with NULL output;
+  clients see `NoReply`, and the daemon D-Bus activates next has its login keyring locked), and a first
+  `ReadAlias` answers `/`. Eight concurrent writes in a loop hit it about once per thousand connections
+  on gnome-keyring 46.1 (the conformance suite's concurrent case did on CI); with the greeting, none in
+  12,000, and no wrong `ReadAlias` either.
 - **Calls and signals:** a call waits for the reply with its serial; signals that arrive meanwhile are
   kept for `WaitForSignal`. The bus delivers signals only for match rules, so a prompt adds its rule
   (`AddMatch`) *before* calling `Prompt`.
@@ -143,7 +151,7 @@ KWallet (5.97 and later), KeePassXC and others. Three ways to reach it from a Na
   `Prompts.Allow` it calls `Prompt("")` and waits for `Completed`; a dismissed prompt is `Dismissed`.
   gnome-keyring without a display does exactly that: its `gcr-prompter` cannot open a display, and the
   prompt completes as dismissed.
-- **The probe** connects, reads the default alias and the collection's `Locked` property. It never
+- **The probe** connects, greets, reads the default alias and the collection's `Locked` property. It never
   creates anything and, with `AutoStart = false`, sends every call with `NO_AUTO_START`, so it never
   starts a service either. Operations use activation (`AutoStart = true`), as libsecret does.
 
