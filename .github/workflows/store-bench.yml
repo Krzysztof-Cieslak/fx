@@ -1,18 +1,13 @@
 name: Store benchmark
 
 # Throughput and latency of the event and blob stores (tools/Fx.Store.Bench, docs/modules/store.md
-# "Performance") on idle runners of each OS. Runs when the stores change, or by hand. Results go to
-# the job summary; nothing fails on numbers.
+# "Performance") on idle runners of each OS. Results go to the job summary; nothing fails on numbers.
+# Never on pull requests: weekly, or by hand (`gh workflow run "Store benchmark" --ref <branch>` after
+# changing the stores).
 on:
-  pull_request:
-    paths:
-      - src/Fx.Sqlite/**
-      - src/Fx.Store/**
-      - src/Fx.Store.Live/**
-      - tools/Fx.Store.Bench/**
-      - native/sqlite/**
-      - .github/workflows/store-bench.yml
   workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 0"
 
 permissions:
   contents: read

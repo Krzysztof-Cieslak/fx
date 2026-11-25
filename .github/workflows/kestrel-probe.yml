@@ -1,13 +1,12 @@
 name: Kestrel probe
 
 # Binary size and startup of Native AOT variants with and without Kestrel, on every target
-# (docs/spikes/kestrel.md). Runs when the probe changes, or by hand.
+# (docs/spikes/kestrel.md). Measurements on eight runners, so never on pull requests: weekly, or by
+# hand (`gh workflow run "Kestrel probe" --ref <branch>` after changing the probe).
 on:
-  pull_request:
-    paths:
-      - docs/spikes/kestrel-probe/**
-      - .github/workflows/kestrel-probe.yml
   workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 0"
 
 permissions:
   contents: read
@@ -21,7 +20,7 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
-  # Same image as the musl AOT jobs in ci.yml; keep them in step.
+  # Same image as the musl targets in ci.yml; keep them in step.
   ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
 
 jobs:
