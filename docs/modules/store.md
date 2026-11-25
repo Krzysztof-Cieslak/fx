@@ -317,7 +317,7 @@ What this decides:
 | What | Task |
 |---|---|
 | Blob garbage collection: references from events, sessions and values; a grace period from `created` | with T201 (values) or T131 |
-| Journaling capability calls by blob hash, `ReplayEnv` | T131 |
+| Journaling capability calls by blob hash, `ReplayEnv` | done: T131, [replay.md](replay.md) |
 | `MaxBatch` and page sizes as variant slots (durability and the subscribe gap are the host's: [host.md](host.md)) | when tuned |
 | Following another process's commits (`PRAGMA data_version`), if a deployment ever shares a store | when needed |
 | `fullfsync` on macOS as a durability level | when measured on real machines |

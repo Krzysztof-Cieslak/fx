@@ -457,7 +457,7 @@ fake clock), on all eight targets.
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
 | Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | when the sandbox (T113) is not there to catch them |
 | Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
-| Exact replay of model streams and variant reads from a journal | T131 |
+| Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | Compaction on overflow (`Collapsed`), steering and queueing UX | T206 |
 | Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents, values and handles) | T201, T213 and their tasks |

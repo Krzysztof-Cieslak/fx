@@ -147,7 +147,7 @@ module Clock =
 | `IGrants` | T123 |
 | `IContext` (the prompt render itself is pure: [prompt.md](prompt.md)) | T201 |
 | `ISnapshots`: per-step snapshots, retention, two-phase undo (the capability and `GitSnapshots` are in `src/Fx.Envd`, [envd.md](envd.md)) | T205 |
-| `ITerminal`: a deterministic fake and journaling (the shape and the local interpreter are in `src/Fx.Pty`, the conformance suite in `tests/Fx.Pty.Tests`, the proxy in `src/Fx.Envd`) | T131 |
+| `ITerminal`: a deterministic fake and journaling (the shape and the local interpreter are in `src/Fx.Pty`, the conformance suite in `tests/Fx.Pty.Tests`, the proxy in `src/Fx.Envd`) | when sessions use terminals ([replay.md](replay.md)) |
 | `IRepo` | T202 |
 | `IRuns` | T212 |
 | `IAgents` | T213 |
@@ -192,18 +192,20 @@ type SessionEnv =
 
 ## Record and replay
 
-`Fx.Effects.Replay` proves the shape that T131 builds on, for `Clock` and `Ids`:
+`Fx.Effects.Replay` proved the shape for `Clock` and `Ids` (`Record.clock`, `Replay.clock`, one sequence
+of calls); `ReplayDivergedException` is what replay throws. Recording and replay of sessions are
+`src/Fx.Replay` (T131, [replay.md](replay.md)):
 
-- `Record.clock journal clock` wraps a real interpreter and journals every call with its inputs and output.
-- `Replay.clock cursor` answers from the journal without touching the world. It throws `ReplayDivergedException` when the program asks something else, or the same things in another order.
-- A replayed run returns exactly the recorded result, and `ReplayTests` checks this.
+- **Concurrency.** Entries are kept per lane (a capability instance) and matched by operation and input
+  digest in start order, so concurrent calls replay whatever their order; calls whose completion depended
+  on time complete in the recorded order.
+- **Delay outcomes.** A delay's outcome is journaled (elapsed or cancelled); an elapsed one completes once
+  everything recorded before it happened again, a cancelled one waits for its cancellation.
+- **Process output** is a sequence of `Read` results, journaled like any other output; writes are
+  numbered when they start.
+- **Secrets.** References and outcomes, never values; processes' variables by name only.
 
-What T131 has to add:
-
-- **Concurrency.** The journal here is one sequence, so it replays only sequential effects. Concurrent children interleave their calls in a nondeterministic order, so key entries by scope or span instead.
-- **Delay outcomes.** Replayed delays complete at once, so a race between a delay and other work (`timeout`) can be decided differently. Journal each delay's outcome, not only its start.
-- **Process output.** Streaming output is a sequence of `Read` results, and is journaled like any other output.
-- **Secrets.** Journal references and outcomes, never values.
+Every capability is recordable before a session uses it: a `Record.x`/`Replay.x` pair in `src/Fx.Replay`.
 
 ## Performance
 

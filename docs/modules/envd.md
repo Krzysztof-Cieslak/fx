@@ -215,8 +215,8 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
 - **T113** (done, [sandbox.md](sandbox.md)): sandbox drivers wrap the processes the host starts for
   agents; with bubblewrap they die with envd. Resolving the file operations' paths beneath their roots
   (no symbolic links; the bindings check them before each call) is follow-up work (T113b).
-- **T131**: journaling capability calls (process output is journaled as `Read` results); a
-  deterministic `ScriptedTerminal` fake.
+- **T131** (done, [replay.md](replay.md)): capability calls journaled (process output as `Read`
+  results). Recording terminals, and a deterministic `ScriptedTerminal` fake, come when sessions use them.
 - **T202**: ripgrep semantics for search; **T204**: anchored edits on `FsOps.ApplyPatch`; **T205**:
   per-step snapshots, retention and two-phase undo.
 - Signals other than kill and Ctrl+C (typed into a terminal), and starting pipe processes with default

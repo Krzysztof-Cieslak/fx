@@ -666,7 +666,7 @@ prompt's placement) on all eight targets.
 | Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
 | Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
-| Journaling streams for exact replay | T131 |
+| Journaling streams for exact replay | done: T131, [replay.md](replay.md) (`Record.llm`: each pull) |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |
 | Decision and embedding wires (`DecisionWire`, `EmbedWire`) | T401 and later |
 | Runtime codecs of the canonical model in `@fx/sdk` (the types are generated now), for TypeScript extensions that call models through `ILlm` or wires written in TypeScript | T109b, or the first TypeScript wire |
