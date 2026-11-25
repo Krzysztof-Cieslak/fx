@@ -317,7 +317,8 @@ jobs:
     # gnome-keyring under dbus-run-session on Linux (glibc, and musl in Alpine) and a temporary
     # keychain on macOS. Windows needs nothing: the build job's tests and the AOT jobs' scenarios use
     # its Credential Manager. Each job proves, natively, that the probe tells every headless state
-    # apart, runs the live tests, and runs the keyring scenarios of the JIT-vs-native diff.
+    # apart, runs the live tests (the keyring's, and the credential-store conformance suite on the
+    # keyring store, docs/modules/auth.md), and runs the keyring scenarios of the JIT-vs-native diff.
     # Targets from the plan: every one in the full tier; in the fast tier only when keyring or
     # credential code changed, and then without the Intel Mac.
     name: Keyring (${{ matrix.rid }})
@@ -377,7 +378,9 @@ jobs:
       - name: Restore (locked)
         run: $IN dotnet restore Fx.slnx --locked-mode
       - name: Build the keyring tests
-        run: $IN dotnet build tests/Fx.Keyring.Tests --no-restore --configuration Release
+        run: |
+          $IN dotnet build tests/Fx.Keyring.Tests --no-restore --configuration Release
+          $IN dotnet build tests/Fx.Auth.Tests --no-restore --configuration Release
       - name: Publish the AOT scenarios
         run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
       # gnome-keyring-daemon returns before it owns org.freedesktop.secrets, so every script waits
@@ -430,6 +433,7 @@ jobs:
             sh artifacts/keyring-wait.sh
             export KEYRING_TESTS=1
             dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
+            dotnet test --project tests/Fx.Auth.Tests --no-build --configuration Release
             dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$0" --no-publish --only keyring-
           ' "$1"
           EOF
@@ -460,6 +464,7 @@ jobs:
           KEYRING_TESTS: "1"
         run: |
           dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
+          dotnet test --project tests/Fx.Auth.Tests --no-build --configuration Release
           dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only keyring-
       - name: Headless detection, natively (macOS)
         if: ${{ runner.os == 'macOS' }}

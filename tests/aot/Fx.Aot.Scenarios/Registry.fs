@@ -46,6 +46,7 @@ let all: Scenario list =
             Environments.scenarios
             Identity.scenarios
             Keyring.scenarios
+            Auth.scenarios
             CodeAct.scenarios
         ]
 
