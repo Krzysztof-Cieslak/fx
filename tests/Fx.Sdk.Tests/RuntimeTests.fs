@@ -318,9 +318,9 @@ let tests =
                     (Exec(
                         "/opt/tool/2.0.0/bin/tool",
                         [
-                            "--config=" + Path.Combine(owned.Config, "tool.conf")
+                            "--config=" + owned.Config + "/tool.conf"
                             "--quiet"
-                            "--project-config=" + Path.Combine(owned.Config, "empty.json")
+                            "--project-config=" + owned.Config + "/empty.json"
                             "/srv/main.js"
                             "--port=1"
                         ]
@@ -336,11 +336,7 @@ let tests =
                 | Exec(_, args) ->
                     Expect.equal
                         args
-                        [
-                            "--config=" + Path.Combine(owned.Config, "tool.conf")
-                            "--quiet"
-                            "/srv/main.js"
-                        ]
+                        [ "--config=" + owned.Config + "/tool.conf"; "--quiet"; "/srv/main.js" ]
                         "no overrides once trusted"
                 | other -> failtest (string other)
 
@@ -486,6 +482,15 @@ let tests =
             test "prepare creates the owned directories and rewrites the runtime's files" {
                 let files = InMemoryFs((FakeClock.Create()).Clock, false)
                 let env = { Files = files; Scope = Scope.root }
+
+                // A root in this machine's form: the in-memory filesystem uses its path rules.
+                let owned =
+                    OwnedDirs.under (
+                        if System.OperatingSystem.IsWindows() then
+                            @"C:\owned\s1"
+                        else
+                            "/owned/s1"
+                    )
 
                 let run (effect: Eff<FsEnv, 'T>) =
                     (Eff.run env effect).WaitAsync(System.TimeSpan.FromSeconds 10.0).GetAwaiter().GetResult()
