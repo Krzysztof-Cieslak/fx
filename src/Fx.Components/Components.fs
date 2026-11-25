@@ -8,22 +8,6 @@ open Fx.Machines
 open Fx.Machines.Host
 open Fx.Sdk
 
-/// An installed component, ready to use.
-type InstalledComponent =
-    {
-        Id: string
-        Version: SemVer
-        /// The install directory (absolute).
-        Dir: string
-        /// Its commands, by name, as absolute paths.
-        Bin: (string * string) list
-        /// Its environment variables, with `${dir}` expanded.
-        Env: (string * string) list
-    }
-
-    override this.ToString() =
-        $"{this.Id} {this.Version} in {this.Dir}"
-
 /// Why components could not be made available.
 type ComponentError =
     /// The lockfile does not have what is required (plan again).

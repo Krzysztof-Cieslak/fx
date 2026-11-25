@@ -363,7 +363,9 @@ module ExtensionHost =
                     match root with
                     | None -> return Error "a process extension needs its package directory"
                     | Some root ->
-                        match! ProcessRuntime.start settings.Process manifest root hostEnv with
+                        match!
+                            ProcessRuntime.start settings.Process settings.Trust.ProjectTrusted manifest root hostEnv
+                        with
                         | Error reason -> return Error reason
                         | Ok running ->
                             let stopProcess = ProcessRuntime.stop settings.Process running

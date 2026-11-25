@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Versions.fs" />
     <Compile Include="ExtensionEnv.fs" />
+    <Compile Include="InjectionVectors.fs" />
     <Compile Include="Manifest.fs" />
     <Compile Include="Remote.fs" />
     <Compile Include="Contribution.fs" />
@@ -18,6 +19,7 @@
     <Compile Include="Extension.fs" />
     <Compile Include="Semver.fs" />
     <Compile Include="Component.fs" />
+    <Compile Include="Runtime.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />

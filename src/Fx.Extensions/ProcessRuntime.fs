@@ -65,10 +65,12 @@ let private withStderr (running: unit -> string) (message: string) =
     | "" -> message
     | text -> message + "; its standard error ends with: " + text
 
-/// Starts the process a manifest describes and connects to it. The connection lives in the scope of
-/// this effect: cancelling it closes the connection.
+/// Starts the process a manifest describes and connects to it; its launch's untrusted overrides
+/// are added unless the project is trusted. The connection lives in the scope of this effect:
+/// cancelling it closes the connection.
 let start<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
     (settings: ProcessSettings)
+    (projectTrusted: bool)
     (manifest: Manifest)
     (root: string)
     : Eff<'R, Result<Running, string>> =
@@ -82,6 +84,7 @@ let start<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
                     Workspace = settings.Workspace
                     HostEnvironment = settings.HostEnvironment
                     IsWindows = settings.IsWindows
+                    ProjectTrusted = projectTrusted
                 }
 
             match Launch.procSpec context launch with

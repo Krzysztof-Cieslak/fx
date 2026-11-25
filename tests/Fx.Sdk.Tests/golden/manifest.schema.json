@@ -180,13 +180,20 @@
             "workspace"
           ],
           "default": "owned"
+        },
+        "untrustedOverrides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Runtime flags (--name=value) added before the program while the project is not trusted."
         }
       },
       "required": [
         "exe"
       ],
       "additionalProperties": false,
-      "description": "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+      "description": "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
     },
     "MethodDecl": {
       "type": "object",

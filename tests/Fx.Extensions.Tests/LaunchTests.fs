@@ -24,6 +24,7 @@ let private context (windows: bool) : LaunchContext =
                 "Path", "C:\\bin"
             ]
         IsWindows = windows
+        ProjectTrusted = false
     }
 
 let private spec: LaunchSpec =
@@ -34,6 +35,7 @@ let private spec: LaunchSpec =
         EnvSet = [ "HOME", "${root}/home"; "MODE", "fast" ]
         EnvDeny = [ "SECRET_*" ]
         Cwd = LaunchCwd.Owned
+        UntrustedOverrides = [ "--no-project-config=${root}/empty" ]
     }
 
 [<Tests>]
@@ -41,12 +43,47 @@ let tests =
     testList
         "Launch"
         [
-            test "templates expand in the program and arguments" {
-                match Launch.procSpec (context false) spec with
+            test "templates expand in the program and arguments; overrides come while the project is untrusted" {
+                match
+                    Launch.procSpec
+                        { context false with
+                            ProjectTrusted = true
+                        }
+                        spec
+                with
                 | Ok proc ->
                     Expect.equal proc.Program (Exec(root + "/bin/tool", [ "--root"; root ])) "program"
-
                     Expect.equal proc.Cwd (Some root) "owned cwd"
+                | Error reason -> failtest reason
+
+                match
+                    Launch.procSpec
+                        (context false)
+                        { spec with
+                            Args = [ "--quiet"; "main.js"; "--stdio" ]
+                        }
+                with
+                | Ok proc ->
+                    Expect.equal
+                        proc.Program
+                        (Exec(
+                            root + "/bin/tool",
+                            [ "--quiet"; "--no-project-config=" + root + "/empty"; "main.js"; "--stdio" ]
+                        ))
+                        "untrusted: before the program"
+                | Error reason -> failtest reason
+
+                match
+                    Launch.procSpec
+                        { context false with
+                            ProjectTrusted = true
+                        }
+                        { spec with
+                            Args = [ "--quiet"; "main.js" ]
+                        }
+                with
+                | Ok proc ->
+                    Expect.equal proc.Program (Exec(root + "/bin/tool", [ "--quiet"; "main.js" ])) "trusted: none"
                 | Error reason -> failtest reason
 
                 match Launch.procSpec (context true) spec with

@@ -97,6 +97,23 @@ module TargetTriple =
     let exeSuffix (target: TargetTriple) : string =
         if target.Os = Os.Windows then ".exe" else ""
 
+    /// The target of a .NET runtime identifier (`linux-x64`, `linux-musl-arm64`, `osx-arm64`,
+    /// `win-x64`, …). A composition root passes its own (`RuntimeInformation.RuntimeIdentifier`): the
+    /// binary was built for the machine it runs on, C library included.
+    let ofRid (rid: string) : TargetTriple option =
+        let arch (text: string) =
+            match text with
+            | "x64" -> Some Arch.X64
+            | "arm64" -> Some Arch.Arm64
+            | _ -> None
+
+        match rid.Split '-' |> List.ofArray with
+        | [ "linux"; a ] -> arch a |> Option.map (fun a -> create Os.Linux a (Some Libc.Glibc))
+        | [ "linux"; "musl"; a ] -> arch a |> Option.map (fun a -> create Os.Linux a (Some Libc.Musl))
+        | [ "osx"; a ] -> arch a |> Option.map (fun a -> create Os.MacOs a None)
+        | [ "win"; a ] -> arch a |> Option.map (fun a -> create Os.Windows a None)
+        | _ -> None
+
     let codec: Codec<TargetTriple> =
         Codec.string
         |> Codec.tryMap parse string
@@ -359,6 +376,23 @@ type Component =
     }
 
     override this.ToString() = $"{this.Id} {this.Version}"
+
+/// An installed component, ready to use: what the installer (`IComponents`) returns, and what a
+/// runtime is launched from (`RuntimeSpec.launch`).
+type InstalledComponent =
+    {
+        Id: string
+        Version: SemVer
+        /// The install directory (absolute).
+        Dir: string
+        /// Its commands, by name, as absolute paths.
+        Bin: (string * string) list
+        /// Its environment variables, with `${dir}` expanded.
+        Env: (string * string) list
+    }
+
+    override this.ToString() =
+        $"{this.Id} {this.Version} in {this.Dir}"
 
 /// A case of a tagged union whose payload is a record codec, with the payload's type erased.
 [<NoEquality; NoComparison>]
