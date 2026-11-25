@@ -412,4 +412,49 @@ let tests =
                 | Decision.Deny _ -> ()
                 | other -> failtest ("an invalid resource denies: " + string other)
             }
+
+            test "a model-egress gate backed by grants: a provider sees content only once a person allowed it" {
+                let h = harness ()
+                let exposure = ActionName.create "provider.expose"
+
+                let gate: Contributed<Gate<Fx.Models.ChatRequest>> =
+                    {
+                        Extension = "fx.host"
+                        Type = ModelEgress.gates.Name
+                        Id = "first-exposure"
+                        Value =
+                            Grants.gate h.Grants (fun (request: Fx.Models.ChatRequest) ->
+                                Some
+                                    {
+                                        Action = exposure
+                                        Resource = request.Model.Provider
+                                        Context = GrantContext.none
+                                    })
+                        Env = extensionEnv "fx.host" h.Env.Clock Scope.root
+                    }
+
+                let request =
+                    Fx.Models.ChatRequest.create
+                        {
+                            Provider = "anthropic"
+                            Model = "claude"
+                        }
+                        []
+
+                match h.Run(Hooks.decide [ gate ] request) with
+                | Verdict.Ask [ reason ] -> Expect.equal reason.By "fx.host/first-exposure" "the gate"
+                | other -> failtest (string other)
+
+                let id =
+                    pendingOf
+                        h
+                        { ask "expose-anthropic" exposure "anthropic" with
+                            Context = GrantContext.none
+                        }
+
+                ok (h.Run(GrantsService.answer h.Service alice id { once with Scope = ScopeChoice.Host }))
+                |> ignore
+
+                Expect.equal (h.Run(Hooks.decide [ gate ] request)) Verdict.Allow "allowed from now on"
+            }
         ]
