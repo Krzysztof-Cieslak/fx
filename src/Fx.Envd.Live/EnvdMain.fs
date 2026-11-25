@@ -26,6 +26,9 @@ type EnvdOptions =
         Shell: string option
         /// Bytes of each output stream kept in memory (the rest is in spill files).
         Retain: int
+        /// The variables of the processes envd starts (`BaseEnvironment`); `None`: envd's own. The
+        /// host sets it when envd runs in its process, so the host's credentials stay out (spec §18).
+        Environment: (string * string) list option
     }
 
     override this.ToString() =
@@ -39,6 +42,7 @@ module EnvdOptions =
             State = None
             Shell = None
             Retain = 1024 * 1024
+            Environment = None
         }
 
 /// A running envd built from the live interpreters, and what releases it.
@@ -52,6 +56,19 @@ type EnvdInstance =
     }
 
     override this.ToString() = $"envd ({this.State})"
+
+/// envd running in the host's process (embedded mode): the host's end of the in-process connection.
+type EmbeddedEnvd =
+    {
+        /// The host connects to envd over this (`EnvClient.connect`).
+        Transport: Transport
+        /// Where envd keeps its state.
+        State: string
+        /// Ends the connection, kills envd's processes and closes its stores.
+        Stop: unit -> Task<unit>
+    }
+
+    override this.ToString() = $"embedded envd ({this.State})"
 
 /// envd's composition root: builds `EnvdServices` from the real interpreters and serves the
 /// environment protocol. The only envd code that decides where things live on disk.
@@ -140,7 +157,17 @@ module EnvdMain =
 
             let clock = SystemClock.clock
             let ids = SystemIds.create clock
-            let localShell = LocalShell.create shell workspace
+            let ignoreCase = OperatingSystem.IsWindows()
+
+            let localShell =
+                match options.Environment with
+                | Some vars -> BaseEnvironment.shell ignoreCase vars (LocalShell.create shell workspace)
+                | None -> LocalShell.create shell workspace
+
+            let localTerminal =
+                match options.Environment with
+                | Some vars -> BaseEnvironment.terminal ignoreCase vars (LocalTerminal.create shell workspace)
+                | None -> LocalTerminal.create shell workspace
 
             match FileBlobStore.openAt (Path.Combine(state, "blobs")) clock ids Durability.Normal with
             | Error e -> Task.FromResult(Error $"cannot open the blob store: {e}")
@@ -171,10 +198,7 @@ module EnvdMain =
                             Fs = LocalFs.write
                             FsOps = LocalFsOps.create clock ids
                             Shell = localShell
-                            Terminal =
-                                TerminalSetup.wrap
-                                    (LocalPlatform.terminalDefaults shell)
-                                    (LocalTerminal.create shell workspace)
+                            Terminal = TerminalSetup.wrap (LocalPlatform.terminalDefaults shell) localTerminal
                             Blobs = blobStore.Blobs
                             Snapshots = snapshots
                             Spill = Some(LocalSpill.create output)
@@ -211,6 +235,34 @@ module EnvdMain =
             | Ok peer ->
                 let! reason = peer.Completion
                 return Ok reason
+        }
+
+    /// envd in this process (embedded mode, spec §3): builds it for the options and serves it over the
+    /// in-process transport. The host connects to the transport it returns; `Stop` ends the
+    /// connection, kills envd's processes and closes its stores.
+    let embed (options: EnvdOptions) : Task<Result<EmbeddedEnvd, string>> =
+        task {
+            match! start options with
+            | Error message -> return Error message
+            | Ok instance ->
+                let limits = ConnectionLimits.frames ConnectionLimits.defaults
+                let client, server = InProcess.pair (256 * 1024) limits limits
+                let served = serve instance.Envd server
+
+                return
+                    Ok
+                        {
+                            Transport = client
+                            State = instance.State
+                            Stop =
+                                fun () ->
+                                    task {
+                                        client.Abort()
+                                        server.Abort()
+                                        let! _ = served
+                                        do! instance.Dispose()
+                                    }
+                        }
         }
 
     /// `envd --stdio`: serves one connection on standard input and output, then stops everything it
