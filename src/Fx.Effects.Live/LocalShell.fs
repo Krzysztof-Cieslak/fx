@@ -88,6 +88,9 @@ module LocalShell =
         | :? InvalidOperationException
         | :? Win32Exception
         | :? NotSupportedException -> ()
+        // Killing a tree wraps the failures of each process, e.g. a process that exited and was
+        // disposed meanwhile ("No process is associated with this object").
+        | :? AggregateException -> ()
 
     let private ofProcess (proc: Process) : Proc =
         let pid = proc.Id
