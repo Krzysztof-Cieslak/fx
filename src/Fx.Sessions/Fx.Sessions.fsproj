@@ -10,8 +10,8 @@
   <ItemGroup>
     <Compile Include="Model.fs" />
     <Compile Include="RequestKinds.fs" />
-    <Compile Include="Session.fs" />
     <Compile Include="Codecs.fs" />
+    <Compile Include="Session.fs" />
   </ItemGroup>
 
   <ItemGroup>

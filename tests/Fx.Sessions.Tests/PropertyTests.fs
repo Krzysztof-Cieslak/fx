@@ -167,7 +167,12 @@ let private command (drive: Drive) (step: Step) : (Attribution * Command) option
             Command.SelectProfile
                 {
                     Profile = $"sha256:p{(profile % 3 + 3) % 3}"
-                    Overrides = [ "edit.guard", Json.String $"v{profile}" ]
+                    // Not canonical: the session keeps what the store will read back.
+                    Overrides =
+                        [
+                            "z.n", (Json.tryNumber $"{abs profile}.0").Value
+                            "edit.guard", Json.String $"v{profile}"
+                        ]
                     Changed = [ "edit.guard" ]
                     BasedOn = if stale then "sha256:stale" else state.Profile
                 }

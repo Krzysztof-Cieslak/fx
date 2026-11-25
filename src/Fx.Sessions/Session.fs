@@ -600,8 +600,21 @@ module Session =
                 |> finish
         | _ -> reject Rejections.Invalid ("Not a command for an open session: " + string command + ".")
 
-    /// Decides what a command means in a state (pure): the events to append, or a rejection.
-    let handle (kinds: RequestKinds) (state: SessionState) (sent: SessionCommand) : Result<Event list, Rejection> =
+    /// The command as its JSON reads, canonical: the JSON values it carries (payloads, answers,
+    /// overrides, evidence) go into events as the store keeps them, so the state of a live actor equals
+    /// the fold of the stored log. A command its codec refuses is refused. (JSON with duplicate keys has
+    /// no canonical form: a defect of whoever built it, which throws.)
+    let private canonical (command: Command) : Result<Command, Rejection> =
+        match Fx.Sessions.Codecs.command.Decode(Json.canonicalize (Fx.Sessions.Codecs.command.Encode command)) with
+        | Ok command -> Ok command
+        | Error issues -> Error(Rejection.create Rejections.Invalid (Issue.renderAtMost 5 issues))
+
+    /// What a canonical command means in a state.
+    let private decide
+        (kinds: RequestKinds)
+        (state: SessionState)
+        (sent: SessionCommand)
+        : Result<Event list, Rejection> =
         let by = sent.By
         let at = sent.At
         let draft = { State = state; Events = [] }
@@ -716,6 +729,12 @@ module Session =
         | _, Command.Reopen -> draft |> emit (Event.Reopened by) |> finish
         | Status.Open, command -> handleOpen kinds by at command draft
         | _, _ -> reject Rejections.Closed "The session is closed."
+
+    /// Decides what a command means in a state (pure): the events to append, or a rejection.
+    let handle (kinds: RequestKinds) (state: SessionState) (sent: SessionCommand) : Result<Event list, Rejection> =
+        match canonical sent.Command with
+        | Error rejection -> Error rejection
+        | Ok command -> decide kinds state { sent with Command = command }
 
     /// Work the state says is in flight besides a turn: request timers, forks being started. An
     /// interrupt cancels every intent of the actor (the control path), so the session asks for these
