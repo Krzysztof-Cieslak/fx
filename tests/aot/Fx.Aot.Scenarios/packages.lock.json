@@ -224,6 +224,13 @@
           "Fx.Store": "[0.0.0, )"
         }
       },
+      "fx.keyring": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects": "[0.0.0, )"
+        }
+      },
       "fx.machines": {
         "type": "Project",
         "dependencies": {

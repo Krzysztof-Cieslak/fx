@@ -1,4 +1,4 @@
-/// `Fx.Aot.Diff [--rid <rid>] [--no-publish] [--self-test]`: publishes the subjects for a runtime
+/// `Fx.Aot.Diff [--rid <rid>] [--no-publish] [--self-test] [--only <prefix>]`: publishes the subjects for a runtime
 /// identifier, runs every case with `dotnet <assembly>.dll` and with the native binary, and fails on
 /// any difference. Exit codes: 0 identical, 1 different, 2 usage or setup error.
 module Fx.Aot.Diff.Program
@@ -14,13 +14,16 @@ type Options =
         Rid: string
         Publish: bool
         SelfTest: bool
+        /// Only the scenarios whose names start with this (e.g. CI's keyring job: `keyring-`).
+        Only: string option
     }
 
 let private usage =
-    "Usage: Fx.Aot.Diff [--rid <rid>] [--no-publish] [--self-test]\n\n"
+    "Usage: Fx.Aot.Diff [--rid <rid>] [--no-publish] [--self-test] [--only <prefix>]\n\n"
     + "  --rid <rid>    runtime identifier to publish and run (default: this machine's)\n"
     + "  --no-publish   use existing builds in artifacts/ instead of publishing first\n"
     + "  --self-test    run the canary scenarios, which must differ, to prove the diff detects it\n"
+    + "  --only <prefix> run only the scenarios whose names start with the prefix\n"
 
 let rec private parse (options: Options) (args: string list) : Result<Options, string> =
     match args with
@@ -28,6 +31,7 @@ let rec private parse (options: Options) (args: string list) : Result<Options, s
     | "--rid" :: rid :: rest -> parse { options with Rid = rid } rest
     | "--no-publish" :: rest -> parse { options with Publish = false } rest
     | "--self-test" :: rest -> parse { options with SelfTest = true } rest
+    | "--only" :: prefix :: rest -> parse { options with Only = Some prefix } rest
     | other :: _ -> Error $"unknown argument: {other}"
 
 /// The repository root: the nearest directory above the working directory with Fx.slnx.
@@ -92,7 +96,13 @@ let private runCase root (bins: Binaries) (case: Case) : Result<string list, str
     | Ok j, Ok n -> Ok(Diff.compare j n), Some j
 
 /// Runs every case of a subject; returns (cases run, failures).
-let private runSubject (root: string) (rid: string) (selfTest: bool) (subject: Subject) : int * int =
+let private runSubject
+    (root: string)
+    (rid: string)
+    (selfTest: bool)
+    (only: string option)
+    (subject: Subject)
+    : int * int =
     let bins = binaries root rid subject
     let mutable ran = 0
     let mutable failed = 0
@@ -151,13 +161,30 @@ let private runSubject (root: string) (rid: string) (selfTest: bool) (subject: S
                 report false listCase (Result.bind (fun _ -> Error [ "cannot list cases" ]) outcome)
                 []
 
-    for case in cases do
+    let selected =
+        match only with
+        | Some prefix ->
+            cases
+            |> List.filter (fun case -> case.Name.StartsWith(prefix, StringComparison.Ordinal))
+        | None -> cases
+
+    match only with
+    | Some prefix when selected.IsEmpty ->
+        failed <- failed + 1
+        say $"FAIL  {subject.Name}: no case starts with {prefix}"
+    | _ -> ()
+
+    for case in selected do
         report selfTest case (fst (runCase root bins case))
 
     ran, failed
 
 let private run (root: string) (options: Options) : int =
-    let subjects = if options.SelfTest then [ canaries ] else all
+    let subjects =
+        match options.SelfTest, options.Only with
+        | true, _ -> [ canaries ]
+        | false, Some _ -> [ scenarios ]
+        | false, None -> all
 
     let publishFailed =
         options.Publish
@@ -189,7 +216,7 @@ let private run (root: string) (options: Options) : int =
 
         let ran, failed =
             subjects
-            |> List.map (runSubject root options.Rid options.SelfTest)
+            |> List.map (runSubject root options.Rid options.SelfTest options.Only)
             |> List.fold (fun (r, f) (r', f') -> (r + r', f + f')) (0, 0)
 
         match options.SelfTest, failed with
@@ -213,6 +240,7 @@ let main argv =
             Rid = RuntimeInformation.RuntimeIdentifier
             Publish = true
             SelfTest = false
+            Only = None
         }
 
     match parse defaults (List.ofArray argv), findRoot () with
