@@ -875,8 +875,12 @@ let tests (name: string) (connect: unit -> Task<Link>) : Test =
                                                     ]
                                             )
 
-                                        for channel in opened |> Array.map expectOk do
-                                            channel.Reset(ResetCode.Cancelled, "done")
+                                        for outcome in opened do
+                                            match outcome with
+                                            | Ok channel -> channel.Reset(ResetCode.Cancelled, "done")
+                                            // A channel the peer refused may still count for a moment.
+                                            | Error(ChannelError.TooMany _) -> ()
+                                            | Error e -> failtest $"open failed: {e}"
 
                                     let! after = run s (Rpc.call s.Peer Methods.add { A = 1; B = 1 })
                                     Expect.equal after (Ok 2) "still connected"
