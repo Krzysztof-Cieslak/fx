@@ -46,8 +46,8 @@ D-Bus client). No design change.
 
 | Path | What |
 |---|---|
-| `src/Fx.Keyring/Keyring.fs` | The capability: `KeyringService`, `KeyringKey`, `SecretText` (never prints its value), `Prompts`, `Unavailable`, `KeyringStatus`, `KeyringError`, the `Keyring` record, `IKeyring` and the `Keyring.*` effects |
-| `src/Fx.Keyring/InMemoryKeyring.fs` | The deterministic fake; it can play a locked or unavailable keyring |
+| `src/Fx.Effects/Keyring.fs` (`src/Fx.Keyring/Keyring.fs` until T121) | The capability: `KeyringService`, `KeyringKey`, `Prompts`, `KeyringUnavailable` (`Unavailable` until T121), `KeyringStatus`, `KeyringError`, the `Keyring` record, `IKeyring` and the `Keyring.*` effects; `SecretText` (never prints its value) is in `Secrets.fs` |
+| `src/Fx.Effects/Fakes/InMemoryKeyring.fs` | The deterministic fake; it can play a locked or unavailable keyring |
 | `src/Fx.Keyring/Headless.fs` | Pure decisions from `HostFacts`: the kind of session (SSH, display, WSL, container, CI), the session bus, whether prompts can reach anyone |
 | `src/Fx.Keyring/LocalHostFacts.fs` | Reads the facts once (environment variables, marker files) |
 | `src/Fx.Keyring/DBus/` | The D-Bus client: `Message.fs` (values, messages), `Wire.fs` (marshalling, pure), `Address.fs` (bus addresses, pure), `Connection.fs` (socket, authentication, calls, signals) |
@@ -286,6 +286,13 @@ Recommendations:
 - **gnome-keyring's private unlock interface** is used by the tests only, never by the keyring.
 
 ## Recommendations for T121
+
+T121 followed them ([docs/modules/auth.md](../modules/auth.md)): the capability moved to `Fx.Effects`
+(the SDK exposes it; the interpreters stay here) and `fx.store.keyring` is built on it; `secret:<name>`
+is the item (`Product.Name`, `<name>` in lowercase); the store is chosen once at startup from
+`credentials.store` as the table above says, never falling back silently; `KeyringConformance`
+generalised to `CredentialStoreConformance`, run on every store; the `file` store is
+`LocalPrivateFiles` (`0600` in `0700`, DPAPI with an owner-only ACL on Windows).
 
 - Build `fx.store.keyring` on this `Keyring` record. If the store becomes an extension, move the record,
   `IKeyring`, the error types and `KeyringConformance` into the SDK's capabilities (with `Fx.Effects`)

@@ -20,7 +20,7 @@ canonical model.
 
 | Where | What | Who uses it |
 |---|---|---|
-| `Fx.Effects` (`Http.fs`) | `IHttp`: requests, streamed bodies, timeouts, typed failures; `InMemoryHttp` fake | adapters (through `WireCtx`), auth flows (T121), catalogs (T208) |
+| `Fx.Effects` (`Http.fs`) | `IHttp`: requests, streamed bodies, timeouts, typed failures; `InMemoryHttp` fake | adapters (through `WireCtx`), auth methods ([auth.md](auth.md)), catalogs (T208) |
 | `Fx.Models` | model metadata, the canonical chat model and its codecs, the fold, `ChatStream`, `ILlm`, SSE/NDJSON parsers, provider definitions, cassettes, replay rules, fitting | everyone; exposed by `Fx.Sdk` |
 | `Fx.Sdk/Models` | `WireCtx`, `WireRequest`, `ChatWire`, `SseWire`, the contribution types, the model-egress hook points, `ModelAccess` | extensions (adapters, providers, egress hooks), the host's composition root |
 | `extensions/Fx.Ext.ModelOpenAI` | `fx.model.openai`: the `openai.responses` wire and the OpenAI API as a provider | the host (bundled) |
@@ -52,7 +52,8 @@ types of `ChatRequest`, `ChatEvent`, `ChatResponse`, `ChatFailure`, `ModelInfo` 
   and extensions' own. Which model plays a role is a variant (T208).
 - `ProviderDef = { Id; Name; Endpoints; Catalog; Auth; Quirks; Transform }` is data:
   `Endpoints` maps families to base URLs; `Catalog` bundles `ModelInfo`s (discovery is T208);
-  `Auth` lists auth method refs (kinds and settings; the methods are T121's); `Quirks` are named
+  `Auth` lists auth method refs (kinds and settings, in the order the host tries them; the methods
+  are extensions', [auth.md](auth.md)); `Quirks` are named
   JSON flags for adapters; `Transform` sets and removes headers and query parameters and edits JSON
   bodies. Declarative extensions and host config can add providers without code.
 - `ResolvedAuth = { Headers; Query; Sign }` (spec §11.3) is what an auth method resolves for one
@@ -217,8 +218,9 @@ An adapter gets a `WireRequest` and a `WireCtx`:
 ### `ModelAccess`: the only way to a wire (spec §18)
 
 `ModelAccess = { Wires; Providers; Egress; Http; Auth; Timeouts; Replay; Clock; Trace }`, built by
-the composition root from the contributions in effect and the host's HTTP and credentials (T121
-provides `Auth`; `ModelAccess.noAuth` sends none). `ModelAccess.stream`, and the `Llm` that
+the composition root from the contributions in effect and the host's HTTP and credentials (`Auth` is
+`AuthService.modelAuth service`, which resolves the provider's auth methods in order,
+[auth.md](auth.md); `ModelAccess.noAuth` sends none). `ModelAccess.stream`, and the `Llm` that
 `ModelAccess.llm` makes of it, are the single entry point:
 
 1. find the provider (`unavailable` if none), the model's catalog entry, its family, endpoint and
@@ -344,7 +346,7 @@ data. Later adapters (T120, T207) mirror its layout:
 ### The provider
 
 `anthropic`, endpoint `https://api.anthropic.com/v1`, discovery path `/models` (T208), auth methods
-`api_key` and `env` (`ANTHROPIC_API_KEY`) sending `x-api-key` (T121 resolves them; the Claude API also
+`api_key` and `env` (`ANTHROPIC_API_KEY`) sending `x-api-key` (`fx.auth.standard` resolves them, [auth.md](auth.md); the Claude API also
 takes `Authorization: Bearer`). The catalog lists current Claude models (Fable 5.2, Opus 5.5, Sonnet
 5.5, Haiku 5.5, Opus 5, Sonnet 5, Sonnet 4.6, Haiku 4.5) with their limits, prices (cache writes at the
 5-minute rate) and capabilities as data: adaptive thinking with the efforts each model takes (`off`
@@ -481,7 +483,8 @@ tests in `tests/Fx.Ext.ModelOpenAI.Tests`) is a native extension on the public S
 ### The provider
 
 `openai`, endpoint `https://api.openai.com/v1`, discovery path `/models` (T208), auth methods
-`api_key` and `env` (`OPENAI_API_KEY`) sending `Authorization: Bearer` (T121 resolves them). The
+`api_key` and `env` (`OPENAI_API_KEY`) sending `Authorization: Bearer` (`fx.auth.standard` resolves
+them, [auth.md](auth.md)). The
 catalog lists GPT-6.2 Astra, GPT-6.2 Sol, GPT-6.1 Terra, GPT-6 Luna and GPT-5.5 with their limits
 (1,050,000 tokens of context, 128,000 of output), prices (for prompts up to 272,000 input tokens;
 cache writes at the 30-minute rate) and capabilities: reasoning with summaries and replay, the
@@ -662,7 +665,6 @@ prompt's placement) on all eight targets.
 | Recorded Anthropic cassettes (the live test records them; needs a key) | T132 |
 | Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
-| Auth methods resolving `ResolvedAuth` from stored credentials | T121 |
 | Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
 | Building `ModelAccess` from the host's contributions (with the adapters' replay scopes, `Anthropic.withReplay`), `ILlm` in session environments | T129 |
 | Journaling streams for exact replay | T131 |
