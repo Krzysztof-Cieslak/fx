@@ -538,4 +538,146 @@ let tests =
                     "was denied"
                     "the model reads the denial"
             }
+
+            testTask "fx run -p is recorded and fx replay replays it exactly; with session.record off nothing is" {
+                do! network.Force()
+                let p = place "replay"
+                p.Write("greeting.txt", "hello\n")
+                let model = Model()
+
+                model.AddAll
+                    [
+                        $"// intent: change the greeting\nconst file = await {g}.fs.read(\"greeting.txt\")\nawait {g}.fs.write(\"greeting.txt\", file.text.replace(\"hello\", \"hello, world\"))\nconst run = await {g}.shell.run(\"cat greeting.txt\")\nrun.stdout"
+                        finish "The greeting says hello, world" "`cat greeting.txt: ${run.stdout.trim()}`"
+                        $"// intent: look\nconst run = await {g}.shell.run(\"cat greeting.txt\")\nrun.stdout"
+                        finish "Looked" "`cat greeting.txt: ${run.stdout.trim()}`"
+                    ]
+
+                let person = Person always
+                let selections = [ "model.role.main", Json.String modelId ]
+
+                // Two host processes: the second continues the session with a kernel of its own.
+                let runIn (request: RunRequest) =
+                    let host = start (options p model selections)
+
+                    try
+                        run host person request
+                    finally
+                        stop host
+
+                let first =
+                    runIn
+                        {
+                            Prompt = "Make the greeting say hello, world"
+                            Session = None
+                            Title = None
+                        }
+
+                Expect.equal (done' first person) "The greeting says hello, world" "done"
+
+                let second =
+                    runIn
+                        {
+                            Prompt = "Look again"
+                            Session = Some first.Session
+                            Title = None
+                        }
+
+                Expect.equal (done' second person) "Looked" "done again"
+
+                // `fx replay <session> --json`: the data directory's stores, without the model, kernels,
+                // files or clock.
+                let replayed =
+                    waitFor
+                        300.0
+                        (Commands.replay
+                            (options p (Model()) [])
+                            {
+                                Session = first.Session
+                                Json = true
+                                StallSeconds = 60
+                            })
+
+                match replayed with
+                | Error errors -> failtest (String.concat "\n" errors)
+                | Ok output ->
+                    Expect.equal output.ExitCode 0 $"replay matched:\n{output.Stdout}{output.Stderr}"
+
+                    match
+                        Json.parse output.Stdout
+                        |> Result.mapError string
+                        |> Result.bind (fun json ->
+                            Fx.Replay.ReplayCommand.reportCodec.Decode json
+                            |> Result.mapError (Issue.renderAtMost 3))
+                    with
+                    | Error e -> failtest e
+                    | Ok report ->
+                        Expect.equal report.Segments 2 "two host processes"
+                        Expect.equal report.Turns 2 "two turns"
+                        Expect.equal report.Requests 4 "every model request again"
+
+                // Not recorded: the same run journals nothing.
+                let off = place "unrecorded"
+                let unrecorded = Model()
+
+                unrecorded.AddAll
+                    [
+                        $"// intent: look\nconst run = await {g}.shell.run(\"echo hi\")\nrun.stdout"
+                        finish "Looked" "`echo hi: ${run.stdout.trim()}`"
+                    ]
+
+                let host =
+                    start (options off unrecorded (selections @ [ "session.record", Json.String "off" ]))
+
+                let outcome =
+                    try
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Look"
+                                Session = None
+                                Title = None
+                            }
+                    finally
+                        stop host
+
+                Expect.equal (done' outcome person) "Looked" "done"
+                let offOptions = options off unrecorded []
+
+                match offOptions.OpenStores offOptions.Paths StoreDurability.Normal with
+                | Error e -> failtest e
+                | Ok stores ->
+                    try
+                        let journal =
+                            wait (
+                                stores.Log.Read
+                                    (Fx.Replay.JournalLog.stream outcome.Session)
+                                    0L
+                                    10
+                                    CancellationToken.None
+                            )
+
+                        let session =
+                            wait (stores.Log.Read (Session.stream outcome.Session) 0L 10 CancellationToken.None)
+
+                        Expect.isNonEmpty session "the session is there"
+                        Expect.isEmpty journal "nothing is journaled"
+                    finally
+                        stores.Close()
+
+                match
+                    waitFor
+                        120.0
+                        (Commands.replay
+                            offOptions
+                            {
+                                Session = outcome.Session
+                                Json = false
+                                StallSeconds = 10
+                            })
+                with
+                | Ok output -> Expect.equal output.ExitCode 1 $"not replayable:\n{output.Stdout}"
+                | Error errors -> failtest (String.concat "\n" errors)
+            }
         ]

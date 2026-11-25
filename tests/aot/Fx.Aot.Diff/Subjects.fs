@@ -72,6 +72,9 @@ let cli: Subject =
                     { case "unknown arguments" [ "--bogus"; "x" ] with
                         MustSucceed = false
                     }
+                    { case "replay without a session" [ "replay" ] with
+                        MustSucceed = false
+                    }
                 ]
     }
 

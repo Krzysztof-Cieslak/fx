@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Fx.CodeAct\Fx.CodeAct.fsproj" />
+    <ProjectReference Include="..\Fx.Replay\Fx.Replay.fsproj" />
     <ProjectReference Include="..\Fx.Extensions\Fx.Extensions.fsproj" />
     <ProjectReference Include="..\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
     <ProjectReference Include="..\Fx.Identity.Host\Fx.Identity.Host.fsproj" />

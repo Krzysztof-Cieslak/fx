@@ -241,6 +241,32 @@ module Setup =
         ExtensionHost.contributions ProviderDefs.contributionType extensions
         |> List.map _.Value
 
+    /// The options the host's kernels start with.
+    let kernelOptions: Fx.Kernel.KernelOptions =
+        { Fx.Kernel.KernelOptions.defaults with
+            Peer =
+                {
+                    Name = Product.binaryName
+                    Version = Product.Version
+                }
+        }
+
+    /// The interpreter provider of an id in effect, and the runtime it runs on.
+    let interpreter (extensions: Fx.Extensions.Host) (id: string) : Result<InterpreterProvider * RuntimeSpec, string> =
+        let interpreters =
+            ExtensionHost.contributions InterpreterProviders.contributionType extensions
+
+        let runtimes = ExtensionHost.contributions RuntimeSpecs.contributionType extensions
+
+        match interpreters |> List.tryFind (fun c -> c.Value.Id = id) with
+        | None -> Error $"no interpreter {Json.quote id} is in effect (agent.interpreter)"
+        | Some interpreter ->
+            let provider = interpreter.Value
+
+            match runtimes |> List.tryFind (fun c -> c.Id = provider.Launch.Runtime) with
+            | None -> Error $"the interpreter {provider.Id} runs on {provider.Launch.Runtime}, which is not in effect"
+            | Some runtime -> Ok(provider, runtime.Value)
+
     /// The host's resolution: the layers under the policies. Every issue is reported.
     let resolve (registry: SlotRegistry) (config: HostConfig) : Result<Fx.Variants.Resolution, string list> =
         Resolution.resolve registry config.Policies config.Layers

@@ -27,8 +27,9 @@ type ReplayOutput =
 
     override this.ToString() = $"exit {this.ExitCode}"
 
-/// `fx replay <session>` (spec §15): parsing and the operation, pure; the host's entry point (T129) opens
-/// the stores read-only, builds `ReplaySettings` from the interpreters it has, and prints the output.
+/// `fx replay <session>` (spec §15): parsing and the operation, pure; the host's command
+/// (`Commands.replay`) opens the stores under the data directory's lock, builds `ReplaySettings` from
+/// the interpreters it has, and the entry point prints the output.
 [<RequireQualifiedAccess>]
 module ReplayCommand =
     let usage =
@@ -127,27 +128,34 @@ module ReplayCommand =
             Stderr = ""
         }
 
+    /// Replays the session `args` names, on a recording.
+    let replay<'E when 'E :> IClock and 'E :> IScopeWith<'E>>
+        (settings: ReplaySettings)
+        (recording: RecordedSession)
+        (args: ReplayArgs)
+        : Eff<'E, ReplayOutput> =
+        eff {
+            let settings =
+                { settings with
+                    StallAfter = TimeSpan.FromSeconds(float args.StallSeconds)
+                }
+
+            let! report = SessionReplay.run settings recording args.Session
+            return output args report
+        }
+
     /// Runs `replay` with the arguments after it, on a recording.
     let run<'E when 'E :> IClock and 'E :> IScopeWith<'E>>
         (settings: ReplaySettings)
         (recording: RecordedSession)
         (args: string list)
         : Eff<'E, ReplayOutput> =
-        eff {
-            match parse args with
-            | Error message ->
-                return
-                    {
-                        ExitCode = 2
-                        Stdout = ""
-                        Stderr = $"{Product.Name}: {message}\n\n{usage}"
-                    }
-            | Ok parsed ->
-                let settings =
-                    { settings with
-                        StallAfter = TimeSpan.FromSeconds(float parsed.StallSeconds)
-                    }
-
-                let! report = SessionReplay.run settings recording parsed.Session
-                return output parsed report
-        }
+        match parse args with
+        | Error message ->
+            Eff.ret
+                {
+                    ExitCode = 2
+                    Stdout = ""
+                    Stderr = $"{Product.Name}: {message}\n\n{usage}"
+                }
+        | Ok parsed -> replay settings recording parsed

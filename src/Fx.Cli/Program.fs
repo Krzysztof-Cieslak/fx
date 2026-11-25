@@ -283,6 +283,21 @@ let private auth (command: AuthCommand) : int =
 
             code
 
+/// `replay`: a recorded session of the data directory, replayed exactly; exits 1 with the first
+/// difference from the recording.
+let private replay (args: Fx.Replay.ReplayArgs) : int =
+    let facts = facts ()
+
+    match hostOptions facts [] with
+    | Error e -> fail [ e ]
+    | Ok options ->
+        match (Commands.replay options args).GetAwaiter().GetResult() with
+        | Error errors -> fail errors
+        | Ok output ->
+            stdout.Write output.Stdout
+            stderr.Write output.Stderr
+            output.ExitCode
+
 /// `serve`: the host for the current directory, serving clients until Ctrl+C.
 let private serve (tcp: int option) : int =
     let facts = facts ()
@@ -333,3 +348,4 @@ let main argv =
     | Cli.Variants view -> variants view
     | Cli.Auth command -> auth command
     | Cli.Serve tcp -> serve tcp
+    | Cli.Replay args -> replay args

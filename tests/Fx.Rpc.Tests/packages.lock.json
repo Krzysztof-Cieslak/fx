@@ -414,6 +414,7 @@
           "Fx.Grants.Host": "[0.0.0, )",
           "Fx.Identity.Host": "[0.0.0, )",
           "Fx.Keyring": "[0.0.0, )",
+          "Fx.Replay": "[0.0.0, )",
           "Fx.Store.Live": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )"
         }
