@@ -25,6 +25,7 @@
     <Compile Include="Envd.fs" />
     <Compile Include="EnvdServer.fs" />
     <Compile Include="EnvClient.fs" />
+    <Compile Include="BlobCache.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
