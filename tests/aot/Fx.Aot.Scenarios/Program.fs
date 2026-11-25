@@ -11,6 +11,7 @@ let private usage =
     + "  rpc-peer           serve the JSON-RPC test service on stdin and stdout\n"
     + "  ext-peer           serve the sample extension on stdin and stdout (extension protocol)\n"
     + "  kernel-peer        serve the script kernel on stdin and stdout (kernel protocol)\n"
+    + "  envd-peer <workspace> <state>   serve envd on stdin and stdout (environment protocol)\n"
 
 let private writeLines (lines: string seq) =
     for line in lines do
@@ -55,6 +56,7 @@ let main argv =
     | [ "rpc-peer" ] -> Rpc.Peer.serve ()
     | [ "ext-peer" ] -> Extensions.SampleHost.servePeer ()
     | [ "kernel-peer" ] -> Kernel.ScriptKernel.serve ()
+    | [ "envd-peer"; workspace; state ] -> Envd.servePeer workspace state
     | _ ->
         stderr.Write usage
         2

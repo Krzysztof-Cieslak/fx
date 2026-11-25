@@ -34,6 +34,7 @@ let all: Scenario list =
             Components.scenarios
             Kernel.Kernel.scenarios
             Runtimes.scenarios
+            Envd.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
