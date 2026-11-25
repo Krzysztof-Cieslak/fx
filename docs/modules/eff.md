@@ -104,7 +104,7 @@ module Clock =
 
 `IFs` inherits `IFsRead`. An environment that implements only `IFsRead` is the read-only attenuation of one that implements `IFs`.
 
-The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)).
+The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` ([store.md](store.md)), and `IVariants` with the variant registry in `Fx.Variants` ([variants.md](variants.md)).
 
 ### Decisions
 
@@ -120,7 +120,7 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 - **Randomness** belongs to `IIds` (`RandomBytes`). It is journaled like every output, so protect journals like the data they record. Mint credentials only in host code (T122).
 - **Shell.**
   - `Exec` passes arguments verbatim, with no shell. `Script` runs a command line with the interpreter's shell: `/bin/sh -c` (present on every Linux, including Alpine, and on macOS), or `pwsh -Command` on Windows. Never assume bash.
-  - Which shell to use is a variant (spec §15, T106). `LocalShell.defaultShell` is only the bootstrap default.
+  - Which shell to use is a variant (spec §15; on Windows the `shell.windows` slot, [variants.md](variants.md)). `LocalShell.defaultShell` is only the bootstrap default.
   - Standard input is always closed after `Run` writes it, so programs that read it never hang.
   - Output is pumped into one bounded channel, so reading one stream never blocks the other.
   - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes (T113) use process groups or job objects.
@@ -129,13 +129,12 @@ The content-addressed blob store, `IBlobs`, lives with the stores in `Fx.Store` 
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
 - **Secrets.** `Secret.ToString` and string interpolation show only the reference. Call `Reveal()` at the one place that needs the value. A recording interpreter journals references and outcomes, never values.
 - **Tracing.** Spec §4.2 names this capability `ITelemetry`; it is `ITrace` because "telemetry" suggests data leaving the machine, and fx has none of that (§18). Traces stay local. Exporting them to a local file or viewer is future work (spec §15, `fx trace`).
-- **Environment variables and process information are not a capability.** Configurable behaviour goes through `IVariants` (T106), which records it. The composition root reads bootstrap values (home directory, `FX_*` variables) once, as values. It is an imperative shell with its own analyzers.json entry, like `src/Fx.Cli/Program.fs`.
+- **Environment variables and process information are not a capability.** Configurable behaviour goes through `IVariants` ([variants.md](variants.md)), which records it. The composition root reads bootstrap values (home directory, `FX_*` variables) once, as values. It is an imperative shell with its own analyzers.json entry, like `src/Fx.Cli/Program.fs`.
 
 ### Capabilities still to come
 
 | Capability | Task |
 |---|---|
-| `IVariants` | T106 |
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
 | `IComponents` | T110 |
 | `IPackages`, extension contributions | T108 |

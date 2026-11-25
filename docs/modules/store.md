@@ -118,7 +118,7 @@ another process's writes would need `PRAGMA data_version` polling.
 
 ### Durability
 
-`Durability` is a store-wide choice by the composition root (to become a variant with T106):
+`Durability` is a store-wide choice by the composition root (to become a variant slot, read by the host, T129):
 
 | | `Full` (default) | `Normal` |
 |---|---|---|
@@ -316,7 +316,7 @@ What this decides:
 | Blob garbage collection: references from events, sessions and values; a grace period from `created` | with T201 (values) or T131 |
 | Journaling capability calls by blob hash, `ReplayEnv` | T131 |
 | `ISessionLog` over this store, client subscriptions over JSON-RPC with snapshot + tail | T125, T129 |
-| `Durability`, `MaxBatch`, page sizes and the subscribe gap as variants | T106 |
+| `Durability`, `MaxBatch`, page sizes and the subscribe gap as variant slots ([variants.md](variants.md)), read by the host when it opens the stores | T129 |
 | A data directory derived from `Fx.Product`; locking a store to one process | T129 |
 | Following another process's commits (`PRAGMA data_version`), if a deployment ever shares a store | when needed |
 | `fullfsync` on macOS as a durability level | when measured on real machines |
