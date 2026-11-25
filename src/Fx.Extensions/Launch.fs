@@ -16,6 +16,8 @@ type LaunchContext =
         HostEnvironment: (string * string) list
         /// Windows: `.exe` suffix, and variable names compared without case.
         IsWindows: bool
+        /// Until the project is trusted, the launch's `UntrustedOverrides` are added.
+        ProjectTrusted: bool
     }
 
     override this.ToString() = $"LaunchContext({this.Root})"
@@ -68,7 +70,14 @@ module Launch =
         cwd
         |> Result.map (fun cwd ->
             {
-                Program = Exec(exe, spec.Args |> List.map (expand context))
+                Program =
+                    Exec(
+                        exe,
+                        LaunchSpec.arguments
+                            context.ProjectTrusted
+                            (spec.UntrustedOverrides |> List.map (expand context))
+                            (spec.Args |> List.map (expand context))
+                    )
                 Cwd = Some cwd
                 Env = Exactly(environment context spec)
             })

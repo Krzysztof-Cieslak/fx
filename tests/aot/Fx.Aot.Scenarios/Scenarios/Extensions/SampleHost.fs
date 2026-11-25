@@ -169,6 +169,7 @@ let processManifest () : Manifest =
                     EnvSet = []
                     EnvDeny = []
                     Cwd = LaunchCwd.Owned
+                    UntrustedOverrides = []
                 }
     }
 

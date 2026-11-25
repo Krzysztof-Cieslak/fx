@@ -1,0 +1,467 @@
+{
+  "type": "object",
+  "properties": {
+    "component": {
+      "$ref": "#/$defs/Component"
+    },
+    "launch": {
+      "$ref": "#/$defs/LaunchSpec"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RuntimeFile"
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "component",
+    "launch"
+  ],
+  "additionalProperties": false,
+  "description": "A runtime: the component that provides it and how to launch it, hardened.",
+  "$defs": {
+    "Component": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+          "description": "The component's id: dotted lowercase segments, e.g. \"bun\"."
+        },
+        "version": {
+          "type": "string",
+          "description": "A semantic version, e.g. \"1.4.5\"."
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MethodChoice"
+          },
+          "minItems": 1
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentRef"
+          },
+          "default": []
+        },
+        "layout": {
+          "$ref": "#/$defs/InstallLayout",
+          "default": {
+            "executables": []
+          }
+        },
+        "exports": {
+          "$ref": "#/$defs/Exports",
+          "default": {
+            "bin": {},
+            "env": {}
+          }
+        },
+        "probe": {
+          "$ref": "#/$defs/Probe"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A target: <os>-<arch>[-<libc>], e.g. \"linux-x64-glibc\", \"macos-arm64\", \"windows-x64\"."
+          },
+          "default": []
+        },
+        "size": {
+          "$ref": "#/$defs/SizeHint",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "methods"
+      ],
+      "additionalProperties": false,
+      "description": "A component: one version of a program or runtime that the product installs and manages itself."
+    },
+    "ComponentRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false,
+      "description": "A component to install before the extension starts: its id and a version range."
+    },
+    "Exports": {
+      "type": "object",
+      "properties": {
+        "bin": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "description": "The executable's path in the install directory."
+          },
+          "default": {}
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "description": "What the component offers: commands by name, and environment variables (values may use ${dir})."
+    },
+    "InstallLayout": {
+      "type": "object",
+      "properties": {
+        "executables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A file that must be executable."
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "description": "How the installed files are laid out; paths are relative to the install directory."
+    },
+    "InstallMethod": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "archive"
+            },
+            "url": {
+              "type": "string",
+              "description": "The archive's https:// URL; ${version} is the component's version."
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "A SHA-256 digest: \"sha256:\" and 64 lowercase hex digits."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "zip",
+                "tar.gz",
+                "tar"
+              ],
+              "description": "How the archive is packed."
+            },
+            "strip": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16,
+              "description": "Leading path segments to drop from every entry.",
+              "default": 0
+            }
+          },
+          "required": [
+            "kind",
+            "url",
+            "digest",
+            "format"
+          ],
+          "additionalProperties": false,
+          "description": "Download an archive, check its digest and unpack it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "release-index"
+            },
+            "index": {
+              "type": "string",
+              "description": "The index's URL."
+            },
+            "select": {
+              "type": "string",
+              "minLength": 1
+            },
+            "trust": {
+              "type": "string",
+              "enum": [
+                "vendor-index",
+                "pinned"
+              ],
+              "default": "vendor-index"
+            }
+          },
+          "required": [
+            "kind",
+            "index",
+            "select"
+          ],
+          "additionalProperties": false,
+          "description": "Find an archive in the vendor's release index."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "script"
+            },
+            "url": {
+              "type": "string",
+              "description": "The script's URL."
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "A SHA-256 digest: \"sha256:\" and 64 lowercase hex digits."
+            },
+            "runner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "url",
+            "digest",
+            "runner"
+          ],
+          "additionalProperties": false,
+          "description": "Download a script, check its digest and run it, sandboxed."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "package"
+            },
+            "manager": {
+              "$ref": "#/$defs/ComponentRef"
+            },
+            "spec": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "manager",
+            "spec"
+          ],
+          "additionalProperties": false,
+          "description": "Install with a package manager that is itself a component."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "system"
+            },
+            "probe": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            },
+            "constraint": {
+              "type": "string",
+              "description": "The versions to accept, as a version range."
+            }
+          },
+          "required": [
+            "kind",
+            "probe",
+            "constraint"
+          ],
+          "additionalProperties": false,
+          "description": "Use what the system has, read-only, if its version is in the range."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "custom"
+            },
+            "extension": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "extension"
+          ],
+          "additionalProperties": false,
+          "description": "Let an extension install it."
+        }
+      ],
+      "description": "How the component gets onto a machine."
+    },
+    "LaunchSpec": {
+      "type": "object",
+      "properties": {
+        "exe": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "envAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+            "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+          },
+          "default": []
+        },
+        "envSet": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "envDeny": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\*?$",
+            "description": "An environment variable name; in deny lists, a trailing * matches any suffix."
+          },
+          "default": []
+        },
+        "cwd": {
+          "type": "string",
+          "enum": [
+            "owned",
+            "workspace"
+          ],
+          "default": "owned"
+        },
+        "untrustedOverrides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Runtime flags (--name=value) added before the program while the project is not trusted."
+        }
+      },
+      "required": [
+        "exe"
+      ],
+      "additionalProperties": false,
+      "description": "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
+    },
+    "MethodChoice": {
+      "type": "object",
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A target: <os>-<arch>[-<libc>], e.g. \"linux-x64-glibc\", \"macos-arm64\", \"windows-x64\"."
+          },
+          "description": "The targets the method is for; empty: every target.",
+          "default": []
+        },
+        "method": {
+          "$ref": "#/$defs/InstallMethod"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "additionalProperties": false
+    },
+    "Probe": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "The program (a path in the install directory) and its arguments."
+        },
+        "expect": {
+          "type": "string",
+          "description": "What the program must print, surrounding whitespace aside; may use ${version}."
+        }
+      },
+      "required": [
+        "argv"
+      ],
+      "additionalProperties": false,
+      "description": "How to check that an install works: run argv in the install directory; it must exit with 0."
+    },
+    "RuntimeFile": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The file's name in the owned config directory; templates name it ${file.<name>}."
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "content"
+      ],
+      "additionalProperties": false,
+      "description": "A file the launcher writes before every launch."
+    },
+    "SizeHint": {
+      "type": "object",
+      "properties": {
+        "download": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "installed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

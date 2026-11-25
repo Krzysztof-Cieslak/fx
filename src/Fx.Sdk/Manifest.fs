@@ -43,13 +43,17 @@ type LaunchCwd =
         | Owned -> "owned"
         | Workspace -> "workspace"
 
-/// How the `process` runtime starts an extension (spec §6.2 `LaunchSpec`), as data.
+/// How to start a process (spec §6.2 `LaunchSpec`), as data: an extension process (`process`
+/// runtime, in a manifest's `launch`) or a runtime (`RuntimeSpec.Launch`, docs/modules/runtimes.md).
 ///
-/// - `Exe` and `Args` may use `${root}` (the package directory) and `${exeSuffix}` (`.exe` on
-///   Windows, empty elsewhere).
+/// - `Exe`, `Args`, `EnvSet` values and `UntrustedOverrides` are templates. A manifest's launch may
+///   use `${root}` (the package directory) and `${exeSuffix}` (`.exe` on Windows, empty elsewhere);
+///   a runtime's has more (`RuntimeSpec`).
 /// - The process gets exactly the host variables named in `EnvAllowlist` and the ones in `EnvSet`;
 ///   then every variable matching `EnvDeny` or the host's own deny list (runtime injection vectors
 ///   such as `NODE_OPTIONS`, spec §18) is removed. A trailing `*` matches any suffix.
+/// - While the project is not trusted, `UntrustedOverrides` are inserted before the first argument
+///   that is not a flag (the program the runtime runs), or at the end (`LaunchSpec.arguments`).
 type LaunchSpec =
     {
         Exe: string
@@ -58,6 +62,9 @@ type LaunchSpec =
         EnvSet: (string * string) list
         EnvDeny: string list
         Cwd: LaunchCwd
+        /// Runtime flags, written `--name=value`, added while the project is not trusted, e.g. Bun's
+        /// `--tsconfig-override` so that the project's `tsconfig.json` is not read.
+        UntrustedOverrides: string list
     }
 
     override this.ToString() =
@@ -244,6 +251,19 @@ module Manifest =
             and! deny = Codec.defaultField "envDeny" (fun l -> l.EnvDeny) [] (Codec.list envName)
             and! cwd = Codec.defaultField "cwd" (fun l -> l.Cwd) LaunchCwd.Owned launchCwd
 
+            // Written only when there are some, so that adding the field changed no manifest's hash.
+            and! overrides =
+                Codec.optionalField
+                    "untrustedOverrides"
+                    (fun l ->
+                        if l.UntrustedOverrides.IsEmpty then
+                            None
+                        else
+                            Some l.UntrustedOverrides)
+                    (Codec.list Codec.string
+                     |> Codec.describe
+                         "Runtime flags (--name=value) added before the program while the project is not trusted.")
+
             return
                 {
                     Exe = exe
@@ -252,11 +272,12 @@ module Manifest =
                     EnvSet = set
                     EnvDeny = deny
                     Cwd = cwd
+                    UntrustedOverrides = overrides |> Option.defaultValue []
                 }
         }
         |> Codec.strict
         |> Codec.describe
-            "How the process runtime starts the extension. exe and args may use ${root} (the package directory) and ${exeSuffix}."
+            "How to start a process: an extension process, or a runtime. exe and args are templates, e.g. ${root} (the package directory) and ${exeSuffix}."
         |> Codec.named "LaunchSpec"
 
     let contributionDecl: Codec<ContributionDecl> =
@@ -424,47 +445,14 @@ module Manifest =
         "sha256:" + Convert.ToHexStringLower digest
 
     /// Runtime injection vectors (spec §18): variables that make a runtime load code or options
-    /// before the program does. The process runtime always removes them, whatever the manifest says;
-    /// a manifest may not set them.
-    let deniedEnvironment =
-        [
-            "BUN_OPTIONS"
-            "BUN_INSPECT*"
-            "BUN_CONFIG_*"
-            "NODE_OPTIONS"
-            "NODE_INSPECT*"
-            "NPM_CONFIG_*"
-            "DOTNET_STARTUP_HOOKS"
-            "DOTNET_ADDITIONAL_DEPS"
-            "DOTNET_SHARED_STORE"
-            "DOTNET_ENABLE_PROFILING*"
-            "CORECLR_PROFILER*"
-            "CORECLR_ENABLE_PROFILING"
-            "COR_PROFILER*"
-            "COR_ENABLE_PROFILING"
-            "LD_PRELOAD"
-            "LD_AUDIT"
-            "DYLD_INSERT_LIBRARIES"
-            "PYTHONSTARTUP"
-            "PERL5OPT"
-            "RUBYOPT"
-            "JAVA_TOOL_OPTIONS"
-            "_JAVA_OPTIONS"
-        ]
+    /// before the program does (`InjectionVectors`). The process runtime always removes them,
+    /// whatever the manifest says; a manifest may not set them.
+    let deniedEnvironment = InjectionVectors.patterns
 
     /// Whether a variable name matches a deny pattern (exact, or a prefix ending in `*`).
     /// `ignoreCase`: Windows compares variable names case-insensitively.
     let matchesEnvPattern (ignoreCase: bool) (pattern: string) (name: string) : bool =
-        let comparison =
-            if ignoreCase then
-                StringComparison.OrdinalIgnoreCase
-            else
-                StringComparison.Ordinal
-
-        if pattern.EndsWith '*' then
-            name.StartsWith(pattern.Substring(0, pattern.Length - 1), comparison)
-        else
-            String.Equals(name, pattern, comparison)
+        EnvPattern.matches ignoreCase pattern name
 
     let private key (name: string) = PathSegment.Key name
     let private index (i: int) = PathSegment.Index i
@@ -530,6 +518,12 @@ module Manifest =
 
                     if name.Contains '*' then
                         Issue.at [ key "launch"; key "envSet"; index i ] "a variable name cannot contain *"
+
+                for i, flag in List.indexed launch.UntrustedOverrides do
+                    if not (flag.StartsWith '-') then
+                        Issue.at
+                            [ key "launch"; key "untrustedOverrides"; index i ]
+                            "an override is a runtime flag, written --name=value"
             | None -> ()
 
             match manifest.Hash with

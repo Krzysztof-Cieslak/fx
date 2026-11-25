@@ -24,6 +24,7 @@ let full: Manifest =
                     EnvSet = [ "TOOLS_MODE", "fast"; "A", "b" ]
                     EnvDeny = [ "SECRET_*" ]
                     Cwd = LaunchCwd.Workspace
+                    UntrustedOverrides = []
                 }
         Requires = [ { Id = "bun"; Version = ">=1.4 <2" } ]
         Capabilities = [ "clock"; "fs.read" ]
@@ -87,7 +88,7 @@ let tests =
                 Expect.equal
                     (issues text)
                     [
-                        "$.launch.cwdd: unknown field; known fields are \"exe\", \"args\", \"envAllowlist\", \"envSet\", \"envDeny\", \"cwd\""
+                        "$.launch.cwdd: unknown field; known fields are \"exe\", \"args\", \"envAllowlist\", \"envSet\", \"envDeny\", \"cwd\", \"untrustedOverrides\""
                         "$.contribution: unknown field; known fields are \"id\", \"version\", \"description\", \"sdk\", \"protocol\", \"placement\", \"runtime\", \"launch\", \"requires\", \"capabilities\", \"contributions\", \"rpc\", \"replaces\", \"hash\""
                     ]
                     "issues"
