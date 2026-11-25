@@ -32,6 +32,7 @@
     <Project Path="src/Fx.Interpreters/Fx.Interpreters.fsproj" />
     <Project Path="src/Fx.Sessions/Fx.Sessions.fsproj" />
     <Project Path="src/Fx.Sessions.Host/Fx.Sessions.Host.fsproj" />
+    <Project Path="src/Fx.Prompt/Fx.Prompt.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
