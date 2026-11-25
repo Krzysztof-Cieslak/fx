@@ -7,6 +7,8 @@
     core (Fx.Extensions, Fx.Rpc, the machine host, the live interpreters). Contracts.TypeScript is there
     for interpreters, which generate their kernels' declarations from the bindings' schemas
     (docs/modules/interpreters.md). Pure: the EFF analyzers apply to every file.
+    references here (Prelude, Contracts, Effects, Variants, Models, Grants): never the core (Fx.Extensions,
+    Fx.Rpc, the machine host, the live interpreters). Pure: the EFF analyzers apply to every file.
     Spec: docs/modules/extensions.md.
   -->
   <PropertyGroup Label="Package">
@@ -32,6 +34,7 @@
     <Compile Include="Models\Wire.fs" />
     <Compile Include="Models\Access.fs" />
     <Compile Include="Interpreter.fs" />
+    <Compile Include="Grants.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
@@ -40,5 +43,6 @@
     <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
     <ProjectReference Include="..\Fx.Variants\Fx.Variants.fsproj" />
     <ProjectReference Include="..\Fx.Models\Fx.Models.fsproj" />
+    <ProjectReference Include="..\Fx.Grants\Fx.Grants.fsproj" />
   </ItemGroup>
 </Project>

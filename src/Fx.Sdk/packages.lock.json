@@ -33,6 +33,13 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.grants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
+      },
       "fx.models": {
         "type": "Project",
         "dependencies": {
