@@ -37,6 +37,7 @@
     <Project Path="src/Fx.Grants.Host/Fx.Grants.Host.fsproj" />
     <Project Path="src/Fx.Environments/Fx.Environments.fsproj" />
     <Project Path="src/Fx.Identity/Fx.Identity.fsproj" />
+    <Project Path="src/Fx.Identity.Host/Fx.Identity.Host.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -109,6 +110,7 @@
     <Project Path="tests/Fx.Grants.Host.Tests/Fx.Grants.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.EgressExclusions.Tests/Fx.Ext.EgressExclusions.Tests.fsproj" />
     <Project Path="tests/Fx.Identity.Tests/Fx.Identity.Tests.fsproj" />
+    <Project Path="tests/Fx.Identity.Host.Tests/Fx.Identity.Host.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="Conformance\IdentityProviderConformance.fs" />
+    <Compile Include="TokenTests.fs" />
+    <Compile Include="AuthenticatorTests.fs" />
+    <Compile Include="ServerTests.fs" />
+    <Compile Include="ConformanceTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Identity.Host\Fx.Identity.Host.fsproj" />
+  </ItemGroup>
+</Project>
