@@ -4,7 +4,8 @@
 /// `kernel-*` scenarios of the JIT-vs-native diff, which drive the host's `Kernel` client against it
 /// in process and as a child process (this program's `kernel-peer` command).
 ///
-/// Its language is a script, one statement per line (`#` starts a comment):
+/// Its language is a script, one statement per line (`#` or `//` starts a comment, so cells can begin
+/// with an `// intent:` line):
 ///
 /// | Statement | Does |
 /// |---|---|
@@ -121,7 +122,7 @@ let parse (code: string) : Result<(int * Statement) list, SyntaxFailure> =
 
         let add (statement: Statement) = statements.Add((number, statement))
 
-        if line = "" || line.StartsWith '#' then
+        if line = "" || line.StartsWith '#' || line.StartsWith "//" then
             ()
         else
             match word with
