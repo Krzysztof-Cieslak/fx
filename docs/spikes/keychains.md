@@ -200,6 +200,10 @@ KWallet (5.97 and later), KeePassXC and others. Three ways to reach it from a Na
 - Every P/Invoke is blittable (`nativeint`, `int`, `uint32`, `byte`), with
   `[<assembly: DisableRuntimeMarshalling>]`, so a signature that needs marshalling fails on the JIT too.
   No variadic function is called.
+- `SetLastError = true` is marshalling: with runtime marshalling disabled, every call to such an import
+  throws ("Setting SetLastError to 'true' is not supported when runtime marshalling is disabled"; found
+  by the Windows tests). The Windows imports leave it out and read `Marshal.GetLastSystemError()` right
+  after a call that failed, which is what `LibraryImport`'s generated stubs do.
 - The D-Bus client uses only .NET's sockets, `BinaryPrimitives` and `UTF8Encoding`. The session crypto
   uses `BigInteger.ModPow`, `HKDF` and `Aes.EncryptCbc`, which on Linux call OpenSSL: like TLS, the DH
   session needs `libssl` on the machine (every desktop with a Secret Service has it).

@@ -1,6 +1,8 @@
 /// advapi32 (Credential Manager), crypt32 (DPAPI) and kernel32 on Windows (x64 and arm64).
 ///
-/// Every signature is blittable: pointers are `nativeint`, `BOOL` is `int`, `DWORD` is `uint32`.
+/// Every signature is blittable: pointers are `nativeint`, `BOOL` is `int`, `DWORD` is `uint32`. No
+/// import sets `SetLastError`, which disabled runtime marshalling does not support: `lastError` reads
+/// the error right after the failing call instead.
 /// Structures are written into zeroed native buffers at their 64-bit offsets; fx targets only
 /// 64-bit Windows.
 module internal Fx.Keyring.Native.Windows
@@ -56,22 +58,22 @@ module DataBlob =
     let Length = 0
     let Data = 8
 
-[<DllImport(Advapi32, EntryPoint = "CredWriteW", SetLastError = true)>]
+[<DllImport(Advapi32, EntryPoint = "CredWriteW")>]
 extern int CredWrite(nativeint credential, uint32 flags)
 
-[<DllImport(Advapi32, EntryPoint = "CredReadW", SetLastError = true)>]
+[<DllImport(Advapi32, EntryPoint = "CredReadW")>]
 extern int CredRead(nativeint targetName, uint32 credentialType, uint32 flags, nativeint credential)
 
-[<DllImport(Advapi32, EntryPoint = "CredDeleteW", SetLastError = true)>]
+[<DllImport(Advapi32, EntryPoint = "CredDeleteW")>]
 extern int CredDelete(nativeint targetName, uint32 credentialType, uint32 flags)
 
-[<DllImport(Advapi32, EntryPoint = "CredEnumerateW", SetLastError = true)>]
+[<DllImport(Advapi32, EntryPoint = "CredEnumerateW")>]
 extern int CredEnumerate(nativeint filter, uint32 flags, nativeint count, nativeint credentials)
 
 [<DllImport(Advapi32)>]
 extern void CredFree(nativeint buffer)
 
-[<DllImport(Crypt32, SetLastError = true)>]
+[<DllImport(Crypt32)>]
 extern int CryptProtectData(
     nativeint dataIn,
     nativeint description,
@@ -82,7 +84,7 @@ extern int CryptProtectData(
     nativeint dataOut
 )
 
-[<DllImport(Crypt32, SetLastError = true)>]
+[<DllImport(Crypt32)>]
 extern int CryptUnprotectData(
     nativeint dataIn,
     nativeint description,
@@ -124,7 +126,9 @@ let wide (text: string) : nativeint =
 
     p
 
-/// The last Win32 error of a P/Invoke with `SetLastError = true`.
-let lastError () = Marshal.GetLastPInvokeError()
+/// The calling thread's last Win32 error. Read it right after the call that failed: runtime
+/// marshalling is disabled for this assembly, and an import with `SetLastError = true` then fails
+/// when it is called, on the JIT and natively.
+let lastError () = Marshal.GetLastSystemError()
 
 let describe (error: int) = Marshal.GetPInvokeErrorMessage error
