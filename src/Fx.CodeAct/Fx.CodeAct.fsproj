@@ -29,6 +29,7 @@
     <Compile Include="CodeAct.fs" />
     <Compile Include="SandboxGuard.fs" />
     <Compile Include="Environment.fs" />
+    <Compile Include="GrantGuard.fs" />
   </ItemGroup>
 
   <ItemGroup>

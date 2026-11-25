@@ -323,7 +323,8 @@ type CodeAct<'R, 'K
             let cellId = cellIdOf journaled.Call
             let! token = Eff.cancellation
             let env = withToken hands.Env token
-            let call = kernel.Call hands.Guard
+            kernel.Guard <- hands.Guard
+            let call = kernel.Call(Permissions.attribute cellId hands.Guard)
 
             match action with
             | ToolAction.Read input ->
