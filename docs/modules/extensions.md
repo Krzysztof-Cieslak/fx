@@ -18,14 +18,14 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
 
 | Assembly | Who references it | Contents |
 |---|---|---|
-| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, `BasicExtensionEnv`, the `RemotePeer` shape, variant slots, the wire contract and `ModelAccess`, the grants capability and contribution types ([grants.md](grants.md)) |
-| `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, `Eff` and capabilities, variant slots, the canonical model ([models.md](models.md)), the grants log's model ([grants.md](grants.md)) |
+| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, `BasicExtensionEnv`, the `RemotePeer` shape, variant slots, interpreters ([interpreters.md](interpreters.md)), the wire contract and `ModelAccess`, the grants capability and contribution types ([grants.md](grants.md)) |
+| `Fx.Prelude`, `Fx.Contracts`, `Fx.Contracts.TypeScript`, `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, TypeScript declarations from schemas, `Eff` and capabilities, variant slots, the canonical model ([models.md](models.md)), the grants log's model ([grants.md](grants.md)) |
 | `Fx.Sdk.Process` (with `Fx.Rpc`, `Fx.Effects.Live`) | F# extension processes; the core, for the protocol's messages | `ExtensionProtocol`, `ExtensionServer`, `ExtensionProcess.run` |
 | `Fx.Extensions`, `Fx.Machines(.Host)`, … | the core and composition roots only | — |
 
 - **The rule:** a package under `extensions/` has exactly one project reference, `src/Fx.Sdk`, and no
   package references. Its compiled assembly references only the SDK surface (`Fx.Sdk`, `Fx.Prelude`,
-  `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants`, `FSharp.Core`) and the base class library
+  `Fx.Contracts`, `Fx.Contracts.TypeScript`, `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants`, `FSharp.Core`) and the base class library
   (`System.*`).
   `ArchitectureTests` checks both, from the `.fsproj` and from the assembly's metadata
   (`System.Reflection.Metadata`), proves the check fails on an assembly that uses the core, checks that

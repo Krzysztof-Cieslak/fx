@@ -128,4 +128,35 @@ module GrantStoreLog =
                 fun asked after cancellation ->
                     check asked
                     store.WaitPast after cancellation
+            FindCommit =
+                fun asked key cancellation ->
+                    check asked
+
+                    // A grant store keeps no index by key, so this scans its one stream. A commit's
+                    // events are consecutive and carry its key.
+                    task {
+                        let mutable after = 0L
+                        let mutable found: Appended option = None
+                        let mutable finished = false
+
+                        while not finished do
+                            let! page = store.Read after EventLog.PageSize cancellation
+
+                            if List.isEmpty page then
+                                finished <- true
+                            else
+                                for stored in page do
+                                    if not finished then
+                                        let matches = (eventMetaOf stored.Meta).Key = key
+
+                                        match found, matches with
+                                        | None, true -> found <- Some { After = stored.Seq - 1L; Count = 1 }
+                                        | Some commit, true -> found <- Some { commit with Count = commit.Count + 1 }
+                                        | Some _, false -> finished <- true
+                                        | None, false -> ()
+
+                                after <- (List.last page).Seq
+
+                        return found
+                    }
         }
