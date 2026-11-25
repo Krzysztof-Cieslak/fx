@@ -118,7 +118,7 @@ module Clock =
   - `Id` is 128 bits laid out like a ULID: a 48-bit millisecond timestamp, then 80 random bits. It is written as 26 Crockford base32 characters, and the text sorts like the id.
   - `IdGenerator` keeps ids strictly increasing within a millisecond and when the clock goes back.
   - Typed ids wrap it, e.g. `type SessionId = SessionId of Id`.
-- **Randomness** belongs to `IIds` (`RandomBytes`). It is journaled like every output, so protect journals like the data they record. Mint credentials only in host code (T122).
+- **Randomness** belongs to `IIds` (`RandomBytes`). It is journaled like every output, so protect journals like the data they record. Mint credentials only in host code (session tokens: `SessionTokens.issue`, [identity.md](identity.md)).
 - **Shell.**
   - `Exec` passes arguments verbatim, with no shell. `Script` runs a command line with the interpreter's shell: `/bin/sh -c` (present on every Linux, including Alpine, and on macOS), or `pwsh -Command` on Windows. Never assume bash.
   - Which shell to use is a variant (spec §15; on Windows the `shell.windows` slot, [variants.md](variants.md)). `LocalShell.defaultShell` is only the bootstrap default.

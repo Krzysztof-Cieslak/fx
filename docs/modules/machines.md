@@ -40,7 +40,7 @@ type Machine<'Cmd, 'Evt, 'S, 'Intent> =
 |---|---|
 | `StreamId` | names one stream, the log of one actor: `kind/id`, e.g. `session/01J…` |
 | `IdempotencyKey` | identifies one command. Clients make keys unique (an `Id` is a good key) |
-| `Attribution` | who sent an input: `{ Principal; Via }`. `Principal` is a principal id (principals are T122); the host's own inputs use `system`. `Via` names the client, interpreter or process manager that delivered it |
+| `Attribution` | who sent an input: `{ Principal; Via }`. `Principal` is a principal id, `<kind>:<provider>:<subject>` ([identity.md](identity.md)); the host's own inputs use `system`. `Via` names the client (its id, the same after reconnects), interpreter or process manager that delivered it |
 | `EventRef` | an event's position: stream and sequence number, printed `stream#seq` |
 | `Envelope<'Cmd>` | a command with its key, its attribution, and the event that caused it, if any |
 | `Outcome` | `Accepted of Appended` (the sequence numbers appended; possibly none), `Rejected of Rejection`, or `Stopped` (the actor stopped before handling it, so nothing happened: send it again with the same key) |
@@ -234,7 +234,6 @@ How it works:
 
 | What | Task |
 |---|---|
-| Principals behind `Attribution.Principal` | T122 |
 | `OutcomeUnknown` through `Recover` | T128 |
 | Retry delays and page sizes as variant slots ([variants.md](variants.md)), read where actors and process managers are started | T129 |
 | Journaling intents for exact replay of a session | T131 |

@@ -21,15 +21,15 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Package | Project | Who uses it | Contents |
 |---|---|---|---|
-| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), environment providers (`EnvProvider`, `IProviderEnv`, specs and leases, [environments.md](environments.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)), content exclusions (`ContentExclusions`, [egress.md](egress.md)), the grants capability (`IGrants`), `GrantStore` and the grants' contribution types ([grants.md](grants.md)) |
-| `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models`, `.Grants` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes; the grants log's model (actions, patterns, grants, requests, the effective rules) |
+| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), environment providers (`EnvProvider`, `IProviderEnv`, specs and leases, [environments.md](environments.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)), content exclusions (`ContentExclusions`, [egress.md](egress.md)), the grants capability (`IGrants`), `GrantStore` and the grants' contribution types ([grants.md](grants.md)), the `IdentityProvider` contract and its contribution type ([identity.md](identity.md)) |
+| `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models`, `.Grants`, `.Identity` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes; the grants log's model (actions, patterns, grants, requests, the effective rules); principals (ids, roles, credentials, `initialize`'s identity members) |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
 | `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host) | codecs, the generated contract types, the extension API, the protocol's server |
 
 - **Built-ins** (`extensions/`) reference `src/Fx.Sdk` and nothing else, and their compiled assemblies
   reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Contracts.TypeScript`,
-  `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
+  `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `Fx.Grants`, `Fx.Identity`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
   `Fx.Sdk.Process` reference only their surfaces (`processSdkSurface` adds `Fx.Sdk.Process`, `Fx.Rpc`,
   `Fx.Effects.Live`). Widening a surface is a deliberate edit of those sets and of this table.
 - **Not public:** `Fx.Extensions` (the registry, catalog, runtimes, bootstrap), `Fx.Machines(.Host)`,
@@ -56,9 +56,14 @@ they are packaged and versioned, and how to write an extension with them. The ex
   files carried in the binary, without dependencies.
 - **`Fx.Grants` is exposed** (T123): extensions request permissions (`IGrants`), add actions to the
   vocabulary and contribute grant stores and policy (spec §13.2, §16.2), so the grants log's model is
-  public. It is pure, references only Contracts (Fable: clients fold the log with it), and its host side
-  (the actor, the host-local store, the service, the `grants/*` methods) stays in `Fx.Grants.Host`, which
-  is not public.
+  public. It is pure, references only Contracts and Identity (Fable: clients fold the log with it), and
+  its host side (the actor, the host-local store, the service, the `grants/*` methods) stays in
+  `Fx.Grants.Host`, which is not public.
+- **`Fx.Identity` is exposed** (T122): extensions contribute identity providers (spec §11.2, §16.2), whose
+  contract speaks principals, credentials and roles, and the grants log reads a principal's kind from its
+  id. It is pure and references only Contracts (Fable: clients decode `initialize`'s identity members
+  with it); session tokens and the authenticator stay in `Fx.Identity.Host`, which is not public
+  ([identity.md](identity.md)).
 - **`Fx.Variants` is exposed**: extensions define slots (`VariantSlots.contributionType`, `variant-slot`,
   in the core catalog) and will read them through `IVariants` (T109b). It is pure and references only
   Contracts and Effects.

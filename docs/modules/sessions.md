@@ -167,7 +167,8 @@ let! outcome = SessionHost.send host "s1" (IdempotencyKey "k1") alice (Command.P
   appended since the last one (after commands the host sends, and when an actor starts).
 - **Multi-client.** Every command goes through the actor's mailbox with its key and attribution: inputs from
   any number of clients are handled one at a time, in arrival order, each attributed to its principal
-  (`Attribution`; principals are T122, epoch-fenced takeover T507).
+  (`Attribution`: the principal id and client id of the connection's session, [identity.md](identity.md);
+  epoch-fenced takeover T507).
 - **Intents.** `RunTurn` runs the turn runner; `Expire` sleeps until the deadline on the wall clock (looping, as
   delays run on the monotonic clock) and sends `ExpireRequest`; `StartFork` starts the child; `Abandon` (from
   recovery) ends a turn the host stopped during.
@@ -229,7 +230,7 @@ type TurnRunner<'R> = { Run: TurnContext<'R> -> Eff<'R, Result<TurnResult, strin
 |---|---|
 | `session/*` methods over JSON-RPC (send, interrupt on the control path, subscribe with `SessionLog.feed`, offers on attach), capability checks of answering clients, activating sessions with work in flight at start | T129 |
 | `SnapshotEvery`, `MaxGap` and `ProfileAttempts` as variant slots | T129 |
-| Principals behind `Attribution`, roles; epoch-fenced takeover | T122, T507 |
+| Each method's least role ([identity.md](identity.md#roles)); epoch-fenced takeover | T129, T507 |
 | The strategy behind `TurnRunner`, `TurnResult` validation (`Ensure`), richer `Evidence` | T127 |
 | In-flight tool calls become `OutcomeUnknown` on recovery, with a decision | T128 |
 | Decision cards, grant requests, gates, auth flows, installs as request kinds | T301, T123, T306, T121, T110 |
