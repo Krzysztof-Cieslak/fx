@@ -3,8 +3,11 @@ module Fx.Cli.Cli
 
 open System
 open Fx
+open Fx.Contracts
 open Fx.Envd.Live
+open Fx.Host
 open Fx.Sqlite
+open Fx.Variants
 
 type Outcome =
     {
@@ -13,6 +16,37 @@ type Outcome =
         Stderr: string
     }
 
+/// What `run` asks for.
+type RunArgs =
+    {
+        Prompt: string
+        /// `--json`: print the outcome as JSON on standard output.
+        Json: bool
+        /// `--session <id>`: prompt a session that exists.
+        Session: string option
+        Title: string option
+        /// `--model`, `--surface` and `--variant`, in order: the explicit layer.
+        Selections: (string * Json) list
+    }
+
+    override this.ToString() =
+        let json = if this.Json then " --json" else ""
+        $"run{json} ({this.Selections.Length} selections)"
+
+/// What `trust` asks for.
+[<RequireQualifiedAccess>]
+type TrustArgs =
+    /// Trust a directory (`None`: the current one).
+    | Add of dir: string option
+    | Remove of dir: string option
+    | List
+
+    override this.ToString() =
+        match this with
+        | Add dir -> "trust " + (dir |> Option.defaultValue ".")
+        | Remove dir -> "untrust " + (dir |> Option.defaultValue ".")
+        | List -> "trust --list"
+
 /// What the command line asks for.
 type Command =
     /// Print and exit.
@@ -20,11 +54,18 @@ type Command =
     /// Serve the environment protocol on standard input and output (`envd --stdio`; hidden: hosts
     /// start it, users do not).
     | Envd of EnvdOptions
+    /// Run one prompt headless in the current directory (embedded host).
+    | Run of RunArgs
+    | Trust of TrustArgs
+    | Variants of VariantsView
 
     override this.ToString() =
         match this with
         | Print outcome -> $"print (exit {outcome.ExitCode})"
         | Envd options -> string options
+        | Run args -> string args
+        | Trust args -> string args
+        | Variants view -> "variants " + string view
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
@@ -32,12 +73,26 @@ let versionText = $"{Product.Name} {Product.Version}\n"
 let buildInfo () =
     versionText + $"sqlite {Library.version ()} ({Library.sourceId ()})\n"
 
+let private bin = Product.binaryName
+
 let usage =
-    $"{Product.Name} {Product.Version}: exploration stage, nothing usable yet.\n\n"
-    + $"Usage: {Product.binaryName} [--help | --version | --build-info]\n"
+    $"{Product.Name} {Product.Version}: exploration stage.\n\n"
+    + "Usage:\n"
+    + $"  {bin} run -p <prompt> [--json] [--model <provider/model>] [--surface cells-only|hybrid]\n"
+    + $"      [--variant <slot>=<value>]... [--session <id>] [--title <text>]\n"
+    + "      Runs one prompt in the current directory, headless, and prints how its turn ended.\n"
+    + $"  {bin} trust [<dir>] | --remove [<dir>] | --list\n"
+    + "      Trusts a project: its config, extensions and setup may run.\n"
+    + $"  {bin} variants [list|explain|schema]\n"
+    + "      Lists the variant slots, explains their values here, or prints the config schema.\n"
+    + $"  {bin} --help | --version | --build-info\n"
+    + "\nThe interactive interface is not there yet.\n"
 
 let private envdUsage =
-    $"Usage: {Product.binaryName} envd --stdio [--workspace <dir>] [--state <dir>] [--shell pwsh|powershell|sh] [--retain <bytes>]\n"
+    $"Usage: {bin} envd --stdio [--workspace <dir>] [--state <dir>] [--shell pwsh|powershell|sh] [--retain <bytes>]\n"
+
+let private runUsage =
+    $"Usage: {bin} run -p <prompt> [--json] [--model <provider/model>] [--surface cells-only|hybrid] [--variant <slot>=<value>]... [--session <id>] [--title <text>]\n"
 
 let private failure (message: string) (help: string) =
     Print
@@ -67,6 +122,62 @@ let private parseEnvd (args: string list) : Command =
 
     loop EnvdOptions.defaults false args
 
+/// `run` arguments.
+let private parseRun (args: string list) : Command =
+    let rec loop (run: RunArgs) (prompt: string option) (args: string list) =
+        match args with
+        | [] ->
+            match prompt with
+            | Some prompt when prompt.Trim() <> "" -> Run { run with Prompt = prompt }
+            | _ -> failure "run needs a prompt (-p <prompt>)" runUsage
+        | ("-p" | "--prompt") :: text :: rest -> loop run (Some text) rest
+        | "--json" :: rest -> loop { run with Json = true } prompt rest
+        | "--session" :: id :: rest -> loop { run with Session = Some id } prompt rest
+        | "--title" :: title :: rest -> loop { run with Title = Some title } prompt rest
+        | "--model" :: model :: rest ->
+            if model.Contains '/' && not (model.StartsWith '/') && not (model.EndsWith '/') then
+                loop
+                    { run with
+                        Selections = run.Selections @ [ (Slots.modelRole "main").Id.Value, Json.String model ]
+                    }
+                    prompt
+                    rest
+            else
+                failure $"--model takes <provider>/<model>, e.g. anthropic/claude-sonnet-5-5; got {model}" runUsage
+        | "--surface" :: surface :: rest ->
+            match surface with
+            | "cells-only"
+            | "hybrid" ->
+                loop
+                    { run with
+                        Selections = run.Selections @ [ Slots.actionSurface.Id.Value, Json.String surface ]
+                    }
+                    prompt
+                    rest
+            | other -> failure $"--surface is cells-only or hybrid, not {other}" runUsage
+        | "--variant" :: selection :: rest ->
+            match Selections.parseArgument selection with
+            | Ok selection ->
+                loop
+                    { run with
+                        Selections = run.Selections @ [ selection ]
+                    }
+                    prompt
+                    rest
+            | Error e -> failure $"--variant: {e}" runUsage
+        | other :: _ -> failure $"unknown run argument: {other}" runUsage
+
+    loop
+        {
+            Prompt = ""
+            Json = false
+            Session = None
+            Title = None
+            Selections = []
+        }
+        None
+        args
+
 let parse (args: string list) : Command =
     match args with
     | []
@@ -93,6 +204,18 @@ let parse (args: string list) : Command =
                 Stderr = ""
             }
     | "envd" :: rest -> parseEnvd rest
+    | "run" :: rest -> parseRun rest
+    | [ "trust" ] -> Trust(TrustArgs.Add None)
+    | [ "trust"; "--list" ] -> Trust TrustArgs.List
+    | [ "trust"; "--remove" ] -> Trust(TrustArgs.Remove None)
+    | [ "trust"; "--remove"; dir ] -> Trust(TrustArgs.Remove(Some dir))
+    | [ "trust"; dir ] when not (dir.StartsWith '-') -> Trust(TrustArgs.Add(Some dir))
+    | "trust" :: _ -> failure "trust takes a directory, --remove [<dir>] or --list" usage
+    | [ "variants" ]
+    | [ "variants"; "list" ] -> Variants VariantsView.List
+    | [ "variants"; "explain" ] -> Variants VariantsView.Explain
+    | [ "variants"; "schema" ] -> Variants VariantsView.Schema
+    | "variants" :: _ -> failure "variants takes list, explain or schema" usage
     | other ->
         let given = String.concat " " other
         failure $"unknown arguments: {given}" usage

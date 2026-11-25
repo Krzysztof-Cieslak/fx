@@ -22,5 +22,6 @@
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
     <ProjectReference Include="..\Fx.Sqlite\Fx.Sqlite.fsproj" />
     <ProjectReference Include="..\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
+    <ProjectReference Include="..\Fx.Host\Fx.Host.fsproj" />
   </ItemGroup>
 </Project>

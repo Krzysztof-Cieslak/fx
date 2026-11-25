@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of src/Fx.Host: its pure parts (paths, config, trust, credentials, the static list, activity
+    lines, the session index's JSON); the host started on scratch directories with the live
+    interpreters and a scripted model (start, lock, config errors, trust, variants, sessions in an
+    embedded environment, restarts); and fx run -p end to end on the bun-ts kernel, with the pinned
+    Bun installed by the host's own installer (network, cached; skipped offline, required in CI).
+  -->
+  <ItemGroup>
+    <Compile Include="..\Fx.Kernel.Tests\Repo.fs" Link="Bun\Repo.fs" />
+    <Compile Include="..\Fx.Kernel.Tests\PinnedBun.fs" Link="Bun\PinnedBun.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="UnitTests.fs" />
+    <Compile Include="HostTests.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="golden\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Host\Fx.Host.fsproj" />
+  </ItemGroup>
+</Project>

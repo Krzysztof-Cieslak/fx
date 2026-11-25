@@ -91,14 +91,48 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Envd.Live": "[0.0.0, )",
+          "Fx.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Sqlite": "[0.0.0, )"
+        }
+      },
+      "fx.codeact": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Environments": "[0.0.0, )",
+          "Fx.Interpreters": "[0.0.0, )",
+          "Fx.Prompt": "[0.0.0, )",
+          "Fx.Sessions.Host": "[0.0.0, )"
+        }
+      },
+      "fx.components": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.components.live": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Components": "[0.0.0, )"
         }
       },
       "fx.contracts": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.contracts.typescript": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
         }
       },
       "fx.effects": {
@@ -134,6 +168,162 @@
           "Fx.Store.Live": "[0.0.0, )"
         }
       },
+      "fx.environments": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Components": "[0.0.0, )",
+          "Fx.Envd": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.ext.egressexclusions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.envlocal": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.identitylocalosuser": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.interpreterbunts": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.modelanthropic": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.modelopenai": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.runtimebun": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.extensions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Sdk.Process": "[0.0.0, )"
+        }
+      },
+      "fx.grants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Identity": "[0.0.0, )"
+        }
+      },
+      "fx.grants.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Grants": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.CodeAct": "[0.0.0, )",
+          "Fx.Components.Live": "[0.0.0, )",
+          "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Envd.Live": "[0.0.0, )",
+          "Fx.Ext.EgressExclusions": "[0.0.0, )",
+          "Fx.Ext.EnvLocal": "[0.0.0, )",
+          "Fx.Ext.IdentityLocalOsUser": "[0.0.0, )",
+          "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
+          "Fx.Ext.ModelAnthropic": "[0.0.0, )",
+          "Fx.Ext.ModelOpenAI": "[0.0.0, )",
+          "Fx.Ext.RuntimeBun": "[0.0.0, )",
+          "Fx.Extensions": "[0.0.0, )",
+          "Fx.Grants.Host": "[0.0.0, )",
+          "Fx.Identity.Host": "[0.0.0, )",
+          "Fx.Store.Live": "[0.0.0, )",
+          "Fx.Transport.Http": "[0.0.0, )"
+        }
+      },
+      "fx.identity": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
+      },
+      "fx.identity.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Identity": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.interpreters": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Envd": "[0.0.0, )",
+          "Fx.Kernel": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.kernel": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Contracts.TypeScript": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
       "fx.machines": {
         "type": "Project",
         "dependencies": {
@@ -148,10 +338,32 @@
           "Fx.Machines": "[0.0.0, )"
         }
       },
+      "fx.models": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
       "fx.prelude": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )"
+        }
+      },
+      "fx.prompt": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Models": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
         }
       },
       "fx.pty": {
@@ -168,6 +380,46 @@
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Effects": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.sdk": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Contracts.TypeScript": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Grants": "[0.0.0, )",
+          "Fx.Identity": "[0.0.0, )",
+          "Fx.Models": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
+        }
+      },
+      "fx.sdk.process": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Effects.Live": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.sessions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )"
+        }
+      },
+      "fx.sessions.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
         }
       },
       "fx.sqlite": {
@@ -190,6 +442,21 @@
           "FSharp.Core": "[11.0.101, )",
           "Fx.Sqlite": "[0.0.0, )",
           "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.transport.http": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.variants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )"
         }
       }
     }
