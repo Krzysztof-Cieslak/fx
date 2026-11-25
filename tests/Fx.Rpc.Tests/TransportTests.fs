@@ -143,6 +143,11 @@ let shellChildProcess () : Task<Link> =
         return
             {
                 Transport = transport
+                Ended =
+                    task {
+                        let! _ = proc.Wait CancellationToken.None
+                        ()
+                    }
                 Crash =
                     fun () ->
                         task {
