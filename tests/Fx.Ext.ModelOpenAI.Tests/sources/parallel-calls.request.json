@@ -1,0 +1,39 @@
+{
+  "model": "gpt-6-luna",
+  "input": [
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "Rename x to count in src/main.fs." }]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "read_file",
+      "description": "Reads a file.",
+      "parameters": {
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": ["path"]
+      },
+      "strict": false
+    },
+    {
+      "type": "function",
+      "name": "edit_file",
+      "description": "Replaces a file's text.",
+      "parameters": {
+        "type": "object",
+        "properties": { "path": { "type": "string" }, "text": { "type": "string" } },
+        "required": ["path", "text"]
+      },
+      "strict": false
+    }
+  ],
+  "parallel_tool_calls": true,
+  "reasoning": { "effort": "low" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 8000,
+  "store": false,
+  "stream": true
+}

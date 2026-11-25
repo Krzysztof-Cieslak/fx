@@ -1,0 +1,134 @@
+{
+  "name": "text",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6-luna",
+    "system": [
+      {
+        "kind": "text",
+        "text": "Be brief."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Say hello in Polish."
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "off",
+      "visible": false
+    },
+    "maxOutputTokens": 1024,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {
+      "key": "conversation-1"
+    },
+    "metadata": {
+      "user_id": "user-7f3a",
+      "session": "s-1"
+    }
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6-luna",
+            "input": [
+              {
+                "role": "developer",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Be brief."
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Say hello in Polish."
+                  }
+                ]
+              }
+            ],
+            "reasoning": {
+              "effort": "none"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 1024,
+            "prompt_cache_key": "conversation-1",
+            "safety_identifier": "user-7f3a",
+            "metadata": {
+              "session": "s-1"
+            },
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_5d94463082aaf93660540ce70a92846cc19771a38b679bde\",\"object\":\"response\",\"created_at\":1764059300,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6-luna\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_5d94463082aaf93660540ce70a92846cc19771a38b679bde\",\"object\":\"response\",\"created_at\":1764059300,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6-luna\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":3,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":4,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"delta\":\"Cześć!\",\"logprobs\":[],\"obfuscation\":\"kPq9xR\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"delta\":\" 👋 W czym\",\"logprobs\":[],\"obfuscation\":\"3d\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":6,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"delta\":\" mogę pomóc?\",\"logprobs\":[],\"obfuscation\":\"Zw\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":7,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"text\":\"Cześć! 👋 W czym mogę pomóc?\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":8,\"item_id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Cześć! 👋 W czym mogę pomóc?\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":9,\"output_index\":0,\"item\":{\"id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Cześć! 👋 W czym mogę pomóc?\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":10,\"response\":{\"id\":\"resp_5d94463082aaf93660540ce70a92846cc19771a38b679bde\",\"object\":\"response\",\"created_at\":1764059300,\"status\":\"completed\",\"completed_at\":1764059301,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6-luna\",\"output\":[{\"id\":\"msg_c6ec1ef487558d0575895690d2e0b249eade2181598bf2a4\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Cześć! 👋 W czym mogę pomóc?\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}],\"store\":false,\"usage\":{\"input_tokens\":1290,\"input_tokens_details\":{\"cached_tokens\":1152,\"cache_write_tokens\":0},\"output_tokens\":12,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":1302}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_5d94463082aaf93660540ce70a92846cc19771a38b679bde",
+      "model": "gpt-6-luna",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "Cześć! 👋 W czym mogę pomóc?",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6-luna",
+            "kind": "phase",
+            "data": "final_answer"
+          }
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 1290,
+        "output": 12,
+        "cacheRead": 1152,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

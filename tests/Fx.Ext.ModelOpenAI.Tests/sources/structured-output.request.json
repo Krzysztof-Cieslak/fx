@@ -1,0 +1,35 @@
+{
+  "model": "gpt-6.1-terra",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Extract the contact: John Smith (john@example.com) asked for a demo."
+        }
+      ]
+    }
+  ],
+  "include": ["reasoning.encrypted_content"],
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "contact_info",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        },
+        "required": ["name", "email", "phone"],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  },
+  "max_output_tokens": 1024,
+  "store": false,
+  "stream": true
+}

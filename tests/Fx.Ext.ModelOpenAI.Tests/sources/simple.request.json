@@ -1,0 +1,13 @@
+{
+  "model": "gpt-6.2-sol",
+  "input": [
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "Hi" }]
+    }
+  ],
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 256,
+  "store": false,
+  "stream": true
+}

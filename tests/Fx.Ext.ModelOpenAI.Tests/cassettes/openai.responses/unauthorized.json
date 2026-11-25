@@ -1,0 +1,81 @@
+{
+  "name": "unauthorized",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-sol",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 256,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-sol",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 256,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 401,
+          "headers": {
+            "content-type": "application/json",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "{\n  \"error\": {\n    \"message\": \"Incorrect API key provided: sk-proj-********************abcd. You can find your API key at https://platform.openai.com/account/api-keys.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": null,\n    \"code\": \"invalid_api_key\"\n  }\n}",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "authFailed",
+      "message": "Incorrect API key provided: sk-proj-********************abcd. You can find your API key at https://platform.openai.com/account/api-keys."
+    }
+  }
+}

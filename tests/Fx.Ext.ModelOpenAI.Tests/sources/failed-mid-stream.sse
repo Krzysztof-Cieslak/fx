@@ -1,0 +1,18 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e","object":"response","created_at":1764060000,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6.2-sol","output":[],"store":false,"usage":null}}
+
+event: response.in_progress
+data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e","object":"response","created_at":1764060000,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6.2-sol","output":[],"store":false,"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":3,"item_id":"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":4,"item_id":"msg_e2a4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8","output_index":0,"content_index":0,"delta":"The answer","logprobs":[],"obfuscation":"Fd3"}
+
+event: response.failed
+data: {"type":"response.failed","sequence_number":5,"response":{"id":"resp_4b6d8f0a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b1d3f5a7c9e","object":"response","created_at":1764060000,"status":"failed","error":{"code":"server_error","message":"The model failed to generate a response."},"incomplete_details":null,"model":"gpt-6.2-sol","output":[],"store":false,"usage":null}}
+

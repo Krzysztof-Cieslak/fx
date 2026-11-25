@@ -1,0 +1,42 @@
+{
+  "model": "gpt-5.5",
+  "input": [
+    {
+      "role": "developer",
+      "content": [{ "type": "input_text", "text": "You are a coding agent." }]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Repository map: src/Program.fs, src/Library.fs, tests/Tests.fs."
+        }
+      ]
+    },
+    { "role": "assistant", "content": "Noted.", "phase": "final_answer" },
+    {
+      "role": "user",
+      "content": [{ "type": "input_text", "text": "Which file defines main?" }]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "read_file",
+      "description": "Reads a file.",
+      "parameters": {
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": ["path"]
+      },
+      "strict": false
+    }
+  ],
+  "reasoning": { "effort": "medium" },
+  "include": ["reasoning.encrypted_content"],
+  "max_output_tokens": 4096,
+  "prompt_cache_key": "repo-fx",
+  "store": false,
+  "stream": true
+}

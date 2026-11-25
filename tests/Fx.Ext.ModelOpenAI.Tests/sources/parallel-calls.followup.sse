@@ -1,0 +1,27 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_0eabf23b91e1dc57821da5aa75eca0bd9ee0f169a3319a96","object":"response","created_at":1764059404,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6-luna","output":[],"store":false,"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_01e63613fe9840e3ec0357bc2da35ee13e7594dcb41d1fcc","type":"message","status":"in_progress","content":[],"phase":"commentary","role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":2,"item_id":"msg_01e63613fe9840e3ec0357bc2da35ee13e7594dcb41d1fcc","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":3,"item_id":"msg_01e63613fe9840e3ec0357bc2da35ee13e7594dcb41d1fcc","output_index":0,"content_index":0,"delta":"Only src/main.fs needs the rename.","logprobs":[],"obfuscation":"x"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":4,"output_index":0,"item":{"id":"msg_01e63613fe9840e3ec0357bc2da35ee13e7594dcb41d1fcc","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"Only src/main.fs needs the rename."}],"phase":"commentary","role":"assistant"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":5,"output_index":1,"item":{"id":"fc_b5810f76bee4e27018ab719c78333c0dd5e0e77cd190125e","type":"function_call","status":"in_progress","arguments":"","call_id":"call_1DeAHmv8z9SxAWnhKjnpLQqZ","name":"edit_file"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":6,"item_id":"fc_b5810f76bee4e27018ab719c78333c0dd5e0e77cd190125e","output_index":1,"delta":"{\"path\":\"src/main.fs\",\"text\":\"let count = 1\"}","obfuscation":"P"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":7,"output_index":1,"item":{"id":"fc_b5810f76bee4e27018ab719c78333c0dd5e0e77cd190125e","type":"function_call","status":"completed","arguments":"{\"path\":\"src/main.fs\",\"text\":\"let count = 1\"}","call_id":"call_1DeAHmv8z9SxAWnhKjnpLQqZ","name":"edit_file"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":8,"response":{"id":"resp_0eabf23b91e1dc57821da5aa75eca0bd9ee0f169a3319a96","object":"response","created_at":1764059404,"status":"completed","completed_at":1764059405,"error":null,"incomplete_details":null,"model":"gpt-6-luna","output":[],"store":false,"usage":{"input_tokens":1402,"input_tokens_details":{"cached_tokens":1152,"cache_write_tokens":0},"output_tokens":41,"output_tokens_details":{"reasoning_tokens":12},"total_tokens":1443}}}
+

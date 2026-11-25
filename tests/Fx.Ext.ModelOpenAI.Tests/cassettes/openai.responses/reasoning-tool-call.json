@@ -1,0 +1,326 @@
+{
+  "name": "reasoning-tool-call",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-astra",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a coding agent."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What's the weather in Kraków?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "The current weather in a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "celsius",
+                "fahrenheit"
+              ]
+            }
+          },
+          "required": [
+            "location"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "high",
+      "visible": true
+    },
+    "maxOutputTokens": 16000,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {
+      "key": "weather-1"
+    },
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-astra",
+            "input": [
+              {
+                "role": "developer",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "You are a coding agent."
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "What's the weather in Kraków?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "type": "function",
+                "name": "get_weather",
+                "description": "The current weather in a city.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "celsius",
+                        "fahrenheit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "location"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "reasoning": {
+              "effort": "high",
+              "summary": "auto"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 16000,
+            "prompt_cache_key": "weather-1",
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_bdd07f2a98ccdd6e21d29d5925254556578f3b22ce33caf0\",\"object\":\"response\",\"created_at\":1764059200,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-astra\",\"output\":[],\"parallel_tool_calls\":true,\"reasoning\":{\"effort\":\"high\",\"summary\":\"auto\"},\"store\":false,\"usage\":null}}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_bdd07f2a98ccdd6e21d29d5925254556578f3b22ce33caf0\",\"object\":\"response\",\"created_at\":1764059200,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-astra\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"type\":\"reasoning\",\"summary\":[]}}\n\nevent: response.reasoning_summary_part.added\ndata: {\"type\":\"response.reasoning_summary_part.added\",\"sequence_number\":3,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":0,\"part\":{\"type\":\"summary_text\",\"text\":\"\"}}\n\nevent: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"sequence_number\":4,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":0,\"delta\":\"**Checking the weather**\\n\\n\",\"obfuscation\":\"q8Zr\"}\n\nevent: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"sequence_number\":5,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":0,\"delta\":\"The user wants the current weather in Kraków.\",\"obfuscation\":\"W1\"}\n\nevent: response.reasoning_summary_text.done\ndata: {\"type\":\"response.reasoning_summary_text.done\",\"sequence_number\":6,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":0,\"text\":\"**Checking the weather**\\n\\nThe user wants the current weather in Kraków.\"}\n\nevent: response.reasoning_summary_part.done\ndata: {\"type\":\"response.reasoning_summary_part.done\",\"sequence_number\":7,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":0,\"part\":{\"type\":\"summary_text\",\"text\":\"**Checking the weather**\\n\\nThe user wants the current weather in Kraków.\"}}\n\nevent: response.reasoning_summary_part.added\ndata: {\"type\":\"response.reasoning_summary_part.added\",\"sequence_number\":8,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":1,\"part\":{\"type\":\"summary_text\",\"text\":\"\"}}\n\nevent: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"sequence_number\":9,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":1,\"delta\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\",\"obfuscation\":\"Hn3\"}\n\nevent: response.reasoning_summary_text.done\ndata: {\"type\":\"response.reasoning_summary_text.done\",\"sequence_number\":10,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":1,\"text\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\"}\n\nevent: response.reasoning_summary_part.done\ndata: {\"type\":\"response.reasoning_summary_part.done\",\"sequence_number\":11,\"item_id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"output_index\":0,\"summary_index\":1,\"part\":{\"type\":\"summary_text\",\"text\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":12,\"output_index\":0,\"item\":{\"id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"**Checking the weather**\\n\\nThe user wants the current weather in Kraków.\"},{\"type\":\"summary_text\",\"text\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\"}],\"encrypted_content\":\"gAAAAABpfmDsLqFtcoCkv1I3oplBkJKVb2E72WpmDzAC5cTK38TCLAIPybeUbUfE16b1hLLaj4/CjbQYpXB5q6mXTikDrHkyfkTUHEnuK+4PN2VNuqhx92pKsVzKC9Ve8lKl5ZkH6uvKd60JAZwpw5ruSZVANFUaV34DRASvcj63xy0pTo/CguH9jZLOmt+qfG06xqirjFiOcJ8w3ESIAWEER3wShyvYy3z+2sqF4y3LCxYkHE2QE1nWb9MWL0Emk8oyxUAFavZIa+xUuwEZRyOgxY/+tnCvWPVk8+BsMu8MHmscVPbIQ91L44xK376wRFrklrn5PcJyFNOucylXhYQ6yyBTffjF+6w2V+r2kZ3EK+N6qnMpN6yUmwpQnQw2542/jLZCnN2vZq35NizWNfeP\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":13,\"output_index\":1,\"item\":{\"id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"commentary\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":14,\"item_id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":15,\"item_id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"output_index\":1,\"content_index\":0,\"delta\":\"Let me check the weather\",\"logprobs\":[],\"obfuscation\":\"Xy\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":16,\"item_id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"output_index\":1,\"content_index\":0,\"delta\":\" in Kraków.\",\"logprobs\":[],\"obfuscation\":\"bL0pQ\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":17,\"item_id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"output_index\":1,\"content_index\":0,\"text\":\"Let me check the weather in Kraków.\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":18,\"item_id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather in Kraków.\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":19,\"output_index\":1,\"item\":{\"id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather in Kraków.\"}],\"phase\":\"commentary\",\"role\":\"assistant\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":20,\"output_index\":2,\"item\":{\"id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_TKcqkXObC6C30KgIHKmel5kU\",\"name\":\"get_weather\"}}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":21,\"item_id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"output_index\":2,\"delta\":\"{\\\"location\\\":\\\"Kra\",\"obfuscation\":\"9f\"}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":22,\"item_id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"output_index\":2,\"delta\":\"ków\\\",\\\"unit\\\":\\\"celsius\\\"}\",\"obfuscation\":\"Tq7\"}\n\nevent: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"sequence_number\":23,\"item_id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"output_index\":2,\"arguments\":\"{\\\"location\\\":\\\"Kraków\\\",\\\"unit\\\":\\\"celsius\\\"}\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":24,\"output_index\":2,\"item\":{\"id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"location\\\":\\\"Kraków\\\",\\\"unit\\\":\\\"celsius\\\"}\",\"call_id\":\"call_TKcqkXObC6C30KgIHKmel5kU\",\"name\":\"get_weather\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":25,\"response\":{\"id\":\"resp_bdd07f2a98ccdd6e21d29d5925254556578f3b22ce33caf0\",\"object\":\"response\",\"created_at\":1764059200,\"status\":\"completed\",\"completed_at\":1764059204,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-astra\",\"output\":[{\"id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"**Checking the weather**\\n\\nThe user wants the current weather in Kraków.\"},{\"type\":\"summary_text\",\"text\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\"}],\"encrypted_content\":\"gAAAAABpfmDsLqFtcoCkv1I3oplBkJKVb2E72WpmDzAC5cTK38TCLAIPybeUbUfE16b1hLLaj4/CjbQYpXB5q6mXTikDrHkyfkTUHEnuK+4PN2VNuqhx92pKsVzKC9Ve8lKl5ZkH6uvKd60JAZwpw5ruSZVANFUaV34DRASvcj63xy0pTo/CguH9jZLOmt+qfG06xqirjFiOcJ8w3ESIAWEER3wShyvYy3z+2sqF4y3LCxYkHE2QE1nWb9MWL0Emk8oyxUAFavZIa+xUuwEZRyOgxY/+tnCvWPVk8+BsMu8MHmscVPbIQ91L44xK376wRFrklrn5PcJyFNOucylXhYQ6yyBTffjF+6w2V+r2kZ3EK+N6qnMpN6yUmwpQnQw2542/jLZCnN2vZq35NizWNfeP\"},{\"id\":\"msg_503b2fcf509d2f1a0764a8248672242dcfd780d9c5478822\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather in Kraków.\"}],\"phase\":\"commentary\",\"role\":\"assistant\"},{\"id\":\"fc_4ce6403df0b398c4059b7d501721d5800d18679a8ee491cb\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"location\\\":\\\"Kraków\\\",\\\"unit\\\":\\\"celsius\\\"}\",\"call_id\":\"call_TKcqkXObC6C30KgIHKmel5kU\",\"name\":\"get_weather\"}],\"store\":false,\"usage\":{\"input_tokens\":412,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":187,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":599}}}\n\n",
+          "end": "complete"
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-astra",
+            "input": [
+              {
+                "role": "developer",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "You are a coding agent."
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "What's the weather in Kraków?"
+                  }
+                ]
+              },
+              {
+                "id": "rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2",
+                "type": "reasoning",
+                "summary": [
+                  {
+                    "type": "summary_text",
+                    "text": "**Checking the weather**\n\nThe user wants the current weather in Kraków."
+                  },
+                  {
+                    "type": "summary_text",
+                    "text": "**Calling get_weather**\n\nI'll ask for Kraków in celsius."
+                  }
+                ],
+                "encrypted_content": "gAAAAABpfmDsLqFtcoCkv1I3oplBkJKVb2E72WpmDzAC5cTK38TCLAIPybeUbUfE16b1hLLaj4/CjbQYpXB5q6mXTikDrHkyfkTUHEnuK+4PN2VNuqhx92pKsVzKC9Ve8lKl5ZkH6uvKd60JAZwpw5ruSZVANFUaV34DRASvcj63xy0pTo/CguH9jZLOmt+qfG06xqirjFiOcJ8w3ESIAWEER3wShyvYy3z+2sqF4y3LCxYkHE2QE1nWb9MWL0Emk8oyxUAFavZIa+xUuwEZRyOgxY/+tnCvWPVk8+BsMu8MHmscVPbIQ91L44xK376wRFrklrn5PcJyFNOucylXhYQ6yyBTffjF+6w2V+r2kZ3EK+N6qnMpN6yUmwpQnQw2542/jLZCnN2vZq35NizWNfeP"
+              },
+              {
+                "role": "assistant",
+                "content": "Let me check the weather in Kraków.",
+                "phase": "commentary"
+              },
+              {
+                "type": "function_call",
+                "call_id": "call_TKcqkXObC6C30KgIHKmel5kU",
+                "name": "get_weather",
+                "arguments": "{\"location\":\"Kraków\",\"unit\":\"celsius\"}"
+              },
+              {
+                "type": "function_call_output",
+                "call_id": "call_TKcqkXObC6C30KgIHKmel5kU",
+                "output": "4 °C, light snow"
+              }
+            ],
+            "tools": [
+              {
+                "type": "function",
+                "name": "get_weather",
+                "description": "The current weather in a city.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "celsius",
+                        "fahrenheit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "location"
+                  ]
+                },
+                "strict": false
+              }
+            ],
+            "reasoning": {
+              "effort": "high",
+              "summary": "auto"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 16000,
+            "prompt_cache_key": "weather-1",
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_6e0c1d8f2b7a4e9c3d5f8a1b0c2d4e6f7a9b1c3d5e7f9a0b\",\"object\":\"response\",\"created_at\":1764059206,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-astra\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"rs_8a2f5c1e9d3b7f0a4c6e8b2d1f3a5c7e9b0d2f4a6c8e1b3d\",\"type\":\"reasoning\",\"summary\":[]}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"rs_8a2f5c1e9d3b7f0a4c6e8b2d1f3a5c7e9b0d2f4a6c8e1b3d\",\"type\":\"reasoning\",\"summary\":[],\"encrypted_content\":\"gAAAAABpm+lTN1w+HrJxTsBmMJHqDEub7dC8LuEdJpo0/7gTK/GGTdZ/xMLrUr5lsaUFxW3nyzT0g6U1IB0NSlkC7CsFK3I7Bgttn+obxswETSeiO/2Utjmz47W9RBeeoGJeoK+rHycQQWcTKjVt3dhDAZYugaCwJBHTZMg9Mj0XU/eva99XRkKPsFj9osV9WAtuXjY51OcpT2tGVOZ71FAv36jFIV0eB9QCBdM6OhT3/zUsa5jhswiymtcbi0nhLSCJEoehFm64VS6XVEEFrWcivqyC1fsSFF2MvQ8gQ+EN6XVzpRVp+eFX3u+GZ/oDhW/ZBwl7fwdMKI6zCnhst0GGGov/o5JgxTM=\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":3,\"output_index\":1,\"item\":{\"id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":4,\"item_id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"item_id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"output_index\":1,\"content_index\":0,\"delta\":\"It's 4 °C in Kraków with light snow.\",\"logprobs\":[],\"obfuscation\":\"a\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":6,\"item_id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"output_index\":1,\"content_index\":0,\"text\":\"It's 4 °C in Kraków with light snow.\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":7,\"item_id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It's 4 °C in Kraków with light snow.\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":8,\"output_index\":1,\"item\":{\"id\":\"msg_2c4e6a8b0d1f3e5a7c9b2d4f6e8a0c1e3b5d7f9a2c4e6b8d\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It's 4 °C in Kraków with light snow.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":9,\"response\":{\"id\":\"resp_6e0c1d8f2b7a4e9c3d5f8a1b0c2d4e6f7a9b1c3d5e7f9a0b\",\"object\":\"response\",\"created_at\":1764059206,\"status\":\"completed\",\"completed_at\":1764059207,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-astra\",\"output\":[],\"store\":false,\"usage\":{\"input_tokens\":640,\"input_tokens_details\":{\"cached_tokens\":384,\"cache_write_tokens\":0},\"output_tokens\":46,\"output_tokens_details\":{\"reasoning_tokens\":30},\"total_tokens\":686}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_bdd07f2a98ccdd6e21d29d5925254556578f3b22ce33caf0",
+      "model": "gpt-6.2-astra",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "**Checking the weather**\n\nThe user wants the current weather in Kraków.\n\n**Calling get_weather**\n\nI'll ask for Kraków in celsius.",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6.2-astra",
+            "kind": "reasoning",
+            "data": "{\"id\":\"rs_14b1e79e03fc85fb8891142f033f02d5e527df79abc206f2\",\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"**Checking the weather**\\n\\nThe user wants the current weather in Kraków.\"},{\"type\":\"summary_text\",\"text\":\"**Calling get_weather**\\n\\nI'll ask for Kraków in celsius.\"}],\"encrypted_content\":\"gAAAAABpfmDsLqFtcoCkv1I3oplBkJKVb2E72WpmDzAC5cTK38TCLAIPybeUbUfE16b1hLLaj4/CjbQYpXB5q6mXTikDrHkyfkTUHEnuK+4PN2VNuqhx92pKsVzKC9Ve8lKl5ZkH6uvKd60JAZwpw5ruSZVANFUaV34DRASvcj63xy0pTo/CguH9jZLOmt+qfG06xqirjFiOcJ8w3ESIAWEER3wShyvYy3z+2sqF4y3LCxYkHE2QE1nWb9MWL0Emk8oyxUAFavZIa+xUuwEZRyOgxY/+tnCvWPVk8+BsMu8MHmscVPbIQ91L44xK376wRFrklrn5PcJyFNOucylXhYQ6yyBTffjF+6w2V+r2kZ3EK+N6qnMpN6yUmwpQnQw2542/jLZCnN2vZq35NizWNfeP\"}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Let me check the weather in Kraków.",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6.2-astra",
+            "kind": "phase",
+            "data": "commentary"
+          }
+        },
+        {
+          "kind": "toolCall",
+          "id": "call_TKcqkXObC6C30KgIHKmel5kU",
+          "name": "get_weather",
+          "arguments": "{\"location\":\"Kraków\",\"unit\":\"celsius\"}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 412,
+        "output": 187,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 128
+      }
+    }
+  },
+  "followUp": {
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "call_TKcqkXObC6C30KgIHKmel5kU",
+            "name": "get_weather",
+            "content": [
+              {
+                "kind": "text",
+                "text": "4 °C, light snow"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    ],
+    "statesVerbatim": false
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "name": "media",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6-luna",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Describe the image and the document."
+          },
+          {
+            "kind": "media",
+            "media": "image",
+            "mediaType": "image/png",
+            "source": {
+              "kind": "base64",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+            }
+          },
+          {
+            "kind": "media",
+            "media": "pdf",
+            "mediaType": "application/pdf",
+            "source": {
+              "kind": "url",
+              "url": "https://example.com/invoice.pdf"
+            },
+            "name": "invoice.pdf"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "off",
+      "visible": false
+    },
+    "maxOutputTokens": 2048,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6-luna",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Describe the image and the document."
+                  },
+                  {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+                    "detail": "auto"
+                  },
+                  {
+                    "type": "input_file",
+                    "filename": "invoice.pdf",
+                    "file_url": "https://example.com/invoice.pdf"
+                  }
+                ]
+              }
+            ],
+            "reasoning": {
+              "effort": "none"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 2048,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_f28cf999ea78c6c9ebe0c980d7f48d8d12cd92ab01b4f342\",\"object\":\"response\",\"created_at\":1764059700,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6-luna\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":2,\"item_id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":3,\"item_id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"output_index\":0,\"content_index\":0,\"delta\":\"A red square; the PDF is a one-page invoice.\",\"logprobs\":[],\"obfuscation\":\"7Hk\"}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":4,\"item_id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"output_index\":0,\"content_index\":0,\"text\":\"A red square; the PDF is a one-page invoice.\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"sequence_number\":5,\"item_id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"A red square; the PDF is a one-page invoice.\"}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":6,\"output_index\":0,\"item\":{\"id\":\"msg_9f56610ff09f7dc3e8eac25cfbb63168cddd39eed3e49d95\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"A red square; the PDF is a one-page invoice.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":7,\"response\":{\"id\":\"resp_f28cf999ea78c6c9ebe0c980d7f48d8d12cd92ab01b4f342\",\"object\":\"response\",\"created_at\":1764059700,\"status\":\"completed\",\"completed_at\":1764059702,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6-luna\",\"output\":[],\"store\":false,\"usage\":{\"input_tokens\":1650,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":1664}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_f28cf999ea78c6c9ebe0c980d7f48d8d12cd92ab01b4f342",
+      "model": "gpt-6-luna",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "A red square; the PDF is a one-page invoice.",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6-luna",
+            "kind": "phase",
+            "data": "final_answer"
+          }
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 1650,
+        "output": 14,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

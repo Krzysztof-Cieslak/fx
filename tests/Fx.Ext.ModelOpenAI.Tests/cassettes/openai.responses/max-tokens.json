@@ -1,0 +1,113 @@
+{
+  "name": "max-tokens",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.2-sol",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 256,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.2-sol",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 256,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_543fe516abeb26d7d8004d6e1833e7b351e264ce3a37b3f0\",\"object\":\"response\",\"created_at\":1764060000,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"rs_3c9e1a7f5b2d8e0c4a6f1b9d3e5a7c0f2b4d6e8a1c3f5b7d\",\"type\":\"reasoning\",\"summary\":[]}}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"rs_3c9e1a7f5b2d8e0c4a6f1b9d3e5a7c0f2b4d6e8a1c3f5b7d\",\"type\":\"reasoning\",\"summary\":[],\"encrypted_content\":\"gAAAAABp1U2bz1kniJZSB1+hBh5q2w3exiVNqypFK61vUL6BTbdDTmHRJ1eVtu4oJpRyCWC5wjBNC01ihnECVlGiyr2WnUv4cWjX9g5ydsVJm5m0Qv2qyKnFp/f5g3JBNORslcbYerD8MSCMYUp9p+ZjViSd1gSxSPARIKGDOXTjwyq6JSYQ5jYk/hssEz5B+vxLjguYcHUFvZI93TBw9sjtgdkV0kdqTdeudg8K2mTXrKFWu+fUXra+\"}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":3,\"output_index\":1,\"item\":{\"id\":\"msg_c6b2928f45accc11788eaf73e7ad0d80d97dcf2def416b13\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":4,\"item_id\":\"msg_c6b2928f45accc11788eaf73e7ad0d80d97dcf2def416b13\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"item_id\":\"msg_c6b2928f45accc11788eaf73e7ad0d80d97dcf2def416b13\",\"output_index\":1,\"content_index\":0,\"delta\":\"Hello! It is a pleasure\",\"logprobs\":[],\"obfuscation\":\"aZ\"}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":6,\"item_id\":\"msg_c6b2928f45accc11788eaf73e7ad0d80d97dcf2def416b13\",\"output_index\":1,\"content_index\":0,\"delta\":\" to meet\",\"logprobs\":[],\"obfuscation\":\"0rTq\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":7,\"output_index\":1,\"item\":{\"id\":\"msg_c6b2928f45accc11788eaf73e7ad0d80d97dcf2def416b13\",\"type\":\"message\",\"status\":\"incomplete\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! It is a pleasure to meet\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"}}\n\nevent: response.incomplete\ndata: {\"type\":\"response.incomplete\",\"sequence_number\":8,\"response\":{\"id\":\"resp_543fe516abeb26d7d8004d6e1833e7b351e264ce3a37b3f0\",\"object\":\"response\",\"created_at\":1764060000,\"status\":\"incomplete\",\"error\":null,\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"max_output_tokens\":256,\"model\":\"gpt-6.2-sol\",\"output\":[],\"store\":false,\"usage\":{\"input_tokens\":9,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":256,\"output_tokens_details\":{\"reasoning_tokens\":248},\"total_tokens\":265}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_543fe516abeb26d7d8004d6e1833e7b351e264ce3a37b3f0",
+      "model": "gpt-6.2-sol",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6.2-sol",
+            "kind": "reasoning",
+            "data": "{\"id\":\"rs_3c9e1a7f5b2d8e0c4a6f1b9d3e5a7c0f2b4d6e8a1c3f5b7d\",\"type\":\"reasoning\",\"summary\":[],\"encrypted_content\":\"gAAAAABp1U2bz1kniJZSB1+hBh5q2w3exiVNqypFK61vUL6BTbdDTmHRJ1eVtu4oJpRyCWC5wjBNC01ihnECVlGiyr2WnUv4cWjX9g5ydsVJm5m0Qv2qyKnFp/f5g3JBNORslcbYerD8MSCMYUp9p+ZjViSd1gSxSPARIKGDOXTjwyq6JSYQ5jYk/hssEz5B+vxLjguYcHUFvZI93TBw9sjtgdkV0kdqTdeudg8K2mTXrKFWu+fUXra+\"}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Hello! It is a pleasure to meet",
+          "state": {
+            "family": "openai.responses",
+            "model": "openai/gpt-6.2-sol",
+            "kind": "phase",
+            "data": "final_answer"
+          }
+        }
+      ],
+      "stop": {
+        "kind": "maxTokens"
+      },
+      "usage": {
+        "input": 9,
+        "output": 256,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 248
+      }
+    }
+  }
+}

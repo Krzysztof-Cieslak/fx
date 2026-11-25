@@ -1,0 +1,27 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_b4f35d74144aef31493b79bd66bbfa60a8f5729d967d6663","object":"response","created_at":1764059900,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6.2-sol","output":[],"store":false,"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":2,"item_id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":3,"item_id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","output_index":0,"content_index":0,"delta":"`src/Program.fs` defines","logprobs":[],"obfuscation":"Mx"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":4,"item_id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","output_index":0,"content_index":0,"delta":" `main`.","logprobs":[],"obfuscation":"y2fC"}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","sequence_number":5,"item_id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","output_index":0,"content_index":0,"text":"`src/Program.fs` defines `main`.","logprobs":[]}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","sequence_number":6,"item_id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","output_index":0,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"`src/Program.fs` defines `main`."}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":7,"output_index":0,"item":{"id":"msg_ac681214cc4668a36a122a0b1899cd218499d86977f849be","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"`src/Program.fs` defines `main`."}],"phase":"final_answer","role":"assistant"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":8,"response":{"id":"resp_b4f35d74144aef31493b79bd66bbfa60a8f5729d967d6663","object":"response","created_at":1764059900,"status":"completed","completed_at":1764059901,"error":null,"incomplete_details":null,"model":"gpt-6.2-sol","output":[],"store":false,"usage":{"input_tokens":4212,"input_tokens_details":{"cached_tokens":2048,"cache_write_tokens":2150,"cache_write_tokens_details":{"ttl_30m_tokens":150,"ttl_12h_tokens":2000}},"output_tokens":15,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":4227}}}
+

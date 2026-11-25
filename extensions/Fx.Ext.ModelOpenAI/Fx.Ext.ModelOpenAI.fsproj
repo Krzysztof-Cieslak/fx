@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.model.openai package (spec §10.1, §16.4): the openai.responses chat wire (OpenAI's
+    Responses API, streamed and stateless) and the OpenAI API as a provider definition. A native
+    extension: like every package under extensions/, it references the public SDK (src/Fx.Sdk) and
+    nothing else. See README.md and docs/modules/models.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Provider.fs" />
+    <Compile Include="Strict.fs" />
+    <Compile Include="Errors.fs" />
+    <Compile Include="Request.fs" />
+    <Compile Include="Decoder.fs" />
+    <Compile Include="OpenAI.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

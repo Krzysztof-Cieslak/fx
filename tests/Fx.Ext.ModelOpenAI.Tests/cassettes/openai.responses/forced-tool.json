@@ -1,0 +1,135 @@
+{
+  "name": "forced-tool",
+  "endpoint": "https://api.openai.com/v1",
+  "request": {
+    "model": "openai/gpt-6.1-terra",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What is in this directory?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "list_files",
+        "description": "Lists the files of the working directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "tool",
+      "name": "list_files"
+    },
+    "parallelToolCalls": false,
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "off",
+      "visible": false
+    },
+    "maxOutputTokens": 512,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "gpt-6.1-terra",
+            "input": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "What is in this directory?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "type": "function",
+                "name": "list_files",
+                "description": "Lists the files of the working directory.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {}
+                },
+                "strict": false
+              }
+            ],
+            "tool_choice": {
+              "type": "function",
+              "name": "list_files"
+            },
+            "parallel_tool_calls": false,
+            "reasoning": {
+              "effort": "none"
+            },
+            "include": [
+              "reasoning.encrypted_content"
+            ],
+            "max_output_tokens": 512,
+            "store": false,
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "x-request-id": "req_7c1e0a5f3b9d2e8a4c6f1b0d"
+          },
+          "body": "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_0f0fc697041b683455933104c9db95af8758989fecb86ea5\",\"object\":\"response\",\"created_at\":1764059800,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.1-terra\",\"output\":[],\"store\":false,\"usage\":null}}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"output_index\":0,\"item\":{\"id\":\"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_vGaQvH0EoTJpSxTUva4asyzW\",\"name\":\"list_files\"}}\n\nevent: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"sequence_number\":2,\"item_id\":\"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407\",\"output_index\":0,\"arguments\":\"{}\"}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"sequence_number\":3,\"output_index\":0,\"item\":{\"id\":\"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{}\",\"call_id\":\"call_vGaQvH0EoTJpSxTUva4asyzW\",\"name\":\"list_files\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":4,\"response\":{\"id\":\"resp_0f0fc697041b683455933104c9db95af8758989fecb86ea5\",\"object\":\"response\",\"created_at\":1764059800,\"status\":\"completed\",\"completed_at\":1764059801,\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-6.1-terra\",\"output\":[],\"store\":false,\"usage\":{\"input_tokens\":402,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":11,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":413}}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "resp_0f0fc697041b683455933104c9db95af8758989fecb86ea5",
+      "model": "gpt-6.1-terra",
+      "parts": [
+        {
+          "kind": "toolCall",
+          "id": "call_vGaQvH0EoTJpSxTUva4asyzW",
+          "name": "list_files",
+          "arguments": "{}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 402,
+        "output": 11,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

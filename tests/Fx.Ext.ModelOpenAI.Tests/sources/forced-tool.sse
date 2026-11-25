@@ -1,0 +1,15 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_0f0fc697041b683455933104c9db95af8758989fecb86ea5","object":"response","created_at":1764059800,"status":"in_progress","error":null,"incomplete_details":null,"model":"gpt-6.1-terra","output":[],"store":false,"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407","type":"function_call","status":"in_progress","arguments":"","call_id":"call_vGaQvH0EoTJpSxTUva4asyzW","name":"list_files"}}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":2,"item_id":"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407","output_index":0,"arguments":"{}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"id":"fc_ea628bbe6e37e65760d92a990e8db0b609d3fc8415c58407","type":"function_call","status":"completed","arguments":"{}","call_id":"call_vGaQvH0EoTJpSxTUva4asyzW","name":"list_files"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":4,"response":{"id":"resp_0f0fc697041b683455933104c9db95af8758989fecb86ea5","object":"response","created_at":1764059800,"status":"completed","completed_at":1764059801,"error":null,"incomplete_details":null,"model":"gpt-6.1-terra","output":[],"store":false,"usage":{"input_tokens":402,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":11,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":413}}}
+
