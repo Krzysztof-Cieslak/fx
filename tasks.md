@@ -346,8 +346,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T110,T116 done
-  class T114 inprogress
+  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T110,T114,T116 done
 ```
 
 <!-- /tasks:generated -->
@@ -387,7 +386,7 @@ flowchart LR
 | T111 | envd core | T005, T104, T107 | §3, §9 | todo | envd mode: exec/PTY with sequenced resumable output, fs ops (batch stat, read/write, apply-patch, search, watch), blob store, shadow-git snapshots, environment protocol. |
 | T112 | Env provider + local | T108, T111 | §9.1–9.2 | todo | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |
 | T113 | Sandbox drivers | T108, T111 | §9.1 | todo | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
-| T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | in-progress | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
+| T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
 | T116 | Kernel protocol | T101, T107 | §6.4 | done | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
 | T117 | bun-ts kernel | T109, T111, T114, T116 | §6.3–6.5 | todo | `fx.interpreter.bun-ts`: persistent cells, transpile, bounded output, host bridge (`fx.*` stubs from codecs), `fx.finish`; passes kernel conformance. |
