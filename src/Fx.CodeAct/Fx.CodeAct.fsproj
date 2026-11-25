@@ -12,6 +12,8 @@
   -->
 
   <ItemGroup>
+    <Compile Include="ShellSyntax.fs" />
+    <Compile Include="Permissions.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="ContextLog.fs" />
     <Compile Include="Tools.fs" />
