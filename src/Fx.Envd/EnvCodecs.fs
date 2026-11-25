@@ -93,75 +93,45 @@ module EnvCodecs =
         }
         |> Codec.named "Entry"
 
-    type private FsErrorWire =
-        {
-            Kind: string
-            Path: string
-            Detail: string option
-        }
-
-    let private fsErrorKinds =
-        [
-            "notFound"
-            "alreadyExists"
-            "notADirectory"
-            "isADirectory"
-            "directoryNotEmpty"
-            "accessDenied"
-            "invalidPath"
-            "ioFailed"
-        ]
-
-    /// `{"kind": "notFound", "path": "…", "detail": "…"}`: one flat object, not a union codec (eight
-    /// cases are more than `Codec.union` takes under Native AOT).
+    /// A tagged union: `{"kind": "notFound", "path": "…"}`, `{"kind": "invalidPath", "path": "…",
+    /// "reason": "…"}`, `{"kind": "ioFailed", "path": "…", "message": "…"}`.
     let fsError: Codec<FsError> =
-        Codec.record {
-            let! kind =
-                Codec.field
-                    "kind"
-                    (fun (w: FsErrorWire) -> w.Kind)
-                    (Codec.enum (fsErrorKinds |> List.map (fun k -> k, k)))
+        let path = Field.required "path" Codec.string
 
-            and! path = Codec.field "path" (fun w -> w.Path) Codec.string
-            and! detail = Codec.optionalField "detail" (fun w -> w.Detail) Codec.string
+        Codec.union "kind" {
+            let! notFound = Codec.case1 "notFound" NotFound path
+            and! alreadyExists = Codec.case1 "alreadyExists" AlreadyExists path
+            and! notADirectory = Codec.case1 "notADirectory" NotADirectory path
+            and! isADirectory = Codec.case1 "isADirectory" IsADirectory path
+            and! directoryNotEmpty = Codec.case1 "directoryNotEmpty" DirectoryNotEmpty path
+            and! accessDenied = Codec.case1 "accessDenied" AccessDenied path
+
+            and! invalidPath =
+                Codec.case2
+                    "invalidPath"
+                    (fun path reason -> InvalidPath(path, reason))
+                    path
+                    (Field.required "reason" Codec.string)
+
+            and! ioFailed =
+                Codec.case2
+                    "ioFailed"
+                    (fun path message -> IoFailed(path, message))
+                    path
+                    (Field.required "message" Codec.string)
 
             return
-                {
-                    Kind = kind
-                    Path = path
-                    Detail = detail
-                }
+                fun value ->
+                    match value with
+                    | NotFound p -> notFound p
+                    | AlreadyExists p -> alreadyExists p
+                    | NotADirectory p -> notADirectory p
+                    | IsADirectory p -> isADirectory p
+                    | DirectoryNotEmpty p -> directoryNotEmpty p
+                    | AccessDenied p -> accessDenied p
+                    | InvalidPath(p, reason) -> invalidPath p reason
+                    | IoFailed(p, message) -> ioFailed p message
         }
-        |> Codec.map
-            (fun w ->
-                let detail = w.Detail |> Option.defaultValue ""
-
-                match w.Kind with
-                | "notFound" -> NotFound w.Path
-                | "alreadyExists" -> AlreadyExists w.Path
-                | "notADirectory" -> NotADirectory w.Path
-                | "isADirectory" -> IsADirectory w.Path
-                | "directoryNotEmpty" -> DirectoryNotEmpty w.Path
-                | "accessDenied" -> AccessDenied w.Path
-                | "invalidPath" -> InvalidPath(w.Path, detail)
-                | _ -> IoFailed(w.Path, detail))
-            (fun error ->
-                let wire kind path detail =
-                    {
-                        Kind = kind
-                        Path = path
-                        Detail = detail
-                    }
-
-                match error with
-                | NotFound path -> wire "notFound" path None
-                | AlreadyExists path -> wire "alreadyExists" path None
-                | NotADirectory path -> wire "notADirectory" path None
-                | IsADirectory path -> wire "isADirectory" path None
-                | DirectoryNotEmpty path -> wire "directoryNotEmpty" path None
-                | AccessDenied path -> wire "accessDenied" path None
-                | InvalidPath(path, reason) -> wire "invalidPath" path (Some reason)
-                | IoFailed(path, message) -> wire "ioFailed" path (Some message))
         |> Codec.named "FsError"
 
     /// An entry or why there is none: `{"entry": …}` or `{"error": …}`.
@@ -211,28 +181,36 @@ module EnvCodecs =
         |> Codec.named "TextEdit"
 
     let filePatch: Codec<FilePatch> =
-        Codec.union "op" (fun create edit delete value ->
-            match value with
-            | Create(path, text) -> create path text
-            | Edit(path, digest, edits) -> edit path digest edits
-            | Delete(path, digest) -> delete path digest)
-        |> Codec.case2
-            "create"
-            (fun path text -> Create(path, text))
-            (Field.required "path" Codec.string)
-            (Field.required "text" Codec.string)
-        |> Codec.case3
-            "edit"
-            (fun path digest edits -> Edit(path, digest, edits))
-            (Field.required "path" Codec.string)
-            (Field.optional "digest" blobHash)
-            (Field.required "edits" (Codec.list textEdit))
-        |> Codec.case2
-            "delete"
-            (fun path digest -> Delete(path, digest))
-            (Field.required "path" Codec.string)
-            (Field.optional "digest" blobHash)
-        |> Codec.buildUnion
+        Codec.union "op" {
+            let! create =
+                Codec.case2
+                    "create"
+                    (fun path text -> Create(path, text))
+                    (Field.required "path" Codec.string)
+                    (Field.required "text" Codec.string)
+
+            and! edit =
+                Codec.case3
+                    "edit"
+                    (fun path digest edits -> Edit(path, digest, edits))
+                    (Field.required "path" Codec.string)
+                    (Field.optional "digest" blobHash)
+                    (Field.required "edits" (Codec.list textEdit))
+
+            and! delete =
+                Codec.case2
+                    "delete"
+                    (fun path digest -> Delete(path, digest))
+                    (Field.required "path" Codec.string)
+                    (Field.optional "digest" blobHash)
+
+            return
+                fun value ->
+                    match value with
+                    | Create(path, text) -> create path text
+                    | Edit(path, digest, edits) -> edit path digest edits
+                    | Delete(path, digest) -> delete path digest
+        }
         |> Codec.named "FilePatch"
 
     let patchedFile: Codec<PatchedFile> =
@@ -250,26 +228,33 @@ module EnvCodecs =
         }
 
     let patchError: Codec<PatchError> =
-        Codec.union "kind" (fun stale invalid notText fs value ->
-            match value with
-            | Stale(path, expected, actual) -> stale path expected actual
-            | InvalidEdit(path, reason) -> invalid path reason
-            | NotText path -> notText path
-            | PatchFsError e -> fs e)
-        |> Codec.case3
-            "stale"
-            (fun path expected actual -> Stale(path, expected, actual))
-            (Field.required "path" Codec.string)
-            (Field.required "expected" blobHash)
-            (Field.required "actual" blobHash)
-        |> Codec.case2
-            "invalidEdit"
-            (fun path reason -> InvalidEdit(path, reason))
-            (Field.required "path" Codec.string)
-            (Field.required "reason" Codec.string)
-        |> Codec.case1 "notText" NotText (Field.required "path" Codec.string)
-        |> Codec.case1 "fs" PatchFsError (Field.required "error" fsError)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! stale =
+                Codec.case3
+                    "stale"
+                    (fun path expected actual -> Stale(path, expected, actual))
+                    (Field.required "path" Codec.string)
+                    (Field.required "expected" blobHash)
+                    (Field.required "actual" blobHash)
+
+            and! invalid =
+                Codec.case2
+                    "invalidEdit"
+                    (fun path reason -> InvalidEdit(path, reason))
+                    (Field.required "path" Codec.string)
+                    (Field.required "reason" Codec.string)
+
+            and! notText = Codec.case1 "notText" NotText (Field.required "path" Codec.string)
+            and! fs = Codec.case1 "fs" PatchFsError (Field.required "error" fsError)
+
+            return
+                fun value ->
+                    match value with
+                    | Stale(path, expected, actual) -> stale path expected actual
+                    | InvalidEdit(path, reason) -> invalid path reason
+                    | NotText path -> notText path
+                    | PatchFsError e -> fs e
+        }
 
     let searchQuery: Codec<SearchQuery> =
         Codec.record {
@@ -334,13 +319,18 @@ module EnvCodecs =
         }
 
     let searchError: Codec<SearchError> =
-        Codec.union "kind" (fun invalid fs value ->
-            match value with
-            | InvalidQuery reason -> invalid reason
-            | SearchFsError e -> fs e)
-        |> Codec.case1 "invalidQuery" InvalidQuery (Field.required "reason" Codec.string)
-        |> Codec.case1 "fs" SearchFsError (Field.required "error" fsError)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! invalid =
+                Codec.case1 "invalidQuery" InvalidQuery (Field.required "reason" Codec.string)
+
+            and! fs = Codec.case1 "fs" SearchFsError (Field.required "error" fsError)
+
+            return
+                fun value ->
+                    match value with
+                    | InvalidQuery reason -> invalid reason
+                    | SearchFsError e -> fs e
+        }
 
     let changeKind: Codec<ChangeKind> =
         Codec.enum
@@ -360,17 +350,22 @@ module EnvCodecs =
     // ---- Processes ------------------------------------------------------------------------------
 
     let program: Codec<Program> =
-        Codec.union "kind" (fun exec script value ->
-            match value with
-            | Exec(file, args) -> exec file args
-            | Script text -> script text)
-        |> Codec.case2
-            "exec"
-            (fun file args -> Exec(file, args))
-            (Field.required "file" Codec.string)
-            (Field.withDefault "args" [] (Codec.list Codec.string))
-        |> Codec.case1 "script" Script (Field.required "script" Codec.string)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! exec =
+                Codec.case2
+                    "exec"
+                    (fun file args -> Exec(file, args))
+                    (Field.required "file" Codec.string)
+                    (Field.withDefault "args" [] (Codec.list Codec.string))
+
+            and! script = Codec.case1 "script" Script (Field.required "script" Codec.string)
+
+            return
+                fun value ->
+                    match value with
+                    | Exec(file, args) -> exec file args
+                    | Script text -> script text
+        }
 
     let private variable: Codec<string * string> =
         Codec.record {
@@ -387,13 +382,19 @@ module EnvCodecs =
         }
 
     let envVars: Codec<EnvVars> =
-        Codec.union "mode" (fun inherits exactly value ->
-            match value with
-            | Inherit changes -> inherits changes
-            | Exactly vars -> exactly vars)
-        |> Codec.case1 "inherit" Inherit (Field.withDefault "changes" [] (Codec.list change))
-        |> Codec.case1 "exactly" Exactly (Field.required "vars" (Codec.list variable))
-        |> Codec.buildUnion
+        Codec.union "mode" {
+            let! inherits =
+                Codec.case1 "inherit" Inherit (Field.withDefault "changes" [] (Codec.list change))
+
+            and! exactly =
+                Codec.case1 "exactly" Exactly (Field.required "vars" (Codec.list variable))
+
+            return
+                fun value ->
+                    match value with
+                    | Inherit changes -> inherits changes
+                    | Exactly vars -> exactly vars
+        }
 
     let ptySize: Codec<PtySize> =
         Codec.record {
@@ -421,13 +422,19 @@ module EnvCodecs =
     // ---- Blobs and snapshots --------------------------------------------------------------------
 
     let blobError: Codec<BlobError> =
-        Codec.union "kind" (fun notFound corrupt value ->
-            match value with
-            | BlobError.NotFound hash -> notFound hash
-            | BlobError.Corrupt hash -> corrupt hash)
-        |> Codec.case1 "notFound" BlobError.NotFound (Field.required "hash" blobHash)
-        |> Codec.case1 "corrupt" BlobError.Corrupt (Field.required "hash" blobHash)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! notFound =
+                Codec.case1 "notFound" BlobError.NotFound (Field.required "hash" blobHash)
+
+            and! corrupt =
+                Codec.case1 "corrupt" BlobError.Corrupt (Field.required "hash" blobHash)
+
+            return
+                fun value ->
+                    match value with
+                    | BlobError.NotFound hash -> notFound hash
+                    | BlobError.Corrupt hash -> corrupt hash
+        }
 
     let snapshotRef: Codec<SnapshotRef> =
         Codec.record {
@@ -438,15 +445,21 @@ module EnvCodecs =
         |> Codec.named "SnapshotRef"
 
     let snapshotError: Codec<SnapshotError> =
-        Codec.union "kind" (fun unavailable failed value ->
-            match value with
-            | Unavailable reason -> unavailable reason
-            | GitFailed(command, code, stderr) -> failed command code stderr)
-        |> Codec.case1 "unavailable" Unavailable (Field.required "reason" Codec.string)
-        |> Codec.case3
-            "gitFailed"
-            (fun command code stderr -> GitFailed(command, code, stderr))
-            (Field.required "command" Codec.string)
-            (Field.required "exitCode" Codec.int)
-            (Field.required "stderr" Codec.string)
-        |> Codec.buildUnion
+        Codec.union "kind" {
+            let! unavailable =
+                Codec.case1 "unavailable" Unavailable (Field.required "reason" Codec.string)
+
+            and! failed =
+                Codec.case3
+                    "gitFailed"
+                    (fun command code stderr -> GitFailed(command, code, stderr))
+                    (Field.required "command" Codec.string)
+                    (Field.required "exitCode" Codec.int)
+                    (Field.required "stderr" Codec.string)
+
+            return
+                fun value ->
+                    match value with
+                    | Unavailable reason -> unavailable reason
+                    | GitFailed(command, code, stderr) -> failed command code stderr
+        }

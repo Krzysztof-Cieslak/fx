@@ -99,8 +99,9 @@ brackets; all definitions in `EnvProtocol`):
   Uploads (`fs/write`, `blobs/put`): the caller writes and closes; envd answers after the end. A caller
   whose call fails resets its channel (`Transfer.download`/`upload`). Unaccepted channels count against
   `maxChannels` until the connection ends, which is why the handler always accepts.
-- `FsError` (eight cases) is one flat object `{kind, path, detail?}`: `Codec.union` takes at most four
-  cases under Native AOT.
+- Typed errors are tagged unions like every union codec: `FsError` is `{"kind": "notFound", "path": …}`,
+  with `reason` for `invalidPath` and `message` for `ioFailed`; `ExecError`, `PatchError` (whose `fs`
+  case nests an `FsError`), `SearchError`, `BlobError` and `SnapshotError` likewise.
 - Typed errors are expected failures; a lost connection or a crash in a handler is a defect at the
   proxy (`EnvCallException`, `TransferFailedException`), as for every capability.
 
