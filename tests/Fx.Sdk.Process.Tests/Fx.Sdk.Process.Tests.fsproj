@@ -1,9 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="Repo.fs" />
     <Compile Include="ProtocolTests.fs" />
+    <Compile Include="SdkDeclarations.fs" />
+    <Compile Include="GeneratedTests.fs" />
+    <Compile Include="Fixtures.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.Sdk.Process\Fx.Sdk.Process.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Contracts.TypeScript\Fx.Contracts.TypeScript.fsproj" />
   </ItemGroup>
 </Project>

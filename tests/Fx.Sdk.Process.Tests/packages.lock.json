@@ -92,6 +92,13 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.contracts.typescript": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
+      },
       "fx.effects": {
         "type": "Project",
         "dependencies": {
