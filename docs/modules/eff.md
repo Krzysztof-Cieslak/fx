@@ -127,7 +127,7 @@ module Clock =
   - Which shell to use is a variant (spec §15; on Windows the `shell.windows` slot, [variants.md](variants.md)). `LocalShell.defaultShell` is only the bootstrap default.
   - Standard input is always closed after `Run` writes it, so programs that read it never hang.
   - Output is pumped into one bounded channel, so reading one stream never blocks the other.
-  - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes (T113) use process groups or job objects.
+  - Cancelling kills the process tree. A process whose parent already exited cannot be found by its tree, so sandboxes ([sandbox.md](sandbox.md)) use process groups, pid namespaces or job objects.
   - Pipes only. Terminals (PTY, ConPTY) have their own capability, `Terminal` in `src/Fx.Pty` ([`docs/spikes/pty.md`](../spikes/pty.md)), with a conformance suite in `tests/Fx.Pty.Tests` and a proxy over the environment protocol ([envd.md](envd.md)).
 - **Files.** `WriteFile` replaces a file in place; it is not atomic. Atomic writes, ranged reads, patches, search and watching are envd's `FsOps` ([envd.md](envd.md)). Reads and writes here are whole files.
 - **Paths** are absolute, in the syntax of the machine the interpreter runs on. That is the environment's machine, not necessarily the host's, so the host never applies its own path rules to them. Relative paths fail with `InvalidPath`, because a relative path depends on ambient state.
@@ -175,7 +175,7 @@ type SessionEnv =
   - give an effect a narrower environment type with `Eff.local`, e.g. a view that implements only `IFsRead`;
   - wrap a capability, e.g. `Fs.confine root`.
 
-  Types are not a security boundary, and `Fs.confine` does not resolve symlinks: the sandbox (T113) is the boundary (§18).
+  Types are not a security boundary, and `Fs.confine` does not resolve symlinks: the sandbox ([sandbox.md](sandbox.md)) is the boundary (§18).
 - **Environments can be structs** (no boxing: the combinators are generic in `'R`).
 
 ## Fakes and conformance

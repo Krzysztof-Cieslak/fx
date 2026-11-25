@@ -30,6 +30,7 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | Cells' values kept for `recall` (`Recall`: keep, restore, the `recall` binding) | `Recall.fs` |
 | The hybrid tools over the bridge's bindings (`Hybrid`) | `Hybrid.fs` |
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
+| The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
 
 ## Composition
@@ -53,6 +54,10 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
   the hands' environment `'K` (`IShell`, `IFs`, `IFsOps`, `IClock`, `IScopeWith`): envd's capability
   records through `EnvClient` (`EnvHands.ofHandle` over an `EnvHandle` from `IEnvs.Open`), or the local
   ones in embedded mode.
+- In an environment, the session's processes and kernels run in its sandbox under the agent's
+  overrides (`KernelPlan.Sandbox`, e.g. a reviewer's read-only workspace), and `SandboxGuard` checks
+  every host call of the file bindings against the same policy before the plan's guard
+  ([sandbox.md](sandbox.md)).
 - The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`), and the host's registry the
   slots a turn reads (`CodeActSlots.read`: the core's, the render's, content exclusions' and the
   strategy's). Both are the composition root's (T129).

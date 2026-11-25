@@ -599,6 +599,8 @@ Interactive sessions; **specs in the repo → goals** (Ralph-style plan files).
 
 - **Environment providers** — built-in `fx.env.local`, `fx.env.ssh`, `fx.env.docker`; plugins: E2B, Daytona, Modal, Sprites, Morph, Apple containers, Kubernetes, devcontainers, Codespaces, OpenShell, benchmark task containers.
 - **Sandbox drivers** — built-in none, bubblewrap+seccomp, Seatbelt; **Windows: `none` with a persistent warning in v1** (AppContainer later); plugins: nsjail, gVisor.
+  - The host wraps every process it starts for an agent (commands, terminals, kernels, setup); envd itself is not sandboxed (it may run in the host's process, keeps its own state, and serves agents with different policies). A policy gives paths by access (the workspace, owned and temporary directories writable; credentials and the product's data directory denied; git hooks/config and `.fx/` protected) and the network (`open` or `none`; allowlists come with the egress proxy).
+  - The privileged `sandbox.driver` chooses (`auto`: the OS's driver, falling back to `none` with the warning where it cannot run); specs and agents (`SandboxOverrides`) only tighten. The file bindings, which run in envd, are checked against the same policy. Details: `docs/modules/sandbox.md`.
 
 ### 9.2 Provider contract
 

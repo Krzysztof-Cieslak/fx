@@ -9,7 +9,7 @@ from the capabilities it is handed); the local provider in
 [`extensions/Fx.Ext.EnvLocal`](../../extensions/Fx.Ext.EnvLocal); embedded envd in `EnvdMain.embed`
 ([`src/Fx.Envd.Live`](../../src/Fx.Envd.Live)).
 Tests: `tests/Fx.Environments.Tests` (specs, the lifecycle machine and its replay, the provider
-conformance suite on `fx.env.local` in process and piped), `tests/Fx.Extensions.Tests` (the package
+conformance suite on `fx.env.local` in process and piped, sandboxed environments), `tests/Fx.Extensions.Tests` (the package
 loads, a project cannot contribute providers, architecture), and the `environments-*` scenarios of the
 JIT-vs-native diff.
 
@@ -109,9 +109,11 @@ Config files are JSON (as for variants, [variants.md](variants.md)); `EnvSpecs.o
 - **Capability negotiation** (`EnvSpecs.check provider spec`, before anything is created): the
   provider is the one named; `config` decodes with its codec; the transport is one it offers and one
   this host implements (`Direct`, `Dialback`: T501, T504); the workspace's source is one it
-  materializes; no `export` yet (T503); `sandbox` is absent or `none` (drivers: T113); `network` and
-  `setup.network` are absent or `open` (policies need a sandbox and the egress proxy); no
-  `setup.secrets` (credential injection); `components.placement` is `env-fetch` (T503 for the rest).
+  materializes; no `export` yet (T503); `sandbox` is a driver's id, one in effect
+  (`EnvSpecs.checkSandbox`; which driver applies is decided when the environment connects:
+  [sandbox.md](sandbox.md)); `network` and `setup.network` are absent, `open` or `none` (`none` needs a
+  sandbox driver that confines; allowlists need the egress proxy); no `setup.secrets` (credential
+  injection); `components.placement` is `env-fetch` (T503 for the rest).
 
 ## The lifecycle (spec §9.5)
 
@@ -124,7 +126,7 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
 | `requested` | accepted | `provision` (`Create`) |
 | `provisioning` | the lease is held; envd is starting, or is to be started again (detached) | `bootstrap`, or none |
 | `bootstrapped` | envd runs | `connect` |
-| `connected` | the host speaks to envd | `install` (components, then setup) |
+| `connected` | the host speaks to envd | `install` (components, the sandbox, then setup) |
 | `ready` | ready | — |
 | `suspended` | the provider suspended it | — |
 | `lost` | the provider no longer has it | — |
@@ -160,7 +162,8 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
 
 1. `provider.Platform lease` gives the machine; the layout follows (`EnvLayout`: `<home>/envd` for
    envd's state, `<home>/assets` for interpreters' assets, `<home>/owned/<launch>` for runtimes' owned
-   directories, `<data dir>/runtimes` for components; paths in the environment's syntax).
+   directories, `<home>/tmp` for sandboxed processes' temporary files, `<home>/sandbox` for the sandbox
+   driver's files, `<data dir>/runtimes` for components; paths in the environment's syntax).
 2. envd starts for the transport:
    - `InProcess`: `EnvsSettings.Embed` (the composition root's `EnvdMain.embed`) in the host's process;
    - `Piped`: the host's own binary (`EnvsSettings.Binary`, `BinaryArgs` before `envd` on the JIT)
@@ -172,15 +175,20 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
    connection lives as long as the host, not the intent.
 4. **Components** of the lockfile (`EnvComponents.Requires`, held by `environment:<id>`), through the
    installer that serves the machine (`EnvComponents.For`: on the host's machine, the host's
-   `ComponentInstaller.components`; elsewhere over the environment protocol, T501). Then `setup.run`,
-   each command with the environment's shell in the workspace; a non-zero exit fails the step.
+   `ComponentInstaller.components`; elsewhere over the environment protocol, T501). Then the **sandbox**
+   ([sandbox.md](sandbox.md)): the driver the host's `sandbox.driver` and the spec choose, probed in the
+   environment, and the environment's policy; a required driver that cannot run fails the step, `auto`
+   falls back to `none` with notes. Then `setup.run`, each command with the environment's shell in the
+   workspace, **in the sandbox** (with `setup.network`); a non-zero exit fails the step. The `readied`
+   event records the sandbox (`EnvSandboxInfo`).
 
 **Credentials stay on the host** (spec §18). On the host's machine, envd and everything it starts get
 the host's variables **scrubbed** (`HostEnvironment.scrub`): runtime injection vectors
 (`InjectionVectors`) and names that look like credentials (`*_API_KEY*`, `*_TOKEN`, `*SECRET*`,
 `*PASSWORD*`, `*_PRIVATE_KEY*`, `*_CREDENTIALS*`, …, without case). Piped envd starts with exactly those;
 embedded envd uses them as the base of every process it starts (`EnvdOptions.Environment`,
-`BaseEnvironment` in `Fx.Envd`). The list is a guardrail, not a boundary: sandboxes are (T113).
+`BaseEnvironment` in `Fx.Envd`). The list is a guardrail, not a boundary: sandboxes are
+([sandbox.md](sandbox.md): credential files are denied paths).
 
 ## The capability (`IEnvs`)
 
@@ -188,14 +196,19 @@ embedded envd uses them as the base of every process it starts (`EnvdOptions.Env
 type Envs = { Create: EnvSpec -> …Result<EnvRecord, EnvError>    // waits until ready (or not)
               Get; List; Open: string -> …Result<EnvHandle, EnvError>
               Suspend; Resume; Destroy }
-type EnvHandle = { Id; Spec; Client: EnvClient; Machine: EnvMachine; Layout: EnvLayout; Installed }
+type EnvHandle = { Id; Spec; Client: EnvClient; Machine: EnvMachine; Layout: EnvLayout; Installed
+                   Sandbox: EnvSandbox }        // Client's processes and terminals start in the sandbox
 ```
 
 `EnvsHost.start settings log` serves it (`EnvsHost.envs`). `Open` returns the capability records of a
 ready environment, attaching it again first if the host has no connection (after a restart or a lost
-connection). `Envs.warnings` gives what a person must be told: today every environment runs
-unsandboxed (spec §9.1: a persistent warning; T130 shows it). `EnvsHost.stop` closes every connection
-(envds stop) and keeps the leases for the next host.
+connection); its shell and terminals start every process in the environment's sandbox, and
+`EnvHandle.attenuate overrides` gives an agent's tighter one ([sandbox.md](sandbox.md)).
+`Envs.warnings` gives what a person must be told: an environment no driver confines runs unsandboxed
+(spec §9.1: a persistent warning; T130 shows it). `EnvsHost.stop` closes every connection (envds
+stop) and keeps the leases for the next host. `EnvsSettings.Sandboxes` are the drivers in effect
+(built-ins first: `auto` takes the first that confines on an environment's OS), and the host registers
+`SandboxSlots.all` with `Slots.all`.
 
 Continuations: actors reply, and the in-memory log wakes subscribers, on the appending thread; the
 host hands those results on asynchronously (`later`), so code that reads the log or sends again never
@@ -214,7 +227,8 @@ suspend, fork or snapshots; config `{}`.
   `Upload`: unsupported (the host's machine has every file).
 - `Destroy`: deletes the home (envd's state with it), depth first, never following links, and only if
   it is the provider's home for that id; the workspace is never touched.
-- No sandbox (T113 adds drivers; the spec's `sandbox` field is the hook).
+- Its processes are sandboxed like every environment's ([sandbox.md](sandbox.md)); its home holds the
+  sandbox's temporary directory and the driver's files.
 
 ## Conformance suite v1
 
@@ -236,6 +250,7 @@ lease) to tests. Everything goes through `EnvsHost` and envd's capability record
 - attaching again after the connection to envd is lost;
 - capability negotiation: transports and materializations not offered, unknown settings, a sandbox
   driver that does not exist, an unknown provider; nothing is created;
+- the record says what sandboxes the environment, and an unsandboxed one carries one warning;
 - a failed creation is `failed` with a reason and can be destroyed;
 - `Create` and `Destroy` are idempotent per id at the provider.
 
@@ -254,7 +269,7 @@ reconciles, destroy; piped runs the scenarios program's own `envd --stdio` mode)
 
 | What | Task |
 |---|---|
-| Sandbox drivers and their contribution type; `network` policies; per-agent overrides | T113 |
+| Network allowlists (the egress proxy); agents' overrides from their definitions | with the egress proxy; T213 ([sandbox.md](sandbox.md)) |
 | Choosing an environment per session (the host's composition and `env/*` are [host.md](host.md)) | T130 |
 | Showing `Envs.warnings` (unsandboxed) persistently | T130 |
 | envd for other targets (upload), installing components over the environment protocol, `fx.env.ssh`, `Direct` over WebSocket | T501 |
