@@ -132,6 +132,25 @@ let tests (name: string) (keyring: Keyring) : Test =
                 finally
                     clean keyring other)
 
+            case "concurrent writes of different accounts all land" (fun service ->
+                let accounts = [ for i in 0..7 -> "c" + string i ]
+
+                accounts
+                |> List.map (fun account ->
+                    Task.Run(fun () ->
+                        run keyring (Keyring.write (key service account) (SecretText account))
+                        |> ok ("write " + account)))
+                |> Array.ofList
+                |> Task.WaitAll
+
+                Expect.equal (run keyring (Keyring.list service) |> ok "list") accounts "all listed"
+
+                for account in accounts do
+                    Expect.equal
+                        (run keyring (Keyring.read (key service account)) |> ok "read" |> reveal)
+                        (Some account)
+                        account)
+
             case "Unicode accounts and values, and empty values, round-trip" (fun service ->
                 let values =
                     [
