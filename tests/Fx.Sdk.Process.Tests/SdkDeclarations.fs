@@ -10,6 +10,7 @@ open Fx.Rpc
 open Fx.Variants
 open Fx.Sdk
 open Fx.Sdk.Process
+open Fx.Models
 
 let private field (name: string) (schema: Schema) : FieldSchema =
     {
@@ -110,7 +111,7 @@ let constants: Schema =
         ]
 
 /// The declarations of `@fx/sdk`'s contracts: schemas, issues, manifests, decisions, variant slots,
-/// and every message of the extension protocol.
+/// every message of the extension protocol, and the canonical model.
 let contracts: DeclarationFile =
     {
         Layout = Layout.Module
@@ -137,6 +138,14 @@ let contracts: DeclarationFile =
                 constants
                 Handshake.initializeParams.Schema
                 Handshake.initializeResult.Schema
+                // The canonical model (docs/modules/models.md): requests, streamed events, responses,
+                // typed errors, model metadata and provider definitions.
+                ChatRequest.codec.Schema
+                ChatEvent.codec.Schema
+                ChatResponse.codec.Schema
+                ChatFailure.codec.Schema
+                ModelInfo.codec.Schema
+                ProviderDef.codec.Schema
             ]
         Members = []
     }

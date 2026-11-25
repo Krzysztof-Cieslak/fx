@@ -21,15 +21,15 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Package | Project | Who uses it | Contents |
 |---|---|---|---|
-| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, variant slots (`VariantSlots`) |
-| `<Name>.Prelude`, `.Contracts`, `.Effects`, `.Variants` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; `Eff` and the capabilities; variant slots and `IVariants` |
+| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)) |
+| `<Name>.Prelude`, `.Contracts`, `.Effects`, `.Variants`, `.Models` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; `Eff` and the capabilities (`IHttp` included); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
 | `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host, T117's kernel) | codecs, the generated contract types, the extension API, the protocol's server |
 
 - **Built-ins** (`extensions/`) reference `src/Fx.Sdk` and nothing else, and their compiled assemblies
   reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`,
-  `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
+  `Fx.Models`, `FSharp.Core`) and the base class library. `ArchitectureTests` checks both, and that `Fx.Sdk` and
   `Fx.Sdk.Process` reference only their surfaces (`processSdkSurface` adds `Fx.Sdk.Process`, `Fx.Rpc`,
   `Fx.Effects.Live`). Widening a surface is a deliberate edit of those sets and of this table.
 - **Not public:** `Fx.Extensions` (the registry, catalog, runtimes, bootstrap), `Fx.Machines(.Host)`,
@@ -43,6 +43,9 @@ they are packaged and versioned, and how to write an extension with them. The ex
   engine; a process extension needs it. Putting the protocol's server in `Fx.Sdk` would widen every
   extension's surface with `Fx.Rpc` and the live interpreters. The protocol's messages live with the
   server (the host references `Fx.Sdk.Process` for them), so both sides use one definition.
+- **`Fx.Models` is exposed** (T118): wire adapters and provider definitions are extensions' contributions
+  (spec §10.1, §16.2), so the canonical model they translate is public. It is pure and references only
+  Prelude, Contracts and Effects.
 - **`Fx.Variants` is exposed**: extensions define slots (`VariantSlots.contributionType`, `variant-slot`,
   in the core catalog) and will read them through `IVariants` (T109b). It is pure and references only
   Contracts and Effects.
@@ -88,7 +91,7 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Path | Contents |
 |---|---|
-| `src/generated/contracts.d.ts` | **Generated** from the F# codecs (`SdkDeclarations` in `tests/Fx.Sdk.Process.Tests`, with T102's generator): `Schema`, `Issue`, `Manifest` and its parts, `Decision`, `TransformSettings`, `SlotDecl`, every extension protocol message and typed error, `ExtensionRequests` (method → params, result, error), `ErrorCodes`, `ExtensionConstants`, the handshake |
+| `src/generated/contracts.d.ts` | **Generated** from the F# codecs (`SdkDeclarations` in `tests/Fx.Sdk.Process.Tests`, with T102's generator): `Schema`, `Issue`, `Manifest` and its parts, `Decision`, `TransformSettings`, `SlotDecl`, every extension protocol message and typed error, `ExtensionRequests` (method → params, result, error), `ErrorCodes`, `ExtensionConstants`, the handshake, and the canonical model's types (`ChatRequest`, `ChatEvent`, `ChatResponse`, `ChatFailure`, `ModelInfo`, `ProviderDef` and what they use; types only, no runtime codecs yet) |
 | `src/generated/product.ts` | **Generated** from `Fx.Product` and `Versions`: the product name, version, SDK and protocol versions, the manifest file name, `extensionId` |
 | `src/json.ts`, `src/schema.ts`, `src/codec.ts` | JSON as the F# side writes and describes it; JSON Schema emitted as `Schema.toJsonSchema` does; the codec combinators |
 | `src/manifest.ts`, `src/protocol.ts` | Runtime mirrors of the F# contracts: the manifest codec, `Manifest.check` and `Manifest.hash`; decisions, slots, the protocol's messages and typed errors |

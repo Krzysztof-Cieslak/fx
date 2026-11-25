@@ -7,6 +7,11 @@
     to every file. Fx.Sdk exposes it to extensions; the wire contract, the model-egress hooks and the
     entry point that runs them are in Fx.Sdk. Spec: docs/modules/models.md.
   -->
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The canonical chat model: typed parts, provider state, streamed events, typed errors, ILlm, event-stream parsers and HTTP cassettes.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Model.fs" />
     <Compile Include="Chat.fs" />
