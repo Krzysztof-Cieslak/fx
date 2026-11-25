@@ -198,8 +198,11 @@ writer of the store's stream, rebuilds the state and restarts the timers.
   - `Check query`: the effective rules and the policy gates now (`GrantCheck`: `Allowed grant | MustAsk
     reasons | Denied reasons`). Records nothing.
   - `Request ask`: an invalid ask is an error; otherwise the rules settle it (`AskOutcome.Settled`) or
-    a durable pending request is recorded (`AskOutcome.Pending id`). The same key is the same request,
-    whatever happened since.
+    a durable pending request is recorded (`AskOutcome.Pending id`). **A key is one request**, unique on
+    the host (derive it from what asks and where: `session/<id>#<seq>/<call>`): asking again while it is
+    pending gets it, once allowed gets that; once denied or cancelled, the rules settle the ask if they
+    allow or deny now (a grant made since), otherwise it keeps its resolution. Prompting again takes a
+    new key, so retrying a tool call cannot spam a person.
   - `Await id`: waits for the resolution. While it waits, it folds the log, and closes the request as
     `Covered` when a grant made since allows it, or `Refused` when the rules now deny it: answering one
     prompt with a broader pattern settles the others it covers (batched prompts, spec §19.4).

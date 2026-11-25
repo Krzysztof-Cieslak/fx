@@ -54,7 +54,9 @@ module Approvals =
         }
 
     /// Approves installs through a grants capability: asks, and waits for a person if the rules say
-    /// ask. Allowed is `Approved` (by the grant); denied, cancelled or failed is `Rejected`.
+    /// ask. Allowed is `Approved` (by the grant); denied, cancelled or failed is `Rejected`. The answer
+    /// to an install's request is final for that install: after "deny once", installing the same
+    /// version again is refused until a grant allows it (made in the grants view).
     let viaGrants<'R when 'R :> IScopeWith<'R>>
         (grants: Grants)
         (requester: Requester)

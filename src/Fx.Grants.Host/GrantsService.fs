@@ -232,7 +232,10 @@ module GrantsService =
         | Some resolution -> AskOutcome.Settled resolution
         | None -> AskOutcome.Pending id
 
-    /// Settles an ask from the rules, or records a durable pending request (spec §5).
+    /// Settles an ask from the rules, or records a durable pending request (spec §5). A key is one
+    /// request: asking again while it is pending gets it, once it is allowed gets that. Once it was
+    /// denied or cancelled, the rules settle the ask if they allow or deny now (a grant made since), and
+    /// otherwise it keeps its resolution: prompting again takes a new key.
     let request<'R when 'R :> IClock and 'R :> IIds and 'R :> ITrace and 'R :> IScopeWith<'R>>
         (service: GrantsService<'R>)
         (ask: GrantAsk)
@@ -243,7 +246,15 @@ module GrantsService =
             let! at = now
 
             match state.Keys.TryFind ask.Key with
-            | Some existing -> return Ok(outcomeOf state existing)
+            | Some existing ->
+                match GrantLog.resolution state existing with
+                | None
+                | Some(Resolution.Allowed _) -> return Ok(outcomeOf state existing)
+                | Some earlier ->
+                    match! decide service state state.Requests[existing].Request.Query with
+                    | GrantCheck.Allowed grant -> return Ok(AskOutcome.Settled(Resolution.Allowed grant))
+                    | GrantCheck.Denied reasons -> return Ok(AskOutcome.Settled(Resolution.Denied reasons))
+                    | GrantCheck.MustAsk _ -> return Ok(AskOutcome.Settled earlier)
             | None ->
                 // Validate before deciding: an invalid ask is an error, not a denial.
                 match GrantLog.request settings.Actions ask (RequestId "-") at with

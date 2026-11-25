@@ -55,6 +55,41 @@ let tests =
                 Expect.equal (List.length (events h)) 1 "one event"
             }
 
+            test "a key is one request: its answer is final, unless the rules decide now" {
+                let h = harness ()
+                let id = pendingOf h (ask "call-1" shellExec "make deploy")
+                ok (answerAs h alice id { once with Effect = GrantEffect.Deny }) |> ignore
+
+                match h.Run(GrantsService.request h.Service (ask "call-1" shellExec "make deploy")) with
+                | Ok(AskOutcome.Settled(Resolution.Denied _)) -> ()
+                | other -> failtest ("the same key keeps its denial: " + string other)
+
+                Expect.isEmpty (GrantsService.pending h.Service).Requests "no new prompt"
+
+                let draft =
+                    {
+                        Action = shellExec
+                        Resource = "make **"
+                        Effect = GrantEffect.Allow
+                        Scope = GrantScope.Host
+                        Expires = None
+                        Reason = None
+                    }
+
+                let made = ok (h.Run(GrantsService.grant h.Service alice draft))
+
+                Expect.equal
+                    (h.Run(GrantsService.request h.Service (ask "call-1" shellExec "make deploy")))
+                    (Ok(AskOutcome.Settled(Resolution.Allowed made.Id)))
+                    "a grant made since allows it"
+
+                ok (h.Run(GrantsService.revoke h.Service alice made.Id None))
+
+                match h.Run(GrantsService.request h.Service (ask "call-2" shellExec "make deploy")) with
+                | Ok(AskOutcome.Pending _) -> ()
+                | other -> failtest ("a new key prompts again: " + string other)
+            }
+
             test "an answer resolves the waiting requester" {
                 let h = harness ()
                 let id = pendingOf h (ask "call-1" shellExec "git status")
