@@ -128,8 +128,10 @@ environment, `EnvClient`'s proxies.
 - Output is bounded (spec §6.6): each stream of a command keeps `OutputChars` (16 000) characters, the
   head and the tail with a marker line (`… [n chars omitted] …`), never half a surrogate pair. Overflow
   into a blob with a grep-able path is T201's.
-- `CoreSettings.CommandEnv` is the environment commands get: envd's own (`Inherit []`) by default. The
-  environment provider decides what that holds (T112); it never holds the host's credentials (§18).
+- `CoreSettings.CommandEnv` is the environment commands get: envd's own (`Inherit []`) by default. On
+  the host's machine that is the host's variables without credentials and injection vectors
+  (`HostEnvironment.scrub`, [environments.md](environments.md)); it never holds the host's credentials
+  (§18).
 - The settings' values are variants (spec §6.6); T127 reads them through `IVariants`.
 
 ## Launching
@@ -153,8 +155,9 @@ from a bridge.
 5. `KernelLaunch` carries the runtime's deny list; `Kernel.start` refuses an unsafe launch, starts the
    process with the shell capability, and connects (kernel-protocol.md).
 
-Where `AssetsRoot` and the owned directories live per session and environment, and serving runtimes
-and kernels to a remote envd, is the composition root's (T112, T129).
+Where `AssetsRoot` and the owned directories live per environment is `EnvLayout` (`Assets`, and
+`EnvLayout.owned` per launch, under the environment's home: [environments.md](environments.md));
+serving runtimes and kernels to a remote envd is the composition root's (T129).
 
 ## `fx.interpreter.bun-ts`
 
@@ -251,6 +254,6 @@ environment, a missing runtime).
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | `CoreSettings.Exclusions` from the session's variants; provenance of cell results for the egress hooks | T127, T205 |
-| Where assets and owned directories live per environment; installing `Requires` in the environment; launching over a remote envd (the same capability records through `EnvClient`); killing stale kernels when envd starts (a pid file in the owned directory) | T112, T129 |
+| Installing `Requires` in the environment; launching over a remote envd (the same capability records through `EnvClient`); killing stale kernels when envd starts (a pid file in the owned directory). Where assets and owned directories live per environment is `EnvLayout` (T112) | T127, T129 |
 | Per-session packages through the egress proxy (`caps.packages`), `process`/`Bun` as globals (a variant), cells on a `Worker` so busy loops can be stopped without a kill | later |
 | A data form of `InterpreterProvider` for declarative interpreters | T602 |
