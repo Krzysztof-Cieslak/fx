@@ -228,7 +228,17 @@ let live =
 
                         match status.Out.SpillPath with
                         | Some path ->
-                            Expect.equal (File.ReadAllText path) all $"{reach}: the spill file holds the whole output"
+                            // As grep would open it while envd still has it open for writing (Windows).
+                            use stream =
+                                new FileStream(
+                                    path,
+                                    FileMode.Open,
+                                    FileAccess.Read,
+                                    FileShare.ReadWrite ||| FileShare.Delete
+                                )
+
+                            use reader = new StreamReader(stream)
+                            Expect.equal (reader.ReadToEnd()) all $"{reach}: the spill file holds the whole output"
                         | None -> failtest "no spill file"
 
                         wait (EnvClient.release session.Client started.Id none)
