@@ -11,6 +11,11 @@
     <Compile Include="..\Fx.Models.Tests\Conformance\WireConformance.fs" Link="Conformance\WireConformance.fs" />
     <Compile Include="Cases.fs" />
     <Compile Include="ConformanceTests.fs" />
+    <Compile Include="RequestTests.fs" />
+    <Compile Include="DecoderTests.fs" />
+    <Compile Include="ErrorTests.fs" />
+    <Compile Include="ProviderTests.fs" />
+    <Compile Include="LiveTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
