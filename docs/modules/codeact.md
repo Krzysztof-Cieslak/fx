@@ -2,11 +2,12 @@
 
 Spec: §4.3–4.5 (functions, machines, strategies, turn results), §5 (sessions, steering at step
 boundaries, prompt = pure render), §6.5 (kernel behaviour: host bridge, finishing, activity), §6.9
-(action surfaces), §6.10 (example cells), §10 (models), §13 (grants), §15 (variants), §18 (egress).
-Tasks: T127, T128 (crash recovery). Builds on [sessions.md](sessions.md) (the turn-runner boundary), [prompt.md](prompt.md)
-(the render and context events), [models.md](models.md) (`ILlm`), [interpreters.md](interpreters.md)
-(the bridge and kernels), [kernel-protocol.md](kernel-protocol.md), [egress.md](egress.md) and
-[environments.md](environments.md).
+(action surfaces), §6.10 (example cells), §10 (models), §13 (grants), §15 (variants), §18 (egress,
+sandbox, guardrails).
+Tasks: T127, T127b (grants), T128 (crash recovery). Builds on [sessions.md](sessions.md) (the turn-runner boundary),
+[prompt.md](prompt.md) (the render and context events), [models.md](models.md) (`ILlm`),
+[interpreters.md](interpreters.md) (the bridge and kernels), [kernel-protocol.md](kernel-protocol.md),
+[egress.md](egress.md), [environments.md](environments.md) and [grants.md](grants.md).
 Code: [`src/Fx.CodeAct`](../../src/Fx.CodeAct) (pure apart from the capabilities it is handed; the EFF
 analyzers apply to every file).
 Tests: `tests/Fx.CodeAct.Tests` and the `codeact-*` scenarios of the JIT-vs-native diff.
@@ -32,6 +33,9 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
+| Command lines split as sh and PowerShell split them (`ShellSyntax`, `CommandLine`) | `ShellSyntax.fs` |
+| Host calls as grants, the guard's slots and settings (`Permissions`, `GrantSlots`, `GrantSettings`) | `Permissions.fs` |
+| The grants guard (`GrantGuard`, `GrantSetup`) | `GrantGuard.fs` |
 
 ## Composition
 
@@ -58,9 +62,12 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
   overrides (`KernelPlan.Sandbox`, e.g. a reviewer's read-only workspace), and `SandboxGuard` checks
   every host call of the file bindings against the same policy before the plan's guard
   ([sandbox.md](sandbox.md)).
-- The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`), and the host's registry the
-  slots a turn reads (`CodeActSlots.read`: the core's, the render's, content exclusions' and the
-  strategy's). Both are the composition root's (T129).
+- The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`),
+  and the host's registry the slots a turn reads (`CodeActSlots.read`: the core's, the render's, content
+  exclusions', the strategy's and its grants guard's). Both are the composition root's (`src/Fx.Host`).
+- The composition root attaches the grants guard to each turn's hands (`GrantGuard.attach` with
+  `GrantSetup.create grants sessions turn (GrantSettings.ofVariants variants)`, the variants of the
+  turn's profile): without it, nothing asks the grants log.
 - `codeact.Close()` closes every session's kernel when the host stops.
 
 ## A turn
@@ -120,8 +127,8 @@ Keys derive from the turn's start event and the step: `<session>#<seq>/step/<n>/
 - Tools are made from codecs (`ToolSpec.ofCodec`), and their arguments decode with the same codecs: what
   does not decode is a receipt with the issues, and nothing runs.
 - **Same capabilities.** `read`, `edit` and `bash` are host calls of the bridge's own bindings
-  (`fs.read`, `fs.patch` after `fs.read`, `shell.run`), through the same guard (`Hands.Guard`), settings
-  and content exclusions as cells' calls. `edit` replaces text read from the file and patches the lines
+  (`fs.read`, `fs.patch` after `fs.read`, `shell.run`), through the same guard (`Hands.Guard`, and so
+  the same grants), settings and content exclusions as cells' calls. `edit` replaces text read from the file and patches the lines
   that changed, checked against the digest it read; `read` shows numbered lines as a `Piece.File` (they
   count as seen).
 - **A conversation keeps the surface its frame recorded** (the `tools` section's version): tools come
@@ -135,8 +142,9 @@ One kernel per session (`SessionKernel`), started when the first cell needs it a
 - It is started in the hands' environment (`Hands.Env`, the host's scope), not the turn's: an RPC peer
   lives in the scope that connected it, and an interrupt cancels the turn's.
 - The bridge is `CoreBindings.all` with the turn's settings (`CoreSettings.Exclusions` from the session's
-  variants, `codeact.output.maxChars`), behind `Hands.Guard`; `finish` validates with the session's
-  `Codecs.turnResult` and the turn's checks, and only from the running cell.
+  variants, `codeact.output.maxChars`), behind the running turn's `Hands.Guard` (`SessionKernel.Guard`,
+  set before each action: hands are per turn, a kernel outlives the turn that started it); `finish`
+  validates with the session's `Codecs.turnResult` and the turn's checks, and only from the running cell.
 - **Interrupts** cancel the turn's scope. The cell runs shielded from it and is stopped in stages
   (`Kernel.interrupt`: `cell/cancel`, then a kill after `ExitGrace`), so a busy cell does not leave the
   kernel busy; the next turn waits until it stopped (one turn at a time uses a kernel).
@@ -176,6 +184,9 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
   new version.
 - **`bash`**: the command, its exit code (or timeout) and its bounded output.
+- **Refused host calls** (grants, below): `Refused: <why>` for a direct tool; in a cell, the error the
+  kernel throws with code `denied` and the same reason, which the cell's receipt shows unless the cell
+  catches it.
 
 ## Policies (spec §4.5)
 
@@ -280,6 +291,84 @@ kept is journaled as lost with why (no JSON form, too large, a handle).
 - What comes back is JSON: names cells declared, functions, class instances, promises, open resources
   and handles are gone with their kernel.
 
+## Grants (spec §13, §18; T127b)
+
+Before a host call runs, from a cell or a direct tool alike, the turn's grants guard (`GrantGuard`,
+attached to the hands by the composition root) asks the grants log ([grants.md](grants.md)) about
+what the call needs. A guardrail, not a boundary: the sandbox (T113) is the boundary, and Windows v1 has
+none (spec §18).
+
+**What a call needs** (`Permissions.needs`, pure: from the call's arguments and the workplace, never
+the filesystem):
+
+| Binding | Needs |
+|---|---|
+| `shell.run` | `shell.exec` for each simple command of the line (`ShellSyntax`, below), and `fs.write` for each file a redirection writes outside the workspace or to a protected path |
+| `fs.write`, `fs.patch` | `fs.write` for each file outside the workspace or under `codeact.grants.protectedPaths` (default `.git` and the project's directory: hooks run code, configuration changes behaviour) |
+| `fs.read` | `fs.read` for a file outside the workspace (content leaves for the model) |
+| network bindings | `net.connect host:port` for each endpoint (`Permissions.connects` with `Permissions.endpoint`); no core binding is one yet |
+| others (`fs.list`, `fs.stat`, …) | nothing: a binding that runs programs, writes, reads outside the workspace or connects must have a rule (`BindingRule`) |
+
+Resources are canonical (`Resource.validate`): commands are their words joined by single spaces
+(`ShellSyntax.resource`), paths in the workspace are workspace-relative, others absolute, all
+`/`-separated with `..` resolved (with the OS's case rules, as content exclusions compare them). A path
+grants cannot name (a UNC share) refuses the call. Symbolic links are not followed.
+
+**Commands** are split by `ShellSyntax.parse` with the environment's shell (sh; PowerShell 7 on
+Windows): lists (`;`, `&&`, `||`, `&`, newlines), pipelines, subshells and groups are flattened, and
+command substitutions (`$(…)`, backquotes; `$(…)`, `@(…)`, `(…)` in PowerShell) are parts of their own,
+before the command that holds them. Quotes and escapes are removed; nothing is expanded, so a word that
+the shell expands (a parameter, a tilde, braces; a variable, splatting) is marked. Whatever it does not
+follow is **opaque**, and the whole line is one `shell.exec` for a person: control flow, functions,
+here-documents and here-strings, process substitutions, arithmetic, script blocks, hashtables, type
+literals and member calls, `--%`, unclosed quotes, nesting deeper than 8, more than 256 commands; so is
+a line that redirects to a name the shell expands, to a relative path after a `cd`, or that needs more
+than 16 grants. A `cd` (and its PowerShell spellings) needs nothing itself, but later commands' working
+directory is then unknown.
+
+**Listed commands.** `codeact.grants.allowCommands` (privileged; default `pwd`, `ls`, `cat`, `head`,
+`tail`, `wc`, `grep`, `echo`, `git status` and their PowerShell counterparts: commands that read, write
+nothing and start no other program) run without a person when written plainly: no word the shell
+expands, in a known working directory in the workspace, and no argument that names a path outside it
+(an option with a path or `..` attached counts). Deny grants, policy rules and gates still apply: a
+listed command is allowed only when nothing but "no grant applies" stands in the way.
+
+**Deciding.** For each need, `Grants.check`: allowed, denied (the call fails `denied` with the reasons
+and a reminder not to work around a denial), or a person must decide. Then, by `codeact.grants.mode`
+(privileged):
+
+| Mode | A call a person must decide |
+|---|---|
+| `ask` (default) | its requests are made at once (batched prompts), and the call waits for their answers |
+| `deny` | refused at once, nothing recorded: unattended runs |
+| `off` | nothing is checked at all: sandboxed or throwaway environments |
+
+- **Keys** derive from what asks: `<turn's start event>/<cell or tool call>/<action>/<digest of the
+  resource>` (`GrantGuard.key`). A retried call is the same request with the same answer; the same
+  command in another cell asks again (or is covered by a broader grant, e.g. answered for the session
+  with a suggested pattern such as `npm run **`).
+- **Requests** name the session (`Context.Session`), the repository when the composition root knows it
+  (`GrantSetup.Repo`, the place: the file or the command's working directory), the turn's first
+  sender as principal and the agent; their evidence says which turn and call asked
+  (`asked by: session s1, turn 3, t3-s2-1`), the whole command line and why a line was not split.
+  This is how the turn shows its pending requests: clients list them with `grants/pending` and
+  `grants/subscribe` by session (T130); the grants log owns them, the session opens none.
+- **Waiting**: the first denial or unanswered request refuses the call and withdraws the others. An
+  **interrupt** cancels the wait (a cell's host call is cancelled with the cell) and withdraws the
+  requests. A **steer** that arrives while a call waits withdraws its requests too: the call fails
+  ("a message from the user arrived"), and the steer comes at the next boundary. A request times out
+  after `codeact.grants.timeoutMs` (the grants service closes it), and the call is refused.
+- **A host that stops** mid-wait cancels the turn and so withdraws its requests; after a crash they stay
+  pending in the grants log (durable) until answered, timed out or withdrawn: what happens to the turn
+  is recovery's (T128).
+
+| Slot | Default | |
+|---|---|---|
+| `codeact.grants.mode` | `ask` | privileged |
+| `codeact.grants.allowCommands` | the read-only commands above | privileged: a project can never loosen it |
+| `codeact.grants.protectedPaths` | `.git`, `.git/**`, the project's directory | privileged |
+| `codeact.grants.timeoutMs` | none | only tightens |
+
 ## Content exclusions (spec §18)
 
 `ContentExclusions.compile` over the turn's variants (`ContentExclusions.read`: policy, host, project
@@ -305,6 +394,7 @@ recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, t
 | `codeact.finish.evidence` | `optional` |
 | `codeact.journal.snapshots` | true |
 | `codeact.recall.maxBytes`, `codeact.recall.restore` | 1048576, 20 |
+| `codeact.grants.mode`, `.allowCommands`, `.protectedPaths`, `.timeoutMs` | see Grants |
 
 Defaults are provisional until evals decide (spec §1, principle 7).
 
@@ -323,6 +413,13 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   guard, each text-only policy and a question answered into the next turn, length cuts, empty replies,
   retries, overflow, fatal errors, the step budget, content exclusions for cells and direct tools, an
   unknown tool, calls after `finish`.
+- **Grants**: the parsers (both dialects case by case; seeded random lines: plain lists split exactly,
+  substitutions at any depth flattened in order, and any line split or opaque, never a crash), host
+  calls as grants (`PermissionTests`), the guard over the real grants service (listed, asked and
+  answered, keys, a broader session grant, policy and deny grants, modes, batched requests, an
+  interrupted wait, timeouts, network), and turns on the real session host for both surfaces (answered,
+  denied, refused by policy, a write outside the workspace, interrupts, steers, timeouts, mode deny, a
+  host stopping and crashing mid-wait), with replay and determinism of the logs and requests.
 - **Replay**: the recorded logs render, through the render alone, to exactly the requests sent; the same
   inputs give the same context log, requests and session events.
 - **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back; finding the
@@ -342,17 +439,21 @@ Defaults are provisional until evals decide (spec §1, principle 7).
 
 Native AOT: `codeact-hybrid`, `codeact-text-only` (a session on the session host with the script
 kernel, an in-memory workspace and a scripted model; the receipts, the context log and the logs replayed
-into the requests) and `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
-card, the journal, the receipts, the session's events), on all eight targets.
+into the requests), `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
+card, the journal, the receipts, the session's events), and `codeact-shell-syntax`, `codeact-grant-needs`
+and `codeact-grant-guard` (the parsers, host calls as grants, the guard over the grants service on the
+fake clock), on all eight targets.
 
 ## Left for later
 
 | What | Task |
 |---|---|
-| Grants on sensitive bindings (`shell.exec` with compound commands split, writes outside the workspace, network) through `Hands.Guard`, pending grant requests shown in the turn | T127b |
 | The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
 | Partial output of commands in doubt (`shell.run`, `bash`): run them as envd processes, whose output logs resume by byte offset, and journal the process | T205 |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
+| Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
+| Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | when the sandbox (T113) is not there to catch them |
+| Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
 | Exact replay of model streams and variant reads from a journal | T131 |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | Compaction on overflow (`Collapsed`), steering and queueing UX | T206 |
