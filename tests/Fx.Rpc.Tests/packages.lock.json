@@ -118,6 +118,7 @@
           "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
           "Fx.Ext.ModelAnthropic": "[0.0.0, )",
           "Fx.Ext.ModelCanonical": "[0.0.0, )",
+          "Fx.Ext.ModelOpenAI": "[0.0.0, )",
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
@@ -211,6 +212,13 @@
         }
       },
       "fx.ext.modelcanonical": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.modelopenai": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",

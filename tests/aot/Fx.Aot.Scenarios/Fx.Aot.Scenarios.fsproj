@@ -50,6 +50,7 @@
     <Compile Include="Scenarios\Kernel\Kernel.fs" />
     <Compile Include="Scenarios\Runtimes.fs" />
     <Compile Include="Scenarios\Envd.fs" />
+    <Compile Include="Scenarios\ModelsOpenAI.fs" />
     <Compile Include="..\..\Fx.Models.Tests\Samples.fs" Link="Scenarios\ModelsSamples.fs" />
     <Compile Include="Scenarios\Models.fs" />
     <Compile Include="Scenarios\Interpreters.fs" />
@@ -79,6 +80,7 @@
     <ProjectReference Include="..\..\..\src\Fx.Sessions.Host\Fx.Sessions.Host.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.Sample\Fx.Ext.Sample.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.ModelCanonical\Fx.Ext.ModelCanonical.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Interpreters\Fx.Interpreters.fsproj" />
