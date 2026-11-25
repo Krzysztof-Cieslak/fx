@@ -322,7 +322,13 @@ let baseSelections: (string * Json) list =
 
 /// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
 /// for the fixture's root directory.
-let createWith (name: string) (selections: (string * Json) list) (make: string -> Interpreter<HandsEnv>) : Fixture =
+let createOver
+    (name: string)
+    (selections: (string * Json) list)
+    (make: string -> Interpreter<HandsEnv>)
+    (llm: Llm option)
+    (catalog: ModelRef -> ModelInfo option)
+    : Fixture =
     let root = scratch name
     let interpreter = make root
     let workspace = Path.Combine(root, "workspace")
@@ -334,7 +340,7 @@ let createWith (name: string) (selections: (string * Json) list) (make: string -
         {
             Clock = clock
             Trace = Trace.none
-            Llm = model.Llm
+            Llm = llm |> Option.defaultValue model.Llm
             Scope = Scope.root
         }
 
@@ -377,7 +383,7 @@ let createWith (name: string) (selections: (string * Json) list) (make: string -
                                     Guard = fun _ -> EffResult.ok ()
                                 }
                         )
-                Catalog = fun _ -> None
+                Catalog = catalog
             }
 
     let settings =
@@ -401,6 +407,10 @@ let createWith (name: string) (selections: (string * Json) list) (make: string -
         Hands = hands
         Variants = variants
     }
+
+/// A fixture with the scripted model, no catalog, and the interpreter `make` gives for its root.
+let createWith (name: string) (selections: (string * Json) list) (make: string -> Interpreter<HandsEnv>) : Fixture =
+    createOver name selections make None (fun _ -> None)
 
 let kernelOptions =
     { KernelOptions.defaults with

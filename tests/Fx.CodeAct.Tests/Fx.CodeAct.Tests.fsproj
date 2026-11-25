@@ -12,6 +12,7 @@
     <Compile Include="UnitTests.fs" />
     <Compile Include="TurnTests.fs" />
     <Compile Include="ReplayTests.fs" />
+    <Compile Include="ProviderTests.fs" />
     <Compile Include="LiveTests.fs" />
   </ItemGroup>
 
@@ -22,6 +23,9 @@
     <!-- The bun-ts kernel, launched as the product launches it. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <!-- The provider wires, on recorded-format streams. -->
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelOpenAI\Fx.Ext.ModelOpenAI.fsproj" />
     <!-- The script kernel. -->
     <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
   </ItemGroup>
