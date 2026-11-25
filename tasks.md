@@ -349,6 +349,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T114,T116,T117,T118,T119,T120,T125,T126 done
+  class T123 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -398,7 +399,7 @@ flowchart LR
 | T120 | openai.responses | T118 | §10.1 | done | OpenAI Responses adapter (streaming, encrypted reasoning replay, prompt_cache_key); passes wire conformance. |
 | T121 | Auth + credential stores | T007, T108 | §11.3–11.4 | todo | `AuthMethod` contract with `api_key`/`env`; `fx.store.keyring|file|ephemeral`; `secret:` references; credential-store conformance. |
 | T122 | Identity + tokens | T108 | §11.2 | todo | `IdentityProvider` contract, `fx.identity.local-os-user`, principals, host-issued session tokens. |
-| T123 | Grants log | T104, T105, T108 | §13 | todo | Grant machine, host-local `GrantStore`, effective-rules projection (deny wins, most specific, else ask), grant request/answer protocol. |
+| T123 | Grants log | T104, T105, T108 | §13 | in-progress | Grant machine, host-local `GrantStore`, effective-rules projection (deny wins, most specific, else ask), grant request/answer protocol. |
 | T124 | Egress hooks | T108, T118 | §18 | todo | Model-egress hook kind (transform + gate) on every model-bound payload; built-in `fx.egress.exclusions` (path/glob content exclusions). |
 | T125 | Session machine | T101b, T104, T105, T107 | §5 | done | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
 | T126 | Prompt render | T118, T125 | §5 | done | Pure render (prefix/history/suffix), stable receipts, cache-breakpoint mapping, `SeenRanges`, content-exclusion filtering; prefix-stability property tests. |
