@@ -142,7 +142,9 @@ The root is given by the composition root: `InstallRoot.defaultFor` is `~/.fx/ru
 3. **Ask**: the first install of a component is a **grant** (spec §13). `InstallerSettings.Approve`
    answers it: the caller asks a person or applies a policy (default "ask"); tests approve. Approval
    is per component id and journaled (`Approved`), so a restart does not ask again and upgrades
-   need none. The grants log (T123) takes this callback over.
+   need none. `Approvals.viaGrants grants requester context` is the callback over the grants log
+   ([grants.md](grants.md)): it asks `component.install` on `<id>@<version>` (keyed by the install,
+   suggesting `<id>@*`) and waits for a person if the rules say ask; the composition root passes it.
 4. **Fetch** (under the install's lock): an install that appeared meanwhile is `Found`. Otherwise
    an archive left by an earlier attempt is reused if its digest matches; else it downloads to
    `.partial`, checks the SHA-256 computed while writing, and renames it into place. Network errors,
@@ -258,7 +260,7 @@ bytes may differ between zlib builds.
 | What | Task |
 |---|---|
 | The other install methods (`ReleaseIndex` with vendor-index trust, sandboxed `Script`, `Package`, read-only `System`, `Custom`); placement `host-push` and `prebaked`, mirrors, `fx runtime bundle\|import` | T211, T503 |
-| Grants through the grants log instead of the `Approve` callback | T123 |
+| Passing `Approvals.viaGrants` as `Approve` in the host's composition, and forwarding the request from an environment's installer to the host's grants log | T129 |
 | Persisting the installer's stream in `SqliteEventStore` (an `EventSchema` for `InstallerEvent`; easiest with T101b's `Codec.union { }`), serving `IComponents` to the host over the environment protocol, envd's composition | T111, T129 |
 | Planning at startup, writing the lockfile next to the project (`.fx/`), the frozen-lockfile check, the profile's lockfile hash | T129 |
 | Symbolic links on Windows (Developer Mode, or copies) | when a component needs them |
