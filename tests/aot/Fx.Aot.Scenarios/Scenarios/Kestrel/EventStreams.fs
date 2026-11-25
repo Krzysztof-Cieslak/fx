@@ -54,8 +54,11 @@ let private stream (acks: Channel<int>) (logs: Channel<string list>) (request: R
                             Type = if i % 2 = 0 then Some "tick" else None
                         }
 
-                    do! Events.write context event cancel.Token
+                    // Recorded before the write: the client can parse the event before the write's
+                    // flush completes, and a stop then cancels the write. It never runs ahead: the
+                    // next event is only written after the client acknowledges this one.
                     sent <- string i
+                    do! Events.write context event cancel.Token
                     // The client acknowledges each event it has parsed: it was flushed, not buffered.
                     let! acked = acks.Reader.ReadAsync(cancel.Token)
 
