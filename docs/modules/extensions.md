@@ -18,14 +18,15 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
 
 | Assembly | Who references it | Contents |
 |---|---|---|
-| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, `BasicExtensionEnv`, the `RemotePeer` shape, variant slots |
-| `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, `Eff` and capabilities, variant slots |
+| `Fx.Sdk` | extensions, the core, composition roots | manifests, contribution types, hooks and their algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv`, `BasicExtensionEnv`, the `RemotePeer` shape, variant slots, the wire contract and `ModelAccess` |
+| `Fx.Prelude`, `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `Fx.Models` | exposed by `Fx.Sdk` | `Product`, JSON and codecs, `Eff` and capabilities, variant slots, the canonical model ([models.md](models.md)) |
 | `Fx.Sdk.Process` (with `Fx.Rpc`, `Fx.Effects.Live`) | F# extension processes; the core, for the protocol's messages | `ExtensionProtocol`, `ExtensionServer`, `ExtensionProcess.run` |
 | `Fx.Extensions`, `Fx.Machines(.Host)`, … | the core and composition roots only | — |
 
 - **The rule:** a package under `extensions/` has exactly one project reference, `src/Fx.Sdk`, and no
   package references. Its compiled assembly references only the SDK surface (`Fx.Sdk`, `Fx.Prelude`,
-  `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `FSharp.Core`) and the base class library (`System.*`).
+  `Fx.Contracts`, `Fx.Effects`, `Fx.Variants`, `Fx.Models`, `FSharp.Core`) and the base class library
+  (`System.*`).
   `ArchitectureTests` checks both, from the `.fsproj` and from the assembly's metadata
   (`System.Reflection.Metadata`), proves the check fails on an assembly that uses the core, checks that
   `Fx.Sdk` exposes nothing else, and that the core references no extension package.
@@ -274,7 +275,7 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
 | Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
 | Wiring the installer into the host: planning the lockfile from the component definitions of builtin and host-config candidates before the bootstrap, `Components.installFor` as `InstallComponents` | T129 |
 | The `bun` runtime (`fx.exthost.bun`, a process extension contributing `ExtensionRuntime "bun"`) | T115 |
-| Model-egress hooks on every model-bound payload (`Hook.transform`/`Hook.gate` on a privileged point) | T124 |
+| The built-in content exclusions on the model-egress hook points (`ModelEgress.transforms`/`gates`, defined and run by T118's `ModelAccess`) | T124 |
 | Disabling and pinning from host config and policy; variants selecting extensions (`IVariants`) and profiles recording extension versions (spec §15) | T106 |
 
 ## Transport parity

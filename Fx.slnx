@@ -28,6 +28,7 @@
     <Project Path="src/Fx.Kernel/Fx.Kernel.fsproj" />
     <Project Path="src/Fx.Envd/Fx.Envd.fsproj" />
     <Project Path="src/Fx.Envd.Live/Fx.Envd.Live.fsproj" />
+    <Project Path="src/Fx.Models/Fx.Models.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
