@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- Shared conformance suites: envd's proxies pass the same tests as the interpreters they stand for. -->
+    <Compile Include="..\Fx.Effects.Tests\Conformance\FsConformance.fs" Link="Conformance\FsConformance.fs" />
+    <Compile Include="..\Fx.Store.Tests\Conformance\BlobsConformance.fs" Link="Conformance\BlobsConformance.fs" />
+    <Compile Include="Conformance\FsOpsConformance.fs" />
+    <Compile Include="PureTests.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="EnvdTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Envd\Fx.Envd.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

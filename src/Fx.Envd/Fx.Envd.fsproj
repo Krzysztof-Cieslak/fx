@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    envd core (spec §3 "hands", §9, §17): the capabilities envd adds (FsOps, workspace Snapshots, output
+    logs), the environment protocol on Fx.Rpc, envd's state and handlers (Envd, EnvdServer), and the
+    host's proxies that implement the same capability records over a connection (EnvClient). Pure: no
+    I/O of its own, only the capabilities it is handed, so the EFF analyzers apply to every file. The
+    live interpreters and the `envd` entry point are Fx.Envd.Live. Spec: docs/modules/envd.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Platform.fs" />
+    <Compile Include="FsOps.fs" />
+    <Compile Include="Glob.fs" />
+    <Compile Include="TextPatch.fs" />
+    <Compile Include="Search.fs" />
+    <Compile Include="FsOpsOver.fs" />
+    <Compile Include="ChangeQueue.fs" />
+    <Compile Include="OutputLog.fs" />
+    <Compile Include="Snapshots.fs" />
+    <Compile Include="TerminalSetup.fs" />
+    <Compile Include="EnvCodecs.fs" />
+    <Compile Include="OutputRecords.fs" />
+    <Compile Include="EnvProtocol.fs" />
+    <Compile Include="Transfer.fs" />
+    <Compile Include="CallEnv.fs" />
+    <Compile Include="Envd.fs" />
+    <Compile Include="EnvdServer.fs" />
+    <Compile Include="EnvClient.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+    <ProjectReference Include="..\Fx.Pty\Fx.Pty.fsproj" />
+    <ProjectReference Include="..\Fx.Rpc\Fx.Rpc.fsproj" />
+    <ProjectReference Include="..\Fx.Store\Fx.Store.fsproj" />
+  </ItemGroup>
+</Project>
