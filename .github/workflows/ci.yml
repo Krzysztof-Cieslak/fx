@@ -128,6 +128,12 @@ jobs:
       - name: Analyzers reject the failing samples
         if: env.CODE == 'true'
         run: bun scripts/analyzers.ts samples --no-build
+      # The build jobs compile Release only. Debug keeps optimizations off, and some code compiles
+      # differently: a state machine that only the optimizer makes static fails FS3511 there, so the
+      # solution must build in Debug too (here, in parallel with the OS jobs).
+      - name: Build (Debug)
+        if: env.CODE == 'true'
+        run: dotnet build Fx.slnx --no-restore --configuration Debug
       # The spike is superseded by packages/kernel-bun-ts: only when it changes, and in the full tier.
       # It runs the tests only; the kernel itself runs on the pinned Bun the tests download and verify.
       - name: Bun kernel spike
