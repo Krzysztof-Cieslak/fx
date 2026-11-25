@@ -45,6 +45,7 @@ let all: Scenario list =
             Egress.scenarios
             Environments.scenarios
             Identity.scenarios
+            Keyring.scenarios
         ]
 
 /// Scenarios that must differ between the JIT and Native AOT. Never listed with `all`: the diff
