@@ -58,6 +58,7 @@
     <Compile Include="Scenarios\ModelsAnthropic.fs" />
     <Compile Include="Scenarios\Prompt.fs" />
     <Compile Include="Scenarios\Grants.fs" />
+    <Compile Include="Scenarios\CodeActGrants.fs" />
     <Compile Include="Scenarios\Egress.fs" />
     <Compile Include="Scenarios\Environments.fs" />
     <Compile Include="Scenarios\Sandbox.fs" />

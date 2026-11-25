@@ -42,6 +42,7 @@ let all: Scenario list =
             ModelsAnthropic.scenarios
             Prompt.scenarios
             Grants.scenarios
+            CodeActGrants.scenarios
             Egress.scenarios
             Environments.scenarios
             Sandbox.scenarios
