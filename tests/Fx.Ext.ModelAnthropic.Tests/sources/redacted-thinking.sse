@@ -1,0 +1,36 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_01KbsTMqD8KTUpWmQzJZnvGW","type":"message","role":"assistant","content":[],"model":"claude-sonnet-5-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":318,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":3}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"xZrPybeJCMNzkigJ5QZhOMy1jPsPcdOw6ycLntEIOkUQXPadvgfyt0s4Q46WNK+rEwhe8DcYmqZEPS67NJ5QDMqhmmnLNDSfY+g35lIRtd7S4alxiGnkZSXrp18BUnTE6dFLfDem4WbMPfSTihJJlrpWQ3LAO4fInm4cDbWQQYOckPk+Q3Dx07N2UCHuCqbO4H3lNktOvT9+f1CVIvAaNH1MeG7sctqJfrFoW3W7fGcn7ZQ8"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"thinking_delta","thinking":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"signature_delta","signature":"DpgvvyuAvk4ZcHZ1SiBPtwDhl9R1HyWQOM8S/blWr9Lsvh5s5jIzIFWcbjrrOI4ffR8mcbDHpszHXG2QYMpJIWKr34krBs2IobCzrco2EITSRIKkUDbCTDZNuVSatAExRZEYFA5SZFHmUocTH4nXi5YVFoaeZq4cCTj+QNnAVuf1p9ygq4KAg/R6gpdM15oSTtxIaj6MThK0nYcLx8fnuQAA5I7ZbTYWUgQ/pPmzGwFJbyjz"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_01ABQmGsdx5aXXDpgxp8ewjv","name":"run_command","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"command\": \"git status --short\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null,"stop_details":null},"usage":{"output_tokens":152,"output_tokens_details":{"thinking_tokens":118}}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

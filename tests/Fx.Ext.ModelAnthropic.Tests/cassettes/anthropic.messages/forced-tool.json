@@ -1,0 +1,123 @@
+{
+  "name": "forced-tool",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-haiku-5-5",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What is in this directory?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "list_files",
+        "description": "Lists the files of the working directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "tool",
+      "name": "list_files"
+    },
+    "parallelToolCalls": false,
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 512,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-haiku-5-5",
+            "max_tokens": 512,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "What is in this directory?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "list_files",
+                "description": "Lists the files of the working directory.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            ],
+            "tool_choice": {
+              "type": "tool",
+              "name": "list_files",
+              "disable_parallel_tool_use": true
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01FoRcEdToOlUsE000000001\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-haiku-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":402,\"output_tokens\":1}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01DdListFiles000000000004\",\"name\":\"list_files\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":11}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "msg_01FoRcEdToOlUsE000000001",
+      "model": "claude-haiku-5-5",
+      "parts": [
+        {
+          "kind": "toolCall",
+          "id": "toolu_01DdListFiles000000000004",
+          "name": "list_files",
+          "arguments": "{}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 402,
+        "output": 11,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

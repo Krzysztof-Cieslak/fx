@@ -1,0 +1,278 @@
+{
+  "name": "redacted-thinking",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-sonnet-5-5",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What changed in the working tree?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "run_command",
+        "description": "Runs a shell command in the repository.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "medium",
+      "visible": false
+    },
+    "maxOutputTokens": 32000,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-sonnet-5-5",
+            "max_tokens": 32000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "What changed in the working tree?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "run_command",
+                "description": "Runs a shell command in the repository.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive"
+            },
+            "output_config": {
+              "effort": "medium"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01KbsTMqD8KTUpWmQzJZnvGW\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":318,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":3}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"redacted_thinking\",\"data\":\"xZrPybeJCMNzkigJ5QZhOMy1jPsPcdOw6ycLntEIOkUQXPadvgfyt0s4Q46WNK+rEwhe8DcYmqZEPS67NJ5QDMqhmmnLNDSfY+g35lIRtd7S4alxiGnkZSXrp18BUnTE6dFLfDem4WbMPfSTihJJlrpWQ3LAO4fInm4cDbWQQYOckPk+Q3Dx07N2UCHuCqbO4H3lNktOvT9+f1CVIvAaNH1MeG7sctqJfrFoW3W7fGcn7ZQ8\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"DpgvvyuAvk4ZcHZ1SiBPtwDhl9R1HyWQOM8S/blWr9Lsvh5s5jIzIFWcbjrrOI4ffR8mcbDHpszHXG2QYMpJIWKr34krBs2IobCzrco2EITSRIKkUDbCTDZNuVSatAExRZEYFA5SZFHmUocTH4nXi5YVFoaeZq4cCTj+QNnAVuf1p9ygq4KAg/R6gpdM15oSTtxIaj6MThK0nYcLx8fnuQAA5I7ZbTYWUgQ/pPmzGwFJbyjz\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01ABQmGsdx5aXXDpgxp8ewjv\",\"name\":\"run_command\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"command\\\": \\\"git status --short\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":152,\"output_tokens_details\":{\"thinking_tokens\":118}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-sonnet-5-5",
+            "max_tokens": 32000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "What changed in the working tree?"
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "redacted_thinking",
+                    "data": "xZrPybeJCMNzkigJ5QZhOMy1jPsPcdOw6ycLntEIOkUQXPadvgfyt0s4Q46WNK+rEwhe8DcYmqZEPS67NJ5QDMqhmmnLNDSfY+g35lIRtd7S4alxiGnkZSXrp18BUnTE6dFLfDem4WbMPfSTihJJlrpWQ3LAO4fInm4cDbWQQYOckPk+Q3Dx07N2UCHuCqbO4H3lNktOvT9+f1CVIvAaNH1MeG7sctqJfrFoW3W7fGcn7ZQ8"
+                  },
+                  {
+                    "type": "thinking",
+                    "thinking": "",
+                    "signature": "DpgvvyuAvk4ZcHZ1SiBPtwDhl9R1HyWQOM8S/blWr9Lsvh5s5jIzIFWcbjrrOI4ffR8mcbDHpszHXG2QYMpJIWKr34krBs2IobCzrco2EITSRIKkUDbCTDZNuVSatAExRZEYFA5SZFHmUocTH4nXi5YVFoaeZq4cCTj+QNnAVuf1p9ygq4KAg/R6gpdM15oSTtxIaj6MThK0nYcLx8fnuQAA5I7ZbTYWUgQ/pPmzGwFJbyjz"
+                  },
+                  {
+                    "type": "tool_use",
+                    "id": "toolu_01ABQmGsdx5aXXDpgxp8ewjv",
+                    "name": "run_command",
+                    "input": {
+                      "command": "git status --short"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_01ABQmGsdx5aXXDpgxp8ewjv",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": " M src/main.fs\n?? notes.md"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "run_command",
+                "description": "Runs a shell command in the repository.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive"
+            },
+            "output_config": {
+              "effort": "medium"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01Lk2tqXRmA8rWhPBwKnLzQd\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":512,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":1}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"`src/main.fs` is modified and `notes.md` is new.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":21}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "msg_01KbsTMqD8KTUpWmQzJZnvGW",
+      "model": "claude-sonnet-5-5",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "",
+          "state": {
+            "family": "anthropic.messages",
+            "model": "anthropic/claude-sonnet-5-5",
+            "kind": "redacted",
+            "data": "xZrPybeJCMNzkigJ5QZhOMy1jPsPcdOw6ycLntEIOkUQXPadvgfyt0s4Q46WNK+rEwhe8DcYmqZEPS67NJ5QDMqhmmnLNDSfY+g35lIRtd7S4alxiGnkZSXrp18BUnTE6dFLfDem4WbMPfSTihJJlrpWQ3LAO4fInm4cDbWQQYOckPk+Q3Dx07N2UCHuCqbO4H3lNktOvT9+f1CVIvAaNH1MeG7sctqJfrFoW3W7fGcn7ZQ8"
+          }
+        },
+        {
+          "kind": "reasoning",
+          "text": "",
+          "state": {
+            "family": "anthropic.messages",
+            "model": "anthropic/claude-sonnet-5-5",
+            "kind": "signature",
+            "data": "DpgvvyuAvk4ZcHZ1SiBPtwDhl9R1HyWQOM8S/blWr9Lsvh5s5jIzIFWcbjrrOI4ffR8mcbDHpszHXG2QYMpJIWKr34krBs2IobCzrco2EITSRIKkUDbCTDZNuVSatAExRZEYFA5SZFHmUocTH4nXi5YVFoaeZq4cCTj+QNnAVuf1p9ygq4KAg/R6gpdM15oSTtxIaj6MThK0nYcLx8fnuQAA5I7ZbTYWUgQ/pPmzGwFJbyjz"
+          }
+        },
+        {
+          "kind": "toolCall",
+          "id": "toolu_01ABQmGsdx5aXXDpgxp8ewjv",
+          "name": "run_command",
+          "arguments": "{\"command\": \"git status --short\"}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 318,
+        "output": 152,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 118
+      }
+    }
+  },
+  "followUp": {
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "toolu_01ABQmGsdx5aXXDpgxp8ewjv",
+            "name": "run_command",
+            "content": [
+              {
+                "kind": "text",
+                "text": " M src/main.fs\n?? notes.md"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    ],
+    "statesVerbatim": true
+  }
+}

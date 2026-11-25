@@ -1,0 +1,296 @@
+{
+  "name": "thinking-tool-use",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-opus-5-5",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "What's the weather in Kraków?"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "The current weather in a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "celsius",
+                "fahrenheit"
+              ]
+            }
+          },
+          "required": [
+            "location"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "high",
+      "visible": true
+    },
+    "maxOutputTokens": 16000,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-opus-5-5",
+            "max_tokens": 16000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "What's the weather in Kraków?"
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "get_weather",
+                "description": "The current weather in a city.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "celsius",
+                        "fahrenheit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "location"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive",
+              "display": "summarized"
+            },
+            "output_config": {
+              "effort": "high"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01XFDUDYJgAACzvnptvVoYEL\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-opus-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":472,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The user wants the weather in Kraków.\\n\\n\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"I should call get_weather with \\\"Kraków\\\" in celsius.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"YkRYCjRqz12BSkjc9lvNq1UwCIyiaMMdxYZpRCB+iTgJ3vXDv1exumjdcDce0kSacj2P/kScquAOHqW1CcQXTdejVczwxl5AlGplyMKTV3sS3F7CLdj3N0OMU8BgEYL8/bI166scaJn6GpzcPYeNFmsd8s5/CcdLoHG+9vDmQVCcX2o/EpHRiFqPvOWxlubGt8uENrAiFaNU8Zn4cbVWk+oVaM2lPUR5yetY9ZdatLHB4RIy\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Let me check the weather in \"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Kraków for you.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01T1x1fJ34qAmk2tNTrN7Up6\",\"name\":\"get_weather\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"location\\\": \\\"Kra\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ków\\\", \\\"unit\\\": \\\"celsius\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":89,\"output_tokens_details\":{\"thinking_tokens\":41}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-opus-5-5",
+            "max_tokens": 16000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "What's the weather in Kraków?"
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "thinking",
+                    "thinking": "The user wants the weather in Kraków.\n\nI should call get_weather with \"Kraków\" in celsius.",
+                    "signature": "YkRYCjRqz12BSkjc9lvNq1UwCIyiaMMdxYZpRCB+iTgJ3vXDv1exumjdcDce0kSacj2P/kScquAOHqW1CcQXTdejVczwxl5AlGplyMKTV3sS3F7CLdj3N0OMU8BgEYL8/bI166scaJn6GpzcPYeNFmsd8s5/CcdLoHG+9vDmQVCcX2o/EpHRiFqPvOWxlubGt8uENrAiFaNU8Zn4cbVWk+oVaM2lPUR5yetY9ZdatLHB4RIy"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Let me check the weather in Kraków for you."
+                  },
+                  {
+                    "type": "tool_use",
+                    "id": "toolu_01T1x1fJ34qAmk2tNTrN7Up6",
+                    "name": "get_weather",
+                    "input": {
+                      "location": "Kraków",
+                      "unit": "celsius"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_01T1x1fJ34qAmk2tNTrN7Up6",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "4 °C, light snow"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "get_weather",
+                "description": "The current weather in a city.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "celsius",
+                        "fahrenheit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "location"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive",
+              "display": "summarized"
+            },
+            "output_config": {
+              "effort": "high"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01Q2VVx1kVz9Ey3S9t1hE8DQ\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-opus-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":36,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":584,\"output_tokens\":1}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"It's 4 °C with light snow in Kraków.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":18}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+      "model": "claude-opus-5-5",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "The user wants the weather in Kraków.\n\nI should call get_weather with \"Kraków\" in celsius.",
+          "state": {
+            "family": "anthropic.messages",
+            "model": "anthropic/claude-opus-5-5",
+            "kind": "signature",
+            "data": "YkRYCjRqz12BSkjc9lvNq1UwCIyiaMMdxYZpRCB+iTgJ3vXDv1exumjdcDce0kSacj2P/kScquAOHqW1CcQXTdejVczwxl5AlGplyMKTV3sS3F7CLdj3N0OMU8BgEYL8/bI166scaJn6GpzcPYeNFmsd8s5/CcdLoHG+9vDmQVCcX2o/EpHRiFqPvOWxlubGt8uENrAiFaNU8Zn4cbVWk+oVaM2lPUR5yetY9ZdatLHB4RIy"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Let me check the weather in Kraków for you."
+        },
+        {
+          "kind": "toolCall",
+          "id": "toolu_01T1x1fJ34qAmk2tNTrN7Up6",
+          "name": "get_weather",
+          "arguments": "{\"location\": \"Kraków\", \"unit\": \"celsius\"}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 472,
+        "output": 89,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 41
+      }
+    }
+  },
+  "followUp": {
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "toolu_01T1x1fJ34qAmk2tNTrN7Up6",
+            "name": "get_weather",
+            "content": [
+              {
+                "kind": "text",
+                "text": "4 °C, light snow"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    ],
+    "statesVerbatim": true
+  }
+}

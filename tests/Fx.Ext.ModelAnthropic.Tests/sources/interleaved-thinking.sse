@@ -1,0 +1,42 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_01Vq7mJ2wFh1hCxT8R4ZbN6s","type":"message","role":"assistant","content":[],"model":"claude-fable-5-2","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1210,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":4}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Read both files before changing anything."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EBRQ15ruemhJMWup63/5BJNRDr4CqDK+mba4jV6q8r4TYIK9ra7H3h0XG2yc3J5tFXPMO840o7tNLw+bhDrJhV2PhT/WasTepXwLDKP0cTjMkpHorsuFRVdpq/bgs2eKUWooOS1OFbrvo1UdDGJxc4R8hXX/VN3ZGSwGYOw9ptK0rnXbi2MNrhnBgNekDr5TmfOVX8c0Znvz94HeAZWZhU4JOX1+vC8vver1rWMccWSW0BXP"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01AaReadMainFs00000000001","name":"read_file","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"src/main.fs\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_01BbReadTestsFs0000000002","name":"read_file","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"path\": \"tests/main.fs\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null,"stop_details":null},"usage":{"output_tokens":97,"output_tokens_details":{"thinking_tokens":38}}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

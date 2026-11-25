@@ -1,0 +1,30 @@
+{
+  "model": "claude-fable-5-2",
+  "max_tokens": 64000,
+  "messages": [
+    { "role": "user", "content": [ { "type": "text", "text": "Rename x to count in src/main.fs." } ] }
+  ],
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Reads a file.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": [ "path" ]
+      }
+    },
+    {
+      "name": "edit_file",
+      "description": "Replaces a file's text.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "path": { "type": "string" }, "text": { "type": "string" } },
+        "required": [ "path", "text" ]
+      }
+    }
+  ],
+  "thinking": { "type": "adaptive", "display": "summarized" },
+  "output_config": { "effort": "max" },
+  "stream": true
+}
