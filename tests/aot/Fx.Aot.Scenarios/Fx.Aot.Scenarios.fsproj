@@ -56,6 +56,7 @@
     <Compile Include="Scenarios\Interpreters.fs" />
     <Compile Include="Scenarios\Sessions.fs" />
     <Compile Include="Scenarios\ModelsAnthropic.fs" />
+    <Compile Include="Scenarios\Prompt.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -85,5 +86,6 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Interpreters\Fx.Interpreters.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Prompt\Fx.Prompt.fsproj" />
   </ItemGroup>
 </Project>
