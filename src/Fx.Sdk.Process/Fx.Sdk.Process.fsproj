@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The public F# SDK for extension processes (spec §16.1 `process` runtime): the extension protocol
+    (its messages and codecs, shared with the host) and the server side of it, so that an F# extension
+    can run as its own process. A process extension references this package and nothing else of fx;
+    built-in extensions run in the binary and see only Fx.Sdk. ExtensionProcess.fs is the one shell
+    file (the console). Spec: docs/modules/sdk.md.
+  -->
+  <ItemGroup>
+    <Compile Include="ExtensionProtocol.fs" />
+    <Compile Include="ExtensionServer.fs" />
+    <Compile Include="ExtensionProcess.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Sdk\Fx.Sdk.fsproj" />
+    <ProjectReference Include="..\Fx.Rpc\Fx.Rpc.fsproj" />
+    <ProjectReference Include="..\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

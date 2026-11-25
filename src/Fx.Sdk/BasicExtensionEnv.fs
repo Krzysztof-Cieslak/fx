@@ -1,10 +1,11 @@
-namespace Fx.Extensions
+namespace Fx.Sdk
 
 open Fx.Effects
-open Fx.Sdk
 
-/// The extension environment every extension gets today: its id, a clock and the scope. The SDK adds
-/// capabilities (T109), each attenuated by the manifest's `capabilities`.
+/// The extension environment every extension gets today: its id, a clock and the scope. The host
+/// builds one per extension (`HostSettings.EnvFor`), an extension process one per extension it
+/// serves, and tests of an extension one to run its activation in. Host capabilities join it as
+/// the SDK grows, each attenuated by the manifest's `capabilities` (docs/modules/sdk.md).
 type BasicExtensionEnv =
     {
         Extension: string

@@ -2,8 +2,10 @@
 /// JSON-RPC (`src/Fx.Rpc`), in any language. The host is the client: it starts the process, sends
 /// `initialize` with `extensionProtocol`, then activates extensions, runs their contributions' code
 /// and calls their methods. One process may serve several extensions, and load more with a runtime
-/// it contributes (e.g. `bun`), so every request names the extension.
-module Fx.Extensions.ExtensionProtocol
+/// it contributes (e.g. `bun`), so every request names the extension. Both sides use these values:
+/// the host (`Fx.Extensions`) and the servers (`ExtensionServer` here, `@fx/sdk` in TypeScript, whose
+/// types are generated from these codecs).
+module Fx.Sdk.Process.ExtensionProtocol
 
 open Fx.Contracts
 open Fx.Rpc

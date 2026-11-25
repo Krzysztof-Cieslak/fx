@@ -8,7 +8,7 @@ open Fx.Contracts
 open Fx.Effects
 open Fx.Rpc
 open Fx.Sdk
-open Fx.Extensions.ExtensionProtocol
+open Fx.Sdk.Process.ExtensionProtocol
 
 /// The smallest environment a call needs: its scope.
 type private CallEnv =

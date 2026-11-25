@@ -21,9 +21,14 @@ let private root =
     up (DirectoryInfo AppContext.BaseDirectory)
 
 /// The public SDK: Fx.Sdk and the projects it exposes. Widening it widens what every extension may
-/// depend on: change docs/modules/extensions.md with it.
+/// depend on: change docs/modules/sdk.md with it.
 let sdkSurface =
     set [ "Fx.Sdk"; "Fx.Prelude"; "Fx.Contracts"; "Fx.Effects"; "FSharp.Core" ]
+
+/// The SDK of extension processes: the public SDK, the extension protocol's server (Fx.Sdk.Process),
+/// the JSON-RPC engine it runs on and the real interpreters a process's composition root uses.
+let processSdkSurface =
+    sdkSurface + set [ "Fx.Sdk.Process"; "Fx.Rpc"; "Fx.Effects.Live" ]
 
 /// The base class library, which every .NET assembly references. The analyzers keep I/O in it out of
 /// extensions (the EFF rules apply to extensions/).
@@ -32,6 +37,7 @@ let private isFramework (name: string) =
     || name = "mscorlib"
     || name = "System"
     || name.StartsWith("System.", StringComparison.Ordinal)
+    || name.StartsWith("Microsoft.Win32.", StringComparison.Ordinal)
 
 /// The assemblies an assembly references, from its metadata.
 let assemblyReferences (path: string) : string list =
@@ -45,10 +51,13 @@ let assemblyReferences (path: string) : string list =
     ]
     |> List.sort
 
-/// What an extension assembly references beyond the SDK surface and the base class library.
-let violations (assembly: string) : string list =
+/// What an assembly references beyond a surface and the base class library.
+let violationsOf (surface: Set<string>) (assembly: string) : string list =
     assemblyReferences assembly
-    |> List.filter (fun name -> not (sdkSurface.Contains name || isFramework name))
+    |> List.filter (fun name -> not (surface.Contains name || isFramework name))
+
+/// What an extension assembly references beyond the SDK surface and the base class library.
+let violations (assembly: string) : string list = violationsOf sdkSurface assembly
 
 /// A project file's project and package references (paths relative to the repository root).
 let private projectReferences (project: string) : string list * string list =
@@ -136,6 +145,24 @@ let tests =
                     (violations (Path.Combine(AppContext.BaseDirectory, "Fx.Sdk.dll")))
                     []
                     "assembly references"
+            }
+
+            test "the process SDK adds only the protocol's server and what it runs on" {
+                let projects, packages =
+                    projectReferences (Path.Combine(root, "src", "Fx.Sdk.Process", "Fx.Sdk.Process.fsproj"))
+
+                Expect.equal
+                    (projects |> List.map (fun p -> Path.GetFileNameWithoutExtension p) |> List.sort)
+                    [ "Fx.Effects.Live"; "Fx.Rpc"; "Fx.Sdk" ]
+                    "project references"
+
+                Expect.equal packages [] "package references"
+
+                for assembly in [ "Fx.Sdk.Process"; "Fx.Rpc"; "Fx.Effects.Live" ] do
+                    Expect.equal
+                        (violationsOf processSdkSurface (Path.Combine(AppContext.BaseDirectory, assembly + ".dll")))
+                        []
+                        $"{assembly}: assembly references"
             }
 
             test "the core references no extension package" {

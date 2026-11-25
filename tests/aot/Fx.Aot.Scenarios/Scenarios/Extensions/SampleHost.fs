@@ -17,6 +17,7 @@ open Fx.Effects.Live
 open Fx.Extensions
 open Fx.Rpc
 open Fx.Sdk
+open Fx.Sdk.Process
 open Fx.Ext.Sample
 
 /// The host's environment: processes, a clock and a scope.
@@ -179,39 +180,10 @@ let childProcess () : Task<Loaded> =
         (hostEnv (LocalShell.create (LocalShell.defaultShell ()) AppContext.BaseDirectory))
         (Candidate.create Source.Builtin (Package.Manifest(processManifest (), Some AppContext.BaseDirectory)))
 
-/// The `ext-peer` command: serves the sample on standard input and output until the host closes it.
+/// The `ext-peer` command: serves the sample on standard input and output until the host closes it,
+/// as any F# extension process does (`ExtensionProcess.run` from the SDK).
 let servePeer () : int =
-    let input = Console.OpenStandardInput()
-    let output = Console.OpenStandardOutput()
-
-    let transport =
-        StreamTransport.create (ConnectionLimits.frames ConnectionLimits.defaults) input output
-
-    let env =
-        {
-            Clock = SystemClock.clock
-            Shell = LocalShell.create (LocalShell.defaultShell ()) AppContext.BaseDirectory
-            Scope = Scope.root
-        }
-
-    let served =
-        ExtensionServer.serve
-            ({
-                Name = "Fx.Ext.Sample"
-                Version = Sample.manifest.Version
-            }
-            : PeerInfo)
-            [ Sample.extension ]
-            (BasicExtensionEnv.forManifest SystemClock.clock)
-            transport
-
-    match (Eff.run env served).GetAwaiter().GetResult() with
-    | Ok peer ->
-        peer.Completion.GetAwaiter().GetResult() |> ignore
-        0
-    | Error e ->
-        stderr.WriteLine("ext-peer: " + string e)
-        1
+    ExtensionProcess.run "Fx.Ext.Sample" Sample.manifest.Version [ Sample.extension ]
 
 /// A process in memory: its standard input and output are pipes to an `ExtensionServer` serving the
 /// extensions in this process. The process runtime and `ProcTransport` run exactly as for a child.
