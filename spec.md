@@ -602,7 +602,7 @@ Interactive sessions; **specs in the repo → goals** (Ralph-style plan files).
 ### 9.2 Provider contract
 
 ```fsharp
-type TransportKind = Piped | Direct | Dialback
+type TransportKind = InProcess | Piped | Direct | Dialback
 
 type ProviderCaps =
   { Transports: TransportKind list; Suspend: bool; Fork: bool
@@ -614,7 +614,7 @@ type EnvProvider =
     Create   : EnvSpec -> Task<Lease>
     Platform : Lease -> Task<Platform>
     Exec     : Lease * Argv * StdioMode -> Task<ByteStreams>
-    Upload   : Lease * path: string * Stream -> Task
+    Upload   : Lease * hostFile: string * path: string -> Task
     Connect  : (Lease -> Task<Endpoint>) option
     Suspend  : (Lease -> Task) option;  Resume: (Lease -> Task) option
     Snapshot : (Lease -> Task<ProviderSnapshot>) option
@@ -624,6 +624,8 @@ type EnvProvider =
 ```
 
 - Bootstrap: `Platform` → `Upload` `envd` → `Exec` `envd` → install components from the lockfile.
+- `InProcess` is embedded mode (§3): envd runs in the host's process over the in-process transport, only for environments on the host's machine (no upload, no exec). `Exec` gives pipes (terminals are envd's); `Upload` copies a host file, as `scp` and `docker cp` do.
+- Operations are effects over the provider's environment: the host machine's files and processes, through which providers reach their environments. A lease is named after the environment's id, so `Create` is idempotent and `List` is what the host reconciles with. Details: `docs/modules/environments.md`.
 
 ### 9.3 Workspaces
 
@@ -656,7 +658,7 @@ policy     = { network = "allowlist:dev", idle = "suspend:15m", ttl = "8h", budg
 
 ### 9.5 Lifecycle
 
-`Requested → Provisioning → Bootstrapped → Connected → Ready ⇄ Suspended → Lost | Destroyed`. Leases persisted and reconciled; cost/TTL/idle tracked. Moves: same-provider snapshot, or cross-provider workspace transfer + kernel restart.
+`Requested → Provisioning → Bootstrapped → Connected → Ready ⇄ Suspended → Lost | Destroyed`; a failed step leaves it `Failed` (destroying it releases what it holds). Leases persisted and reconciled: after a host restart or a lost connection a provisioned environment is detached and starts envd again when next used; one the provider no longer has is `Lost`. Cost/TTL/idle tracked. Moves: same-provider snapshot, or cross-provider workspace transfer + kernel restart.
 
 ---
 

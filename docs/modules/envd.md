@@ -135,7 +135,7 @@ brackets; all definitions in `EnvProtocol`):
 no locale; on Windows, PowerShell `Script`s start with UTF-8 console encodings (a console starts with
 the OEM code page and loses non-ASCII input). The Windows shell is `pwsh` if it is on `PATH`, else
 Windows PowerShell; `--shell pwsh|powershell|sh` overrides it (the host passes its `shell.windows`
-variant there, T112). A VT responder for programs that query the terminal (pty.md, 6) is not done.
+variant there: [environments.md](environments.md)). A VT responder for programs that query the terminal (pty.md, 6) is not done.
 
 ### Watches
 
@@ -177,6 +177,8 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
 (`EnvdMain`):
 
 - the workspace defaults to the current directory and must exist (exit 2 otherwise);
+- the processes it starts inherit `Environment` instead of envd's own variables when the host sets it
+  (`BaseEnvironment`; embedded mode, where envd's own variables are the host's);
 - the state defaults to `~/.<product>/envd/<hash of the workspace>` (`%LOCALAPPDATA%\<product>\envd\…`
   on Windows): `blobs/` (`FileBlobStore`), `output/` (spill files, emptied at start: one envd per state
   directory), `snapshots.git`; if the state is inside the workspace, snapshots exclude it;
@@ -201,8 +203,11 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
 
 ## Left to later tasks
 
-- **T112**: the provider contract, the local provider (embedded mode wiring), reconnecting transports
-  (WebSocket, Dialback), and passing the host's `shell.windows` variant.
+- **T112** (done, [environments.md](environments.md)): the provider contract, `fx.env.local` (embedded
+  mode: `EnvdMain.embed`; piped: `fx envd --stdio` through the provider), the host's `shell.windows`
+  variant passed as `--shell`, and the base environment of envd's processes (`EnvdOptions.Environment`,
+  `BaseEnvironment`: the host's variables without credentials). Reconnecting transports (WebSocket,
+  Dialback) are T501 and T504.
 - **T113**: sandboxes; containment of escaped processes; stopping children when envd is killed.
 - **T131**: journaling capability calls (process output is journaled as `Read` results); a
   deterministic `ScriptedTerminal` fake.

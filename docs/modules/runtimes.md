@@ -190,7 +190,7 @@ environment). Their output does not depend on the operating system.
 | What | Task |
 |---|---|
 | Launching a process extension on a runtime (a manifest `launch` that names the `bun` runtime and its entry point), the TypeScript extension host | T115 |
-| The bun-ts kernel's owned directories per session and environment, killing stale kernels (T117 launches it on this runtime: interpreters.md) | T112, T129 |
+| The bun-ts kernel's owned directories per session (per environment: `EnvLayout.owned`, environments.md), killing stale kernels (T117 launches it on this runtime: interpreters.md) | T127, T129 |
 | Where launches' owned directories live (under the product's home, per session), serving runtimes to envd over the environment protocol | T111, T129 |
 | The installer's probe (`bun --revision`) inherits the installer's environment minus the vectors' exact names: an inherited environment cannot drop prefixes (`BUN_INSPECT*`). The composition root should set `InstallerSettings.ProbeEnv` to `Exactly` a small environment | T129 |
 | `ReleaseIndex` with `SHASUMS256.txt` and its signature as the vendor index | T211 |
