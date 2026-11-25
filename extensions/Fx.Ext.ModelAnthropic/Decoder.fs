@@ -42,15 +42,16 @@ type BlockKind =
         | ToolUse(_, streamed) -> $"tool use (streamed {streamed})"
         | Skipped -> "skipped"
 
-/// An open content block: its canonical part and kind.
+/// A content block: its canonical part and kind, and whether it stopped.
 type Block =
     {
         Part: int
         Kind: BlockKind
+        Stopped: bool
     }
 
     override this.ToString() =
-        $"block (part {this.Part}, {this.Kind})"
+        $"block (part {this.Part}, {this.Kind}, stopped {this.Stopped})"
 
 /// Anthropic's token counts as reported so far (each `message_delta` repeats or updates them).
 type RawUsage =
@@ -71,7 +72,7 @@ type State =
         /// Stamps provider state: the call's family and model.
         Family: string
         Model: ModelRef
-        /// Open blocks by Anthropic's index.
+        /// The blocks so far, by Anthropic's index.
         Blocks: Map<int, Block>
         /// Parts started so far (the next part's index).
         Parts: int
@@ -82,7 +83,7 @@ type State =
     }
 
     override this.ToString() =
-        $"anthropic decoder ({this.Parts} parts, {this.Blocks.Count} open)"
+        $"anthropic decoder ({this.Parts} parts, {this.Blocks.Count} blocks)"
 
 let private zero: RawUsage =
     {
@@ -193,7 +194,15 @@ let private blockStart (state: State) (index: int) (content: Json) : Decoded<Sta
 
         decoded
             { state with
-                Blocks = state.Blocks.Add(index, { Part = part; Kind = kind })
+                Blocks =
+                    state.Blocks.Add(
+                        index,
+                        {
+                            Part = part
+                            Kind = kind
+                            Stopped = false
+                        }
+                    )
                 Parts = parts
             }
             [
@@ -231,7 +240,8 @@ let private blockStart (state: State) (index: int) (content: Json) : Decoded<Sta
 
 let private blockDelta (state: State) (index: int) (delta: Json) : Decoded<State> =
     match state.Blocks.TryFind index with
-    | None -> fail state $"a delta for content block {index}, which is not open"
+    | None -> fail state $"a delta for content block {index}, which never started"
+    | Some block when block.Stopped -> fail state $"a delta for content block {index} after it stopped"
     | Some block ->
         let update (kind: BlockKind) =
             { state with
@@ -260,11 +270,12 @@ let private blockDelta (state: State) (index: int) (delta: Json) : Decoded<State
 
 let private blockStop (state: State) (index: int) : Decoded<State> =
     match state.Blocks.TryFind index with
-    | None -> fail state $"content block {index} stopped, but it is not open"
+    | None -> fail state $"content block {index} stopped, but it never started"
+    | Some block when block.Stopped -> fail state $"content block {index} stopped twice"
     | Some block ->
         let state =
             { state with
-                Blocks = state.Blocks.Remove index
+                Blocks = state.Blocks.Add(index, { block with Stopped = true })
             }
 
         let stamp (kind: string) (data: string) : ProviderState =
