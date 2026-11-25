@@ -96,7 +96,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - **Codecs**: write them by hand with combinators (`Codec.record`, `Codec.union`, …). A single codec yields the schema, encoding, validated decoding and the preview. Use our JSON (`Fx.Contracts`), never System.Text.Json; hash only `Json.serializeCanonical` output. See [docs/modules/contracts.md](docs/modules/contracts.md).
 - **Configurable behaviour** must be read through `IVariants`. Never read configuration ad hoc, because it has to be recorded and replayable. Module spec: [`docs/modules/variants.md`](docs/modules/variants.md).
   - Make each choice a slot next to the code that reads it (`Slot.enum` or `Slot.create`: a dotted id that never changes, a description, a codec, a default, choices if enumerated, `Slot.privileged` if a project must not set it), register it (core slots in `Slots.all`, an extension's as contributions), and read it with `Variants.get slot`.
-  - Test with `FakeVariants`. Adding a core slot changes the golden files in `tests/Fx.Variants.Tests/golden` and every profile id.
+  - Test with `FakeVariants`. Adding a core slot changes the golden files in `tests/Fx.Variants.Tests/golden`, `variants.d.ts` and `fixtures.ts` in `tests/Fx.Contracts.TypeScript.Tests/golden`, and every profile id.
 
 **Effects and capabilities** (module spec: [`docs/modules/eff.md`](docs/modules/eff.md))
 - Write effects with `eff { }`, or `effResult { }` when they have expected failures. Only `Eff` values can be bound. Lift a task with `Eff.ofTask` only inside capability modules and interpreters.
@@ -197,6 +197,9 @@ The bans on `%A`, printf format specifiers, runtime reflection and I/O outside `
 
 - Kernel and workflow-worker code must stay deterministic. In workflow mode, `Date` and `Math.random` must not be used directly; every effect goes through `fx.*`.
 - Types for `@fx/sdk` and `fx.d.ts` are **generated from the F# codecs**. Never edit generated files by hand.
+  - Generate them with `DeclarationFile.render` (`src/Fx.Contracts.TypeScript`, module spec [`docs/modules/typescript.md`](docs/modules/typescript.md)): `Layout.Module` for the SDK and clients, `Layout.Global(Product.kernelGlobal, …)` for a kernel's host bridge.
+  - Name a codec with `Codec.named` to make it a declared type, and describe it before naming it, so that its declaration carries the description.
+  - Type-check TypeScript with Bun's `bun check`, always with `--no-script` (otherwise it runs a `check` script from a `package.json` above the project).
 
 ## Naming
 
@@ -260,6 +263,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target when the probe changes (`kestrel-probe.yml`) |
 | Update golden files | `UPDATE_GOLDEN=1 dotnet test --solution Fx.slnx`, then review the diff |
+| Type-check the generated TypeScript | `bun scripts/declarations.ts`: the golden declarations in `tests/Fx.Contracts.TypeScript.Tests/golden` with the shared fixtures, and the misuses that must fail (needs Bun 1.4.5, as CI) |
 | Native libraries | Built by `dotnet build` and `dotnet publish` (no separate step) into `artifacts/native/`. Needs a C compiler, as Native AOT does: clang or gcc on Linux and macOS (`FxSqliteCC` overrides), Visual Studio or the Build Tools with the C++ workload on Windows. The first build downloads the pinned sources; offline, pass `-p:FxSqliteArchive=<zip>` |
 | PTY probe | `dotnet build src/Fx.Pty -c Release`, then `dotnet fsi docs/spikes/pty-probe/probe.fsx`; CI runs it on every target when `src/Fx.Pty` or the probe changes (`pty-probe.yml`) |
 
@@ -281,6 +285,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | `Directory.Packages.props` | Central package versions |
 | `src/Fx.Prelude` | Bottom layer with no dependencies (Fable-compatible). `Fx.Product` derives every user-visible name from the constant |
 | `src/Fx.Contracts` | JSON, `Schema`, `Validation`, `Preview` and the `Codec` combinators (spec §4.1; Fable-compatible) |
+| `src/Fx.Contracts.TypeScript` | TypeScript declarations (`.d.ts`) generated from schemas: types for `@fx/sdk` and clients, and a kernel's host bridge (pure, Native AOT-safe; spec in [`docs/modules/typescript.md`](docs/modules/typescript.md)) |
 | `src/Fx.Cli` | The single `fx` executable (`AssemblyName` comes from the constant; Native AOT when published with `-r <rid>`) |
 | `src/Fx.Effects` | `Eff`, the `eff`/`effResult` builders, the core capabilities and their deterministic fakes (pure; spec in [`docs/modules/eff.md`](docs/modules/eff.md)) |
 | `src/Fx.Effects.Live` | The real interpreters of the core capabilities (the imperative shell); referenced only by composition roots |

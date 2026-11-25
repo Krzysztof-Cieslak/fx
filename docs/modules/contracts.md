@@ -129,6 +129,8 @@ for the model adapters (T118 and later).
 
 `Schema.render` gives a TypeScript-like expression (`{ path: string; line?: integer }`) and
 `Schema.typeName` a short name for messages and previews (`Match[]`, `string | null`).
+TypeScript declarations (`.d.ts`) are generated from schemas by `Fx.Contracts.TypeScript`
+([typescript.md](typescript.md)).
 
 ## Codecs
 
