@@ -310,10 +310,14 @@ jobs:
         if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && runner.os == 'macOS' && needs.plan.outputs.keyring == 'true' }}
         shell: bash
         run: bash .github/scripts/keyring-macos.sh create "$RID"
-      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
+      - name: Keyring live tests (macOS)
         if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
         shell: bash
-        run: bash .github/scripts/keyring-macos.sh live "$RID"
+        run: bash .github/scripts/keyring-macos.sh tests
+      - name: The keyring scenarios of the JIT-vs-native diff (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/keyring-macos.sh scenarios "$RID"
       - name: Keyring headless detection, natively (macOS)
         if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
         shell: bash
@@ -335,10 +339,10 @@ jobs:
   targets:
     # The full tier's other targets (scripts/ci-plan.ts, TARGETS), natively: Native AOT publish, smoke
     # tests, binary sizes, the JIT-vs-native diff and its self-test. Each also runs what only it can
-    # show (its matrix flags): the sandbox suites with bubblewrap on arm64 (the seccomp program is per
+    # show (its matrix flags): the sandbox with bubblewrap on arm64 (the seccomp program is per
     # architecture) and Seatbelt on Intel macOS; the keyring in Alpine (gnome-keyring on musl) and on
     # Intel macOS; and fx.runtime.bun on musl (the pinned Bun's musl build) with fx.interpreter.bun-ts
-    # on it.
+    # on it. Targets without `suites` run only the areas' native scenarios and probes.
     name: Target (${{ matrix.rid }})
     needs: plan
     if: needs.plan.outputs.full == 'true'
@@ -375,7 +379,7 @@ jobs:
       # The sandbox suites' CodeAct live tests run the bun-ts kernel on the pinned Bun. Never in
       # Alpine: its musl Bun would share the glibc build's key.
       - name: Cache the pinned Bun
-        if: ${{ matrix.sandbox && !matrix.alpine }}
+        if: ${{ matrix.sandbox && matrix.suites && !matrix.alpine }}
         uses: actions/cache@v6
         with:
           path: artifacts/kernel-bun-ts/runtimes
@@ -401,10 +405,11 @@ jobs:
       - name: Restore (locked)
         id: restore
         run: $IN dotnet restore Fx.slnx --locked-mode
-      # The tests of this target's areas, built before the publishes below restore for the target.
+      # The test suites of this target's areas, built before the publishes below restore for the
+      # target.
       - name: Build the area tests
         id: area-tests
-        if: ${{ matrix.keyring || matrix.sandbox || matrix.bun }}
+        if: ${{ matrix.suites }}
         env:
           KEYRING: ${{ matrix.keyring }}
           SANDBOX: ${{ matrix.sandbox }}
@@ -474,11 +479,14 @@ jobs:
         run: $IN sh .github/scripts/keyring-live.sh "$RID"
       - name: Create a temporary keychain (macOS)
         id: keychain
-        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && steps.scenarios.outcome == 'success' && matrix.keyring && runner.os == 'macOS' }}
+        if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && matrix.keyring && runner.os == 'macOS' }}
         run: bash .github/scripts/keyring-macos.sh create "$RID"
-      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
+      - name: Keyring live tests (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' && steps.area-tests.outcome == 'success' && matrix.suites }}
+        run: bash .github/scripts/keyring-macos.sh tests
+      - name: The keyring scenarios of the JIT-vs-native diff (macOS)
         if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
-        run: bash .github/scripts/keyring-macos.sh live "$RID"
+        run: bash .github/scripts/keyring-macos.sh scenarios "$RID"
       - name: Keyring headless detection, natively (macOS)
         if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
         run: bash .github/scripts/keyring-macos.sh detect "$RID"
@@ -487,10 +495,11 @@ jobs:
         run: bash .github/scripts/keyring-macos.sh delete
 
       # The sandbox drivers where the os jobs do not run them, each requiring its OS's driver
-      # (SANDBOX_TESTS=1): the conformance suite, sandboxed environments, the bun-ts kernel in a
-      # sandbox (the CodeAct live tests), and the sandbox scenarios of the JIT-vs-native diff.
+      # (SANDBOX_TESTS=1): with the suites, the conformance suite, sandboxed environments and the
+      # bun-ts kernel in a sandbox (the CodeAct live tests); and the sandbox scenarios of the
+      # JIT-vs-native diff.
       - name: Sandbox tests
-        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.sandbox }}
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.sandbox && matrix.suites }}
         env:
           SANDBOX_TESTS: "1"
         run: |

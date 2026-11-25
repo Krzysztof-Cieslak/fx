@@ -5,15 +5,17 @@
 #   .github/scripts/keyring-macos.sh create <rid>   creates it, removes its auto-lock, puts it first in
 #                                                    the search list and makes it the default; exports
 #                                                    KEYRING_TEST_KEYCHAIN through $GITHUB_ENV
-#   .github/scripts/keyring-macos.sh live <rid>     the keyring's tests, the credential-store conformance
-#                                                    suite on the keyring store and the keyring scenarios
-#                                                    of the JIT-vs-native diff, with KEYRING_TESTS=1
+#   .github/scripts/keyring-macos.sh tests          the keyring's tests and the credential-store
+#                                                    conformance suite on the keyring store, built before,
+#                                                    with KEYRING_TESTS=1
+#   .github/scripts/keyring-macos.sh scenarios <rid> the keyring scenarios of the JIT-vs-native diff, with
+#                                                    KEYRING_TESTS=1
 #   .github/scripts/keyring-macos.sh detect <rid>   the probe, natively: ready, then locked
 #   .github/scripts/keyring-macos.sh delete         restores the login keychain as the default and
 #                                                    deletes the temporary one (run it always)
 set -euo pipefail
 
-command=${1:?usage: keyring-macos.sh <create|live|detect|delete> [rid]}
+command=${1:?usage: keyring-macos.sh <create|tests|scenarios|detect|delete> [rid]}
 bin="artifacts/publish/Fx.Aot.Scenarios/release_${2:-}/Fx.Aot.Scenarios"
 
 case "$command" in
@@ -32,11 +34,14 @@ case "$command" in
     echo "KEYRING_TEST_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
     ;;
 
-  live)
+  tests)
     export KEYRING_TESTS=1
     dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
     dotnet test --project tests/Fx.Auth.Tests --no-build --configuration Release
-    dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$2" --no-publish --only keyring-
+    ;;
+
+  scenarios)
+    KEYRING_TESTS=1 dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$2" --no-publish --only keyring-
     ;;
 
   detect)
