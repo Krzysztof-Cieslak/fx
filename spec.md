@@ -669,15 +669,15 @@ policy     = { network = "allowlist:dev", idle = "suspend:15m", ttl = "8h", budg
 type ModelKind = Chat | Decision | Embedding
 
 type ModelInfo =
-  { Ref: ModelRef; Kind: ModelKind; Limits: Limits; Caps: ModelCaps
-    Cost: Cost option; PlanBacked: bool }
+  { Ref: ModelRef; Kind: ModelKind; Family: string option   // the wire family that serves it
+    Limits: Limits; Caps: ModelCaps; Cost: Cost option; PlanBacked: bool }
 
 type ModelCaps =
   { Reasoning: ReasoningCaps option; Tools: ToolCaps; StructuredOutput: bool
     Logprobs: bool; Caching: CachingCaps; Media: MediaKind list
     Sampling: SamplingCaps; Transports: Transport list }
 
-type ChatWire     = { Family: string; Stream: WireCtx -> ChatRequest -> IAsyncEnumerable<ChatEvent> }
+type ChatWire     = { Family: string; Stream: WireRequest -> Eff<WireCtx, ChatStream> }   // pulled event by event
 type DecisionWire = { Family: string; Decide: WireCtx -> DecisionRequest -> Task<DecisionResponse> }
 type EmbedWire    = { Family: string; Embed: WireCtx -> EmbedRequest -> Task<EmbedResponse> }
 
@@ -689,6 +689,9 @@ type ProviderDef =
 ### 10.3 Canonical model
 
 Typed parts + opaque `ProviderState` replayed byte-exact; recorded model-switch rules; capability-driven requests; cache mapping; typed errors (rate limit, mid-stream quota, overflow → compaction, refusal, transport); small tool surface; **every request passes the model-egress hooks**.
+
+- Streams are pulled (`ChatStream = { Next; Close }`, like a process's output) rather than `IAsyncEnumerable`: nothing runs in the background, each pull is recordable, and nothing needs reflection under Native AOT.
+- Wires get requests only as `WireRequest`, which only `ModelAccess` (the host's `ILlm`) makes, after fitting, replay rules and the model-egress hooks; a wire's HTTP reaches only its provider's endpoints and adds the credentials itself. Wire adapters pass a wire-conformance suite over recorded HTTP exchanges (cassettes). Module spec: `docs/modules/models.md`.
 
 ### 10.4 Catalog, probes, roles, routing
 
