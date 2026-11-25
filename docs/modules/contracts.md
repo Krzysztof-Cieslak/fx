@@ -266,7 +266,20 @@ target.
 
 `tools/Fx.Contracts.Bench` measures encoding, decoding (from a `Json` value) and previewing a 4-case
 union, a 24-case union and a 48-field record (median of 7 runs per value; command in AGENTS.md). The
-`Contracts benchmark` workflow runs it on an idle runner when the contracts change.
+`Contracts benchmark` workflow runs it on an idle runner when the contracts change. On a GitHub
+`ubuntu-24.04` runner (4 cores, .NET 11.0.0, JIT):
+
+| Codec | Operation | Time per value | Allocated per value |
+|---|---|---|---|
+| union, 4 cases | encode | 168 ns | 832 B |
+| union, 4 cases | decode | 184 ns | 656 B |
+| union, 4 cases | preview | 726 ns | 3226 B |
+| union, 24 cases | encode | 152 ns | 668 B |
+| union, 24 cases | decode | 121 ns | 308 B |
+| union, 24 cases | preview | 425 ns | 1764 B |
+| record, 48 fields | encode | 3562 ns | 12976 B |
+| record, 48 fields | decode | 7283 ns | 9432 B |
+| record, 48 fields | preview | 10332 ns | 40264 B |
 
 The union redesign (T101b) changed only how a codec is built: per value, `Codec.union { }` runs the
 same code as the curried API did. Measured against the old API on the same machine, interleaved, best
