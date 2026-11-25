@@ -1,0 +1,6 @@
+{
+  // must-fail.ts misuses the generated declarations: the check must fail with exactly the errors
+  // its `expect:` comments list. Proves that the checker runs and that the types are not `any`.
+  "extends": "../tsconfig.json",
+  "files": ["../../golden/domain.d.ts", "../../golden/kernel.d.ts", "must-fail.ts"]
+}
