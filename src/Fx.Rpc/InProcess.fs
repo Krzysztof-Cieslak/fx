@@ -31,6 +31,13 @@ module InProcess =
         | Frame.Binary bytes when bytes.Length > limits.MaxBinary -> Some limits.MaxBinary
         | Frame.Binary _ -> None
 
+    /// This end stops at once: it reads nothing more and the peer's sends fail. What it already sent
+    /// stays readable by the peer, then the end (if the output was closed first) or a reset, as on a
+    /// pipe whose writer exited or crashed.
+    let private abort (incoming: BoundedQueue<Frame>) (outgoing: BoundedQueue<Frame>) =
+        incoming.Fail()
+        outgoing.CompleteFailed()
+
     let private endpoint
         (name: string)
         (limits: FrameLimits)
@@ -62,8 +69,7 @@ module InProcess =
 
                             match tooLarge limits frame with
                             | Some limit ->
-                                incoming.Fail()
-                                outgoing.Fail()
+                                abort incoming outgoing
                                 return Received.Failed(TransportError.TooLarge limit)
                             | None -> return Received.Frame frame
                         | ValueNone when incoming.IsFailed ->
@@ -74,10 +80,7 @@ module InProcess =
                 fun _ _ ->
                     outgoing.Complete()
                     Task.FromResult()
-            Abort =
-                fun () ->
-                    incoming.Fail()
-                    outgoing.Fail()
+            Abort = fun () -> abort incoming outgoing
         }
 
     /// Two connected transports, each buffering at most `bufferBytes` in its direction (a sender waits

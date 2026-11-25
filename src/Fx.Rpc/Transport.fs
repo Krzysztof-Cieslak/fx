@@ -37,7 +37,9 @@ type Transport =
         /// stays open until the peer closes its side too.
         CloseOutput: Shutdown -> CancellationToken -> Task<unit>
         /// Releases the transport at once. A pending or later `Receive` returns `End` or `Failed`, a
-        /// later `Send` fails. Idempotent.
+        /// later `Send` fails. Frames already sent stay readable by the peer, as on a pipe: the
+        /// connection closes gracefully by `CloseOutput`, then `Abort`, and the peer must still get
+        /// everything sent before. Idempotent.
         Abort: unit -> unit
     }
 

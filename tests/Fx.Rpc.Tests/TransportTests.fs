@@ -21,19 +21,26 @@ let private serverEnv =
         Scope = Scope.root
     }
 
-/// Serves `TestService` on a transport, in the background.
-let private serve (transport: Transport) : unit =
-    Eff.run serverEnv (Rpc.accept (service ()) transport) |> ignore
+/// Serves `TestService` on a transport, in the background; completes when that connection has ended.
+let private serve (transport: Transport) : Task =
+    task {
+        match! Eff.run serverEnv (Rpc.accept (service ()) transport) with
+        | Ok peer ->
+            let! _ = peer.Completion
+            ()
+        | Error _ -> ()
+    }
 
 let inProcess () : Task<Link> =
     let client, server =
         InProcess.pair (256 * 1024) (ConnectionLimits.frames clientLimits) (ConnectionLimits.frames limits)
 
-    serve server
+    let ended = serve server
 
     Task.FromResult
         {
             Transport = client
+            Ended = ended
             Crash =
                 fun () ->
                     server.Abort()
@@ -67,11 +74,12 @@ let memoryPipes () : Task<Link> =
             (toClient.Reader.AsStream())
             (toServer.Writer.AsStream())
 
-    serve server
+    let ended = serve server
 
     Task.FromResult
         {
             Transport = client
+            Ended = ended
             Crash =
                 fun () ->
                     server.Abort()
@@ -89,6 +97,7 @@ let childProcess () : Task<Link> =
     Task.FromResult
         {
             Transport = child.Transport
+            Ended = child.Process.WaitForExitAsync()
             Crash =
                 fun () ->
                     child.Process.Kill true
@@ -115,22 +124,27 @@ let private overWebSocket (listener: LocalServer.Listener) (cleanup: unit -> uni
         let serverEnd =
             TaskCompletionSource<Transport>(TaskCreationOptions.RunContinuationsAsynchronously)
 
+        let ended = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
         let endpoint =
             LocalServer.Endpoint.webSocket "/rpc" [ Protocol.webSocketSubprotocol ] (fun request socket ->
                 task {
-                    let transport = WebSocketTransport.create (ConnectionLimits.frames limits) socket
-                    serverEnd.TrySetResult transport |> ignore
+                    try
+                        let transport = WebSocketTransport.create (ConnectionLimits.frames limits) socket
+                        serverEnd.TrySetResult transport |> ignore
 
-                    let env =
-                        { serverEnv with
-                            Scope = Scope.ofCancellation request.Stopping
-                        }
+                        let env =
+                            { serverEnv with
+                                Scope = Scope.ofCancellation request.Stopping
+                            }
 
-                    match! Eff.run env (Rpc.accept (service ()) transport) with
-                    | Ok peer ->
-                        let! _ = peer.Completion
-                        ()
-                    | Error _ -> ()
+                        match! Eff.run env (Rpc.accept (service ()) transport) with
+                        | Ok peer ->
+                            let! _ = peer.Completion
+                            ()
+                        | Error _ -> ()
+                    finally
+                        ended.TrySetResult() |> ignore
                 })
 
         let! server =
@@ -160,6 +174,7 @@ let private overWebSocket (listener: LocalServer.Listener) (cleanup: unit -> uni
         return
             {
                 Transport = client
+                Ended = ended.Task
                 Crash =
                     fun () ->
                         task {
@@ -265,7 +280,7 @@ let particular =
                         (toServer.Reader.AsStream())
                         (toClient.Writer.AsStream())
 
-                serve server
+                let _ = serve server
                 let input = toServer.Writer.AsStream()
                 let output = toClient.Reader.AsStream()
 
@@ -297,7 +312,7 @@ let particular =
                         (toServer.Reader.AsStream())
                         (toClient.Writer.AsStream())
 
-                serve server
+                let _ = serve server
                 let input = toServer.Writer.AsStream()
                 // A binary frame header announcing more than the limit.
                 do! input.WriteAsync(ReadOnlyMemory([| 0uy; 0x7Fuy; 0uy; 0uy; 0uy |]))
