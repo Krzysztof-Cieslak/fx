@@ -348,8 +348,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T114,T116,T117,T118,T119,T120,T122,T123,T124,T125,T126 done
-  class T007 inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T114,T116,T117,T118,T119,T120,T122,T123,T124,T125,T126 done
 ```
 
 <!-- /tasks:generated -->
@@ -366,7 +365,7 @@ flowchart LR
 | T004 | Spike: Kestrel/WS/SSE | T003 | §17, §20 | done | Kestrel `CreateSlimBuilder` + `RequestDelegate` endpoints + WebSocket + SSE work under AOT on all OSes; findings written to `docs/spikes/`. |
 | T005 | Spike: PTY | T003 | §6.5, §20 | done | PTY spawn/resize/read under AOT on Linux/macOS (forkpty) and Windows (ConPTY); PowerShell 7 launch verified. |
 | T006 | Spike: SQLite | T003 | §20 | done | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
-| T007 | Spike: keychains | T003 | §11.4 | in-progress | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
+| T007 | Spike: keychains | T003 | §11.4 | done | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
 | T008 | Spike: tree-sitter | T003 | §6.7 | todo | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
 | T009 | Spike: Bun kernel | T001 | §6.3 | done | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
 | T010 | Spike: envd bootstrap | T003 | §9.2 | todo | Upload + exec a native binary into a Docker container and talk to it over stdio JSON-RPC. |
