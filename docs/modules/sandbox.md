@@ -208,7 +208,9 @@ real processes through its wrap on this machine's shell and terminals:
 - commands run, with their exit codes and output, in the workspace;
 - writes land in the workspace, the owned and temporary directories (`TMPDIR`), and nowhere else (the
   home, the data directory, the environment's home, a component, a directory outside);
-- denied paths cannot be read or listed; readable paths inside denied ones can;
+- denied paths cannot be read or listed; readable paths inside denied ones can, and programs that
+  look at each directory on the way to them (`mkdir -p` of an owned directory under the data
+  directory) reach them;
 - protected paths stay unchanged inside a writable workspace, and cannot be renamed away;
 - a read-only workspace (overrides) blocks writes, not reads; overrides deny and protect more;
 - a denied network refuses a connection to a listener on the loopback, an allowed one makes it;

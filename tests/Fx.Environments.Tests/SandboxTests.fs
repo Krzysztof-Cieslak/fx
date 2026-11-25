@@ -333,7 +333,7 @@ let environments =
                                 handle
                                 $"echo w > in.txt; echo x > '{outside}' 2>/dev/null; echo \"$TMPDIR\"; echo \"$XDG_CACHE_HOME\"; mkdir -p \"$BUN_INSTALL_CACHE_DIR\" && echo cached"
 
-                        Expect.equal output.ExitCode 0 "the command ran"
+                        Expect.equal output.ExitCode 0 $"the command ran: {Output.stderrText output}"
 
                         Expect.isTrue
                             (File.Exists(Path.Combine(handle.Layout.Workspace, "in.txt")))

@@ -92,6 +92,16 @@ let profiles =
                     "the keys are not"
             }
 
+            test "the denied directories above a readable path show their metadata only" {
+                let rendered = Profile.render (request policy)
+                let metadata = having rendered "(allow file-read-metadata"
+
+                for path in [ "/Users/u/.fx"; "/Users/u/.fx/environments"; "/Users/u/.fx/environments/e1" ] do
+                    Expect.contains metadata $"(allow file-read-metadata (literal {param rendered path}))" path
+
+                Expect.equal metadata.Length 3 "nothing else: not the paths above the keys"
+            }
+
             test "writes: the workspace but its protected paths, the owned and temporary directories" {
                 let rendered = Profile.render (request policy)
                 let writes = having rendered "(allow file-write*"

@@ -349,6 +349,16 @@ let tests (subject: Subject) : Test =
 
                 Expect.equal (List.last (lines output)) f.Temp "TMPDIR")
 
+            confining "the directories above a writable path inside a denied one can be looked up" (fun ready f ->
+                let deep = Path.Combine(f.Owned, "a", "b")
+
+                let output =
+                    run subject ready f.Policy $"mkdir -p '{deep}' && cd '{f.Owned}' && echo made"
+
+                Expect.equal output.ExitCode 0 $"mkdir -p reached the owned directory: {Output.stderrText output}"
+                Expect.equal (stdout output) "made" "made"
+                Expect.isTrue (Directory.Exists deep) "the directories were made")
+
             confining "writes outside the allowed paths never land" (fun ready f ->
                 let targets =
                     [
