@@ -104,8 +104,10 @@ let handlers<'R when 'R :> IScope>
                             | None ->
                                 return
                                     Error(
-                                        ProtocolError.Failed
+                                        ProtocolError.ActivationFailed(
+                                            manifest.Id,
                                             $"this process has no extension runtime {manifest.Runtime}"
+                                        )
                                     )
                             | Some(runtime, runtimeEnv) ->
                                 let request =
@@ -116,7 +118,7 @@ let handlers<'R when 'R :> IScope>
                                     }
 
                                 match! runtime.Activate request (runtimeEnv.WithScope env.Scope) with
-                                | Error reason -> return Error(ProtocolError.Failed reason)
+                                | Error reason -> return Error(ProtocolError.ActivationFailed(manifest.Id, reason))
                                 | Ok activation ->
                                     table.Add
                                         {
@@ -126,7 +128,7 @@ let handlers<'R when 'R :> IScope>
                                         }
 
                                     return Ok(Activation.describe manifest activation)
-                        | None, _ -> return Error(ProtocolError.Unknown("extension " + parameters.Extension))
+                        | None, _ -> return Error(ProtocolError.UnknownExtension parameters.Extension)
                 })
 
     let invokeHandler =
@@ -136,16 +138,16 @@ let handlers<'R when 'R :> IScope>
                     let address = $"{parameters.Extension}/{parameters.Type}/{parameters.Id}"
 
                     match table.TryActive parameters.Extension with
-                    | None -> return Error(ProtocolError.Failed(parameters.Extension + " is not active"))
+                    | None -> return Error(ProtocolError.NotActive parameters.Extension)
                     | Some served ->
                         match
                             served.Activation.Contributions
                             |> List.tryFind (fun c -> c.Type = parameters.Type && c.Id = parameters.Id)
                         with
-                        | None -> return Error(ProtocolError.Unknown("contribution " + address))
+                        | None -> return Error(ProtocolError.UnknownContribution address)
                         | Some contribution ->
                             match contribution.Serve with
-                            | None -> return Error(ProtocolError.Failed(address + " runs only in its process"))
+                            | None -> return Error(ProtocolError.InProcessOnly address)
                             | Some serve ->
                                 match! serve parameters.Input (scoped served env) with
                                 | Ok output -> return Ok output
@@ -157,15 +159,14 @@ let handlers<'R when 'R :> IScope>
             fun (env: 'R) ->
                 task {
                     match table.TryActive parameters.Extension with
-                    | None -> return Error(ProtocolError.Failed(parameters.Extension + " is not active"))
+                    | None -> return Error(ProtocolError.NotActive parameters.Extension)
                     | Some served ->
                         match served.Activation.Methods |> List.tryFind (fun m -> m.Name = parameters.Method) with
-                        | None -> return Error(ProtocolError.Unknown("method " + parameters.Method))
+                        | None -> return Error(ProtocolError.UnknownMethod parameters.Method)
                         | Some m ->
                             match! m.Invoke parameters.Params (scoped served env) with
                             | Ok result -> return Ok result
-                            | Error(MethodFailure.UnknownMethod name) ->
-                                return Error(ProtocolError.Unknown("method " + name))
+                            | Error(MethodFailure.UnknownMethod name) -> return Error(ProtocolError.UnknownMethod name)
                             | Error(MethodFailure.InvalidParams issues) -> return Error(ProtocolError.Invalid issues)
                             | Error(MethodFailure.Failed(message, data)) ->
                                 return Error(ProtocolError.MethodFailed(message, data))
@@ -190,7 +191,7 @@ let handlers<'R when 'R :> IScope>
             fun (env: 'R) ->
                 task {
                     match table.Remove parameters.Extension with
-                    | None -> return Error(ProtocolError.Failed(parameters.Extension + " is not active"))
+                    | None -> return Error(ProtocolError.NotActive parameters.Extension)
                     | Some served ->
                         do! served.Activation.Deactivate(scoped served env)
                         return Ok()

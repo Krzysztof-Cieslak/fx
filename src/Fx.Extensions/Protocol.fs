@@ -20,28 +20,38 @@ let VersionMember = "extensionProtocol"
 [<Literal>]
 let ServesMember = "serves"
 
-/// The typed errors of the protocol's methods. Four cases at most: `Codec.union` with more fails the
-/// Native AOT compilation (IL3054); the host knows which method it called, so it tells an unknown or
-/// invalid method from an unknown or invalid contribution.
+/// The typed errors of the protocol's methods. Contributions are addressed as
+/// `<extension>/<type>/<id>`. The host knows which method it called, so `Invalid` is the input of a
+/// contribution or the params of a method.
 [<RequireQualifiedAccess>]
 type ProtocolError =
-    /// No such extension, contribution or method: `extension <id>`, `contribution <address>`,
-    /// `method <name>`.
-    | Unknown of what: string
+    /// The process neither serves this extension nor can load it.
+    | UnknownExtension of extension: string
+    /// The extension is not active: never activated, or deactivated.
+    | NotActive of extension: string
+    /// The process has no runtime for the package, or its runtime refused it.
+    | ActivationFailed of extension: string * reason: string
+    /// The active extension has no such contribution.
+    | UnknownContribution of address: string
+    /// The contribution's code cannot leave its process (interpreter middleware).
+    | InProcessOnly of address: string
+    /// The active extension has no such method.
+    | UnknownMethod of name: string
     /// The input or params do not decode with the contribution type's or the method's codec.
     | Invalid of issues: Issue list
     /// The method failed with one of its typed errors.
     | MethodFailed of message: string * data: Json
-    /// The extension is not active, the contribution's code cannot leave its process (interpreter
-    /// middleware), or activation failed.
-    | Failed of reason: string
 
     override this.ToString() =
         match this with
-        | Unknown what -> "unknown " + what
+        | UnknownExtension extension -> "unknown extension " + extension
+        | NotActive extension -> extension + " is not active"
+        | ActivationFailed(_, reason) -> reason
+        | UnknownContribution address -> "unknown contribution " + address
+        | InProcessOnly address -> address + " runs only in its process"
+        | UnknownMethod name -> "unknown method " + name
         | Invalid issues -> "invalid:\n" + Issue.renderAtMost 10 issues
         | MethodFailed(message, _) -> message
-        | Failed reason -> reason
 
 type InvokeParams =
     {
@@ -75,8 +85,30 @@ module Codecs =
 
     let protocolError: Codec<ProtocolError> =
         Codec.union "kind" {
-            let! unknown =
-                Codec.case1 "unknown" ProtocolError.Unknown (Field.required "what" Codec.string)
+            let! unknownExtension =
+                Codec.case1 "unknownExtension" ProtocolError.UnknownExtension (Field.required "extension" Codec.string)
+
+            and! notActive =
+                Codec.case1 "notActive" ProtocolError.NotActive (Field.required "extension" Codec.string)
+
+            and! activationFailed =
+                Codec.case2
+                    "activationFailed"
+                    (fun extension reason -> ProtocolError.ActivationFailed(extension, reason))
+                    (Field.required "extension" Codec.string)
+                    (Field.required "reason" Codec.string)
+
+            and! unknownContribution =
+                Codec.case1
+                    "unknownContribution"
+                    ProtocolError.UnknownContribution
+                    (Field.required "address" Codec.string)
+
+            and! inProcessOnly =
+                Codec.case1 "inProcessOnly" ProtocolError.InProcessOnly (Field.required "address" Codec.string)
+
+            and! unknownMethod =
+                Codec.case1 "unknownMethod" ProtocolError.UnknownMethod (Field.required "method" Codec.string)
 
             and! invalid =
                 Codec.case1 "invalid" ProtocolError.Invalid (Field.required "issues" issues)
@@ -88,16 +120,17 @@ module Codecs =
                     (Field.required "message" Codec.string)
                     (Field.required "data" Codec.json)
 
-            and! failed =
-                Codec.case1 "failed" ProtocolError.Failed (Field.required "reason" Codec.string)
-
             return
                 fun value ->
                     match value with
-                    | ProtocolError.Unknown what -> unknown what
+                    | ProtocolError.UnknownExtension extension -> unknownExtension extension
+                    | ProtocolError.NotActive extension -> notActive extension
+                    | ProtocolError.ActivationFailed(extension, reason) -> activationFailed extension reason
+                    | ProtocolError.UnknownContribution address -> unknownContribution address
+                    | ProtocolError.InProcessOnly address -> inProcessOnly address
+                    | ProtocolError.UnknownMethod name -> unknownMethod name
                     | ProtocolError.Invalid issues -> invalid issues
                     | ProtocolError.MethodFailed(message, data) -> methodFailed message data
-                    | ProtocolError.Failed reason -> failed reason
         }
         |> Codec.named "ExtensionProtocolError"
 

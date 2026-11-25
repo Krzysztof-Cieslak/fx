@@ -197,11 +197,19 @@ the ids the process serves (`"serves"`).
 | `extension/call` | `{extension, method, params}` | `{output}` |
 | `extension/deactivate` | `{extension}` | `null` |
 
-Typed errors (`ExtensionProtocolError`, by `kind`): `unknown {what}` (`extension <id>`,
-`contribution <address>`, `method <name>`), `invalid {issues}` (input or params that do not decode),
-`methodFailed {message, data}` (a method's typed error), `failed {reason}` (not active, code that
-cannot leave its process, activation failed). Four cases: `Codec.union` with more fails the Native
-AOT compilation (IL3054).
+Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
+`<extension>/<type>/<id>`):
+
+| `kind` | Fields | When |
+|---|---|---|
+| `unknownExtension` | `extension` | `activate`: the process neither serves the extension nor can load it |
+| `notActive` | `extension` | `invoke`, `call`, `deactivate`: never activated, or deactivated |
+| `activationFailed` | `extension`, `reason` | `activate`: no runtime for the package, or the runtime refused it |
+| `unknownContribution` | `address` | `invoke`: the active extension has no such contribution |
+| `inProcessOnly` | `address` | `invoke`: the contribution's code cannot leave its process (interpreter middleware) |
+| `unknownMethod` | `method` | `call`: the active extension has no such method |
+| `invalid` | `issues` | `invoke`, `call`: the input or params do not decode |
+| `methodFailed` | `message`, `data` | `call`: the method failed with one of its typed errors |
 
 - Every request names the extension, so one process can serve several and load more.
 - Activating twice answers the same. The host checks that the answer's id and version are the
