@@ -7,6 +7,7 @@
     <Compile Include="InstallerTests.fs" />
     <Compile Include="ComponentsTests.fs" />
     <Compile Include="ConformanceTests.fs" />
+    <Compile Include="ApprovalsTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.Components\Fx.Components.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Grants.Host\Fx.Grants.Host.fsproj" />
   </ItemGroup>
 </Project>
