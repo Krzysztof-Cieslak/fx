@@ -188,6 +188,7 @@ let choosing =
 
                 Expect.equal (access "/home/u/.fx/environments/e1/owned/k-1/home") PathAccess.ReadWrite "owned"
                 Expect.equal (access "/home/u/.fx/environments/e1/tmp/x") PathAccess.ReadWrite "temporary files"
+                Expect.equal (access "/home/u/.fx/environments/e1/cache/bun/x") PathAccess.ReadWrite "the tools' caches"
                 Expect.equal (access "/home/u/.fx/environments/e1/envd/blobs") PathAccess.NoAccess "envd's state"
                 Expect.equal (access "/home/u/.fx/environments/e1/assets/kernel.ts") PathAccess.ReadOnly "assets"
                 Expect.equal (access "/home/u/.fx/runtimes/bun/bin/bun") PathAccess.ReadOnly "components"
@@ -328,7 +329,9 @@ let environments =
                         let outside = Path.Combine(Scratch.directory (), "x.txt")
 
                         let output =
-                            shellRun handle $"echo w > in.txt; echo x > '{outside}' 2>/dev/null; echo \"$TMPDIR\""
+                            shellRun
+                                handle
+                                $"echo w > in.txt; echo x > '{outside}' 2>/dev/null; echo \"$TMPDIR\"; echo \"$XDG_CACHE_HOME\"; mkdir -p \"$BUN_INSTALL_CACHE_DIR\" && echo cached"
 
                         Expect.equal output.ExitCode 0 "the command ran"
 
@@ -337,7 +340,11 @@ let environments =
                             "the workspace is writable"
 
                         Expect.isFalse (File.Exists outside) "outside is not"
-                        Expect.equal ((Output.stdoutText output).Trim()) handle.Layout.Temp "TMPDIR"
+
+                        Expect.equal
+                            ((Output.stdoutText output).Trim().Split('\n') |> List.ofArray)
+                            [ handle.Layout.Temp; handle.Layout.Cache; "cached" ]
+                            "TMPDIR, and the tools' caches in the environment's cache directory"
 
                         let reviewer = EnvHandle.attenuate SandboxOverrides.readOnly handle
                         let output = shellRun reviewer "echo r > ro.txt 2>/dev/null; cat hello.txt"

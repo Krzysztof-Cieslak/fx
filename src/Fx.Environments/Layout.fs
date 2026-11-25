@@ -21,6 +21,9 @@ type EnvLayout =
         Owned: string
         /// The temporary directory of sandboxed processes (`<home>/tmp`, their `TMPDIR`).
         Temp: string
+        /// The tools' caches of sandboxed processes (`<home>/cache`, their `XDG_CACHE_HOME`): the
+        /// user's own caches are read-only in the sandbox.
+        Cache: string
         /// The sandbox driver's own files, e.g. its seccomp program (`<home>/sandbox`).
         Sandbox: string
         /// The component install root of the machine (`<data dir>/runtimes`).
@@ -53,6 +56,7 @@ module EnvLayout =
             Assets = join os home "assets"
             Owned = join os home "owned"
             Temp = join os home "tmp"
+            Cache = join os home "cache"
             Sandbox = join os home "sandbox"
             Components = join os machine.DataDir InstallRoot.DirName
         }

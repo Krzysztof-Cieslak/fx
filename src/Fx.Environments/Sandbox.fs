@@ -98,6 +98,9 @@ type EnvSandbox =
         Ready: SandboxReady
         Policy: SandboxPolicy
         Info: EnvSandboxInfo
+        /// Variables every sandboxed process gets unless it sets them itself: the tools' caches in the
+        /// environment's cache directory (`EnvSandbox.caches`). Empty when the driver confines nothing.
+        Defaults: (string * string) list
         /// envd's client, unsandboxed.
         Unsandboxed: EnvClient
     }
@@ -175,10 +178,29 @@ module EnvSandbox =
         else
             Some(SandboxPath.trim path)
 
-    /// An environment's policy: the workspace and the launches' owned directories writable, its
-    /// temporary directory as `TMPDIR`, the components and assets readable, git's hooks and config
-    /// and the project's directory protected, and the product's data directory and the credential
-    /// locations denied; plus the host's `sandbox.writable` and `sandbox.denied`.
+    /// Where common tools keep their caches, in the environment's cache directory: the user's own
+    /// caches (`~/.cache`, `~/.bun`, `~/.npm`, …) are read-only in the sandbox, and an agent writing
+    /// into them would reach what runs outside it later. XDG-following tools (pip on Linux, Go's
+    /// build cache, many CLIs) follow `XDG_CACHE_HOME`; Bun, npm, Yarn, pip on macOS and Go's modules
+    /// get their own variables. Tools without such a variable (NuGet's packages, Cargo) need their
+    /// cache in the host's `sandbox.writable`.
+    let caches (layout: EnvLayout) : (string * string) list =
+        let under = EnvLayout.join layout.Os layout.Cache
+
+        [
+            "XDG_CACHE_HOME", layout.Cache
+            "BUN_INSTALL_CACHE_DIR", under "bun"
+            "npm_config_cache", under "npm"
+            "YARN_CACHE_FOLDER", under "yarn"
+            "PIP_CACHE_DIR", under "pip"
+            "GOMODCACHE", under "go-mod"
+        ]
+
+    /// An environment's policy: the workspace, the launches' owned directories and the tools' cache
+    /// directory writable, its temporary directory as `TMPDIR`, the components and assets readable,
+    /// git's hooks and config and the project's directory protected, and the product's data
+    /// directory and the credential locations denied; plus the host's `sandbox.writable` and
+    /// `sandbox.denied`.
     let policy
         (layout: EnvLayout)
         (machine: EnvMachine)
@@ -192,7 +214,7 @@ module EnvSandbox =
         {
             Workspace = layout.Workspace
             WorkspaceAccess = WorkspaceAccess.ReadWrite
-            Writable = layout.Owned :: expandAll writable
+            Writable = layout.Owned :: layout.Cache :: expandAll writable
             Readable = [ layout.Components; layout.Assets ]
             Protected =
                 SandboxPolicy.protectedInWorkspace
@@ -254,6 +276,13 @@ module EnvSandbox =
                     }
                 else
                     Task.FromResult Map.empty
+
+            let proc =
+                { proc with
+                    Env =
+                        sandbox.Defaults
+                        |> List.fold (fun env (name, value) -> Sandbox.withDefault name value env) proc.Env
+                }
 
             let request =
                 {
