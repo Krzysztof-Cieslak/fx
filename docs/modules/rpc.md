@@ -280,9 +280,9 @@ connection's limits: `ConnectionLimits.frames`.
 
 ## Left to later tasks
 
-- **Kernel protocol (T116):** the Bun kernel may write stray bytes to stdout; the spike recovers
-  frames after them. The stream framing here answers a non-JSON line with a parse error; T116 decides
-  whether kernels get a lenient reader that reports stray output instead.
+- **Kernel protocol (T116):** kernels share their stdout with the code they run, so the kernel
+  transport (`src/Fx.Kernel`, [kernel-protocol.md](kernel-protocol.md)) reads it with its own framing:
+  messages after stray bytes are recovered and the rest reported, never answered with a parse error.
 - **HTTP/SSE fallback** (spec §17 "offset-read mirror") and **Dialback** with Noise (spec §3) are
   transports for T129 and later.
 - **Record and replay (T131):** calls are recorded at the capability level (an envd-backed `IFs` is a

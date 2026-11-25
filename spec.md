@@ -292,7 +292,7 @@ and InterpreterCaps =
 
 ### 6.4 Kernel protocol and conformance
 
-- **Kernel protocol** (language-neutral JSON-RPC over stdio): `cell/run|cancel`, `value/preview|encode|decode`, `host/call`, `finish`, `recall`, optional `snapshot`/`restore`.
+- **Kernel protocol** (language-neutral JSON-RPC over stdio): `cell/run|cancel`, `value/preview|encode|decode`, `host/call`, `finish`, `recall`, optional `snapshot`/`restore` and `cell/check`; output and activity stream as notifications while a cell runs. Details: `docs/modules/kernel-protocol.md`.
 - **Kernel conformance suite** required for selection, on Linux, macOS and Windows: persistent state, previews, `finish`, marshalling, cancellation, truncation, activity, content exclusions, launch hygiene.
 
 ### 6.5 Kernel behaviour (all interpreters)
