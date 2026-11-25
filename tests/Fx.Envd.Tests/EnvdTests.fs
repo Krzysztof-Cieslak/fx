@@ -171,6 +171,34 @@ let conformance =
                     Release = connection.Cut
                 })
 
+            BlobsConformance.tests "host cache over the envd proxy" (fun () ->
+                let envd, _ = fakeEnvd (ControlledShell()).Shell
+                BlobCache.over (InMemoryBlobs().Blobs) (connect envd).Client.Blobs)
+
+            test "the host cache fetches a blob once" {
+                let remote = InMemoryBlobs()
+                let mutable fetched = 0
+
+                let counting =
+                    { remote.Blobs with
+                        Get =
+                            fun hash cancellation ->
+                                fetched <- fetched + 1
+                                remote.Blobs.Get hash cancellation
+                    }
+
+                let local = InMemoryBlobs()
+                let cache = BlobCache.over local.Blobs counting
+                let blob = wait (remote.Blobs.Put "cached"B none)
+                Expect.equal (wait (cache.Stat blob.Hash none)) (Some blob) "known remotely"
+
+                for _ in 1..3 do
+                    Expect.equal (wait (cache.Get blob.Hash none)) (Ok "cached"B) "content"
+
+                Expect.equal fetched 1 "fetched once"
+                Expect.equal local.Count 1 "kept locally"
+            }
+
             BlobsConformance.tests "envd proxy, InMemoryBlobs" (fun () ->
                 let envd, _ = fakeEnvd (ControlledShell()).Shell
                 (connect envd).Client.Blobs)
