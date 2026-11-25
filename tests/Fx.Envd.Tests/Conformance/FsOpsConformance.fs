@@ -418,6 +418,10 @@ let tests (name: string) (create: unit -> Fixture) : Test =
                         Expect.isTrue
                             (change.Kind = ChangeKind.Added || change.Kind = ChangeKind.Modified)
                             $"added or modified: {change}"
+
+                        // Changes the watcher saw before it was closed are not delivered after it
+                        // (nor are the ones the OS reports late: Windows does, even after Dispose).
+                        write f (at [ "late.txt" ]) "y"
                     finally
                         wait (watcher.Close())
 

@@ -68,6 +68,8 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
   first change starts a `Debounce` on the clock, then everything pending is one `WatchBatch`, coalesced
   per path (added then deleted drops out, deleted then added is modified). Renames are a deletion and
   an addition. An OS buffer overflow or more than 16384 pending changes sets `Overflow`: rescan.
+  `Close` drops what is pending and `Next` returns `None` from then on: the OS keeps reporting changes
+  it saw before it stopped (on Windows even after `Dispose`), and a closed watch delivers none of them.
 
 `ChangeKind`/`FileChange` serve both watch batches (absolute paths) and snapshot diffs (relative, `/`).
 

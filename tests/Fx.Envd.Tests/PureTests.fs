@@ -189,6 +189,36 @@ let changes =
                     None
                     "completed"
             }
+
+            test "a completed change queue delivers nothing, not even what was pending" {
+                let clock = Fx.Effects.Fakes.FakeClock(Instant.unixEpoch)
+                let none = System.Threading.CancellationToken.None
+                let debounce = System.TimeSpan.FromSeconds 1.0
+                let queue = ChangeQueue 16
+                queue.Add { Path = "a"; Kind = ChangeKind.Added }
+                // Completed while debouncing: the batch it was waiting for is dropped.
+                let debouncing = queue.Next(clock.Clock, debounce, none)
+                Expect.isFalse debouncing.IsCompleted "debouncing"
+                queue.Complete()
+                clock.Advance debounce
+                Expect.equal (debouncing.GetAwaiter().GetResult()) None "completed while debouncing"
+
+                // Pending when completed, or reported by the OS after it: dropped.
+                let queue = ChangeQueue 16
+                queue.Add { Path = "b"; Kind = ChangeKind.Added }
+                queue.Overflowed()
+                queue.Complete()
+                queue.Add { Path = "c"; Kind = ChangeKind.Added }
+                Expect.equal (queue.Next(clock.Clock, debounce, none).GetAwaiter().GetResult()) None "pending"
+
+                // Waiting when completed: woken with None.
+                let queue = ChangeQueue 16
+                let waiting = queue.Next(clock.Clock, debounce, none)
+                Expect.isFalse waiting.IsCompleted "waiting"
+                queue.Complete()
+
+                Expect.equal (waiting.WaitAsync(System.TimeSpan.FromSeconds 10.0).GetAwaiter().GetResult()) None "woken"
+            }
         ]
 
 [<Tests>]

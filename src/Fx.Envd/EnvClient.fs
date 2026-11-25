@@ -138,8 +138,14 @@ type internal WatchInbox(capacity: int) =
             return result
         }
 
-    member this.Close() =
-        this.Deliver({ Changes = []; Overflow = false }, true)
+    /// The host closed the watch (or lost the connection): batches not taken yet are dropped, and
+    /// `Next` returns `None` from now on.
+    member _.Close() =
+        lock gate (fun () ->
+            closed <- true
+            batches.Clear()
+            lost <- false
+            wake ())
 
     override _.ToString() = "WatchInbox"
 
