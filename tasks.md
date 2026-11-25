@@ -347,6 +347,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T110 done
+  class T116 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -388,7 +389,7 @@ flowchart LR
 | T113 | Sandbox drivers | T108, T111 | §9.1 | todo | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | todo | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
-| T116 | Kernel protocol | T101, T107 | §6.4 | todo | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
+| T116 | Kernel protocol | T101, T107 | §6.4 | in-progress | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
 | T117 | bun-ts kernel | T109, T111, T114, T116 | §6.3–6.5 | todo | `fx.interpreter.bun-ts`: persistent cells, transpile, bounded output, host bridge (`fx.*` stubs from codecs), `fx.finish`; passes kernel conformance. |
 | T118 | Canonical model | T101, T101b, T108 | §10.2–10.3 | todo | Canonical chat model (typed parts, `ProviderState`), `ChatWire` contract, typed errors, wire-conformance harness over recorded streams. |
 | T119 | anthropic.messages | T118 | §10.1 | todo | Anthropic Messages adapter (streaming, thinking signatures, cache_control mapping); passes wire conformance. |
