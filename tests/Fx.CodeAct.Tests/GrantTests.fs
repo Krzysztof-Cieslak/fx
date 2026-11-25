@@ -474,40 +474,49 @@ type private Granted =
 
     override _.ToString() = "Granted"
 
-/// A session host and its strategy over a store, with hands that pass the grants guard.
-let private hostOn
+/// A host process over a fixture's stores whose hands pass the grants guard.
+let private processOn
     (env: HostEnv)
     (store: InMemoryEventLog<Payload>)
+    (blobs: InMemoryBlobs)
     (variants: Variants)
     (hands: Hands<HandsEnv>)
     (grants: Grants)
-    : SessionHost<HostEnv> * CodeAct<HostEnv, HandsEnv> =
+    : unit -> Process =
     let sessions = SessionLog.typed store.Log
-
-    let codeact =
-        CodeAct.create
-            {
-                Sessions = sessions
-                Contexts = ContextLog.typed store.Log
-                Profile = fun _ -> Eff.ret variants
-                Hands =
-                    fun turn ->
-                        eff {
-                            let! settings = GrantSettings.ofVariants variants
-                            return Ok(GrantGuard.attach (GrantSetup.create grants sessions turn settings) hands)
-                        }
-                Catalog = fun _ -> None
-            }
+    let snapshots = InMemorySnapshots()
 
     let settings =
         { SessionSettings.defaults with
             Kinds = Questions.kinds
         }
 
-    let host =
-        wait (Eff.run env (SessionHost.create sessions (InMemorySnapshots()).Store codeact.Runner settings))
+    fun () ->
+        let codeact =
+            CodeAct.create
+                {
+                    Sessions = sessions
+                    Contexts = ContextLog.typed store.Log
+                    Steps = StepJournal.typed store.Log
+                    Blobs = Some blobs.Blobs
+                    Profile = fun _ -> Eff.ret variants
+                    Hands =
+                        fun turn ->
+                            eff {
+                                let! settings = GrantSettings.ofVariants variants
+                                return Ok(GrantGuard.attach (GrantSetup.create grants sessions turn settings) hands)
+                            }
+                    Catalog = fun _ -> None
+                }
 
-    host, codeact
+        let host =
+            wait (Eff.run env (SessionHost.create sessions snapshots.Store codeact.Runner settings))
+
+        {
+            Host = host
+            Kernel = codeact.Kernel
+            Close = fun () -> codeact.Close()
+        }
 
 let private granted (name: string) (selections: (string * Json) list) (policy: PolicyRule list) : Granted =
     let root = scratch name
@@ -533,18 +542,19 @@ let private granted (name: string) (selections: (string * Json) list) (policy: P
 
     let variants = FakeVariants.create CodeActSlots.read chosen
     let store = InMemoryEventLog<Payload>()
+    let blobs = InMemoryBlobs()
     let genv = grantsEnv ()
     let service = startGrants genv store policy
-    let host, codeact = hostOn env store variants hands (GrantsService.grants service)
-    cleanup.Insert(0, (fun () -> codeact.Close()))
+    let start = processOn env store blobs variants hands (GrantsService.grants service)
 
     {
         F =
             {
                 Env = env
                 Store = store
-                Host = host
-                Kernel = codeact.Kernel
+                Blobs = blobs
+                Process = start ()
+                Start = start
                 Model = model
                 Root = root
                 Workspace = workspace
@@ -803,62 +813,44 @@ let private turnTests =
             }
 
             testTask "a host that stops while a call waits: withdrawn on a clean stop, pending after a crash" {
-                // A clean stop cancels the turn: the request is withdrawn; recovery decides about the turn
-                // (T128), and nothing asks again by itself.
-                let g = granted "grant-restart" hybrid []
-
-                try
-                    g.F.Model.AddAll [ Say.tool "bash" [ "command", Json.String "mkdir made" ] ]
-                    do! kickoff g.F "Make a directory"
-                    let! (requests: GrantRequest list) = g.Pending 1
-                    do! g.F.Cleanup[0]()
-                    do! Eff.run g.F.Env (SessionHost.stop g.F.Host)
-                    withdrawn g.Service requests.Head.Id
-
-                    let hands =
-                        localHands (fun _ -> scriptKernel kernelOptions) g.F.Root g.F.Workspace g.F.Cleanup
-
-                    let host, codeact =
-                        hostOn g.F.Env g.F.Store g.F.Variants hands (GrantsService.grants g.Service)
-
-                    let f =
-                        { g.F with
-                            Host = host
-                            Kernel = codeact.Kernel
-                        }
-
-                    g.F.Cleanup[0] <- (fun () -> codeact.Close())
-                    let! _ = state f "s1"
-                    do! Task.Delay 200
-                    Expect.equal (pending g.Service) [] "nothing asks again"
-                    Expect.equal (requestCount g.Service) 1 "one request in the log"
-                    Expect.isFalse (Directory.Exists(f.File "made")) "nothing ran"
-                    (f :> IDisposable).Dispose()
-                finally
-                    wait (Eff.run g.GrantsEnv (GrantsService.stop g.Service))
+                // A stop cancels the turn: the request is withdrawn; recovery decides about the turn
+                // (the call in doubt), and nothing asks the grants log again by itself.
+                do!
+                    withGrants "grant-restart" hybrid [] (fun g ->
+                        task {
+                            g.F.Model.AddAll [ Say.tool "bash" [ "command", Json.String "mkdir made" ] ]
+                            do! kickoff g.F "Make a directory"
+                            let! (requests: GrantRequest list) = g.Pending 1
+                            do! restart g.F
+                            withdrawn g.Service requests.Head.Id
+                            let! _ = state g.F "s1"
+                            do! Task.Delay 200
+                            Expect.equal (pending g.Service) [] "nothing asks again"
+                            Expect.equal (requestCount g.Service) 1 "one request in the log"
+                            Expect.isFalse (Directory.Exists(g.F.File "made")) "nothing ran"
+                        })
 
                 // A crash: the host goes before it can withdraw (here, the grants log stops first), and the
                 // request stays pending in the store for whoever reads it next.
-                let g = granted "grant-crash" hybrid []
+                do!
+                    withGrants "grant-crash" hybrid [] (fun g ->
+                        task {
+                            g.F.Model.AddAll [ Say.tool "bash" [ "command", Json.String "mkdir made" ] ]
+                            do! kickoff g.F "Make a directory"
+                            let! (requests: GrantRequest list) = g.Pending 1
+                            do! Eff.run g.GrantsEnv (GrantsService.stop g.Service)
+                            do! run g.F (SessionHost.stop g.F.Host)
+                            do! g.F.Process.Close()
+                            let again = startGrants g.GrantsEnv g.F.Store []
 
-                try
-                    g.F.Model.AddAll [ Say.tool "bash" [ "command", Json.String "mkdir made" ] ]
-                    do! kickoff g.F "Make a directory"
-                    let! (requests: GrantRequest list) = g.Pending 1
-                    do! Eff.run g.GrantsEnv (GrantsService.stop g.Service)
-                    do! g.F.Cleanup[0]()
-                    do! Eff.run g.F.Env (SessionHost.stop g.F.Host)
-                    let again = startGrants g.GrantsEnv g.F.Store []
-
-                    try
-                        Expect.equal (pending again |> List.map (fun r -> r.Id)) [ requests.Head.Id ] "still pending"
-                    finally
-                        wait (Eff.run g.GrantsEnv (GrantsService.stop again))
-                finally
-                    try
-                        Directory.Delete(g.F.Root, true)
-                    with _ ->
-                        ()
+                            try
+                                Expect.equal
+                                    (pending again |> List.map (fun r -> r.Id))
+                                    [ requests.Head.Id ]
+                                    "still pending"
+                            finally
+                                wait (Eff.run g.GrantsEnv (GrantsService.stop again))
+                        })
             }
         ]
 
