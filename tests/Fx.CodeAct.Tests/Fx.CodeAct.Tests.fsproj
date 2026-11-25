@@ -21,6 +21,9 @@
     <Compile Include="ReplayTests.fs" />
     <Compile Include="ProviderTests.fs" />
     <Compile Include="LiveTests.fs" />
+    <!-- T127b: the grants guard (command parsers, host calls as grants, the guard, turns that ask). -->
+    <Compile Include="ShellSyntaxTests.fs" />
+    <Compile Include="PermissionTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

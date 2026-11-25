@@ -234,9 +234,10 @@ module CodeActSlots =
             Slot.info recallRestore
         ]
 
-    /// Every slot a turn reads: the core's, the render's, content exclusions' and the strategy's.
+    /// Every slot a turn reads: the core's, the render's, content exclusions', the strategy's and its
+    /// grants guard's.
     let read: SlotInfo list =
-        Slots.all @ PromptSlots.all @ ContentExclusions.slots @ all
+        Slots.all @ PromptSlots.all @ ContentExclusions.slots @ all @ GrantSlots.all
 
 /// What a turn runs with, read once at its start through `IVariants` (recorded and replayable).
 type CodeActSettings =
