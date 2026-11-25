@@ -16,6 +16,8 @@
     <Compile Include="Hooks.fs" />
     <Compile Include="Methods.fs" />
     <Compile Include="Extension.fs" />
+    <Compile Include="Semver.fs" />
+    <Compile Include="Component.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
