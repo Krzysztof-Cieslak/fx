@@ -3,7 +3,7 @@
 Spec: §4.3–4.5 (functions, machines, strategies, turn results), §5 (sessions, steering at step
 boundaries, prompt = pure render), §6.5 (kernel behaviour: host bridge, finishing, activity), §6.9
 (action surfaces), §6.10 (example cells), §10 (models), §13 (grants), §15 (variants), §18 (egress).
-Task: T127. Builds on [sessions.md](sessions.md) (the turn-runner boundary), [prompt.md](prompt.md)
+Tasks: T127, T128 (crash recovery). Builds on [sessions.md](sessions.md) (the turn-runner boundary), [prompt.md](prompt.md)
 (the render and context events), [models.md](models.md) (`ILlm`), [interpreters.md](interpreters.md)
 (the bridge and kernels), [kernel-protocol.md](kernel-protocol.md), [egress.md](egress.md) and
 [environments.md](environments.md).
@@ -20,11 +20,14 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | Variant slots and settings (`CodeActSlots`, `CodeActSettings`, the policies) | `Settings.fs` |
 | Where context events live, and the merged history (`ContextLog`, `History`) | `ContextLog.fs` |
 | The action surfaces as tools (`Tools`, `ToolAction`) | `Tools.fs` |
-| The agent's questions (`Questions`, kind `agent.question`) | `Questions.fs` |
+| The step journal (`StepEvent`, `StepCodecs`, `StepJournal`, `JournalWriter`) | `Journal.fs` |
+| Crash recovery: the call in doubt, the decision card (kind `decision.outcomeUnknown`), its receipts (`Recovery`) | `Recovery.fs` |
+| The agent's questions (`Questions`, kind `agent.question`; `Questions.kinds` has every kind turns use) | `Questions.fs` |
 | The loop guard (`LoopGuard`) | `LoopGuard.fs` |
 | What the model is told (`Instructions`: sections, notes) | `Instructions.fs` |
 | Receipts (`Receipts`, `Reads`, `KernelNote`) | `Receipts.fs` |
-| Kernels per session, the host's side of the protocol, `Ensure` (`SessionKernel`, `Interpreter`, `Hands`) | `Kernels.fs` |
+| Kernels per session, the host's side of the protocol, `Ensure` (`SessionKernel`, `Interpreter`, `Hands`, `Watch`, `KernelJournal`) | `Kernels.fs` |
+| Cells' values kept for `recall` (`Recall`: keep, restore, the `recall` binding) | `Recall.fs` |
 | The hybrid tools over the bridge's bindings (`Hybrid`) | `Hybrid.fs` |
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
@@ -36,6 +39,8 @@ let codeact =
     CodeAct.create
         { Sessions = SessionLog.typed store.Log      // the session events
           Contexts = ContextLog.typed store.Log      // the context events, same store
+          Steps    = StepJournal.typed store.Log     // the step journal, same store
+          Blobs    = Some blobs                      // the host's blob store (large kept values)
           Profile  = fun profileId -> …              // the variants of a turn's profile
           Hands    = fun turn -> …                   // the session's environment and interpreter
           Catalog  = fun modelRef -> …  }            // ModelInfo, for the render's cache mapping
@@ -48,7 +53,7 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
   the hands' environment `'K` (`IShell`, `IFs`, `IFsOps`, `IClock`, `IScopeWith`): envd's capability
   records through `EnvClient` (`EnvHands.ofHandle` over an `EnvHandle` from `IEnvs.Open`), or the local
   ones in embedded mode.
-- The session host must know the kind `agent.question` (`Questions.kinds`), and the host's registry the
+- The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`), and the host's registry the
   slots a turn reads (`CodeActSlots.read`: the core's, the render's, content exclusions' and the
   strategy's). Both are the composition root's (T129).
 - `codeact.Close()` closes every session's kernel when the host stops.
@@ -71,8 +76,10 @@ Each step:
    `codeact.maxOutputTokens`) and the catalog's caching caps.
 6. **Model call** through `ILlm`, folded with `ChatAggregate` (the policies below).
 7. **Reply**: recorded (`Replied`) with the suffix its prompt ended with (`Shown`).
-8. **Actions**: every tool call in order, each answered by a receipt (`Returned`) before the next call,
-   also calls that did not run (invalid arguments, an unknown tool, calls after an accepted `finish`).
+8. **Actions**: every tool call in order, each journaled before it runs (`callStarted`, after a workspace
+   snapshot for the step's first; "Crash recovery" below) and answered by a receipt (`Returned`) before
+   the next call, also calls that did not run (invalid arguments, an unknown tool, calls after an
+   accepted `finish`).
 9. **Ending**: an accepted `finish` ends the turn with its result; otherwise the loop guard, the length
    and text-only policies decide whether the turn goes on.
 
@@ -129,10 +136,12 @@ One kernel per session (`SessionKernel`), started when the first cell needs it a
   (`Kernel.interrupt`: `cell/cancel`, then a kill after `ExitGrace`), so a busy cell does not leave the
   kernel busy; the next turn waits until it stopped (one turn at a time uses a kernel).
 - **Restarts** (Jupyter semantics): a kernel that exited or was killed is dropped; the next cell starts a
-  new one (fresh owned directories per launch) and its receipt says that names and values from earlier
-  cells are gone. Restoring values from a journal (`recall`) is T128.
-- Each cell is `t<turn>-s<step>-<k>`, with its `// intent:` line, `codeact.cell.timeoutMs`, and `check`
-  when `codeact.cell.typeCheck` is on and the kernel handles `cell/check`.
+  new one (fresh owned directories per launch, numbered on from the journal's `KernelLaunched`, also
+  after the host restarted) and its receipt says that names from earlier cells are gone and which
+  values came back (below, "Kept values and `recall`").
+- Each cell is `t<turn>-s<step>-<k>` (`-<attempt>` when people chose to run it again after a crash), with
+  its `// intent:` line, `codeact.cell.timeoutMs`, and `check` when `codeact.cell.typeCheck` is on and the
+  kernel handles `cell/check`. Its receipt names its value `Out["<cell>"]`.
 
 ### `Ensure` (spec §4.3, §4.5)
 
@@ -183,6 +192,89 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 `TurnContext.Open` with id `q-<turn>-<step>`. The answer is the next turn's input (`Request q-1-2 was
 answered: …`). The loop guard fingerprints the tool, its canonical arguments and the receipt.
 
+## Crash recovery (spec §5, §6.5, §12.1, §19.1)
+
+When the host stops in the middle of a turn (a crash, a kill, an upgrade), nothing auto-resumes: the
+session's actor recovers the turn (`Intent.RecoverTurn`, [sessions.md](sessions.md)) through the
+runner's `Recover`. A call that started and has no receipt is **in doubt** (`OutcomeUnknown`): its side
+effects may or may not have happened. The turn pauses on a decision for a person, with the evidence the
+logs give, and goes on only with their answer. If nothing is in doubt (the host stopped during a model
+call, or before a call started), the turn is abandoned as before and the session is held.
+
+### The step journal
+
+Journal before side effects. The strategy writes the stream `steps/<session>` of the host's event store
+(version 1 of `StepCodecs.event`; `tests/Fx.CodeAct.Tests/golden/step-events-v1.jsonl` is what it wrote,
+never regenerated), one entry at a time per session (`JournalWriter`), every entry keyed:
+
+| Event | Written | Key (after `<turn start>/step/<n>/call/<k>/attempt/<a>`) |
+|---|---|---|
+| `callStarted {call, tool, cell?, intent?, fingerprint, snapshot?}` | before the call does anything | `/started` |
+| `kernelLaunched {launch}` | before a kernel starts (key `kernel/<launch>`) | |
+| `hostCallStarted {call, index, binding, args}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`) | `/host/<i>` |
+| `hostCallEnded {call, index, failed, summary}` | after it | `/host/<i>/ended` |
+| `printed {call, text}` | as the running cell streams output (at most 64 entries and 16000 characters per call) | `/output/<j>` |
+| `valueKept {call, cell, value, type}` / `valueLost {call, cell, type, reason}` | after a cell returned a value | `/value` |
+
+- **A call's end is its receipt** (`Returned` in `context/<session>`); the journal does not repeat it, so
+  there is no window between two writes. A call is in doubt exactly when it has a `callStarted` and no
+  receipt.
+- `call` is `{turn, step, index, id, attempt}`: the reply's tool call (its id is the model's) and which
+  attempt at running it. `fingerprint` hashes the tool and its canonical arguments.
+- `snapshot`: with `codeact.journal.snapshots` on and hands that have workspace snapshots
+  (`Hands.Snapshots`, envd's shadow git), each step records the workspace before its first action.
+- Bounded: arguments and results 400 characters, output as above, values as below. Events stay small.
+
+### Recovering a turn
+
+`CodeAct.Runner.Recover` (`Recovery.find` over the context log and the journal, pure):
+
+1. The turn's last reply; its calls without a receipt. The first with a `callStarted` (its latest
+   attempt) is in doubt; those after it never started.
+2. **Evidence**: the call (tool, cell, intent, its code or arguments), what it printed, its host calls
+   (ended or running), and the workspace's changes since the step began (a new snapshot diffed against
+   the step's; or why they are not known).
+3. **The decision** (`Recovery.request`): a request of kind `decision.outcomeUnknown`, id
+   `unknown-<call name>` (`-<attempt>` after the first), origin the turn, `ToOpener`, `Lifetime.Turn`.
+   Its payload is a decision card (`OutcomeUnknownDecision`: `question`, `scope: "session"` (spec §12.3),
+   `call`, `evidence`, `options`); the answer is `{option, note?}`, one of the options:
+
+   | Option | The call's receipt |
+   |---|---|
+   | `completed` | what people decided, then the evidence; not an error |
+   | `failed` | the same, an error: the model checks what it left behind |
+   | `rerun` | the call runs again (attempt `a+1`, journaled like any call, cell `<name>-<a+1>`); its new result, after a line saying so |
+   | `inspect` | the evidence, an error: the model looks at what it did before going on |
+   | (withdrawn, `CancelRequest`) | "nobody decided", an error |
+
+4. The turn **pauses**: it stays running and awaits the answer (`TurnContext.Await`). Steers wait in the
+   inbox for the next boundary; an interrupt ends the turn (and withdraws the decision).
+5. With the answer, the call gets its receipt (keyed as it would have been), the calls after it get
+   "Not run: the host stopped before this call started.", and the turn goes on from the next step: the
+   model's next request is the previous one plus these receipts (append-only).
+
+- **Idempotent.** Every write is keyed by what it records: recovering again (the host stops again before
+  the answer) re-opens nothing (`TurnContext.Open` with the same key returns the first opening) and
+  waits for the same request. A rerun that is in doubt again is a new attempt with a request of its own.
+- **Never re-runs by itself.** Only a person's `rerun` runs a call again.
+- Not in scope of a decision: calls that never started (they did not run) and model calls (they have no
+  side effects); both end as above.
+
+### Kept values and `recall` (spec §6.5 "Durability")
+
+The bun-ts kernel has no snapshots (`caps.snapshot = false`), so durability is Jupyter semantics plus
+the journal: after a cell returns a value, the host asks the kernel to encode `Out[cell]`
+(`value/encode`, at most `codeact.recall.maxBytes`) and journals its JSON, inline up to
+`values.inlineMaxBytes`, in the host's blob store (`CodeActConfig.Blobs`) beyond. A value that cannot be
+kept is journaled as lost with why (no JSON form, too large, a handle).
+
+- A **new kernel** (after a kill, or after the host restarted) gets the latest `codeact.recall.restore`
+  kept values back as `Out[cell]` (`recall`), and its first receipt lists them.
+- **`fx.recall(id)`** (the `recall` binding, from cells): any kept value, by the cell's id or the id of the
+  tool call that ran it; `notKept` with the reason otherwise.
+- What comes back is JSON: names cells declared, functions, class instances, promises, open resources
+  and handles are gone with their kernel.
+
 ## Content exclusions (spec §18)
 
 `ContentExclusions.compile` over the turn's variants (`ContentExclusions.read`: policy, host, project
@@ -206,6 +298,8 @@ recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, t
 | `codeact.cell.timeoutMs`, `codeact.cell.typeCheck` | 600000, false |
 | `codeact.output.maxChars`, `codeact.receipt.maxChars`, `codeact.read.maxLines` | 16000, 20000, 2000 |
 | `codeact.finish.evidence` | `optional` |
+| `codeact.journal.snapshots` | true |
+| `codeact.recall.maxBytes`, `codeact.recall.restore` | 1048576, 20 |
 
 Defaults are provisional until evals decide (spec §1, principle 7).
 
@@ -226,15 +320,23 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   unknown tool, calls after `finish`.
 - **Replay**: the recorded logs render, through the render alone, to exactly the requests sent; the same
   inputs give the same context log, requests and session events.
+- **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back; finding the
+  call in doubt; the card and its answers; each decision's receipt; kept values. End to end, the host
+  process is stopped mid-cell as a crash would stop it and started again on the same stores (with a
+  command that hangs the first time): the decision and its evidence (output, host calls, workspace
+  changes), nothing run before the answer, one decision over two restarts, every answer path (rerun
+  included), calls after the one in doubt, a crash during a model call (abandoned), values back after a
+  host restart and a kill, `fx.recall`, launch numbers; each replays into the requests sent.
 - **Providers**: turns through `ModelAccess` with `anthropic.messages` and `openai.responses` and their
   catalogs, on streams in each provider's documented format (tool calls and results, tools from codecs,
   breakpoints, a stable cache key).
 - **Live** (the pinned Bun; skipped offline, required in CI): TypeScript cells on the bun-ts kernel for
   both surfaces, a rejected `finish`, and a turn in an environment of `fx.env.local` opened through `IEnvs`.
 
-Native AOT: `codeact-hybrid` and `codeact-text-only` (a session on the session host with the script
+Native AOT: `codeact-hybrid`, `codeact-text-only` (a session on the session host with the script
 kernel, an in-memory workspace and a scripted model; the receipts, the context log and the logs replayed
-into the requests), on all eight targets.
+into the requests) and `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
+card, the journal, the receipts, the session's events), on all eight targets.
 
 ## Left for later
 
@@ -242,7 +344,9 @@ into the requests), on all eight targets.
 |---|---|
 | Grants on sensitive bindings (`shell.exec` with compound commands split, writes outside the workspace, network) through `Hands.Guard`, pending grant requests shown in the turn | T127b |
 | Composition: the profile's variants, hands from `IEnvs` per session (`EnvHands.ofHandle`), `ModelAccess.llm`, `Questions.kinds`, registering `CodeActSlots.read`, the catalog | T129 |
-| `OutcomeUnknown` for cells in flight after a crash, journaling cell results and `recall` into a restarted kernel | T128 |
+| The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
+| Partial output of commands in doubt (`shell.run`, `bash`): run them as envd processes, whose output logs resume by byte offset, and journal the process | T205 |
+| Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
 | Exact replay of model streams and variant reads from a journal | T131 |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | Compaction on overflow (`Collapsed`), steering and queueing UX | T206 |

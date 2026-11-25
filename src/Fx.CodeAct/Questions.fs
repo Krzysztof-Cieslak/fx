@@ -42,13 +42,15 @@ module Questions =
     let kind: RequestKind<Question, string> =
         RequestKind.create KindId "A question from the agent, answered with text." payload Codec.string
 
-    /// The kinds a session host needs for CodeAct turns: the built-in ones and the agent's questions.
+    /// The kinds a session host needs for CodeAct turns: the built-in ones, the agent's questions and
+    /// the decisions about calls in doubt after the host stopped (`decision.outcomeUnknown`).
     let kinds: RequestKinds =
         RequestKinds.create
             [
                 RequestKind.info RequestKinds.confirm
                 RequestKind.info RequestKinds.choice
                 RequestKind.info kind
+                RequestKind.info Recovery.kind
             ]
 
     let private bound (text: string) =

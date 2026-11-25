@@ -26,6 +26,12 @@ type CodeActConfig<'R, 'K> =
         Sessions: EventLog<Event>
         /// The context events (`ContextLog.typed` over the same store), where turns record theirs.
         Contexts: EventLog<ContextEvent>
+        /// The step journal (`StepJournal.typed` over the same store): calls before they run, their
+        /// host calls and output, kernel launches and cells' values (crash recovery, `recall`).
+        Steps: EventLog<StepEvent>
+        /// The host's blob store, for cells' values too large to keep in the journal; without one only
+        /// values up to `values.inlineMaxBytes` are kept.
+        Blobs: Fx.Store.Blobs option
         /// The variants of a profile (a turn runs under the profile bound at its start).
         Profile: string -> Eff<'R, Variants>
         /// A session's hands: the environment its kernel runs in (`IEnvs.Open`) and its interpreter.
@@ -41,6 +47,17 @@ type CodeActConfig<'R, 'K> =
 type private Called =
     | Reply of ChatResponse
     | Failed of reason: string
+
+/// A turn the host stopped during, going on after people decided what happened to its call in doubt.
+type private Resumed =
+    {
+        Halted: Halted
+        Card: OutcomeUnknown
+        Decided: Decided
+    }
+
+    override this.ToString() =
+        $"resumed {this.Halted} ({this.Decided})"
 
 /// One turn's state as it runs.
 type private TurnState(settings: CodeActSettings) =
@@ -72,6 +89,139 @@ type CodeAct<'R, 'K
         ConcurrentDictionary<string, SessionKernel<'K>>(StringComparer.Ordinal)
 
     let envs = ConcurrentDictionary<string, 'K>(StringComparer.Ordinal)
+
+    let writers = ConcurrentDictionary<string, JournalWriter>(StringComparer.Ordinal)
+
+    let writerOf (session: string) : JournalWriter =
+        writers.GetOrAdd(session, (fun id -> JournalWriter(config.Steps, id)))
+
+    let journalOf (session: string) : Eff<'E, Recorded<StepEvent> list> when 'E :> IScope =
+        StepJournal.load config.Steps session
+
+    /// A host call's arguments or result, as the journal keeps it.
+    let shown (value: Value) : string =
+        match value with
+        | Value.Inline json -> Json.serialize json
+        | other -> string other
+
+    /// What the step journal sees of a session's kernel: the running action's host calls (not the
+    /// reads) and output.
+    let watchOf (writer: JournalWriter) : Watch<'K> =
+        {
+            Calling =
+                fun call ->
+                    match writer.Running with
+                    | Some action when
+                        not (List.contains call.Binding StepJournal.readOnly)
+                        && (call.CellId.IsNone || call.CellId = action.Cell)
+                        ->
+                        let token, index = writer.BeginHostCall action
+
+                        let args =
+                            Json.serialize (
+                                Json.Array(
+                                    call.Args
+                                    |> List.map (fun arg ->
+                                        match arg with
+                                        | Value.Inline json -> json
+                                        | other -> Json.String(string other))
+                                )
+                            )
+
+                        writer.Append(
+                            $"{action.Key}/host/{index}",
+                            StepEvent.HostCallStarted
+                                {
+                                    Call = action.Call
+                                    Index = index
+                                    Binding = call.Binding
+                                    Args = StepJournal.bound StepJournal.ArgsChars args
+                                }
+                        )
+                        |> Eff.map (fun () -> Some token)
+                    | _ -> Eff.ret None
+            Called =
+                fun token result ->
+                    match writer.EndHostCall token with
+                    | Some(action, index) ->
+                        let failed, summary =
+                            match result with
+                            | Ok value -> false, shown value
+                            | Error e -> true, string e
+
+                        writer.Append(
+                            $"{action.Key}/host/{index}/ended",
+                            StepEvent.HostCallEnded
+                                {
+                                    Call = action.Call
+                                    Index = index
+                                    Failed = failed
+                                    Summary = StepJournal.bound StepJournal.ArgsChars summary
+                                }
+                        )
+                    | None -> Eff.unit
+            Output =
+                fun output ->
+                    match writer.Running with
+                    | Some action when not output.Late && (output.CellId.IsNone || output.CellId = action.Cell) ->
+                        match action.NextPrinted output.Text.Length with
+                        | Some(n, take) ->
+                            let text =
+                                if take >= output.Text.Length then
+                                    output.Text
+                                else
+                                    StepJournal.bound (take + 1) output.Text
+
+                            writer.Append(
+                                $"{action.Key}/output/{n}",
+                                StepEvent.Printed { Call = action.Call; Text = text }
+                            )
+                        | None -> Eff.unit
+                    | _ -> Eff.unit
+        }
+
+    /// The kernel of a session, with its journal: launches numbered on from the journal's, the values
+    /// kept for `recall` restored into new kernels, and the `recall` binding.
+    let kernelOf (session: string) : SessionKernel<'K> =
+        kernels.GetOrAdd(
+            session,
+            fun id ->
+                let writer = writerOf id
+
+                let journal: KernelJournal<'K> =
+                    {
+                        LastLaunch = journalOf id |> Eff.map StepJournal.lastLaunch
+                        Launching = fun launch -> writer.Append($"kernel/{launch}", StepEvent.KernelLaunched launch)
+                        Restore =
+                            fun limit kernel ->
+                                eff {
+                                    let! journal = journalOf id
+                                    return! Recall.restore config.Blobs limit journal kernel
+                                }
+                    }
+
+                SessionKernel<'K>(id, watchOf writer, journal, [ Recall.binding (journalOf id) config.Blobs ])
+        )
+
+    /// The cell id of a call's attempt in its kernel.
+    let cellIdOf (call: CallRef) : string =
+        if call.Attempt <= 1 then
+            call.Name
+        else
+            $"{call.Name}-{call.Attempt}"
+
+    let takeSnapshot
+        (snapshots: Snapshots)
+        (message: string)
+        : Eff<'E, Result<SnapshotRef, SnapshotError>> when 'E :> IScope =
+        fun env -> snapshots.Take message env.Scope.Cancellation
+
+    let diffSnapshots
+        (snapshots: Snapshots)
+        (before: SnapshotRef)
+        (after: SnapshotRef)
+        : Eff<'E, Result<FileChange list, SnapshotError>> when 'E :> IScope =
+        fun env -> snapshots.Diff before after env.Scope.Cancellation
 
     let withToken (env: 'K) (token: Threading.CancellationToken) : 'K =
         env.WithScope { env.Scope with Cancellation = token }
@@ -159,16 +309,18 @@ type CodeAct<'R, 'K
             | Error rejection -> return Error $"the agent's question could not be asked: {rejection.Message}"
         }
 
-    /// Runs one action and gives its receipt, and the result `finish` accepted in it.
+    /// Runs one action and gives its receipt, and the result `finish` accepted in it. A cell's value
+    /// is kept in the journal for `recall`.
     let execute
         (hands: Hands<'K>)
         (kernel: SessionKernel<'K>)
         (settings: CodeActSettings)
         (limits: KernelLimits)
-        (cellId: string)
+        (journaled: RunningAction)
         (action: ToolAction)
         : Eff<'R, Executed * TurnResult option> =
         eff {
+            let cellId = cellIdOf journaled.Call
             let! token = Eff.cancellation
             let env = withToken hands.Env token
             let call = kernel.Call hands.Guard
@@ -185,7 +337,9 @@ type CodeAct<'R, 'K
                 return executed, None
             | ToolAction.Cell code ->
                 let intent = Cell.intent code
-                let! acquired = Eff.provide hands.Env (kernel.Acquire(hands, limits))
+
+                let! acquired =
+                    Eff.provide hands.Env (kernel.Acquire(hands, limits, settings.RecallRestore))
 
                 match acquired with
                 | Error reason ->
@@ -209,6 +363,23 @@ type CodeAct<'R, 'K
 
                     match record.Result with
                     | Ok result ->
+                        match result.Outcome with
+                        | CellOutcome.Completed(Some info) when not (Kernel.exited running).IsCompleted ->
+                            let! kept =
+                                Eff.provide
+                                    env
+                                    (Recall.keep
+                                        config.Blobs
+                                        settings.InlineBytes
+                                        settings.RecallMaxBytes
+                                        running
+                                        journaled.Call
+                                        cellId
+                                        info)
+
+                            do! (writerOf kernel.Session).Append($"{journaled.Key}/value", kept)
+                        | _ -> ()
+
                         return
                             {
                                 Pieces = Receipts.cell settings.ReceiptChars note intent record.Reads result
@@ -224,7 +395,70 @@ type CodeAct<'R, 'K
                             None
         }
 
-    let turn (context: TurnContext<'R>) (hands: Hands<'K>) (kernel: SessionKernel<'K>) (settings: CodeActSettings) =
+    /// Journals a call's start (before anything it does), runs it as the session's running action, and
+    /// gives its receipt and the result `finish` accepted in it. The receipt, recorded by the caller,
+    /// is the call's end.
+    let runAction
+        (prefix: string)
+        (hands: Hands<'K>)
+        (kernel: SessionKernel<'K>)
+        (settings: CodeActSettings)
+        (limits: KernelLimits)
+        (call: CallRef)
+        (toolCall: ToolCall)
+        (action: ToolAction)
+        (snapshot: SnapshotRef option)
+        : Eff<'R, Executed * TurnResult option> =
+        eff {
+            let writer = writerOf kernel.Session
+            let key = $"{prefix}/step/{call.Step}/call/{call.Index}/attempt/{call.Attempt}"
+
+            let cell, intent =
+                match action with
+                | ToolAction.Cell code -> Some(cellIdOf call), Cell.intent code
+                | _ -> None, None
+
+            do!
+                writer.Append(
+                    key + "/started",
+                    StepEvent.CallStarted
+                        {
+                            Call = call
+                            Tool = toolCall.Name
+                            Cell = cell
+                            Intent = intent
+                            Fingerprint = StepJournal.fingerprint toolCall.Name toolCall.Arguments
+                            Snapshot = snapshot
+                        }
+                )
+
+            let journaled = RunningAction(call, key, cell)
+            writer.SetRunning(Some journaled)
+
+            try
+                return! execute hands kernel settings limits journaled action
+            finally
+                writer.SetRunning None
+        }
+
+    /// The workspace before a step's actions, if the hands have snapshots and they are on.
+    let snapshotOf (hands: Hands<'K>) (settings: CodeActSettings) (message: string) : Eff<'R, SnapshotRef option> =
+        eff {
+            match hands.Snapshots with
+            | Some snapshots when settings.Snapshots ->
+                match! takeSnapshot snapshots message with
+                | Ok snapshot -> return Some snapshot
+                | Error _ -> return None
+            | _ -> return None
+        }
+
+    let turn
+        (context: TurnContext<'R>)
+        (hands: Hands<'K>)
+        (kernel: SessionKernel<'K>)
+        (settings: CodeActSettings)
+        (resume: Resumed option)
+        =
         eff {
             let start = context.Turn
             let session = start.Session
@@ -265,6 +499,91 @@ type CodeAct<'R, 'K
                         session
                         $"{started}/{what}"
                         (ContextEvent.withhold exclusions event)
+
+                let prefix = string started
+
+                // A turn the host stopped during goes on where it stopped: the call in doubt gets its
+                // receipt from what people decided (or its new result, if they chose to run it again),
+                // the calls after it are answered as not run, and the next step calls the model.
+                match resume with
+                | None -> ()
+                | Some resumed ->
+                    let halted = resumed.Halted
+                    let call = halted.Started.Call
+                    let! history = ContextLog.load config.Sessions config.Contexts session
+
+                    let surface =
+                        Instructions.recordedSurface (Transcript.ofItems history.Items).Current
+                        |> Option.defaultValue settings.Surface
+
+                    kernel.Begin(core, Ensure.all settings.Evidence history.State)
+
+                    let! executed, finished =
+                        match resumed.Decided with
+                        | Decided.Rerun _ ->
+                            match Tools.decode surface halted.Call with
+                            | Error message ->
+                                Eff.ret (
+                                    {
+                                        Pieces = Recovery.rerun resumed.Decided :: Receipts.failed message
+                                        IsError = true
+                                    },
+                                    None
+                                )
+                            | Ok action ->
+                                eff {
+                                    let again = { call with Attempt = call.Attempt + 1 }
+                                    let! snapshot = snapshotOf hands settings $"{prefix} step {call.Step} again"
+
+                                    let! executed, finished =
+                                        runAction prefix hands kernel settings limits again halted.Call action snapshot
+
+                                    return
+                                        { executed with
+                                            Pieces = Recovery.rerun resumed.Decided :: executed.Pieces
+                                        },
+                                        finished
+                                }
+                        | decided ->
+                            let pieces, isError = Recovery.receipt settings.ReceiptChars resumed.Card decided
+                            Eff.ret ({ Pieces = pieces; IsError = isError }, None)
+
+                    do!
+                        record
+                            $"step/{halted.Step}/receipt/{call.Index}"
+                            (ContextEvent.Returned
+                                {
+                                    Turn = start.Turn
+                                    Step = halted.Step
+                                    Call = Some halted.Call.Id
+                                    Name = halted.Call.Name
+                                    Pieces = executed.Pieces
+                                    IsError = executed.IsError
+                                })
+
+                    match finished with
+                    | Some result -> state.Outcome <- Some(Ok result)
+                    | None -> ()
+
+                    for index, notRun in halted.NotRun do
+                        do!
+                            record
+                                $"step/{halted.Step}/receipt/{index}"
+                                (ContextEvent.Returned
+                                    {
+                                        Turn = start.Turn
+                                        Step = halted.Step
+                                        Call = Some notRun.Id
+                                        Name = notRun.Name
+                                        Pieces =
+                                            if state.Outcome.IsSome then
+                                                Receipts.skipped
+                                            else
+                                                Recovery.notRun
+                                        IsError = true
+                                    })
+
+                    state.Step <- halted.Step
 
                 while state.Outcome.IsNone do
                     state.Step <- state.Step + 1
@@ -350,10 +669,25 @@ type CodeAct<'R, 'K
                             let calls = callsOf response.Parts
                             let cut = response.Stop = StopReason.MaxTokens
                             let mutable stop = None
+                            let mutable snapshot = None
 
                             for index, toolCall in List.indexed calls do
-                                let! executed, finished =
+                                let decoded =
                                     if state.Outcome.IsSome then
+                                        None
+                                    else
+                                        Some(Tools.decode surface toolCall)
+
+                                // The workspace before the step's first action.
+                                match decoded, snapshot with
+                                | Some(Ok _), None ->
+                                    let! before = snapshotOf hands settings $"{prefix} step {step}"
+                                    snapshot <- Some before
+                                | _ -> ()
+
+                                let! executed, finished =
+                                    match decoded with
+                                    | None ->
                                         Eff.ret (
                                             {
                                                 Pieces = Receipts.skipped
@@ -361,24 +695,34 @@ type CodeAct<'R, 'K
                                             },
                                             None
                                         )
-                                    else
-                                        match Tools.decode surface toolCall with
-                                        | Error message ->
-                                            Eff.ret (
-                                                {
-                                                    Pieces = Receipts.failed message
-                                                    IsError = true
-                                                },
-                                                None
-                                            )
-                                        | Ok action ->
-                                            execute
-                                                hands
-                                                kernel
-                                                settings
-                                                limits
-                                                $"t{start.Turn}-s{step}-{index + 1}"
-                                                action
+                                    | Some(Error message) ->
+                                        Eff.ret (
+                                            {
+                                                Pieces = Receipts.failed message
+                                                IsError = true
+                                            },
+                                            None
+                                        )
+                                    | Some(Ok action) ->
+                                        let call: CallRef =
+                                            {
+                                                Turn = start.Turn
+                                                Step = step
+                                                Index = index + 1
+                                                Id = toolCall.Id
+                                                Attempt = 1
+                                            }
+
+                                        runAction
+                                            prefix
+                                            hands
+                                            kernel
+                                            settings
+                                            limits
+                                            call
+                                            toolCall
+                                            action
+                                            (snapshot |> Option.flatten)
 
                                 do!
                                     record
@@ -484,16 +828,86 @@ type CodeAct<'R, 'K
             match! config.Hands start with
             | Error reason -> return Error $"the session's environment is not available: {reason}"
             | Ok hands ->
-                let kernel = kernels.GetOrAdd(start.Session, (fun id -> SessionKernel<'K> id))
+                let kernel = kernelOf start.Session
 
                 envs[start.Session] <- hands.Env
                 let! held = kernel.Enter()
                 use _ = held
-                return! turn context hands kernel settings
+                return! turn context hands kernel settings None
+        }
+
+    /// The workspace's changes since a snapshot, or why they are not known.
+    let changesSince
+        (hands: Result<Hands<'K>, string>)
+        (before: SnapshotRef option)
+        : Eff<'R, Result<FileChange list, string>> =
+        eff {
+            match hands, before with
+            | Error reason, _ -> return Error $"the environment is not available: {reason}"
+            | Ok hands, _ when hands.Snapshots.IsNone -> return Error "the environment has no workspace snapshots"
+            | Ok _, None ->
+                return Error "no snapshot of the workspace was recorded before the step (codeact.journal.snapshots)"
+            | Ok hands, Some before ->
+                match hands.Snapshots with
+                | None -> return Error "the environment has no workspace snapshots"
+                | Some snapshots ->
+                    match! takeSnapshot snapshots "after the host stopped" with
+                    | Error e -> return Error(string e)
+                    | Ok after ->
+                        match! diffSnapshots snapshots before after with
+                        | Ok changes -> return Ok changes
+                        | Error e -> return Error(string e)
+        }
+
+    /// A turn the host stopped during (spec §5, crash recovery): if a call started and has no receipt,
+    /// the turn pauses on a decision with the evidence the logs and the workspace give, and goes on
+    /// with what people decide; otherwise nothing is in doubt, and the session abandons it.
+    let recover (context: TurnContext<'R>) : Eff<'R, Result<TurnResult, string> option> =
+        eff {
+            let start = context.Turn
+            let session = start.Session
+            let! journal = journalOf session
+            let! history = ContextLog.load config.Sessions config.Contexts session
+
+            match Recovery.find (ContextLog.stream session) start.Turn history.Items journal with
+            | None -> return None
+            | Some halted ->
+                let! variants = config.Profile start.Profile
+                let! settings = CodeActSettings.ofVariants variants
+                let! hands = config.Hands start
+                let! changes = changesSince hands halted.Started.Snapshot
+
+                let card =
+                    Recovery.card halted (Recovery.evidence halted.Started.Call journal changes)
+
+                let request = Recovery.request halted card
+
+                match! context.Open request with
+                | Error rejection ->
+                    return Some(Error $"the decision about the call in doubt could not be opened: {rejection.Message}")
+                | Ok opened ->
+                    let! resolution = context.Await request.Id opened
+
+                    let resumed =
+                        {
+                            Halted = halted
+                            Card = card
+                            Decided = Recovery.decided resolution
+                        }
+
+                    match hands with
+                    | Error reason -> return Some(Error $"the session's environment is not available: {reason}")
+                    | Ok hands ->
+                        let kernel = kernelOf session
+                        envs[session] <- hands.Env
+                        let! held = kernel.Enter()
+                        use _ = held
+                        let! result = turn context hands kernel settings (Some resumed)
+                        return Some result
         }
 
     /// The turn runner sessions run their turns with.
-    member _.Runner: TurnRunner<'R> = TurnRunner.create run
+    member _.Runner: TurnRunner<'R> = { Run = run; Recover = recover }
 
     /// The kernel of a session, if it has one.
     member _.Kernel(session: string) : Kernel option =

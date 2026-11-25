@@ -240,6 +240,8 @@ let private session
                 {
                     Sessions = sessions
                     Contexts = contexts
+                    Steps = StepJournal.typed store.Log
+                    Blobs = None
                     Profile = fun _ -> Eff.ret variants
                     Hands =
                         fun _ ->
@@ -252,6 +254,7 @@ let private session
                                         CommandEnv = Inherit []
                                         Interpreter = kernel
                                         Guard = fun _ -> EffResult.ok ()
+                                        Snapshots = None
                                     }
                             )
                     Catalog = fun _ -> None

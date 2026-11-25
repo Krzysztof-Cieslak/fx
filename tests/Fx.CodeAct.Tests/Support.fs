@@ -271,21 +271,40 @@ let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
                     }
     }
 
+/// What a host process holds: the session host, the strategy's kernels, and how to close them.
+type Process =
+    {
+        Host: SessionHost<HostEnv>
+        /// The kernel of a session, if it has one.
+        Kernel: string -> Kernel option
+        /// Closes the strategy's kernels.
+        Close: unit -> Task
+    }
+
+    override _.ToString() = "Process"
+
 /// A CodeAct session host on fakes and a scratch workspace.
 type Fixture =
     {
         Env: HostEnv
         Store: InMemoryEventLog<Payload>
-        Host: SessionHost<HostEnv>
-        /// The kernel of a session, if it has one.
-        Kernel: string -> Kernel option
+        Blobs: InMemoryBlobs
+        /// The host process running now (`restart` starts another on the same stores).
+        mutable Process: Process
+        /// Starts a host process on the fixture's stores.
+        Start: unit -> Process
         Model: Model
         Root: string
         Workspace: string
         Variants: Variants
-        /// What disposing does first (closing kernels, stopping hosts), in order.
+        /// What disposing does after closing the kernels (stopping environments), in order.
         Cleanup: ResizeArray<unit -> Task>
     }
+
+    member this.Host = this.Process.Host
+
+    /// The kernel of a session, if it has one.
+    member this.Kernel(session: string) = this.Process.Kernel session
 
     member this.File(name: string) = Path.Combine(this.Workspace, name)
 
@@ -298,6 +317,12 @@ type Fixture =
 
     interface IDisposable with
         member this.Dispose() =
+            // Kernels close before their environments stop.
+            try
+                (this.Process.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+            with _ ->
+                ()
+
             for clean in this.Cleanup do
                 try
                     (clean ()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
@@ -324,6 +349,8 @@ let baseSelections: (string * Json) list =
     [
         "model.role.main", Json.String "test/model"
         "codeact.policy.retryDelayMs", Json.int 0
+        // Workspace snapshots (git) only where a test asks for them.
+        "codeact.journal.snapshots", Json.Bool false
     ]
 
 /// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
@@ -359,36 +386,43 @@ let createOn<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> ICloc
 
     let variants = FakeVariants.create CodeActSlots.read chosen
     let store = InMemoryEventLog<Payload>()
+    let blobs = InMemoryBlobs()
+    let snapshots = InMemorySnapshots()
     let sessions = SessionLog.typed store.Log
-
-    let codeact =
-        CodeAct.create
-            {
-                Sessions = sessions
-                Contexts = ContextLog.typed store.Log
-                Profile = fun _ -> Eff.ret variants
-                Hands = fun _ -> Eff.ret (Ok hands)
-                Catalog = catalog
-            }
 
     let settings =
         { SessionSettings.defaults with
             Kinds = Questions.kinds
         }
 
-    let host =
-        (Eff.run env (SessionHost.create sessions (InMemorySnapshots()).Store codeact.Runner settings))
-            .GetAwaiter()
-            .GetResult()
+    let start () : Process =
+        let codeact =
+            CodeAct.create
+                {
+                    Sessions = sessions
+                    Contexts = ContextLog.typed store.Log
+                    Steps = StepJournal.typed store.Log
+                    Blobs = Some blobs.Blobs
+                    Profile = fun _ -> Eff.ret variants
+                    Hands = fun _ -> Eff.ret (Ok hands)
+                    Catalog = catalog
+                }
 
-    // Kernels close before their environments stop.
-    cleanup.Insert(0, (fun () -> codeact.Close()))
+        let host =
+            (Eff.run env (SessionHost.create sessions snapshots.Store codeact.Runner settings)).GetAwaiter().GetResult()
+
+        {
+            Host = host
+            Kernel = codeact.Kernel
+            Close = fun () -> codeact.Close()
+        }
 
     {
         Env = env
         Store = store
-        Host = host
-        Kernel = codeact.Kernel
+        Blobs = blobs
+        Process = start ()
+        Start = start
         Model = model
         Root = root
         Workspace = workspace
@@ -420,6 +454,18 @@ let localHands
         CommandEnv = Inherit []
         Interpreter = make root
         Guard = fun _ -> EffResult.ok ()
+        Snapshots =
+            Some(
+                GitSnapshots.create
+                    (LocalShell.create (LocalShell.defaultShell ()) workspace)
+                    LocalFs.write
+                    {
+                        Git = "git"
+                        GitDir = Path.Combine(root, "shadow.git")
+                        WorkTree = workspace
+                        Exclude = []
+                    }
+            )
     }
 
 /// A fixture on local hands, with the interpreter `make` gives for its root.
@@ -447,6 +493,15 @@ let create (name: string) (selections: (string * Json) list) : Fixture =
 
 let run (f: Fixture) (effect: Eff<HostEnv, 'T>) : Task<'T> =
     (Eff.run f.Env effect).WaitAsync(TimeSpan.FromSeconds 60.0)
+
+/// Stops the host process as a crash would (turns stop where they are, kernels die) and starts another
+/// on the same stores. Its sessions' actors start on first use.
+let restart (f: Fixture) : Task =
+    task {
+        do! run f (SessionHost.stop f.Host)
+        do! f.Process.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
+        f.Process <- f.Start()
+    }
 
 let send (f: Fixture) (session: string) (key: string) (command: Command) : Task<Fx.Machines.Outcome> =
     run f (SessionHost.send f.Host session (IdempotencyKey key) alice command)
@@ -561,3 +616,60 @@ let within (name: string) (selections: (string * Json) list) (body: Fixture -> T
             use f = create name selections
             do! body(f).WaitAsync(TimeSpan.FromSeconds 120.0)
         }
+
+let private canonicalRequest (request: ChatRequest) =
+    Json.serializeCanonical (ChatRequest.codec.Encode request)
+
+/// Replay: the session's recorded logs render, through the pure render alone, to exactly the requests
+/// the model was sent (with the suffix each reply recorded it saw).
+let expectReplays (f: Fixture) (session: string) : Task<unit> =
+    task {
+        let requests = f.Model.Requests
+
+        let! history =
+            run f (ContextLog.load (SessionLog.typed f.Store.Log) (ContextLog.typed f.Store.Log) session)
+
+        let! settings = run f (CodeActSettings.ofVariants f.Variants)
+
+        let replies =
+            history.Items
+            |> List.indexed
+            |> List.choose (fun (i, item) ->
+                match item with
+                | LogItem.Context(_, ContextEvent.Replied reply) -> Some(i, reply)
+                | _ -> None)
+
+        Expect.equal replies.Length requests.Length "a reply per request"
+
+        for (index, reply), sent in List.zip replies requests do
+            let transcript = Transcript.ofItems (history.Items |> List.take index)
+
+            let cfg =
+                PromptSettings.config settings.Prompt [] Exclusions.none ModelCaps.minimal.Caching
+
+            let rendered = Render.render cfg transcript Live.none
+
+            let rendered =
+                { rendered with
+                    Prompt =
+                        { rendered.Prompt with
+                            Suffix = reply.Shown
+                        }
+                }
+
+            let template =
+                { sent with
+                    System = []
+                    Messages = []
+                    Cache = { sent.Cache with Key = None }
+                }
+
+            Expect.equal
+                (canonicalRequest (Render.request cfg template rendered))
+                (canonicalRequest sent)
+                $"request of turn {reply.Turn} step {reply.Step} replays"
+
+        // Append-only: every request is the one before it plus what happened since.
+        for a, b in List.pairwise requests do
+            Expect.equal (b.Messages |> List.truncate a.Messages.Length) a.Messages "append-only"
+    }
