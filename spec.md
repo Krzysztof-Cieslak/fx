@@ -256,7 +256,8 @@ type InstallMethod =
 ### 6.2 Runtimes and interpreters (extensions)
 
 ```fsharp
-type RuntimeSpec = { Component: Component; Launch: LaunchSpec }
+type RuntimeSpec = { Component: Component; Launch: LaunchSpec
+                     Files: RuntimeFile list }      // written to the launch's owned config dir first (e.g. bunfig.toml)
 and LaunchSpec =
   { Exe: Template; Args: string list
     EnvAllowlist: string list; EnvSet: Map<string,string>
@@ -275,6 +276,7 @@ and InterpreterCaps =
     Packages: PackageSupport option; Deterministic: bool }
 ```
 
+- **Launch:** a pure function of the spec, the installed component and the session (target, owned dirs, trust, the launcher's environment) gives the process: the runtime's flags, the untrusted overrides, then the program; a fresh environment (allowlist, exports, `EnvSet`; denied names removed); an absolute program from the install directory. `EnvDeny` must cover every known injection vector (one list for all runtimes). Details: `docs/modules/runtimes.md`.
 - Bindings/prompt packs generated host-side; kernels run in the environment as **separate processes**.
 - **Interpreter is a variant slot.** Plugin candidates: `python`, `monty`, `deno-ts`, `node-ts`, `fsi`, `fsharp-subset`, `luau`.
 
@@ -282,7 +284,7 @@ and InterpreterCaps =
 
 | Package | Extension runtime | Contributes |
 |---|---|---|
-| `fx.runtime.bun` | declarative | `RuntimeSpec` (pinned digests, all targets incl. Windows x64/arm64) + `bun` package method |
+| `fx.runtime.bun` | declarative | `Component` + `RuntimeSpec` (pinned digests, all targets incl. Windows x64/arm64; x64 takes the `-baseline` builds, the same executable as the default ones in 1.4.5) + `bun` package method (with T211's `Package`) |
 | `fx.exthost.bun` | process | `ExtensionRuntime "bun"` + **deterministic workflow worker** |
 | `fx.interpreter.bun-ts` | bun | TypeScript `InterpreterProvider` (kernel, `fx.d.ts`, prompt pack, `bun check`) |
 

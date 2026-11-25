@@ -43,9 +43,10 @@ and InstallMethod =
   is in a range only if a comparator of the alternative names a pre-release of the same
   `major.minor.patch` (npm's rule).
 - **Targets** (`TargetTriple`) are `<os>-<arch>[-<libc>]`: `linux-x64-glibc`, `linux-arm64-musl`,
-  `macos-arm64`, `windows-x64`, … (`TargetTriple.all`, the product's eight targets). There is no CPU
-  feature level: picking Bun's `-baseline` builds (x64 without AVX2) is T114's to decide (a feature
-  dimension on the target, or baseline builds everywhere).
+  `macos-arm64`, `windows-x64`, … (`TargetTriple.all`, the product's eight targets);
+  `TargetTriple.ofRid` gives a .NET runtime identifier's. There is no CPU feature level: Bun's x64
+  `-baseline` builds are byte-identical to its default ones in 1.4.5, so `fx.runtime.bun` installs
+  them everywhere (extensions/Fx.Ext.RuntimeBun/README.md).
 - **Digests** are `sha256:<64 lowercase hex>`.
 - **Archive formats**: `zip`, `tar.gz`, `tar`. `tar.xz` and `tar.zst` need decompressors .NET 11
   lacks (no LZMA, no Zstandard); adding them means a pinned, digest-checked native library like
@@ -205,7 +206,7 @@ Pure: it reads a stream (`System.Formats.Tar`, `GZipStream`, `ZipArchive`) and w
 |---|---|---|---|
 | `IFetch` | `Fetch` | download a URL to a file, hashing it (`FileHash`), with a byte limit; `FetchError.Transient` | `HttpFetch` (HttpClient; redirects, no https→http downgrade, a stall timeout, errors without exception messages); `FakeFetch` (served from memory, scripted failures, held downloads) |
 | `IInstallFiles` | `InstallFiles` | hash a file, unpack an archive, delete a tree without following links, replace a file atomically, try a lock | `LocalInstallFiles`; `InMemoryInstallFiles` (over any `Fs`) |
-| `IComponents` | `Components` | `Ensure { Holder; Requires }`: install from the lockfile and say where (`InstalledComponent`: dir, bins, env) | `ComponentInstaller.components actor lockfile target newKey` |
+| `IComponents` | `Components` | `Ensure { Holder; Requires }`: install from the lockfile and say where (`InstalledComponent`, in `Fx.Sdk`: dir, bins, env; runtimes launch from it) | `ComponentInstaller.components actor lockfile target newKey` |
 
 The installer also uses `IFs` (receipts, roots, renames), `IShell` (probes), `IClock` (retries, lock
 waits, the probe timeout) and `ITrace`.
@@ -239,9 +240,9 @@ fakes and the live interpreters on a temporary directory both pass it, on Linux,
 - transient download failures are retried, others are not;
 - methods other than `archive` are refused with an error that names T211.
 
-`BunTests` (`NETWORK_TESTS=1`; its own CI step on Linux, macOS and Windows) installs the pinned Bun
-1.4.5 for the runner's platform from GitHub through the planner, the lockfile and the installer, and
-runs `bun --version`.
+`tests/Fx.Ext.RuntimeBun.Tests` (`NETWORK_TESTS=1`; its own CI step on Linux, macOS and Windows, and
+an Alpine job for musl) installs the pinned Bun for the runner's platform from GitHub through the
+planner, the lockfile and the installer, and launches it (runtimes.md).
 
 ## Native AOT
 
@@ -257,7 +258,6 @@ bytes may differ between zlib builds.
 | What | Task |
 |---|---|
 | The other install methods (`ReleaseIndex` with vendor-index trust, sandboxed `Script`, `Package`, read-only `System`, `Custom`); placement `host-push` and `prebaked`, mirrors, `fx runtime bundle\|import` | T211, T503 |
-| The `fx.runtime.bun` component (pins for every target, baseline builds) and its `RuntimeSpec` | T114 |
 | Grants through the grants log instead of the `Approve` callback | T123 |
 | Persisting the installer's stream in `SqliteEventStore` (an `EventSchema` for `InstallerEvent`; easiest with T101b's `Codec.union { }`), serving `IComponents` to the host over the environment protocol, envd's composition | T111, T129 |
 | Planning at startup, writing the lockfile next to the project (`.fx/`), the frozen-lockfile check, the profile's lockfile hash | T129 |
