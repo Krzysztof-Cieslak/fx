@@ -64,7 +64,8 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
   (`Versions.Protocol`, `1`).
 - **Hash:** `Manifest.hash` is `sha256:` over the canonical JSON (`Json.serializeCanonical`) of the
   manifest without `hash`. Host config pins extensions by it. A package's payload (executables,
-  scripts) is a component (`requires`), whose digests the component installer checks (T110).
+  scripts) is a component (`requires`), whose digests the component installer checks
+  ([components.md](components.md)).
 - **Capabilities** are names; the host builds the extension's environment from them (below). Their
   syntax is checked; which names exist grows with the SDK (T109).
 
@@ -225,8 +226,9 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 1. **in-binary:** native extensions, then declarative ones, each in the order given. Each is admitted,
    then activated, before the next, so types a native extension defines are known to those after it.
 2. **components:** process and hosted extensions are admitted (all trust checks), then the components
-   each admitted one requires are installed (`HostSettings.InstallComponents`; T110 provides the
-   installer, and until then extensions that require components fail closed).
+   each admitted one requires are installed (`HostSettings.InstallComponents`: `Components.installFor`
+   from `Fx.Components`, [components.md](components.md); the default settings have no installer, so
+   extensions that require components fail closed).
 3. **process:** extension processes start and activate.
 4. **hosted:** extensions whose runtime an extension contributes (now available) activate.
 
@@ -251,7 +253,7 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 | Code cannot add undeclared contributions | activation must match the manifest (`extension.mismatch`) |
 
 Left to later tasks: deciding project trust and reading pins from host config (T106/T129), bundled
-packages extracted with hash checks (T114, T115), the installer's digests (T110), sandboxing extension
+packages extracted with hash checks (T114, T115), sandboxing extension
 processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension processes.
 
 ## Left to later tasks
@@ -260,7 +262,7 @@ processes (T113; Windows v1 runs them unsandboxed), restarting crashed extension
 |---|---|
 | The static list of built-ins in the host's composition root, bootstrap at startup, `ext/<id>/*` on the client protocol, recording the registry's events in the event store | T129 (T105 for the store) |
 | `Fx.Sdk` and `@fx/sdk` as published packages generated from the codecs; host capabilities in `IExtensionEnv` (and over the protocol, `host/*`); a TS sample passing the parity suite | T109, T115 |
-| The components phase's installer | T110 |
+| Wiring the installer into the host: planning the lockfile from the component definitions of builtin and host-config candidates before the bootstrap, `Components.installFor` as `InstallComponents` | T129 |
 | The `bun` runtime (`fx.exthost.bun`, a process extension contributing `ExtensionRuntime "bun"`) | T115 |
 | Model-egress hooks on every model-bound payload (`Hook.transform`/`Hook.gate` on a privileged point) | T124 |
 | Disabling and pinning from host config and policy; variants selecting extensions (`IVariants`) and profiles recording extension versions (spec §15) | T106 |

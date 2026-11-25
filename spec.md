@@ -230,12 +230,12 @@ let render cfg (s: SessionState) =
 
 ```fsharp
 type Component =
-  { Id: string; Version: VersionRange
-    Methods: InstallMethod list
-    DependsOn: ComponentRef list
+  { Id: string; Version: SemVer                     // exact: one definition per version
+    Methods: (TargetTriple list * InstallMethod) list   // per target (empty: any), in order of preference
+    DependsOn: ComponentRef list                    // id + version range
     Layout: InstallLayout
     Exports: Exports
-    Probe: Argv * expect: string option
+    Probe: (Argv * expect: string option) option
     Platforms: TargetTriple list; Size: SizeHint }
 
 type InstallMethod =
@@ -247,8 +247,8 @@ type InstallMethod =
   | Custom       of ExtensionRef
 ```
 
-- **Planner (host):** resolves components and writes `fx.components.lock`; its hash is part of the profile.
-- **Installer (`envd`):** resolve → fetch → verify → stage → activate → probe; repair/upgrade/prune; locks + refcounts; installs into `~/.fx/runtimes/…` (`%LOCALAPPDATA%\fx\…` on Windows). Never touches `PATH` or user-global installs.
+- **Planner (host):** resolves components (highest version in every range, dependencies included; a method per target) and writes `fx.components.lock`, canonical and reproducible; its hash is part of the profile.
+- **Installer (`envd`):** resolve → fetch → verify → stage → probe → activate (one atomic rename of the probed staging directory, so an install is never half active); repair/upgrade/prune; locks + refcounts (holders, published per installer in the install root); installs into `~/.fx/runtimes/…` (`%LOCALAPPDATA%\fx\…` on Windows). Never touches `PATH` or user-global installs. Details: `docs/modules/components.md`.
 - **Placement:** `env-fetch`, `host-push`, `prebaked`. Mirrors; `fx runtime bundle|import` for offline.
 - **Trust:** **vendor-index digests accepted by default** (policy can require pinned digests); `Script` sandboxed and disable-able; `System` read-only; first install is a **grant**.
 - Installer conformance suite.
