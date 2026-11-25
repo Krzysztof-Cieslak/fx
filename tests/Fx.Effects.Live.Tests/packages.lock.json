@@ -96,7 +96,14 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
-          "Fx.Effects": "[0.0.0, )"
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.prelude": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
         }
       }
     }

@@ -23,11 +23,13 @@
     <Compile Include="Shell.fs" />
     <Compile Include="Secrets.fs" />
     <Compile Include="Trace.fs" />
+    <Compile Include="Http.fs" />
     <Compile Include="Fakes\FakeClock.fs" />
     <Compile Include="Fakes\FakeIds.fs" />
     <Compile Include="Fakes\InMemoryFs.fs" />
     <Compile Include="Fakes\ScriptedShell.fs" />
     <Compile Include="Fakes\InMemorySecrets.fs" />
+    <Compile Include="Fakes\InMemoryHttp.fs" />
     <Compile Include="Replay\Journal.fs" />
   </ItemGroup>
 </Project>
