@@ -216,6 +216,16 @@ module RuntimeSpec =
                 "file." + file.Name
         ]
 
+    /// A file in a directory, joined with the target's separator (`\` on Windows, `/` elsewhere), so
+    /// that a launch resolves the same wherever it is computed.
+    let private fileIn (os: Os) (dir: string) (name: string) =
+        let separator = if os = Os.Windows then '\\' else '/'
+
+        if dir.EndsWith separator || dir.EndsWith '/' then
+            dir + name
+        else
+            dir + string separator + name
+
     /// The value of every placeholder for a launch.
     let variables
         (spec: RuntimeSpec)
@@ -229,7 +239,7 @@ module RuntimeSpec =
             for name, path in installed.Bin do
                 "bin." + name, path
             for file in spec.Files do
-                "file." + file.Name, Path.Combine(session.Owned.Config, file.Name)
+                "file." + file.Name, fileIn session.Target.Os session.Owned.Config file.Name
         ]
 
     /// Whether a path is absolute on the target: `/…` on Linux and macOS; `C:\…` (or `C:/…`) or
