@@ -1,15 +1,13 @@
 name: PTY probe
 
 # What a terminal looks like on every target (docs/spikes/pty.md): the raw output ConPTY adds,
-# terminal queries, latency, throughput, exit codes and terminal settings. Runs when the probe or
-# Fx.Pty changes, or by hand. Measurements only: the CI workflow tests behaviour.
+# terminal queries, latency, throughput, exit codes and terminal settings. Measurements only (the CI
+# workflow tests behaviour) on eight runners, so never on pull requests: weekly, or by hand
+# (`gh workflow run "PTY probe" --ref <branch>` after changing the probe or Fx.Pty).
 on:
-  pull_request:
-    paths:
-      - docs/spikes/pty-probe/**
-      - src/Fx.Pty/**
-      - .github/workflows/pty-probe.yml
   workflow_dispatch:
+  schedule:
+    - cron: "47 5 * * 0"
 
 permissions:
   contents: read
@@ -23,7 +21,7 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
-  # Same image as the musl AOT jobs in ci.yml; keep them in step.
+  # Same image as the musl targets in ci.yml; keep them in step.
   ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
 
 jobs:

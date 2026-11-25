@@ -1,15 +1,13 @@
 name: Contracts benchmark
 
 # Encode, decode and preview throughput of codecs (tools/Fx.Contracts.Bench, docs/modules/contracts.md
-# "Performance") on an idle runner. Runs when the contracts change, or by hand. Results go to the job
-# summary; nothing fails on numbers. Pure managed code, so one OS is enough.
+# "Performance") on an idle runner. Results go to the job summary; nothing fails on numbers. Pure
+# managed code, so one OS is enough. Never on pull requests: weekly, or by hand
+# (`gh workflow run "Contracts benchmark" --ref <branch>` after changing the contracts).
 on:
-  pull_request:
-    paths:
-      - src/Fx.Contracts/**
-      - tools/Fx.Contracts.Bench/**
-      - .github/workflows/contracts-bench.yml
   workflow_dispatch:
+  schedule:
+    - cron: "37 6 * * 0"
 
 permissions:
   contents: read
