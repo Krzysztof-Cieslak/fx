@@ -215,8 +215,11 @@ to its requests.
 
 - **Host bindings** (`CoreSettings.Exclusions`, none by default): `fs.read` of an excluded file fails
   with code `excluded` (the origin and pattern as `error.data`) before reading a byte. Writes, patches,
-  listings and stats are allowed (names and digests are not content). The strategy fills the
-  exclusions from the session's variants with the environment's case rules (T127).
+  listings and stats are allowed (names and digests are not content). The path is matched normalized
+  and relative to the workspace (`CoreBindings.exclusionPath`), so `..` cannot step around an anchored
+  pattern; a symbolic link is matched by its own path, not its target (exclusions are a guardrail, not
+  a sandbox). The strategy fills the exclusions from the session's variants with the environment's
+  case rules (T127).
 - **Kernels** never see excluded content through the bridge; the kernel conformance suite checks that a
   read refused as excluded fails in the cell with the reason and no content.
 - **Prompt render** (T126) filters its inputs with `Exclusions.test` (pinned files, instructions,
