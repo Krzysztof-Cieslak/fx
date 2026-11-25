@@ -76,14 +76,18 @@ type ChangeQueue(capacity: int) =
                 overflow <- true
                 wake ())
 
-    /// No more changes: `Next` returns what is pending, then `None`.
+    /// The watch is closed: pending changes are dropped, and `Next` returns `None` from now on, also
+    /// a call that is waiting or debouncing. The OS watcher may still report changes it saw before it
+    /// stopped (on Windows, after `Dispose`); they are dropped too.
     member _.Complete() : unit =
         lock gate (fun () ->
             completed <- true
+            pending.Clear()
+            overflow <- false
             wake ())
 
     /// Waits for a change, then for `debounce` on the clock, and returns everything pending as one
-    /// coalesced batch; `None` once completed and drained.
+    /// coalesced batch; `None` once completed.
     member _.Next(clock: Clock, debounce: TimeSpan, cancellation: CancellationToken) : Task<WatchBatch option> =
         task {
             let mutable result = None
@@ -92,10 +96,10 @@ type ChangeQueue(capacity: int) =
             while not finished do
                 let state =
                     lock gate (fun () ->
-                        if pending.Count > 0 || overflow then
-                            Choice1Of3()
-                        elif completed then
+                        if completed then
                             Choice2Of3()
+                        elif pending.Count > 0 || overflow then
+                            Choice1Of3()
                         else
                             let w =
                                 TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
@@ -105,23 +109,29 @@ type ChangeQueue(capacity: int) =
 
                 match state with
                 | Choice1Of3() ->
-                    if debounce > TimeSpan.Zero && not (lock gate (fun () -> completed)) then
+                    if debounce > TimeSpan.Zero then
                         do! clock.Delay debounce cancellation
 
-                    let changes, lost =
+                    let taken =
                         lock gate (fun () ->
-                            let changes = List.ofSeq pending
-                            let lost = overflow
-                            pending.Clear()
-                            overflow <- false
-                            changes, lost)
+                            if completed then
+                                None
+                            else
+                                let changes = List.ofSeq pending
+                                let lost = overflow
+                                pending.Clear()
+                                overflow <- false
+                                Some(changes, lost))
 
-                    let coalesced = Changes.coalesce changes
+                    match taken with
+                    | None -> finished <- true
+                    | Some(changes, lost) ->
+                        let coalesced = Changes.coalesce changes
 
-                    if not coalesced.IsEmpty || lost then
-                        result <- Some { Changes = coalesced; Overflow = lost }
+                        if not coalesced.IsEmpty || lost then
+                            result <- Some { Changes = coalesced; Overflow = lost }
 
-                        finished <- true
+                            finished <- true
                 | Choice2Of3() -> finished <- true
                 | Choice3Of3 wait -> do! wait.WaitAsync cancellation
 

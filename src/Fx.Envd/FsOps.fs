@@ -223,9 +223,10 @@ type WatchBatch =
 /// A running watch, a record of functions like `Proc`.
 type Watcher =
     {
-        /// The next batch; `None` once the watcher is closed.
+        /// The next batch; `None` once the watch has ended.
         Next: CancellationToken -> Task<WatchBatch option>
-        /// Stops watching. Idempotent.
+        /// Stops watching. Idempotent. Nothing is delivered after it: changes not taken yet are
+        /// dropped, and `Next` returns `None`.
         Close: unit -> Task<unit>
     }
 
