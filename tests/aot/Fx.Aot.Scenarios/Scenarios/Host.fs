@@ -1,7 +1,8 @@
-/// The host's composition root (src/Fx.Host) on the JIT and as a native binary: the start (lock,
-/// config, the built-ins, the variant registry, the SQLite stores, grants, identity, environments,
-/// model access, sessions), signing in the OS user in process, a headless run in an embedded
-/// environment, a restart that continues the session, and the codecs of what `fx run --json` prints.
+/// The host's composition root (src/Fx.Host) on the JIT and as a native binary: `fx auth` on the file
+/// credential store, the start (lock, config, the built-ins, the variant registry, the SQLite stores,
+/// grants, service credentials, identity, environments, model access, sessions), signing in the OS
+/// user in process, a headless run in an embedded environment, a restart that continues the session,
+/// and the codecs of what `fx run --json` prints.
 /// The interpreter is disabled in host config, so turns end at their hands: no network, no Bun.
 module Fx.Aot.Scenarios.Host
 
@@ -16,6 +17,7 @@ open Fx.Effects
 open Fx.Effects.Fakes
 open Fx.Effects.Live
 open Fx.Sessions
+open Fx.Auth
 open Fx.Host
 open Fx.Aot.Scenarios
 
@@ -62,15 +64,29 @@ let private options (root: string) (explicit: (string * Json) list) : HostOption
     match Live.options facts workspace explicit with
     | Error e -> failwith e
     | Ok options ->
+        let paths = HostPaths.under (Path.Combine(root, "data"))
+
         { options with
-            Paths = HostPaths.under (Path.Combine(root, "data"))
+            Paths = paths
             Http = noModel
+            Keyring = InMemoryKeyring().Keyring
+            PrivateFiles = Fx.Keyring.LocalPrivateFiles.create paths.Credentials Product.Name
+            HostVariables = InMemoryVariables.create [ "ANTHROPIC_API_KEY", "scenario-key" ]
+            Prompts = false
         }
+
+/// A login's flow that pastes a key.
+let private paste: FlowRunner =
+    fun flow _ ->
+        match flow with
+        | Fx.Sdk.AuthFlow.Paste _ -> Task.FromResult(Ok(Fx.Sdk.FlowResult.Pasted(SecretText "sk-scenario")))
+        | other -> Task.FromResult(Error $"not a paste: {other}")
 
 let private quiet: RunIo =
     {
         Show = ignore
         Answer = fun _ -> Task.FromResult None
+        Decide = fun _ -> Task.FromResult None
         Interrupt = CancellationToken.None
     }
 
@@ -86,11 +102,21 @@ let private embedded () : Task<string list> =
 
             File.WriteAllText(
                 Path.Combine(data, "config.json"),
-                """{"extensions": {"disabled": ["fx.interpreter.bun-ts"]}}"""
+                """{"extensions": {"disabled": ["fx.interpreter.bun-ts"]}, "variants": {"credentials.store": "file"}}"""
             )
 
             let opts =
                 options root [ "model.role.main", Json.String "anthropic/claude-sonnet-5-5" ]
+
+            for command in [ AuthCommand.Login("openai", None); AuthCommand.List; AuthCommand.Status ] do
+                match! Commands.auth opts paste command with
+                | Error errors -> say ($"auth {command} failed: " + String.concat "; " errors)
+                | Ok(code, lines) ->
+                    let shows = (String.concat " | " lines).Contains "sk-scenario"
+                    say $"auth {command}: exit {code}, shows the key {shows}"
+
+                    for line in lines do
+                        say ("  " + line.Replace(root, "<root>"))
 
             match! Host.start opts with
             | Error errors -> say ("start failed: " + String.concat "; " errors)
@@ -103,6 +129,22 @@ let private embedded () : Task<string list> =
                     say $"extensions: {host.Extensions.Loaded.Count} active, {host.Extensions.Report.Length} reported"
 
                     say $"registry has agent.interpreter: {host.Registry.Contains(HostSlots.interpreter.Id)}"
+
+                    match!
+                        Eff.run
+                            (Host.within host CancellationToken.None)
+                            (AuthService.resolve host.Auth Fx.Ext.ModelOpenAI.Provider.def)
+                    with
+                    | Ok(resolved, kind) ->
+                        let names = resolved.Headers |> List.map fst |> String.concat ", "
+                        say $"openai resolves with {kind}: headers {names}"
+                    | Error e -> say $"openai does not resolve: {e}"
+
+                    match! Commands.auth opts paste AuthCommand.Status with
+                    | Ok _ -> say "fx auth ran beside the host"
+                    | Error errors ->
+                        let held = (String.concat "; " errors).Contains "a host is running"
+                        say $"fx auth beside the host refused: {held}"
 
                     match! Host.start opts with
                     | Ok second ->
@@ -205,13 +247,12 @@ let private composition () : string list =
 
         "built-ins: " + String.concat ", " Builtins.ids
 
-        match ModelAuth.resolve [ "OPENAI_API_KEY", "k" ] Fx.Ext.ModelOpenAI.Provider.def with
-        | Ok auth -> "openai auth: " + string auth
-        | Error e -> "openai auth: " + string e
+        for args in [ [ "login"; "openai"; "--method"; "api_key" ]; [ "status" ]; [ "bogus" ] ] do
+            match AuthCommand.parse args with
+            | Ok command -> "auth: " + string command
+            | Error e -> "auth: " + e
 
-        match ModelAuth.resolve [] Fx.Ext.ModelAnthropic.Provider.def with
-        | Ok auth -> "anthropic auth: " + string auth
-        | Error e -> "anthropic auth: " + string e
+        "core slots: " + string HostSlots.core.Length
 
         "index: "
         + Json.serialize (

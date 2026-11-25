@@ -257,10 +257,18 @@ let options (place: Place) (model: Model) (explicit: (string * Json) list) : Hos
     match Live.options facts place.Workspace explicit with
     | Error e -> failtest e
     | Ok options ->
+        let paths = HostPaths.under place.Data
+
         { options with
-            Paths = HostPaths.under place.Data
+            Paths = paths
             Http = model.Http
             Fetch = cachedFetch
+            // Credentials stay in the test: an in-memory keyring, private files in the place, the
+            // test's variables (with ANTHROPIC_API_KEY), no prompts.
+            Keyring = InMemoryKeyring().Keyring
+            PrivateFiles = Fx.Keyring.LocalPrivateFiles.create paths.Credentials Product.Name
+            HostVariables = InMemoryVariables.create (variables ())
+            Prompts = false
         }
 
 /// Starts a host, failing the test if it does not start.

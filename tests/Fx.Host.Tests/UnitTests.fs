@@ -184,35 +184,6 @@ let tests =
                 ]
 
             testList
-                "model credentials"
-                [
-                    test "the env method of each built-in provider becomes its header" {
-                        let vars = [ "ANTHROPIC_API_KEY", " sk-ant "; "OPENAI_API_KEY", "sk-oai" ]
-
-                        match ModelAuth.resolve vars Fx.Ext.ModelAnthropic.Provider.def with
-                        | Ok auth -> Expect.equal auth.Headers [ "x-api-key", "sk-ant" ] "anthropic"
-                        | Error e -> failtest (string e)
-
-                        match ModelAuth.resolve vars Fx.Ext.ModelOpenAI.Provider.def with
-                        | Ok auth -> Expect.equal auth.Headers [ "authorization", "Bearer sk-oai" ] "openai"
-                        | Error e -> failtest (string e)
-                    }
-
-                    test "without the variable the call fails naming it, and shows no value" {
-                        match ModelAuth.resolve [ "ANTHROPIC_API_KEY", "  " ] Fx.Ext.ModelAnthropic.Provider.def with
-                        | Error(ChatError.AuthFailed message) ->
-                            Expect.stringContains message "ANTHROPIC_API_KEY" "names it"
-                        | other -> failtest (string other)
-
-                        match
-                            ModelAuth.resolve [ "ANTHROPIC_API_KEY", "secret" ] Fx.Ext.ModelAnthropic.Provider.def
-                        with
-                        | Ok auth -> Expect.isFalse ((string auth).Contains "secret") "ToString hides values"
-                        | Error e -> failtest (string e)
-                    }
-                ]
-
-            testList
                 "built-ins"
                 [
                     test "every bundled package is in the static list, the samples are not" {
@@ -226,6 +197,10 @@ let tests =
                                 "egress.exclusions"
                                 "interpreter.bun-ts"
                                 "runtime.bun"
+                                "auth.standard"
+                                "store.keyring"
+                                "store.file"
+                                "store.ephemeral"
                              ]
                              |> List.map Product.extensionId
                              |> List.sort)

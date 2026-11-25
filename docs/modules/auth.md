@@ -171,11 +171,11 @@ anthropic'; or ANTHROPIC_API_KEY is not set`). A provider without methods needs 
 **The `ModelAccess` seam:** `ModelAccess.Auth` is `ProviderDef -> CancellationToken ->
 Task<Result<ResolvedAuth, ChatError>>` ([models.md](models.md)); `AuthService.modelAuth service` is
 exactly that, mapping a failure to `ChatError.Unavailable` with the provider and the hint. The host's
-composition root (T129) builds the service once (`AuthHost.start`) and sets
+composition root (`Setup.auth` in `src/Fx.Host`) builds the service once (`AuthHost.start`) and sets
 `{ access with Auth = AuthService.modelAuth service }`; the wire then gets the resolved headers through
-`ModelAccess.confine` and never sees a credential. Until it does, `env` alone (variables read through
-`SystemVariables`) is what T129's interim seam does, and the built-in providers already list `env`
-second, so switching changes nothing for a host configured by variables.
+`ModelAccess.confine` and never sees a credential. The built-in providers list `env` second, so a host
+configured by variables (`ANTHROPIC_API_KEY`, read through `SystemVariables`) works with nothing
+stored ([host.md](host.md#service-credentials-and-fx-auth)).
 
 ### Logins and flows
 
@@ -270,9 +270,10 @@ let access = { access with Auth = AuthService.modelAuth service }
 ### `auth` on the command line
 
 `AuthCommand.parse` (the arguments after `auth`) and `AuthCli.run service providers runFlow command`
-(an exit code and lines that never contain a secret) are what the CLI's entry point (T129) calls; it
-supplies the `FlowRunner` over the terminal (a paste prompt without echo; a browser and a loopback
-listener; a device code).
+(an exit code and lines that never contain a secret) are what the CLI's entry point calls (`fx auth`
+through `Commands.auth`, under the data directory's lock: [host.md](host.md#service-credentials-and-fx-auth));
+it supplies the `FlowRunner` over the terminal (a paste prompt without echo, or a line of redirected
+standard input; a device code; browser logins and their loopback listener later).
 
 | Command | Does | Prints |
 |---|---|---|
@@ -294,9 +295,8 @@ files: modes, DPAPI on Windows, no staging file left) on every target, and `keyr
 
 | What | Task |
 |---|---|
-| Composition: `AuthHost.start` at boot with the live interpreters, `AuthSlots.all` in the registry, `AuthMethods.contributionTypes` in the catalog, `ModelAccess.Auth = AuthService.modelAuth`, `AuthService.check` at startup, the `auth` commands in the CLI with a terminal `FlowRunner` | T129a |
 | `auth/*` over the client protocol (login forwarded to a capable client, list, logout, status) | T129b |
-| `command` and `sigv4` methods, auth-flow forwarding, mTLS (`ClientCert` in `ResolvedAuth`) | T509 |
+| `command` and `sigv4` methods, auth-flow forwarding, mTLS (`ClientCert` in `ResolvedAuth`); browser logins on the command line (a loopback listener for `AuthFlow.Browser`) | T509 |
 | OAuth device and PKCE methods (`Refresh` through `Resolution.Updated`), the Copilot identity profiles | T509, `fx.model.copilot` |
 | The `command` secret source; plugin sources (vaults) | with their first user |
 | Values over 2560 bytes on Windows (keep them in the file store, or a key in the Credential Manager that encrypts them) | when a provider's token sets need it |

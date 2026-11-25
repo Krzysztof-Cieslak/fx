@@ -26,6 +26,8 @@ type HostPaths =
         /// The component installer's root (the same `runtimes` directory environments on this machine
         /// use: `EnvLayout`).
         Runtimes: string
+        /// The owner-only directory of the file credential store (`LocalPrivateFiles`).
+        Credentials: string
     }
 
     override this.ToString() = $"HostPaths({this.Data})"
@@ -49,6 +51,7 @@ module HostPaths =
             Trust = Path.Combine(data, "trust.json")
             MachineId = Path.Combine(data, "machine-id")
             Runtimes = Path.Combine(data, "runtimes")
+            Credentials = Path.Combine(data, "credentials")
         }
 
     /// The per-user data directory from the process's variables: `FX_HOME` if set, else

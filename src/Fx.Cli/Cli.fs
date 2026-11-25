@@ -3,6 +3,7 @@ module Fx.Cli.Cli
 
 open System
 open Fx
+open Fx.Auth
 open Fx.Contracts
 open Fx.Envd.Live
 open Fx.Host
@@ -58,6 +59,8 @@ type Command =
     | Run of RunArgs
     | Trust of TrustArgs
     | Variants of VariantsView
+    /// Log in to model providers, or show the credentials the host uses (`auth …`).
+    | Auth of AuthCommand
 
     override this.ToString() =
         match this with
@@ -66,6 +69,7 @@ type Command =
         | Run args -> string args
         | Trust args -> string args
         | Variants view -> "variants " + string view
+        | Auth command -> "auth " + string command
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
@@ -85,6 +89,8 @@ let usage =
     + "      Trusts a project: its config, extensions and setup may run.\n"
     + $"  {bin} variants [list|explain|schema]\n"
     + "      Lists the variant slots, explains their values here, or prints the config schema.\n"
+    + $"  {bin} auth login <provider> [--method <kind>] | logout <provider> | list | status\n"
+    + "      Stores a model provider's credential, removes it, lists them, or shows how each resolves.\n"
     + $"  {bin} --help | --version | --build-info\n"
     + "\nThe interactive interface is not there yet.\n"
 
@@ -93,6 +99,12 @@ let private envdUsage =
 
 let private runUsage =
     $"Usage: {bin} run -p <prompt> [--json] [--model <provider/model>] [--surface cells-only|hybrid] [--variant <slot>=<value>]... [--session <id>] [--title <text>]\n"
+
+let private authUsage =
+    "Usage:\n"
+    + (AuthCommand.usage
+       |> List.map (fun line -> "  " + line + "\n")
+       |> String.concat "")
 
 let private failure (message: string) (help: string) =
     Print
@@ -216,6 +228,10 @@ let parse (args: string list) : Command =
     | [ "variants"; "explain" ] -> Variants VariantsView.Explain
     | [ "variants"; "schema" ] -> Variants VariantsView.Schema
     | "variants" :: _ -> failure "variants takes list, explain or schema" usage
+    | "auth" :: rest ->
+        match AuthCommand.parse rest with
+        | Ok command -> Auth command
+        | Error e -> failure e authUsage
     | other ->
         let given = String.concat " " other
         failure $"unknown arguments: {given}" usage

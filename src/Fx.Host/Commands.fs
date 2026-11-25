@@ -6,6 +6,8 @@ open Fx.Contracts
 open Fx.Effects
 open Fx.Variants
 open Fx.Extensions
+open Fx.Components
+open Fx.Auth
 
 /// What `fx variants` shows.
 [<RequireQualifiedAccess>]
@@ -116,4 +118,67 @@ module Commands =
                         + (Resolution.explain resolution
                            |> List.map (fun l -> l + "\n")
                            |> String.concat "")
+            })
+
+    /// `fx auth …` (auth.md): runs the command against the service credentials the host would start
+    /// with, under the data directory's lock (one writer of the credential stores at a time). The exit
+    /// code and the lines to print, which never hold a secret; `runFlow` runs a login's flow at the
+    /// terminal.
+    let auth
+        (options: HostOptions)
+        (runFlow: FlowRunner)
+        (command: AuthCommand)
+        : Task<Result<int * string list, string list>> =
+        let paths = options.Paths
+
+        let withExtensions (config: HostConfig) (extensions: Fx.Extensions.Host) =
+            effResult {
+                let! registry = Setup.registry extensions
+                let! resolution = Setup.resolve registry config
+                let! env = Eff.ask<HostEnv>
+
+                let resolved =
+                    { env with
+                        Variants = Variants.ofResolution resolution
+                    }
+
+                let! service =
+                    Eff.provide resolved (Setup.auth options extensions)
+                    |> EffResult.mapError List.singleton
+
+                return!
+                    Eff.provide resolved (AuthCli.run service (Setup.providers extensions) runFlow command)
+                    |> Eff.map Ok
+            }
+
+        let locked: Eff<HostEnv, Result<int * string list, string list>> =
+            effResult {
+                let! config = Setup.readConfig options
+
+                return!
+                    Eff.bracket
+                        (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
+                        ExtensionHost.stop
+                        (withExtensions config)
+            }
+
+        run
+            options
+            (effResult {
+                do!
+                    Fs.createDirectory paths.Data
+                    |> EffResult.mapError (fun e -> [ $"the data directory {paths.Data} could not be created: {e}" ])
+
+                let! held =
+                    InstallFiles.tryLock paths.Lock
+                    |> EffResult.mapError (fun e -> [ $"the host's lock {paths.Lock} could not be taken: {e}" ])
+
+                match held with
+                | None ->
+                    return!
+                        EffResult.error
+                            [
+                                $"a host is running on {paths.Data}: stop it first, or set {HostPaths.homeVariable} to another directory"
+                            ]
+                | Some held -> return! Eff.bracket (Eff.ret held) InstallFiles.release (fun _ -> locked)
             })

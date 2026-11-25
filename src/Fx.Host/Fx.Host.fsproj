@@ -3,7 +3,8 @@
     The host's composition root (spec §3, the "brain"; §16.1 bootstrap order; §16.4 built-ins): the
     data directory and its lock, config, policy and project trust, the static list of built-in
     extensions, the variant registry and resolution, the SQLite stores, the grants log, the component
-    installer, identity, environments, model access and the session host with the CodeAct strategy;
+    installer, service credentials (Fx.Auth), identity, environments, model access and the session host
+    with the CodeAct strategy and its step journal;
     embedded mode and headless runs (`fx run -p`). Pure apart from the capabilities it is handed,
     except Live.fs, which builds the live interpreters. Spec: docs/modules/host.md.
   -->
@@ -12,7 +13,6 @@
     <Compile Include="HostSlots.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Trust.fs" />
-    <Compile Include="ModelAuth.fs" />
     <Compile Include="Builtins.fs" />
     <Compile Include="SessionIndex.fs" />
     <Compile Include="HostEnv.fs" />
@@ -36,6 +36,8 @@
     <ProjectReference Include="..\Fx.Components.Live\Fx.Components.Live.fsproj" />
     <ProjectReference Include="..\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
     <ProjectReference Include="..\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
+    <ProjectReference Include="..\Fx.Auth\Fx.Auth.fsproj" />
+    <ProjectReference Include="..\Fx.Keyring\Fx.Keyring.fsproj" />
     <!-- The built-ins: a static list (spec §16.4), never loaded from assemblies. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
@@ -44,5 +46,9 @@
     <ProjectReference Include="..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.AuthStandard\Fx.Ext.AuthStandard.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreKeyring\Fx.Ext.StoreKeyring.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreFile\Fx.Ext.StoreFile.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.StoreEphemeral\Fx.Ext.StoreEphemeral.fsproj" />
   </ItemGroup>
 </Project>

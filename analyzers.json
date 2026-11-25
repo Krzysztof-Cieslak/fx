@@ -15,7 +15,7 @@
     {
       "codes": ["EFF003", "EFF004", "EFF005"],
       "files": ["src/Fx.Cli/Program.fs"],
-      "reason": "Process entry point: reads the process's variables, current directory and path once (ProcessFacts) for the host's composition root, writes the outcome of the pure Cli.parse to stdout and stderr, and asks the person at the terminal (grant prompts, Ctrl+C)."
+      "reason": "Process entry point: reads the process's variables, current directory and path once (ProcessFacts) for the host's composition root, writes the outcome of the pure Cli.parse to stdout and stderr, and asks the person at the terminal (grant prompts, a login's pasted key without echo, Ctrl+C)."
     },
     {
       "codes": ["EFF005"],
