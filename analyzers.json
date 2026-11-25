@@ -43,6 +43,11 @@
       "reason": "IShell interpreter: the only code that starts and controls processes."
     },
     {
+      "codes": ["EFF007"],
+      "files": ["src/Fx.Effects.Live/SystemHttp.fs"],
+      "reason": "IHttp interpreter: the only HTTP client of the core capabilities (model wires, auth flows); no redirects, streamed bodies."
+    },
+    {
       "codes": ["EFF006", "EFF008"],
       "files": ["src/Fx.Pty/UnixPty.fs", "src/Fx.Pty/WindowsPty.fs"],
       "reason": "ITerminal interpreter: the only code that starts and controls processes on pseudo-terminals (posix_spawn with a PTY, CreateProcessW with ConPTY)."
