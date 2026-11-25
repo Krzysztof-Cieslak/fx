@@ -253,7 +253,6 @@ what reaches each provider; the deny action; invalid settings), on all eight tar
 | What | Task |
 |---|---|
 | `Sources` from a cell's `Read` activity (kernel-side reads the bridge does not see) | T205 |
-| Building `ModelAccess` from the contributions in effect; `EgressExclusions.create (ContentExclusions.ofVariants …)` in the static list of built-ins | T129 |
 | Extensions reading their own slots (`ContentExclusions.read` in `IExtensionEnv`) | T109b |
 | Copilot organisation exclusions as a provider's own egress hooks | T210 |
 | Secret redaction by content | T601 |

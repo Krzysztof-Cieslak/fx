@@ -345,7 +345,6 @@ card, the journal, the receipts, the session's events), on all eight targets.
 | What | Task |
 |---|---|
 | Grants on sensitive bindings (`shell.exec` with compound commands split, writes outside the workspace, network) through `Hands.Guard`, pending grant requests shown in the turn | T127b |
-| Composition: the profile's variants, hands from `IEnvs` per session (`EnvHands.ofHandle`), `ModelAccess.llm`, `Questions.kinds`, registering `CodeActSlots.read`, the catalog | T129 |
 | The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
 | Partial output of commands in doubt (`shell.run`, `bash`): run them as envd processes, whose output logs resume by byte offset, and journal the process | T205 |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |

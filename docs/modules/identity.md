@@ -246,8 +246,8 @@ that name another account refuse the client whatever else it presented. Its prin
 
 | What | Task |
 |---|---|
-| Composition: the host's machine id (created once in the per-user data directory), its account (`PeerCredentials.currentAccount`, the user name), `IdentitySlots.all` in the slot registry, `IdentityProviders.contributionTypes` in the catalog, the listener's token file, the facts of each connection, ending connections on `Revocation`, each method group's least role, `session/*` over WebSocket | T129 |
-| Methods to list sessions, sign out and revoke other clients' tokens (`identity/*`) | T129, T507 |
+| The listener's token file, the facts of each connection, ending connections on `Revocation`, each method group's least role, `session/*` over WebSocket (the machine id, the account, the slots and the catalog are the host's: [host.md](host.md)) | T129b |
+| Methods to list sessions, sign out and revoke other clients' tokens (`identity/*`) | T129b, T507 |
 | Device pairing (`Login` with a one-time code, per-device keys) | T505 |
 | GitHub OAuth and OIDC providers (`Login`, `Refresh`) | T506 |
 | Roles beyond the three, sharing, epoch-fenced takeover | T507 |

@@ -254,6 +254,6 @@ environment, a missing runtime).
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |
-| Installing `Requires` in the environment; killing stale kernels when envd starts (a pid file in the owned directory). Launching over envd's capability records with assets and owned directories at `EnvLayout` is `EnvHands.ofHandle` (T127) | T129 |
+| Killing stale kernels when envd starts (a pid file in the owned directory). Installing `Requires` in the environment is the host's ([host.md](host.md)); launching over envd's capability records is `EnvHands.ofHandle` (T127) | T128 |
 | Per-session packages through the egress proxy (`caps.packages`), `process`/`Bun` as globals (a variant), cells on a `Worker` so busy loops can be stopped without a kill | later |
 | A data form of `InterpreterProvider` for declarative interpreters | T602 |

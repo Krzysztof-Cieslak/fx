@@ -240,9 +240,8 @@ type TurnRunner<'R> =
 
 | What | Task |
 |---|---|
-| `session/*` methods over JSON-RPC (send, interrupt on the control path, subscribe with `SessionLog.feed`, offers on attach), capability checks of answering clients, activating sessions with work in flight at start | T129 |
-| `SnapshotEvery`, `MaxGap` and `ProfileAttempts` as variant slots | T129 |
-| Each method's least role ([identity.md](identity.md#roles)); epoch-fenced takeover | T129, T507 |
+| `session/*` methods over JSON-RPC (send, interrupt on the control path, subscribe with `SessionLog.feed`, offers on attach), capability checks of answering clients (the host starts sessions with work in flight: [host.md](host.md)) | T129b |
+| Each method's least role ([identity.md](identity.md#roles)); epoch-fenced takeover | T129b, T507 |
 | The strategy behind `TurnRunner` and `TurnResult` validation (`Ensure`) are the CodeAct strategy's ([codeact.md](codeact.md)); richer `Evidence` | T201, T205 |
 | Decision cards, grant requests, gates, auth flows, installs as request kinds | T301, T123, T306, T121, T110 |
 | Attachments (blob references) in prompts | when the TUI sends files |

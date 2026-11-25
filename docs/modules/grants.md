@@ -256,7 +256,7 @@ this connection" (`Attribution`, or `NotAPerson`). The TypeScript types are gene
 
 | What | Task |
 |---|---|
-| Composition in the host and embedded mode; the installer forwarding approvals from an environment | T129 |
+| The installer forwarding approvals from an environment on another machine (the host's composition: [host.md](host.md)) | T501 |
 | Several stores at once (a repository-policy store's grants next to the host-local ones) | when such a store exists |
 | `IGrants` for extensions (`IExtensionEnv`), and over the extension protocol | T109b |
 | Snapshots of the grants log, bounding the history kept in the state | when a long-lived host needs it |
