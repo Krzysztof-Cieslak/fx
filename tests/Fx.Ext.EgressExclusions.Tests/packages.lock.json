@@ -98,6 +98,7 @@
           "Fx.Environments": "[0.0.0, )",
           "Fx.Ext.EgressExclusions": "[0.0.0, )",
           "Fx.Ext.EnvLocal": "[0.0.0, )",
+          "Fx.Ext.IdentityLocalOsUser": "[0.0.0, )",
           "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
           "Fx.Ext.ModelAnthropic": "[0.0.0, )",
           "Fx.Ext.ModelCanonical": "[0.0.0, )",
@@ -106,6 +107,7 @@
           "Fx.Ext.Sample": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
           "Fx.Grants.Host": "[0.0.0, )",
+          "Fx.Identity.Host": "[0.0.0, )",
           "Fx.Interpreters": "[0.0.0, )",
           "Fx.Kernel": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
@@ -208,6 +210,13 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.ext.identitylocalosuser": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.interpreterbunts": {
         "type": "Project",
         "dependencies": {
@@ -264,7 +273,8 @@
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
-          "Fx.Contracts": "[0.0.0, )"
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Identity": "[0.0.0, )"
         }
       },
       "fx.grants.host": {
@@ -277,6 +287,23 @@
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )",
           "Fx.Store": "[0.0.0, )"
+        }
+      },
+      "fx.identity": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
+      },
+      "fx.identity.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Identity": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.interpreters": {
@@ -371,6 +398,7 @@
           "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects": "[0.0.0, )",
           "Fx.Grants": "[0.0.0, )",
+          "Fx.Identity": "[0.0.0, )",
           "Fx.Models": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Variants": "[0.0.0, )"
