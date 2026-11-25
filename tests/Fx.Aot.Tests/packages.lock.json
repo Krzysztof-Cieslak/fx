@@ -113,6 +113,7 @@
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Pty": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sessions.Host": "[0.0.0, )",
           "Fx.Sqlite": "[0.0.0, )",
           "Fx.Store.Live": "[0.0.0, )",
           "Fx.Transport.Http": "[0.0.0, )",
@@ -309,6 +310,23 @@
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.sessions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )"
+        }
+      },
+      "fx.sessions.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
         }
       },
       "fx.sqlite": {
