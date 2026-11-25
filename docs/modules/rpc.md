@@ -227,6 +227,10 @@ connection's limits: `ConnectionLimits.frames`.
   parity by construction (spec §16.4, T108). Passing typed values would skip validation, and passing
   `Json` trees would skip the reader and the limits. The cost is a serialization per message, small
   next to the work behind it; bulk data goes over channels, whose frames are passed as is.
+- **Aborting keeps what was sent**, on every transport: a connection ends with `CloseOutput`, then
+  `Abort`, and the peer may not have read the last answers yet. The in-process transport behaves like
+  a pipe: frames already sent are still delivered, then the end (after `CloseOutput`) or a reset (a
+  crash).
 - **Stream framing.** A text frame is one message or batch as UTF-8 on one line ending in `\n`
   (newline-delimited JSON, as the Bun kernel speaks it; `\r\n` and empty lines are accepted; a last
   line without `\n` counts). A binary frame is a zero byte, a big-endian uint32 length, then the

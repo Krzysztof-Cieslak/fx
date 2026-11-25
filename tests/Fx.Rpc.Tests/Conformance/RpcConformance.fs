@@ -20,6 +20,8 @@ type Link =
     {
         /// The client's end, not yet initialized.
         Transport: Transport
+        /// Completes when the server's side of the connection has ended (its transport released).
+        Ended: Task
         /// Ends the server abruptly, as a crash does.
         Crash: unit -> Task
         /// Releases the server (and its process) after the test.
@@ -1107,6 +1109,9 @@ let tests (name: string) (connect: unit -> Task<Link>) : Test =
                                             """{"jsonrpc":"2.0","id":1,"method":"test/add","params":{"a":20,"b":22}}"""
 
                                     do! t.CloseOutput Shutdown.Normal CancellationToken.None
+                                    // The server answers, closes and releases its transport before this side
+                                    // reads: what it sent must survive, as on a pipe or a socket.
+                                    do! withinTask link.Ended
                                     let! response = receiveRaw t
                                     Expect.equal (Json.tryField "result" response) (Some(Json.int 42)) "answered"
                                     let! ended = endsSoon t

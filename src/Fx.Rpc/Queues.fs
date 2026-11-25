@@ -28,6 +28,8 @@ type internal BoundedQueue<'T>(budget: int64) =
         None
     // 0 open, 1 completed (drains, then ends), 2 failed (ends at once)
     let mutable state = 0
+    // Completed by `CompleteFailed`: once drained, the queue reports a failure rather than a clean end.
+    let mutable failsWhenDrained = false
 
     let fits (size: int64) = used = 0L || used + size <= budget
 
@@ -73,9 +75,12 @@ type internal BoundedQueue<'T>(budget: int64) =
             deliver handOff
             waiting.TrySetResult true |> ignore
 
-    let stop (next: int) : 'T list =
+    let stop (next: int) (failed: bool) : 'T list =
         let left, waitingProducers, waitingConsumer =
             lock gate (fun () ->
+                if state = 0 then
+                    failsWhenDrained <- failed
+
                 if state = 0 || next > state then
                     state <- next
 
@@ -213,17 +218,25 @@ type internal BoundedQueue<'T>(budget: int64) =
 
     /// Takes no more items; the consumer drains what is queued, then gets `ValueNone`. Waiting
     /// producers get false.
-    member _.Complete() : unit = stop 1 |> ignore
+    member _.Complete() : unit = stop 1 false |> ignore
+
+    /// Like `Complete`, but once drained `IsFailed` is true, unless the queue was already completed:
+    /// what was queued is still delivered, as a pipe delivers what a writer wrote before it died.
+    member _.CompleteFailed() : unit = stop 1 true |> ignore
 
     /// Takes no more items and removes the queued ones, which it returns (urgent ones first). The
     /// consumer gets `ValueNone`.
-    member _.Drain() : 'T list = stop 2
+    member _.Drain() : 'T list = stop 2 false
 
     /// Like `Drain`, discarding the items.
-    member _.Fail() : unit = stop 2 |> ignore
+    member _.Fail() : unit = stop 2 false |> ignore
 
-    /// Whether the queue was failed or drained (rather than completed).
-    member _.IsFailed = lock gate (fun () -> state = 2)
+    /// Whether the queue ended with a failure: failed or drained, or completed with `CompleteFailed`
+    /// and drained.
+    member _.IsFailed =
+        lock gate (fun () ->
+            state = 2
+            || (state = 1 && failsWhenDrained && items.Count = 0 && urgent.Count = 0))
 
 /// Background work that must finish before its owner does. Thread-safe.
 [<Sealed>]

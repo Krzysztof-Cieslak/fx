@@ -132,6 +132,29 @@ let tests =
                 Expect.equal peer (Received.Failed(TransportError.Broken "connection reset")) "reset"
             }
 
+            testTask "frames sent before an abort are still delivered, as on a pipe" {
+                let limits = { MaxText = 100; MaxBinary = 100 }
+                // Closed first: the peer reads the frame, then the end.
+                let a, b = InProcess.pair 1000 limits limits
+                let! _ = a.Send (Frame.Text "answer") none
+                do! a.CloseOutput Shutdown.Normal none
+                a.Abort()
+                let! first = within (b.Receive none)
+                let! second = within (b.Receive none)
+                Expect.equal (string first) "text (6 chars)" "the frame survives the abort"
+                Expect.equal second Received.End "then the end"
+                // Not closed first (a crash): the frame, then a reset.
+                let c, d = InProcess.pair 1000 limits limits
+                let! _ = c.Send (Frame.Text "last") none
+                c.Abort()
+                let! first = within (d.Receive none)
+                let! second = within (d.Receive none)
+                Expect.equal (string first) "text (4 chars)" "the frame survives the crash"
+                Expect.equal second (Received.Failed(TransportError.Broken "connection reset")) "then a reset"
+                let! sent = d.Send (Frame.Text "x") none
+                Expect.isError sent "the crashed end reads no more"
+            }
+
             testTask "aborting resets both ends" {
                 let limits = { MaxText = 100; MaxBinary = 100 }
                 let a, b = InProcess.pair 1000 limits limits
