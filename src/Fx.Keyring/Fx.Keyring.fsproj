@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The operating system's keyring (spec §11.4 `keyring`, §20 "OS keychains"): the macOS Keychain
+    (Security.framework), the Windows Credential Manager and DPAPI, and the Secret Service on Linux
+    over our own D-Bus client, behind the capability-shaped `Keyring` record. The pure parts are
+    Keyring.fs, InMemoryKeyring.fs, Headless.fs, DBus/Message.fs, DBus/Wire.fs, DBus/Address.fs and
+    SecretService/SessionCrypto.fs; the rest is the imperative shell, with reviewed entries in
+    analyzers.json. Findings: docs/spikes/keychains.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Keyring.fs" />
+    <Compile Include="InMemoryKeyring.fs" />
+    <Compile Include="Headless.fs" />
+    <Compile Include="DBus\Message.fs" />
+    <Compile Include="DBus\Wire.fs" />
+    <Compile Include="DBus\Address.fs" />
+    <Compile Include="Native\Libc.fs" />
+    <Compile Include="Native\Apple.fs" />
+    <Compile Include="Native\Windows.fs" />
+    <Compile Include="DBus\Connection.fs" />
+    <Compile Include="SecretService\SessionCrypto.fs" />
+    <Compile Include="SecretService\SecretServiceKeyring.fs" />
+    <Compile Include="MacKeychain.fs" />
+    <Compile Include="WindowsCredentials.fs" />
+    <Compile Include="Dpapi.fs" />
+    <Compile Include="LocalHostFacts.fs" />
+    <Compile Include="LocalKeyring.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Conformance\KeyringConformance.fs" />
+    <Compile Include="KeyringTests.fs" />
+    <Compile Include="HeadlessTests.fs" />
+    <Compile Include="WireTests.fs" />
+    <Compile Include="SessionCryptoTests.fs" />
+    <Compile Include="LiveTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Keyring\Fx.Keyring.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
+  </ItemGroup>
+</Project>

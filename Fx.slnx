@@ -38,6 +38,7 @@
     <Project Path="src/Fx.Environments/Fx.Environments.fsproj" />
     <Project Path="src/Fx.Identity/Fx.Identity.fsproj" />
     <Project Path="src/Fx.Identity.Host/Fx.Identity.Host.fsproj" />
+    <Project Path="src/Fx.Keyring/Fx.Keyring.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -89,6 +90,7 @@
     <Project Path="tests/Fx.Sessions.Host.Tests/Fx.Sessions.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Prompt.Tests/Fx.Prompt.Tests.fsproj" />
     <Project Path="tests/Fx.Environments.Tests/Fx.Environments.Tests.fsproj" />
+    <Project Path="tests/Fx.Keyring.Tests/Fx.Keyring.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/support/">
     <File Path="tests/support/Directory.Build.props" />

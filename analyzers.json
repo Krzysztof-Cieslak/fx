@@ -128,6 +128,31 @@
       "reason": "Dials local listeners (loopback, Unix socket, named pipe) for WebSocket clients: the only outgoing connection code."
     },
     {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Keyring/Native/Apple.fs", "src/Fx.Keyring/MacKeychain.fs"],
+      "reason": "IKeyring interpreter on macOS: CoreFoundation and Security.framework (SecItem*) for the keychain's generic passwords."
+    },
+    {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Keyring/WindowsCredentials.fs", "src/Fx.Keyring/Dpapi.fs"],
+      "reason": "IKeyring interpreter on Windows (Credential Manager: CredReadW, CredWriteW, CredDeleteW, CredEnumerateW) and DPAPI (CryptProtectData) for the file credential store."
+    },
+    {
+      "codes": ["EFF007", "EFF008"],
+      "files": ["src/Fx.Keyring/DBus/Connection.fs"],
+      "reason": "The D-Bus client of the Secret Service keyring: the only code that connects to the session bus (a Unix socket), authenticating with geteuid()."
+    },
+    {
+      "codes": ["EFF002"],
+      "files": ["src/Fx.Keyring/SecretService/SecretServiceKeyring.fs"],
+      "reason": "IKeyring interpreter on Linux: the Diffie-Hellman private key and AES IVs of the Secret Service's encrypted session come from the OS random number generator."
+    },
+    {
+      "codes": ["EFF003", "EFF004"],
+      "files": ["src/Fx.Keyring/LocalHostFacts.fs"],
+      "reason": "Reads, once at startup, what decides whether a keyring is usable: the session-bus, display, SSH, WSL and CI variables, and marker files (the systemd user bus, /proc's WSL kernel, container markers)."
+    },
+    {
       "codes": ["AOT002"],
       "files": ["tests/aot/Fx.Aot.Scenarios/Scenarios/Text.fs"],
       "reason": "The number-formatting scenario checks that composite String.Format behaves identically on the JIT and under Native AOT."
