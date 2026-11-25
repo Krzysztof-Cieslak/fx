@@ -228,7 +228,7 @@ Scenarios: `sandbox-policy` (rules, access, guarded directories, overrides and t
 `sandbox-choose` (the host's choice for every combination, an environment's policy),
 `sandbox-bubblewrap` (command lines, the seccomp program's digest and verdicts per architecture, the
 probe's diagnosis), `sandbox-seatbelt` (a profile and its parameters), and with `SANDBOX_TESTS=1` on
-Linux and macOS `sandbox-live` (a process confined by this OS's driver). CI's sandbox job diffs them
+Linux and macOS `sandbox-live` (a process confined by this OS's driver). CI's sandbox steps diff them
 natively (`--only sandbox-`).
 
 ## Left for later

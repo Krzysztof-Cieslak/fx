@@ -2,7 +2,7 @@
 /// through their codecs, `fx.auth.standard`'s methods and sources and the host's auth service over
 /// fakes, the `auth` commands (all pure, everywhere); the `file` store over this machine's private
 /// files (owner-only modes, DPAPI on Windows); and the `keyring` store over this machine's keyring
-/// where `keyring-roundtrip` runs (Windows, and CI's keyring job with `KEYRING_TESTS=1`).
+/// where `keyring-roundtrip` runs (Windows, and CI's keyring steps with `KEYRING_TESTS=1`).
 ///
 /// Facts are checked against the values they must have, so code that misbehaves the same way on the
 /// JIT and natively still fails.

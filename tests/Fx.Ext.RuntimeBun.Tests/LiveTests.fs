@@ -2,7 +2,8 @@
 /// installer, then launched with the hardened `LaunchSpec`. Each hardening measure has a positive
 /// control: the injection works on a plain launch of the same binary and fails on the hardened one
 /// (ported from the T009 spike's `hardening.test.ts`). Needs the network, so it runs only with
-/// NETWORK_TESTS=1 (CI: its own step on Linux, macOS and Windows, and in the Alpine jobs for musl).
+/// NETWORK_TESTS=1 (CI: its own step on Linux, macOS and Windows, and in the musl targets' Alpine
+/// containers).
 module Fx.Ext.RuntimeBun.Tests.LiveTests
 
 open System

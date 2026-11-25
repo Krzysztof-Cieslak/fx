@@ -27,15 +27,15 @@ answer. What T121 should do in each case is [below](#headless-behaviour-recommen
 Evidence, all in CI:
 
 - the keyring conformance suite (`tests/Fx.Keyring.Tests`) passes against the in-memory fake
-  everywhere, the Credential Manager on Windows (build job), a temporary keychain on macOS arm64 and
-  x64, and gnome-keyring on Linux glibc and musl (keyring job), where it runs once per session
+  everywhere, the Credential Manager on Windows (the `os` job's tests), a temporary keychain on macOS arm64
+  and x64, and gnome-keyring on Linux glibc and musl (keyring steps), where it runs once per session
   algorithm and adds interoperability with libsecret's `secret-tool` and a lock/unlock test;
 - the `keyring-*` scenarios of the JIT-vs-native diff: the D-Bus wire format, the session crypto and
   the headless decisions (pure) and the probe on all eight targets; a full round trip through the real
-  keyring on `win-x64` and `win-arm64` (AOT jobs) and on `linux-x64`, `linux-musl-x64`, `osx-arm64`
-  and `osx-x64` (keyring job); DPAPI on Windows. Each fact is checked against the value it must have,
+  keyring on `win-x64` and `win-arm64` (the JIT-vs-native diff) and on `linux-x64`, `linux-musl-x64`,
+  `osx-arm64` and `osx-x64` (keyring steps); DPAPI on Windows. Each fact is checked against the value it must have,
   so a keyring that misbehaves identically on the JIT and natively still fails;
-- the keyring job runs the native probe in each headless state it can set up and checks the answer
+- the keyring steps run the native probe in each headless state it can set up and checks the answer
   (`KEYRING_EXPECT`): no session bus, no Secret Service, no default collection, ready, locked (Linux),
   ready and locked (macOS).
 
@@ -57,8 +57,8 @@ D-Bus client). No design change.
 | `src/Fx.Keyring/LocalKeyring.fs` | `LocalKeyring.settings facts` and `LocalKeyring.create os settings`: this machine's keyring |
 | `tests/Fx.Keyring.Tests` | `KeyringConformance` (a function from a `Keyring` to a `Test`), the fake, the wire format against bytes worked out from the specification, the crypto against known answers from Python and openssl, the headless decisions, and the live keyrings |
 | `tests/aot/Fx.Aot.Scenarios/Scenarios/Keyring.fs` | The `keyring-*` scenarios (below) |
-| `tests/aot/Fx.Aot.Diff` | `--only <prefix>` runs only some scenarios (the keyring job's diff) |
-| `.github/workflows/ci.yml` | The `keyring` job |
+| `tests/aot/Fx.Aot.Diff` | `--only <prefix>` runs only some scenarios (the keyring steps' diff) |
+| `.github/workflows/ci.yml`, `.github/scripts/keyring-*.sh` | The keyring steps (the `keyring` job until CI went to one job per OS) |
 
 ```fsharp
 let facts = LocalHostFacts.read ()                       // once, in the composition root
@@ -247,12 +247,13 @@ Recommendations:
 
 ## CI
 
-- **Windows:** nothing to prepare: the runners' sessions have a credential set. The build job runs the
-  live tests (the Credential Manager and DPAPI) on `windows-latest`; the AOT jobs run
-  `keyring-roundtrip` and `keyring-dpapi` on `win-x64` (`windows-2025`) and `win-arm64`
-  (`windows-11-arm`).
-- **The keyring job** (`linux-x64`, `linux-musl-x64`, `osx-arm64`, `osx-x64`) publishes the scenarios
-  natively, then:
+- **Windows:** nothing to prepare: the runners' sessions have a credential set. The `os` job's tests
+  run the live tests (the Credential Manager and DPAPI) on `windows-2025`; the JIT-vs-native diff runs
+  `keyring-roundtrip` and `keyring-dpapi` on `win-x64` (`windows-2025`) and, in the full tier,
+  `win-arm64` (`windows-11-arm`).
+- **The keyring steps** (`.github/scripts/keyring-*.sh`), on `linux-x64` and `osx-arm64` (the `os`
+  jobs, when keyring or credential code changes and in the full tier) and on `linux-musl-x64` and
+  `osx-x64` (the `targets` job, full tier), run once the scenarios are published natively:
   - **Linux:** installs `dbus`, `gnome-keyring` and `libsecret-tools` (Ubuntu) or `dbus` and
     `gnome-keyring` (Alpine, which also needs a machine id and a password-database entry for the
     container's user, or `dbus-daemon` refuses to start). The native probe must report each state in
@@ -266,7 +267,7 @@ Recommendations:
     first in the search list and makes it the default; runs the live tests and the diff; the probe must
     say `ready`, then `locked` after `security lock-keychain`; finally restores the login keychain as
     the default and deletes the temporary one. (The runners' own login keychain is unlocked: the probe
-    says `ready` before the temporary keychain exists. The job still never writes to it.)
+    says `ready` before the temporary keychain exists. CI still never writes to it.)
 - **musl:** the D-Bus client is managed code, so musl needs nothing special; Alpine's gnome-keyring
   works under `dbus-run-session` once the user is in `/etc/passwd`.
 

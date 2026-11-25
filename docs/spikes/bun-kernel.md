@@ -1,6 +1,6 @@
 # Spike: Bun kernel (T009)
 
-Spec: §6.2–6.6, §18. Code: [`spikes/bun-kernel/`](../../spikes/bun-kernel/). CI job: **Bun kernel spike** (Linux, macOS, Windows).
+Spec: §6.2–6.6, §18. Code: [`spikes/bun-kernel/`](../../spikes/bun-kernel/). CI: the **Bun kernel spike** step of the Lint job (Linux), when the spike changes and in the full tier.
 
 **Question.** Can the `bun-ts` CodeAct kernel run on a pinned Bun with the hardened launch from §6.3, keep state across cells with `node:vm` + `Bun.Transpiler` replMode, support top-level await, and type-check cells against a generated `.d.ts`?
 

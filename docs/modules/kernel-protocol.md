@@ -304,7 +304,7 @@ in process and as a child process (`Fx.Aot.Scenarios kernel-peer`), and the **bu
 (`fx.interpreter.bun-ts`) as the product launches it: its assets extracted and checked, on the pinned
 Bun 1.4.5 through `fx.runtime.bun`'s hardened launch (`Interpreter.prepare`, [interpreters.md](interpreters.md)).
 The tests download that Bun and check it against the pinned SHA-256 (`artifacts/kernel-bun-ts/`;
-skipped offline, required in CI, which also runs it in an Alpine container for musl). The script
+skipped offline, required in CI, whose full tier also runs it in an Alpine container for musl). The script
 kernel is a second implementation, so the protocol is proven language-neutral.
 
 ## Native AOT

@@ -1,7 +1,7 @@
 /// Fx.Keyring (T007, docs/spikes/keychains.md): the D-Bus wire format and the Secret Service's
 /// session crypto (pure, everywhere), the headless decisions, the probe of this machine's keyring,
 /// and a round trip through the real keyring: the Credential Manager and DPAPI on Windows, and, with
-/// `KEYRING_TESTS=1` (CI's keyring job), the Keychain on macOS and the Secret Service on Linux.
+/// `KEYRING_TESTS=1` (CI's keyring steps), the Keychain on macOS and the Secret Service on Linux.
 ///
 /// Facts are checked against the values they must have, so a keyring that misbehaves the same way on
 /// the JIT and natively still fails. `keyring-detect` also checks `KEYRING_EXPECT` when it is set,

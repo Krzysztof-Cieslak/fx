@@ -80,7 +80,7 @@ type StoredCredential = { Method: string; Secret: SecretText; Meta: Map<string, 
   writes; persistence across opens; secrets that never print. Each test uses ids of its own and deletes
   them, so it runs against a person's real keyring. It runs on `ephemeral`, `file` over in-memory and
   this machine's private files (every OS), `keyring` over the in-memory keyring (and a Windows-sized
-  one), and `keyring` over the OS keyring on Windows and in CI's keyring job (gnome-keyring on glibc and
+  one), and `keyring` over the OS keyring on Windows and in CI's keyring steps (gnome-keyring on glibc and
   musl, a temporary keychain on macOS), `KEYRING_TESTS=1`.
 
 | Store | Keeps credentials in | Protection |
@@ -289,7 +289,7 @@ No reflection; the keyrings' interop is T007's. Scenarios: `auth-store-choice` (
 over fakes with the built-ins: resolution per provider, a login, status, list, secrets, logout, parsing),
 `auth-host-variables` (`SystemVariables`), `auth-file-store` (the file store over this machine's private
 files: modes, DPAPI on Windows, no staging file left) on every target, and `keyring-credential-store`
-(the keyring store over the OS keyring) where `keyring-roundtrip` runs (Windows; CI's keyring job).
+(the keyring store over the OS keyring) where `keyring-roundtrip` runs (Windows; CI's keyring steps).
 
 ## Left to later tasks
 

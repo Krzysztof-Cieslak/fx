@@ -243,7 +243,7 @@ fakes and the live interpreters on a temporary directory both pass it, on Linux,
 - methods other than `archive` are refused with an error that names T211.
 
 `tests/Fx.Ext.RuntimeBun.Tests` (`NETWORK_TESTS=1`; its own CI step on Linux, macOS and Windows, and
-an Alpine job for musl) installs the pinned Bun for the runner's platform from GitHub through the
+in the musl targets' Alpine containers) installs the pinned Bun for the runner's platform from GitHub through the
 planner, the lockfile and the installer, and launches it (runtimes.md).
 
 ## Native AOT
