@@ -1,7 +1,7 @@
 /// The sample extension passes the same suites in the host's process (`native`), behind the process
 /// runtime over in-memory pipes, in a child process (`process`: `Fx.Aot.Scenarios ext-peer`, served by
-/// the F# SDK's `ExtensionProcess.run`), and written in TypeScript against `@fx/sdk`, as a process on
-/// the pinned Bun.
+/// the F# SDK's `ExtensionProcess.run`), built from the SDK's NuGet packages alone, and written in
+/// TypeScript against `@fx/sdk`, as a process on the pinned Bun.
 module Fx.Extensions.Tests.ParityTests
 
 open Expecto
@@ -16,6 +16,7 @@ let tests =
             ParitySuite.tests "process (in memory)" SampleHost.inMemoryProcess
             ParitySuite.tests "process (child)" SampleHost.childProcess
             ParitySuite.tests "process (TypeScript on Bun)" TypeScriptSample.load
+            ParitySuite.tests "process (F# from the SDK packages)" PackagedSample.load
         ]
 
 [<Tests>]
@@ -31,4 +32,5 @@ let servers =
             ServerConformance.tests "F# (in process)" ServerConformance.inProcess
             ServerConformance.tests "F# (child)" (ServerConformance.child System.AppContext.BaseDirectory peer)
             ServerConformance.tests "TypeScript on Bun" TypeScriptSample.connect
+            ServerConformance.tests "F# from the SDK packages" PackagedSample.connect
         ]

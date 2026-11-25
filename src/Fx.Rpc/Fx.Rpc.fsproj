@@ -7,6 +7,11 @@
     Spec: docs/modules/rpc.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>JSON-RPC 2.0: typed methods, the connection engine, binary channels and the stream, WebSocket and in-process transports.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Protocol.fs" />
     <Compile Include="Wire.fs" />

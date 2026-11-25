@@ -5,6 +5,11 @@
     System.Text.Json, spans or reflection. Module spec: docs/modules/contracts.md.
   -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Typed contracts: an exact JSON, Schema, and codec combinators with validation and bounded previews.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="JsonNumber.fs" />
     <Compile Include="Json.fs" />

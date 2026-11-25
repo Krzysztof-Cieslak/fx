@@ -10,6 +10,8 @@
   -->
   <PropertyGroup Label="Product">
     <FxProductName>fx</FxProductName>
+    <!-- The name with a leading capital (Product.pascalName), for NuGet package ids: <FxPascalName>.Sdk. -->
+    <FxPascalName>$(FxProductName.Substring(0, 1).ToUpperInvariant())$(FxProductName.Substring(1))</FxPascalName>
     <Version>0.0.0</Version>
     <Product>$(FxProductName)</Product>
     <Authors>$(FxProductName) contributors</Authors>

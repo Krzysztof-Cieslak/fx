@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Bottom layer: no project or package dependencies beyond FSharp.Core; Fable-compatible. -->
 
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The product's name and the names derived from it.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <!-- Items are evaluated after all properties, so IntermediateOutputPath is final here. -->
     <Compile Include="$(IntermediateOutputPath)ProductConstants.g.fs" Link="ProductConstants.g.fs" />

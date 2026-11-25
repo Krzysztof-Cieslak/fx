@@ -6,6 +6,11 @@
     built-in extensions run in the binary and see only Fx.Sdk. ExtensionProcess.fs is the one shell
     file (the console). Spec: docs/modules/sdk.md.
   -->
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The server side of the extension protocol, for extensions that run as their own process.</Description>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="ExtensionProtocol.fs" />
     <Compile Include="ExtensionServer.fs" />
