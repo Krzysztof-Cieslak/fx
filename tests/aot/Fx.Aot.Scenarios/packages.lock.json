@@ -76,7 +76,26 @@
           "Fx.Store.Live": "[0.0.0, )"
         }
       },
+      "fx.environments": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Components": "[0.0.0, )",
+          "Fx.Envd": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
       "fx.ext.egressexclusions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
+      "fx.ext.envlocal": {
         "type": "Project",
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",

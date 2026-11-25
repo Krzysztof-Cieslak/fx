@@ -12,6 +12,7 @@ let private usage =
     + "  ext-peer           serve the sample extension on stdin and stdout (extension protocol)\n"
     + "  kernel-peer        serve the script kernel on stdin and stdout (kernel protocol)\n"
     + "  envd-peer <workspace> <state>   serve envd on stdin and stdout (environment protocol)\n"
+    + "  envd --stdio --workspace <dir> --state <dir> [--shell <name>]   the binary's envd mode, as hosts start it\n"
 
 let private writeLines (lines: string seq) =
     for line in lines do
@@ -57,6 +58,7 @@ let main argv =
     | [ "ext-peer" ] -> Extensions.SampleHost.servePeer ()
     | [ "kernel-peer" ] -> Kernel.ScriptKernel.serve ()
     | [ "envd-peer"; workspace; state ] -> Envd.servePeer workspace state
+    | "envd" :: "--stdio" :: options -> Environments.serveEnvd options
     | _ ->
         stderr.Write usage
         2

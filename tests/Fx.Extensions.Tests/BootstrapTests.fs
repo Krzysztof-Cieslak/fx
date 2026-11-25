@@ -622,6 +622,40 @@ let tests =
                     "privileged"
             }
 
+            test "fx.env.local loads natively; a project cannot contribute environment providers" {
+                let local = Fx.Ext.EnvLocal.EnvLocal.extension
+                let host = bootstrap [ builtin local ]
+                Expect.equal (report host) [ $"{local.Manifest.Id} [in-binary] activated" ] "activated"
+
+                match ExtensionHost.contributions EnvProviders.contributionType host with
+                | [ contributed ] ->
+                    Expect.equal contributed.By $"{local.Manifest.Id}/local" "the provider, by kind"
+                    Expect.equal contributed.Value.Kind "local" "its kind"
+                | other -> failtest $"{other}"
+
+                let fromProject =
+                    bootstrapWith
+                        { defaultSettings with
+                            Trust =
+                                { defaultSettings.Trust with
+                                    ProjectTrusted = true
+                                }
+                        }
+                        [
+                            Candidate.create
+                                Source.Project
+                                (Package.Native
+                                    { local with
+                                        Manifest = { local.Manifest with Id = "acme.env" }
+                                    })
+                        ]
+
+                Expect.stringStarts
+                    (List.head (report fromProject))
+                    "acme.env [in-binary] rejected: trust.privileged"
+                    "privileged"
+            }
+
             test "a process that cannot start fails its extension" {
                 let manifest =
                     { SampleHost.processManifest () with

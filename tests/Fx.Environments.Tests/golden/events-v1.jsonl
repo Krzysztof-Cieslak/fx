@@ -1,0 +1,21 @@
+{"at":1767225600000000,"id":"a","kind":"requested","spec":{"components":{"placement":"env-fetch"},"config":{},"name":"dev","policy":{},"provider":"local","setup":{"run":[],"secrets":[]},"workspace":{"path":"/src/app","source":"existing"}}}
+{"attempt":1,"id":"a","kind":"provisioned","lease":{"data":{},"home":"/home/u/.fx/environments/a","id":"a","provider":"local","workspace":"/src/app"}}
+{"attempt":1,"id":"a","kind":"bootstrapped","machine":{"dataDir":"/home/u/.fx","sameHost":true,"target":"linux-x64-glibc"},"transport":"in-process"}
+{"attempt":1,"id":"a","kind":"connected","platform":{"arch":"x64","caseSensitive":true,"features":["pty","watch","snapshots"],"libc":"glibc","os":"linux","pathSeparator":"/","shell":{"args":["-c"],"program":"/bin/sh"},"version":"0.0.0","workspace":"/src/app"}}
+{"attempt":1,"components":["bun@1.4.5"],"id":"a","kind":"readied"}
+{"id":"a","kind":"detached","reason":"the connection to envd ended (peer)"}
+{"attempt":2,"id":"a","kind":"attaching"}
+{"attempt":2,"id":"a","kind":"bootstrapped","machine":{"dataDir":"/home/u/.fx","sameHost":true,"target":"linux-x64-glibc"},"transport":"piped"}
+{"attempt":2,"id":"a","kind":"connected","platform":{"arch":"x64","caseSensitive":true,"features":["pty","watch","snapshots"],"libc":"glibc","os":"linux","pathSeparator":"/","shell":{"args":["-c"],"program":"/bin/sh"},"version":"0.0.0","workspace":"/src/app"}}
+{"attempt":2,"components":[],"id":"a","kind":"readied"}
+{"id":"a","kind":"started","step":"suspend"}
+{"id":"a","kind":"suspended"}
+{"id":"a","kind":"started","step":"resume"}
+{"id":"a","kind":"resumed"}
+{"at":1767225600000000,"id":"b","kind":"requested","spec":{"components":{"placement":"env-fetch"},"config":{},"name":"dev","policy":{},"provider":"local","setup":{"run":[],"secrets":[]},"workspace":{"path":"/src/app","source":"existing"}}}
+{"id":"b","kind":"failed","reason":"the workspace /x does not exist","step":"provision"}
+{"at":1767225600000000,"id":"c","kind":"requested","spec":{"components":{"placement":"env-fetch"},"config":{},"name":"dev","policy":{},"provider":"local","setup":{"run":[],"secrets":[]},"workspace":{"path":"/src/app","source":"existing"}}}
+{"attempt":1,"id":"c","kind":"provisioned","lease":{"data":{},"home":"/home/u/.fx/environments/c","id":"c","provider":"local","workspace":"/src/app"}}
+{"id":"c","kind":"lost","reason":"the local provider no longer has it"}
+{"id":"a","kind":"started","step":"destroy"}
+{"id":"a","kind":"destroyed"}
