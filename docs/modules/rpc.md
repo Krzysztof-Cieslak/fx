@@ -147,8 +147,8 @@ Three loops per connection, plus the handlers:
   notifications sent before it. A notification handler that waits for a call to the same peer can
   stall the queue behind it: start the call and return instead.
 - **Writer.** The only caller of `Transport.Send`, over a bounded queue (`MaxOutboundBytes`; a larger
-  message waits for an empty queue). Senders wait for room. Credit, refused-channel and
-  `$/cancelRequest` frames skip the queue (their number is bounded by the channels and calls).
+  message waits for an empty queue). Senders wait for room. Channel open, credit, refused-channel
+  and `$/cancelRequest` frames skip the queue (their number is bounded by the channels and calls).
 
 ### Requests in flight
 
@@ -183,7 +183,9 @@ connection started has finished. A crashed peer looks like `Peer` on a pipe and 
 Multiplexed, ordered, bidirectional byte streams for PTY output, blobs and port forwarding (spec §17):
 
 - `Peer.OpenChannel` (or `Rpc.openChannel`) allocates an id: odd on the client side, even on the
-  server side, never reused. Send the id in a request or a result (`Rpc.channelId` is its codec); the
+  server side, never reused. Ids reach the peer in increasing order (it treats a lower one as a
+  protocol violation), so the open frame is queued with the allocation, under one lock: channels can
+  be opened from many threads at once. Send the id in a request or a result (`Rpc.channelId` is its codec); the
   peer takes it with `AcceptChannel`, once. The opener may write at once: data that arrives before the
   peer accepts is buffered, bounded by the window.
 - **Credit:** each side's `initialWindow` is what the other may send on a new channel before it gets

@@ -357,6 +357,8 @@ type internal ChannelTable
 
     /// Opens a channel; the peer accepts it with the id (sent in a request or result).
     member _.Open(cancellation: CancellationToken) : Task<Result<Channel, ChannelError>> =
+        cancellation.ThrowIfCancellationRequested()
+
         let opened =
             lock gate (fun () ->
                 match closed, settings () with
@@ -372,21 +374,13 @@ type internal ChannelTable
                         nextLocal <- nextLocal + 2u
                         let channel = Channel(id, host, l.InitialWindow, r.InitialWindow, r.MaxFramePayload)
                         channels[id] <- channel
+                        // The peer requires ids in increasing order: queue the open frame under the
+                        // lock that allocated the id, so concurrent opens cannot swap. Urgent, so it
+                        // never waits; nothing of the channel can be queued before it anyway.
+                        sendUrgent (Frame.Binary(ChannelFrame.encode (ChannelFrame.Open id)))
                         Ok channel)
 
-        match opened with
-        | Error e -> Task.FromResult(Error e)
-        | Ok channel ->
-            task {
-                let! sent =
-                    host.Send(Frame.Binary(ChannelFrame.encode (ChannelFrame.Open channel.Id)), cancellation)
-
-                if sent then
-                    return Ok channel
-                else
-                    channel.Fail(ChannelError.ConnectionClosed CloseReason.Local)
-                    return Error(ChannelError.ConnectionClosed CloseReason.Local)
-            }
+        Task.FromResult opened
 
     /// Takes a channel the peer opened. Each one can be accepted once.
     member _.Accept(id: uint32) : Result<Channel, ChannelError> =
