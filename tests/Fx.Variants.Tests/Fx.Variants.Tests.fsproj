@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="Conformance\VariantsConformance.fs" />
+    <Compile Include="SlotTests.fs" />
+    <Compile Include="ResolutionTests.fs" />
+    <Compile Include="ProfileTests.fs" />
+    <Compile Include="VariantsTests.fs" />
+    <Compile Include="MatrixTests.fs" />
+    <Compile Include="CoreSlotsTests.fs" />
+    <Compile Include="RecordingTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <!-- Expecto.FsCheck only requires FsCheck >= 3.0.0; pin the version we test with. -->
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Variants\Fx.Variants.fsproj" />
+    <!-- The recording contract stores profiles in the blob store and binds them in event streams. -->
+    <ProjectReference Include="..\..\src\Fx.Store\Fx.Store.fsproj" />
+  </ItemGroup>
+</Project>

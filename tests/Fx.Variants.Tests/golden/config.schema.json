@@ -1,0 +1,158 @@
+{
+  "type": "object",
+  "properties": {
+    "agent.actionSurface": {
+      "type": "string",
+      "enum": [
+        "cells-only",
+        "hybrid"
+      ],
+      "description": "How the agent acts: cells-only (one cell tool and finish) or hybrid (cells plus direct read, edit and bash tools)."
+    },
+    "edit.guard": {
+      "type": "string",
+      "enum": [
+        "off",
+        "warn",
+        "require"
+      ],
+      "description": "What editing a range the agent has not read does: off, warn, or require reading it first (an error)."
+    },
+    "values.previewLimits": {
+      "$ref": "#/$defs/Limits",
+      "description": "The bounds of value previews shown to models: characters, items, depth and string length."
+    },
+    "values.inlineMaxBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048576,
+      "description": "The largest value, in bytes of JSON, that is copied inline; larger values travel as blob references."
+    },
+    "shell.windows": {
+      "type": "string",
+      "enum": [
+        "pwsh",
+        "powershell"
+      ],
+      "description": "The shell that runs scripts on Windows: pwsh (PowerShell 7) or powershell (Windows PowerShell)."
+    },
+    "goal.context": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "compact",
+        "fresh-handoff"
+      ],
+      "description": "How a goal's iterations carry context: continue, compact, or fresh-handoff (a fresh session with a handoff)."
+    },
+    "model.role.main": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the main role, as provider/model; null until configured."
+    },
+    "model.role.fast": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the fast role, as provider/model; null until configured."
+    },
+    "model.role.summarizer": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the summarizer role, as provider/model; null until configured."
+    },
+    "model.role.review": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the review role, as provider/model; null until configured."
+    },
+    "model.role.judge": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the judge role, as provider/model; null until configured."
+    },
+    "model.role.embed": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[^\\s]+$",
+          "description": "A model: provider/model, e.g. \"anthropic/claude-opus\"."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model for the embed role, as provider/model; null until configured."
+    }
+  },
+  "additionalProperties": false,
+  "description": "Variant selections: slot ids and their values.",
+  "$defs": {
+    "Limits": {
+      "type": "object",
+      "properties": {
+        "maxChars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxStringChars": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "maxChars",
+        "maxItems",
+        "maxDepth",
+        "maxStringChars"
+      ]
+    }
+  }
+}
