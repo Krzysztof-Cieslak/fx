@@ -79,12 +79,15 @@ In this order; any expected failure is an `Error` with every line, and what star
 1. The data directory and its lock (`another host is running on …`).
 2. Trust, host config, policy, and the project's config once trusted (`Setup.readConfig`).
 3. **Extensions** (`Setup.bootstrap`, spec §16.1): the static list (`Builtins.candidates`: env.local,
-   identity.local-os-user, store.keyring, store.file, store.ephemeral, auth.standard, model.anthropic,
-   model.openai, egress.exclusions, interpreter.bun-ts, runtime.bun) plus `HostOptions.Extensions`,
+   sandbox.bubblewrap, sandbox.seatbelt, sandbox.none (the confining drivers first: `auto` takes the
+   first that confines on an environment's OS), identity.local-os-user, store.keyring, store.file,
+   store.ephemeral, auth.standard, model.anthropic, model.openai, egress.exclusions,
+   interpreter.bun-ts, runtime.bun) plus `HostOptions.Extensions`,
    through `ExtensionHost.bootstrap` with the host's catalog (models, identity, grants, service
    credentials) and host config's disabled list. Failed or rejected ones become warnings.
 4. **The variant registry**: `HostSlots.core` (the variants module's, the render's, CodeAct's,
-   identity's, service credentials' and the host's) plus the contributed slots; then the host's resolution. Content
+   identity's, service credentials', the sandbox's (`SandboxSlots`, privileged: `sandbox.driver`,
+   `sandbox.writable`, `sandbox.denied`) and the host's) plus the contributed slots; then the host's resolution. Content
    exclusions read it (`ContentExclusions.ofVariants`) until extensions read their own slots (T109b).
 5. **Stores**: `SqliteEventStore` and `FileBlobStore` with `host.store.durability`.
 6. **Grants**: `GrantsService.start` on the host-local store, with the contributed actions, policy
@@ -96,8 +99,8 @@ In this order; any expected failure is an `Error` with every line, and what star
    requirements installed when they are created.
 8. **Identity**: the machine id, `PeerCredentials.currentAccount`, session tokens and the
    authenticator over the contributed identity providers.
-9. **Environments**: `EnvsHost` on `environments/host` with the contributed providers, envd embedded
-   (`EnvdMain.embed`) or piped (the running binary).
+9. **Environments**: `EnvsHost` on `environments/host` with the contributed providers and sandbox
+   drivers, envd embedded (`EnvdMain.embed`) or piped (the running binary).
 10. **Service credentials** (`Setup.auth`, [auth.md](auth.md)): `AuthHost.start` over the contributed
     credential stores, auth methods and secret sources, with the options' keyring, private files and
     variables. A store that cannot be used as configured stops the start; `AuthService.check`'s
@@ -130,7 +133,10 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
 - A session's **hands** (`CodeActConfig.Hands`, per turn) are its environment opened through `IEnvs`
   (`EnvHands.ofHandle`, with envd's workspace snapshots for the step journal) and a `KernelPlan`: the interpreter named by `agent.interpreter` (default
   `bun-ts`) on the runtime it names, the project's trust, the host's variables scrubbed. Grants on
-  host calls come with T127b (`Guard` allows everything until then).
+  host calls come with T127b (`Guard` allows everything until then). Every process of a session
+  (commands, the kernel) runs in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on
+  Linux, Seatbelt on macOS, none on Windows; the agent's overrides come with agents (T213,
+  `KernelPlan.Sandbox`).
 - The workspace's **environment**: the spec named `default` in host config (or trusted project
   config), on the project's directory unless it names another; otherwise `fx.env.local` on the
   project, envd in the host's process. One per workspace, created with the first session; one that
@@ -224,6 +230,9 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
 1. The person signs in in process through `local-os-user` (client `cli`): their principal is on every
    input.
 2. A new session (index, environment, profile) or `--session <id>` (sessions persist across runs).
+   The environment's warnings are shown once (`warning: …` on standard error): an environment no
+   sandbox driver confines runs unsandboxed, and says why (Windows; `sandbox.driver = none`; bubblewrap
+   that cannot run here, with what to do).
 3. Grant requests that open meanwhile (e.g. installing Bun the first time) are put to the person at the
    terminal: `y` once, `a` always on this host, anything else denies once. Without a terminal they are
    denied once, saying so. A decision about a call in doubt (a turn the host stopped during a call,

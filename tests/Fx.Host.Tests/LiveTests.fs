@@ -361,4 +361,68 @@ let tests =
                 finally
                     stop host
             }
+
+            testTask "fx run -p: a turn's commands and kernel run in the environment's sandbox" {
+                do! network.Force()
+
+                if OperatingSystem.IsWindows() then
+                    skiptest "no sandbox driver confines processes on Windows yet (T511)"
+
+                let p = place "sandboxed-run"
+                let outside = Scratch.directory "outside"
+                let escaped = System.IO.Path.Combine(outside, "escaped.txt")
+                let model = Model()
+
+                let command =
+                    Json.quote (
+                        "echo inside > made.txt; echo x > '"
+                        + escaped
+                        + "' 2>/dev/null; echo \"$TMPDIR|$XDG_CACHE_HOME\" > variables.txt"
+                    )
+
+                model.AddAll
+                    [
+                        $"// intent: write inside and outside the workspace\nconst run = await {g}.shell.run({command})\nrun.stdout"
+                        finish "Wrote what the sandbox allows" "\"made.txt\""
+                    ]
+
+                let person = Person always
+                let host = start (options p model [ "model.role.main", Json.String modelId ])
+
+                try
+                    let outcome =
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Write a file"
+                                Session = None
+                                Title = None
+                            }
+
+                    Expect.equal (done' outcome person) "Wrote what the sandbox allows" "done"
+
+                    let sandbox =
+                        match HostSessions.entries host with
+                        | [ entry ] ->
+                            match wait (host.Env.Envs.Get entry.Environment CancellationToken.None) with
+                            | Some record -> record.Sandbox
+                            | None -> None
+                        | _ -> None
+
+                    Expect.isTrue (System.IO.File.Exists(p.File "made.txt")) "the workspace is writable"
+
+                    match sandbox with
+                    | Some sandbox when sandbox.Confines ->
+                        Expect.isFalse (System.IO.File.Exists escaped) "nothing lands outside the workspace"
+
+                        let variables = (p.Read "variables.txt").Trim().Split('|')
+                        Expect.stringEnds variables[0] "/tmp" "TMPDIR is the environment's"
+                        Expect.stringEnds variables[1] "/cache" "the tools' caches are the environment's"
+                    | Some sandbox when Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1" ->
+                        failtest $"a driver must confine here: {sandbox}"
+                    | _ -> ()
+                finally
+                    stop host
+            }
         ]
