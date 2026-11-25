@@ -1,0 +1,2 @@
+{"conformance":{"acme.interpreter":{"kernel":{"failed":0,"passed":41,"skipped":2}}},"core":"0.1.0","extensions":{"acme.runtime":{"version":"0.1.0"},"acme.tools":{"hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","version":"1.2.0"}},"format":1,"lockfile":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","selections":{"test.depth":3,"test.mode":"thorough","test.ratio":0.25,"test.sandbox":true,"test.width":100}}
+sha256:815818665457c1f2458a1fe0ffe19ecf863edf20d04b48f0892d5791f536d9e3

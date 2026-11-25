@@ -18,6 +18,7 @@
     <Project Path="src/Fx.Sqlite/Fx.Sqlite.fsproj" />
     <Project Path="src/Fx.Store/Fx.Store.fsproj" />
     <Project Path="src/Fx.Store.Live/Fx.Store.Live.fsproj" />
+    <Project Path="src/Fx.Variants/Fx.Variants.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -48,6 +49,7 @@
     <Project Path="tests/Fx.Pty.Tests/Fx.Pty.Tests.fsproj" />
     <Project Path="tests/Fx.Store.Tests/Fx.Store.Tests.fsproj" />
     <Project Path="tests/Fx.Store.Live.Tests/Fx.Store.Live.Tests.fsproj" />
+    <Project Path="tests/Fx.Variants.Tests/Fx.Variants.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/support/">
     <File Path="tests/support/Directory.Build.props" />

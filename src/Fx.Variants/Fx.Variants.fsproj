@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Variants and profiles (spec §15): typed variant slots, the slot registry, layered resolution under
+    policies, profiles and their ids, the IVariants capability with recording and replay, eval matrices,
+    the core's slots and a fake. Pure: no I/O, so the EFF analyzers apply to every file. References
+    only Contracts and Effects, so the public SDK (Fx.Sdk) can expose it to extensions.
+    Spec: docs/modules/variants.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Slot.fs" />
+    <Compile Include="Registry.fs" />
+    <Compile Include="Sources.fs" />
+    <Compile Include="Resolution.fs" />
+    <Compile Include="Profile.fs" />
+    <Compile Include="Variants.fs" />
+    <Compile Include="Matrix.fs" />
+    <Compile Include="Slots.fs" />
+    <Compile Include="Fakes\FakeVariants.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>
