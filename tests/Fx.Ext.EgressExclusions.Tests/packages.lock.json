@@ -103,10 +103,12 @@
           "Fx.Ext.RuntimeBun": "[0.0.0, )",
           "Fx.Ext.Sample": "[0.0.0, )",
           "Fx.Extensions": "[0.0.0, )",
+          "Fx.Grants.Host": "[0.0.0, )",
           "Fx.Interpreters": "[0.0.0, )",
           "Fx.Kernel": "[0.0.0, )",
           "Fx.Machines.Host": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
+          "Fx.Prompt": "[0.0.0, )",
           "Fx.Pty": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sessions.Host": "[0.0.0, )",
@@ -237,6 +239,25 @@
           "Fx.Sdk.Process": "[0.0.0, )"
         }
       },
+      "fx.grants": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )"
+        }
+      },
+      "fx.grants.host": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Grants": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Rpc": "[0.0.0, )",
+          "Fx.Sdk": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )"
+        }
+      },
       "fx.interpreters": {
         "type": "Project",
         "dependencies": {
@@ -292,6 +313,19 @@
           "FSharp.Core": "[11.0.101, )"
         }
       },
+      "fx.prompt": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Models": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
+        }
+      },
       "fx.pty": {
         "type": "Project",
         "dependencies": {
@@ -315,6 +349,7 @@
           "Fx.Contracts": "[0.0.0, )",
           "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects": "[0.0.0, )",
+          "Fx.Grants": "[0.0.0, )",
           "Fx.Models": "[0.0.0, )",
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Variants": "[0.0.0, )"
