@@ -1,0 +1,59 @@
+{
+  "id": "bun",
+  "version": "1.4.5",
+  "methods": [
+    {
+      "platforms": [
+        "linux-x64-glibc"
+      ],
+      "method": {
+        "kind": "archive",
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64.zip",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "format": "zip",
+        "strip": 1
+      }
+    },
+    {
+      "platforms": [],
+      "method": {
+        "kind": "system",
+        "probe": [
+          "bun",
+          "--version"
+        ],
+        "constraint": ">=1.4"
+      }
+    }
+  ],
+  "dependsOn": [
+    {
+      "id": "unzip",
+      "version": "^6"
+    }
+  ],
+  "layout": {
+    "executables": [
+      "bun${exeSuffix}"
+    ]
+  },
+  "exports": {
+    "bin": {
+      "bun": "bun${exeSuffix}"
+    },
+    "env": {
+      "BUN_INSTALL": "${dir}"
+    }
+  },
+  "probe": {
+    "argv": [
+      "bun${exeSuffix}",
+      "--revision"
+    ],
+    "expect": "${version}+a7733435c"
+  },
+  "platforms": [],
+  "size": {
+    "download": 36000000
+  }
+}

@@ -6,6 +6,7 @@
     <Compile Include="ContributionTests.fs" />
     <Compile Include="HookTests.fs" />
     <Compile Include="MethodTests.fs" />
+    <Compile Include="ComponentTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

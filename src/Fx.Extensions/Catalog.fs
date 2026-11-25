@@ -16,11 +16,13 @@ type Catalog =
 
 [<RequireQualifiedAccess>]
 module Catalog =
-    /// The extension system's own types.
+    /// The extension system's own types, and component definitions (spec §6.1), which declarative
+    /// extensions such as the runtimes contribute.
     let core: ContributionTypeInfo list =
         [
             ContributionType.info ExtensionRuntimes.contributionType
             ContributionType.info ContributionTypes.contributionType
+            ContributionType.info ComponentDefinitions.contributionType
         ]
 
     /// Adds a type; `Error` if another type has its name.
