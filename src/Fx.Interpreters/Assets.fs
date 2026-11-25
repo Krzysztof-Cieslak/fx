@@ -115,23 +115,33 @@ module Assets =
                     if not staged then
                         return Error(Corrupt staging)
                     else
-                        // A damaged set: replace it.
-                        let! present = exists dir
+                        // Rename the staged set into place. If something is there, it is either a set
+                        // another launch renamed in meanwhile (complete: use it) or a damaged one
+                        // (remove it and try again). Sets are only ever renamed whole, never written in
+                        // place, so a set that is there and intact stays so.
+                        let mutable outcome = None
+                        let mutable attempts = 0
 
-                        let! removed = if present then remove dir else EffResult.ok ()
+                        while outcome.IsNone do
+                            attempts <- attempts + 1
 
-                        match removed with
-                        | Error e -> return Error(AssetsFs e)
-                        | Ok() ->
                             match! Fs.move staging dir with
-                            | Ok() -> return Ok dir
+                            | Ok() -> outcome <- Some(Ok dir)
                             | Error moveError ->
-                                // Another launch renamed its set into place first.
-                                let! _ = remove staging
                                 let! theirs = intact os dir provider
 
                                 if theirs then
-                                    return Ok dir
+                                    let! _ = remove staging
+                                    outcome <- Some(Ok dir)
+                                elif attempts >= 3 then
+                                    let! _ = remove staging
+                                    outcome <- Some(Error(AssetsFs moveError))
                                 else
-                                    return Error(AssetsFs moveError)
+                                    let! present = exists dir
+
+                                    if present then
+                                        let! _ = remove dir
+                                        ()
+
+                        return outcome.Value
         }

@@ -159,6 +159,50 @@ let tests =
                     | Error e -> failtest (string e)
                 | Error e -> failtest (string e)
 
+            testCase "a set another launch renamed into place first is used, not removed"
+            <| fun () ->
+                let f = fakes (fun _ -> None)
+                let p = provider files
+                let mutable raced = false
+                let deleted = ResizeArray<string>()
+                let target = Assets.directory os root p
+
+                // The other launch renames its set while this one is about to rename its own.
+                let racing =
+                    { f.Env with
+                        Fs =
+                            { f.Env.Fs with
+                                Move =
+                                    fun source destination cancellation ->
+                                        if not raced then
+                                            raced <- true
+                                            Expect.isOk (ensure f p "other") "the other launch"
+
+                                        f.Env.Fs.Move source destination cancellation
+                                Delete =
+                                    fun path cancellation ->
+                                        if not (path.Contains ".tmp") then
+                                            deleted.Add path
+
+                                        f.Env.Fs.Delete path cancellation
+                            }
+                    }
+
+                match run racing (Assets.ensure os root "this" p) with
+                | Ok dir ->
+                    Expect.equal
+                        (content f (dir + string System.IO.Path.DirectorySeparatorChar + "main.ts"))
+                        files[0].Content
+                        "intact"
+
+                    match run f.Env (Fs.list root) with
+                    | Ok entries -> Expect.equal entries.Length 1 "no staging left"
+                    | Error e -> failtest (string e)
+
+                    Expect.equal dir target "the other launch's set"
+                    Expect.isEmpty deleted "nothing of it deleted"
+                | Error e -> failtest (string e)
+
             testCase "versions live side by side"
             <| fun () ->
                 let f = fakes (fun _ -> None)
