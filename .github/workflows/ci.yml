@@ -28,30 +28,29 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
-  # .NET SDK image with the Native AOT prerequisites, for the musl jobs. Keep the SDK version in step
-  # with global.json; the digest pins the multi-arch manifest (amd64 and arm64).
+  # .NET SDK image with the Native AOT prerequisites, for the musl targets. Keep the SDK version in
+  # step with global.json; the digest pins the multi-arch manifest (amd64 and arm64).
   ALPINE_SDK_IMAGE: mcr.microsoft.com/dotnet/sdk:11.0.100-alpine3.24-aot@sha256:a6a89666d050f5d4806aa03edbc677291c7fb92191b5b2a8f3bccdec869ab87a
 
+# A pull request runs five jobs: plan, lint and one `os` job per OS. The full tier (main, the
+# schedule, manual runs, the `ci:full` label) adds the `targets` job's five other targets.
+# In the os and targets jobs, every part runs once what it needs has succeeded, even when another part
+# failed (`!cancelled() && steps.<id>.outcome == 'success'`), so one run reports the tests, Native AOT
+# and each area on their own.
 jobs:
-  # What this run runs (scripts/ci-plan.ts): the full tier on main, the schedule, manual runs, the
-  # `ci:full` label and platform-sensitive changes; otherwise the fast tier, one AOT target per OS
-  # family and each area's own jobs only when it changes.
+  # What this run runs (scripts/ci-plan.ts): the tier, whether there is code to build, and which
+  # areas' steps run (every one in the full tier, otherwise those whose files changed).
   plan:
     name: Plan
     runs-on: ubuntu-latest
     outputs:
       full: ${{ steps.plan.outputs.full }}
       code: ${{ steps.plan.outputs.code }}
-      aot: ${{ steps.plan.outputs.aot }}
-      aot-run: ${{ steps.plan.outputs.aot-run }}
       keyring: ${{ steps.plan.outputs.keyring }}
-      keyring-run: ${{ steps.plan.outputs.keyring-run }}
       sandbox: ${{ steps.plan.outputs.sandbox }}
-      sandbox-run: ${{ steps.plan.outputs.sandbox-run }}
-      bun-musl: ${{ steps.plan.outputs.bun-musl }}
-      bun-musl-run: ${{ steps.plan.outputs.bun-musl-run }}
-      network-all-os: ${{ steps.plan.outputs.network-all-os }}
+      bun: ${{ steps.plan.outputs.bun }}
       spike: ${{ steps.plan.outputs.spike }}
+      targets: ${{ steps.plan.outputs.targets }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -67,14 +66,22 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bun scripts/ci-plan.ts
 
+  # Formatting, the analyzers and the TypeScript packages; the .NET steps only when there is code.
   lint:
     name: Lint
+    needs: plan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CODE: ${{ needs.plan.outputs.code }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
+        if: env.CODE == 'true'
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.5
@@ -82,14 +89,10 @@ jobs:
         run: bun scripts/tasks.ts check
       - name: The CI plan's rules
         run: bun test scripts/ci-plan.test.ts
-      # The golden declarations are the generator's output (the build job's tests keep them current).
+      # The golden declarations are the generator's output (the os jobs' tests keep them current).
       - name: Generated TypeScript declarations type-check
         run: bun scripts/declarations.ts
-      - name: Restore tools
-        run: dotnet tool restore
-      - name: Formatting
-        run: dotnet fantomas --check src tests tools extensions
-      # Its conformance suite runs in the build job (tests/Fx.Kernel.Tests), on the pinned Bun.
+      # Its conformance suite runs in the os jobs (tests/Fx.Kernel.Tests), on the pinned Bun.
       - name: bun-ts kernel type-checks and its unit tests pass
         working-directory: packages/kernel-bun-ts
         run: |
@@ -97,7 +100,7 @@ jobs:
           bun check --no-script
           bun test
       # The TypeScript SDK and its sample: types, codecs against the F# fixtures, the server. The
-      # sample's parity suites run in the build job (tests/Fx.Extensions.Tests), on the pinned Bun.
+      # sample's parity suites run in the os jobs (tests/Fx.Extensions.Tests), on the pinned Bun.
       - name: TypeScript SDK type-checks and its unit tests pass
         working-directory: packages/sdk
         run: |
@@ -110,54 +113,75 @@ jobs:
           bun install --frozen-lockfile
           bun check --no-script
           bun test
-
-  analyzers:
-    name: Analyzers
-    needs: plan
-    if: needs.plan.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: "**/packages.lock.json"
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.5
       - name: Restore tools
+        if: env.CODE == 'true'
         run: dotnet tool restore
+      - name: Formatting
+        if: env.CODE == 'true'
+        run: dotnet fantomas --check src tests tools extensions
       - name: Restore (locked)
+        if: env.CODE == 'true'
         run: dotnet restore Fx.slnx --locked-mode
       - name: Analyzers
+        if: env.CODE == 'true'
         run: bun scripts/analyzers.ts
       - name: Analyzers reject the failing samples
+        if: env.CODE == 'true'
         run: bun scripts/analyzers.ts samples --no-build
+      # The spike is superseded by packages/kernel-bun-ts: only when it changes, and in the full tier.
+      # It runs the tests only; the kernel itself runs on the pinned Bun the tests download and verify.
+      - name: Bun kernel spike
+        if: needs.plan.outputs.spike == 'true'
+        working-directory: spikes/bun-kernel
+        run: |
+          bun install --frozen-lockfile
+          bun check --no-script
+          bun test
+          bun bench/bench.ts | tee -a "$GITHUB_STEP_SUMMARY"
 
-  build:
-    name: Build and test (${{ matrix.os }})
+  os:
+    # Build and test on each OS, then Native AOT for the runner's own target (spec §20): publish the
+    # CLI and the scenarios, smoke-test the binary, report its size, run the JIT-vs-native diff and
+    # its self-test, natively (no cross-compilation, so each binary also runs where it was built).
+    # Then the steps of the areas the plan names: the keyring (Linux and macOS; Windows' Credential
+    # Manager is in the tests already), the sandbox scenarios with a live sandbox (Linux and macOS),
+    # and the network Bun test off Linux.
+    # The runners are fixed here; scripts/ci-plan.ts (OS_JOBS) lists the same, and its tests check it.
+    name: Build, test and AOT (${{ matrix.rid }})
     needs: plan
     if: needs.plan.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - { rid: linux-x64, os: ubuntu-24.04 }
+          - { rid: osx-arm64, os: macos-26 }
+          - { rid: win-x64, os: windows-2025 }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      RID: ${{ matrix.rid }}
+      # A throwaway keyring's password for the keyring steps, not a secret.
+      KEYRING_TEST_PASSWORD: keyring-ci-password
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-          cache: true
-          cache-dependency-path: "**/packages.lock.json"
+      # Everything the locked restore and the publish for this target need (ILCompiler, runtime packs).
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-aot-${{ matrix.rid }}-
       # Native libraries built from source by the build (native/, e.g. SQLite). Their paths carry a
       # hash of their inputs, so a restored cache is either used as is or ignored.
       - name: Cache native libraries
         uses: actions/cache@v6
         with:
           path: artifacts/native
-          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/**') }}
+          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
       # The pinned Bun the reference kernel runs on in the kernel conformance suite; the tests
       # download it and check its digest (tests/Fx.Kernel.Tests/PinnedBun.fs holds the pin).
       - name: Cache the pinned Bun
@@ -182,17 +206,22 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore Fx.slnx --locked-mode
       - name: Build
+        id: build
         run: dotnet build Fx.slnx --no-restore --configuration Release
+
+      # Build and test.
       # Packs the SDKs and builds the sample extension from the packages alone; the tests run it.
       - name: Pack the SDKs and build an extension from the packages
+        id: packages
         run: bun scripts/packages.ts
       - name: Test
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
           PACKAGE_TESTS: "1"
           SANDBOX_TESTS: "1"
         run: dotnet test --solution Fx.slnx --no-build --configuration Release
       - name: Upload the SDK packages
-        if: matrix.os == 'ubuntu-latest'
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' && runner.os == 'Linux' }}
         uses: actions/upload-artifact@v7
         with:
           name: sdk-packages
@@ -200,181 +229,131 @@ jobs:
           if-no-files-found: error
       # Installs the pinned Bun (fx.runtime.bun) from GitHub through the planner and the component
       # installer, launches it hardened, and runs the positive controls. Its own step, so a network
-      # failure is told apart from a failing test. The fast tier runs it on Linux only (two minutes on
-      # Windows), unless the runtime, the installer or the kernel changed.
+      # failure is told apart from a failing test. Off Linux (two minutes on Windows) only when the
+      # runtime, the installer or the kernel changed, and in the full tier.
       - name: Install and launch the pinned Bun (network)
-        if: matrix.os == 'ubuntu-latest' || needs.plan.outputs.network-all-os == 'true'
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && (runner.os == 'Linux' || needs.plan.outputs.bun == 'true') }}
         env:
           NETWORK_TESTS: "1"
         run: dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-build --configuration Release
 
-  aot:
-    # Native AOT publish of the CLI and the JIT-vs-native diff (spec §20), on every target natively:
-    # no cross-compilation, so each binary also runs where it was built.
-    # The targets come from the plan (scripts/ci-plan.ts holds the list): all eight in the full tier,
-    # linux-x64, linux-musl-x64, osx-arm64 and win-x64 in the fast tier.
-    name: AOT (${{ matrix.rid }})
-    needs: plan
-    if: needs.plan.outputs.aot-run == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.aot) }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-    env:
-      RID: ${{ matrix.rid }}
-      # The musl jobs run every command in the Alpine container started below.
-      IN: ${{ matrix.alpine && 'docker exec alpine' || '' }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        if: ${{ !matrix.alpine }}
-        with:
-          global-json-file: global.json
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
-          restore-keys: nuget-aot-${{ matrix.rid }}-
-      - name: Cache native libraries
-        uses: actions/cache@v6
-        with:
-          path: artifacts/native
-          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
-      - name: Start the Alpine container
-        if: ${{ matrix.alpine }}
-        run: >-
-          docker run --detach --name alpine
-          --user "$(id -u):$(id -g)" --env HOME=/tmp
-          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES
-          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
-          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
-          "$ALPINE_SDK_IMAGE" sleep infinity
-      - name: Restore (locked)
-        run: $IN dotnet restore Fx.slnx --locked-mode
+      # Native AOT for this runner's target (.github/scripts/aot-smoke.sh holds the smoke tests).
       - name: Publish the CLI
-        run: $IN dotnet publish src/Fx.Cli --configuration Release --runtime "$RID"
+        id: cli
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: dotnet publish src/Fx.Cli --configuration Release --runtime "$RID"
       - name: Publish the AOT scenarios
-        run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
+        id: scenarios
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
       - name: Smoke test the native binary
         id: smoke
-        run: |
-          name=$($IN dotnet msbuild src/Fx.Cli -getProperty:AssemblyName | tr -d '\r')
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          bin="artifacts/publish/Fx.Cli/release_$RID/$name"
-          ls -l "$(dirname "$bin")"
-          version=$($IN "$bin" --version | tr -d '\r')
-          echo "$version"
-          [[ "$version" == "$name "* ]]
-          $IN "$bin" --help
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/aot-smoke.sh binary "$RID"
       - name: Smoke test envd mode
-        run: |
-          bin="artifacts/publish/Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}"
-          dir="artifacts/envd-smoke"
-          rm -rf "$dir" && mkdir -p "$dir/workspace" "$dir/state"
-          request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersions":["1"],"peer":{"name":"ci","version":"0"},"capabilities":{"maxMessageSize":1048576},"environmentProtocol":"1"}}'
-          # Standard input must reach the container: `docker exec -i`.
-          run=""
-          [[ -n "$IN" ]] && run="docker exec -i alpine"
-          reply=$(echo "$request" | $run "$bin" envd --stdio --workspace "$dir/workspace" --state "$dir/state" | tr -d '\r')
-          echo "$reply"
-          grep -q '"environmentProtocol":"1"' <<< "$reply"
-          grep -q '"platform":{' <<< "$reply"
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/aot-smoke.sh envd "$RID"
       - name: Smoke test the embedded host
-        run: |
-          bin="$PWD/artifacts/publish/Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}"
-          dir="$PWD/artifacts/host-smoke"
-          rm -rf "$dir" && mkdir -p "$dir/home" "$dir/project"
-          home="$dir/home"
-          [[ "$RID" == win-* ]] && home="$(cygpath -w "$home")"
-          # The product's home variable (FX_HOME for the product name fx).
-          variable="$(tr '[:lower:]' '[:upper:]' <<< "${{ steps.smoke.outputs.name }}")_HOME"
-          if [[ -n "$IN" ]]; then
-            run=(docker exec -i -w "$dir/project" -e "$variable=$home" alpine)
-          else
-            run=(env "$variable=$home")
-          fi
-          cd "$dir/project"
-          "${run[@]}" "$bin" variants list > "$dir/list.txt"
-          grep -q '^agent.interpreter = "bun-ts"' "$dir/list.txt"
-          # A headless run starts the whole host (stores, grants, identity, an embedded environment);
-          # without a terminal the first install of Bun is denied, so the run stops there.
-          set +e
-          "${run[@]}" "$bin" run -p hello < /dev/null > "$dir/run.txt" 2>&1
-          code=$?
-          set -e
-          cat "$dir/run.txt"
-          [[ "$code" == 1 ]]
-          grep -q "needs a person's approval" "$dir/run.txt"
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/aot-smoke.sh host "$RID"
       - name: SQLite is linked into the binary
-        run: |
-          dir="artifacts/publish/Fx.Cli/release_$RID"
-          name="${{ steps.smoke.outputs.name }}"
-          exe=""
-          [[ "$RID" == win-* ]] && exe=".exe"
-          if ls "$dir" | grep -iE 'sqlite.*\.(so|dylib|dll|a|lib)$'; then
-            echo "::error::a SQLite library was published next to the binary"
-            exit 1
-          fi
-          # The binary alone in an empty directory: the library name is unique to the binding, so
-          # nothing else could satisfy its imports.
-          alone="artifacts/standalone/$RID"
-          rm -rf "$alone" && mkdir -p "$alone" && cp "$dir/$name$exe" "$alone/"
-          info=$($IN "$alone/$name" --build-info | tr -d '\r')
-          echo "$info"
-          version=$($IN dotnet msbuild src/Fx.Sqlite -getProperty:FxSqliteVersion | tr -d '\r')
-          grep -q "^sqlite $version " <<< "$info"
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/aot-smoke.sh sqlite "$RID"
       - name: Report binary sizes
-        run: |
-          exe=""
-          [[ "$RID" == win-* ]] && exe=".exe"
-          {
-            echo "### Native AOT binaries, $RID"
-            echo "| Binary | Bytes |"
-            echo "|---|---:|"
-            for bin in "Fx.Cli/release_$RID/${{ steps.smoke.outputs.name }}" "Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"; do
-              echo "| $(basename "$bin") | $(wc -c < "artifacts/publish/$bin$exe" | tr -d ' ') |"
-            done
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/aot-smoke.sh sizes "$RID"
       - name: JIT-vs-native diff
-        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        shell: bash
+        run: dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish
       - name: JIT-vs-native diff self-test
-        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release --no-build -- --rid "$RID" --no-publish --self-test
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        shell: bash
+        run: dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release --no-build -- --rid "$RID" --no-publish --self-test
       - name: Upload the native binary
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
           path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
           if-no-files-found: error
 
-  keyring:
-    # The OS keyrings (src/Fx.Keyring, docs/spikes/keychains.md) where CI has to provide one: a
-    # gnome-keyring under dbus-run-session on Linux (glibc, and musl in Alpine) and a temporary
-    # keychain on macOS. Windows needs nothing: the build job's tests and the AOT jobs' scenarios use
-    # its Credential Manager. Each job proves, natively, that the probe tells every headless state
-    # apart, runs the live tests (the keyring's, and the credential-store conformance suite on the
-    # keyring store, docs/modules/auth.md), and runs the keyring scenarios of the JIT-vs-native diff.
-    # Targets from the plan: every one in the full tier; in the fast tier only when keyring or
-    # credential code changed, and then without the Intel Mac.
-    name: Keyring (${{ matrix.rid }})
+      # The keyring (src/Fx.Keyring, docs/spikes/keychains.md) where the runner has to provide one: a
+      # gnome-keyring under dbus-run-session on Linux and a temporary keychain on macOS. Proves,
+      # natively, that the probe tells every headless state apart, runs the live tests (the keyring's,
+      # and the credential-store conformance suite on the keyring store, docs/modules/auth.md), and
+      # runs the keyring scenarios of the JIT-vs-native diff. After the tests, so that no test before
+      # them sees a Secret Service.
+      - name: Install D-Bus and gnome-keyring (Linux)
+        id: keyring-linux
+        if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && runner.os == 'Linux' && needs.plan.outputs.keyring == 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dbus dbus-bin gnome-keyring libsecret-tools
+      - name: Keyring headless detection, natively (Linux)
+        if: ${{ !cancelled() && steps.keyring-linux.outcome == 'success' }}
+        shell: bash
+        run: sh .github/scripts/keyring-detect.sh "$RID"
+      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
+        if: ${{ !cancelled() && steps.keyring-linux.outcome == 'success' }}
+        shell: bash
+        run: sh .github/scripts/keyring-live.sh "$RID"
+      - name: Create a temporary keychain (macOS)
+        id: keychain
+        if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && runner.os == 'macOS' && needs.plan.outputs.keyring == 'true' }}
+        shell: bash
+        run: bash .github/scripts/keyring-macos.sh create "$RID"
+      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/keyring-macos.sh live "$RID"
+      - name: Keyring headless detection, natively (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
+        shell: bash
+        run: bash .github/scripts/keyring-macos.sh detect "$RID"
+      - name: Delete the temporary keychain (macOS)
+        if: ${{ always() && runner.os == 'macOS' && env.KEYRING_TEST_KEYCHAIN != '' }}
+        shell: bash
+        run: bash .github/scripts/keyring-macos.sh delete
+
+      # The sandbox drivers (docs/modules/sandbox.md): the Test step already requires this OS's driver
+      # (SANDBOX_TESTS=1); this diffs the sandbox scenarios with a process confined by it, natively.
+      - name: The sandbox scenarios of the JIT-vs-native diff, with a live sandbox
+        if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && runner.os != 'Windows' && needs.plan.outputs.sandbox == 'true' }}
+        shell: bash
+        env:
+          SANDBOX_TESTS: "1"
+        run: dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only sandbox-
+
+  targets:
+    # The full tier's other targets (scripts/ci-plan.ts, TARGETS), natively: Native AOT publish, smoke
+    # tests, binary sizes, the JIT-vs-native diff and its self-test. Each also runs what only it can
+    # show (its matrix flags): the sandbox suites with bubblewrap on arm64 (the seccomp program is per
+    # architecture) and Seatbelt on Intel macOS; the keyring in Alpine (gnome-keyring on musl) and on
+    # Intel macOS; and fx.runtime.bun on musl (the pinned Bun's musl build) with fx.interpreter.bun-ts
+    # on it.
+    name: Target (${{ matrix.rid }})
     needs: plan
-    if: needs.plan.outputs.keyring-run == 'true'
+    if: needs.plan.outputs.full == 'true'
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.keyring) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.targets) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 75
     defaults:
       run:
         shell: bash
     env:
       RID: ${{ matrix.rid }}
+      # The musl targets run every command in the Alpine container started below.
       IN: ${{ matrix.alpine && 'docker exec alpine' || '' }}
-      # A throwaway keyring's password, not a secret.
       KEYRING_TEST_PASSWORD: keyring-ci-password
     steps:
       - uses: actions/checkout@v7
@@ -393,6 +372,14 @@ jobs:
         with:
           path: artifacts/native
           key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
+      # The sandbox suites' CodeAct live tests run the bun-ts kernel on the pinned Bun. Never in
+      # Alpine: its musl Bun would share the glibc build's key.
+      - name: Cache the pinned Bun
+        if: ${{ matrix.sandbox && !matrix.alpine }}
+        uses: actions/cache@v6
+        with:
+          path: artifacts/kernel-bun-ts/runtimes
+          key: pinned-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/Fx.Kernel.Tests/PinnedBun.fs') }}
       - name: Start the Alpine container
         if: ${{ matrix.alpine }}
         run: >-
@@ -402,262 +389,131 @@ jobs:
           --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
           --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
           "$ALPINE_SDK_IMAGE" sleep infinity
-      - name: Install D-Bus and gnome-keyring (Ubuntu)
-        if: ${{ runner.os == 'Linux' && !matrix.alpine }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends dbus dbus-bin gnome-keyring libsecret-tools
-      - name: Install D-Bus and gnome-keyring (Alpine)
-        if: ${{ matrix.alpine }}
-        run: |
-          docker exec --user root alpine apk add --no-cache dbus gnome-keyring
-          docker exec --user root alpine dbus-uuidgen --ensure
-          # dbus-daemon refuses to start for a user that is not in the password database.
-          docker exec --user root alpine sh -c "echo 'ci:x:$(id -u):$(id -g)::/tmp:/bin/sh' >> /etc/passwd"
-      - name: Restore (locked)
-        run: $IN dotnet restore Fx.slnx --locked-mode
-      - name: Build the keyring tests
-        run: |
-          $IN dotnet build tests/Fx.Keyring.Tests --no-restore --configuration Release
-          $IN dotnet build tests/Fx.Auth.Tests --no-restore --configuration Release
-      - name: Publish the AOT scenarios
-        run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
-      # gnome-keyring-daemon returns before it owns org.freedesktop.secrets, so every script waits
-      # for the name; each session gets its own XDG_RUNTIME_DIR, so no other daemon's control socket
-      # (or systemd's socket unit) is found.
-      - name: Write the Secret Service scripts (Linux)
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          cat > artifacts/keyring-wait.sh <<'EOF'
-          for i in $(seq 1 100); do
-            if dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
-                org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets 2>/dev/null | grep -q 'boolean true'; then
-              exit 0
-            fi
-            sleep 0.1
-          done
-          echo "org.freedesktop.secrets has no owner" >&2
-          exit 1
-          EOF
-          cat > artifacts/keyring-detect.sh <<'EOF'
-          set -eu
-          bin="artifacts/publish/Fx.Aot.Scenarios/release_$1/Fx.Aot.Scenarios"
-          env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR KEYRING_EXPECT="unavailable: no-session-bus" "$bin" run keyring-detect
-          export XDG_RUNTIME_DIR="$(mktemp -d)"
-          dbus-run-session -- env KEYRING_EXPECT="unavailable: no-secret-service" "$bin" run keyring-detect
-          export XDG_RUNTIME_DIR="$(mktemp -d)"
-          dbus-run-session -- sh -c '
-            set -eu
-            gnome-keyring-daemon --start --components=secrets >/dev/null
-            sh artifacts/keyring-wait.sh
-            KEYRING_EXPECT="unavailable: no-default-collection" "$0" run keyring-detect
-          ' "$bin"
-          export XDG_RUNTIME_DIR="$(mktemp -d)"
-          dbus-run-session -- sh -c '
-            set -eu
-            printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
-            sh artifacts/keyring-wait.sh
-            KEYRING_EXPECT=ready "$0" run keyring-detect
-            dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
-              org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null
-            KEYRING_EXPECT=locked "$0" run keyring-detect
-          ' "$bin"
-          EOF
-          cat > artifacts/keyring-live.sh <<'EOF'
-          set -eu
-          export XDG_RUNTIME_DIR="$(mktemp -d)"
-          exec dbus-run-session -- sh -c '
-            set -eu
-            printf %s "$KEYRING_TEST_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
-            sh artifacts/keyring-wait.sh
-            export KEYRING_TESTS=1
-            dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
-            dotnet test --project tests/Fx.Auth.Tests --no-build --configuration Release
-            dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$0" --no-publish --only keyring-
-          ' "$1"
-          EOF
-      # The probe never starts a service (no D-Bus activation), so each state below is what the
-      # machine is, told apart by the native binary.
-      - name: Headless detection, natively (Linux)
-        if: ${{ runner.os == 'Linux' }}
-        run: $IN sh artifacts/keyring-detect.sh "$RID"
-      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
-        if: ${{ runner.os == 'Linux' }}
-        run: $IN sh artifacts/keyring-live.sh "$RID"
-      - name: Create a temporary keychain (macOS)
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          bin="artifacts/publish/Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"
-          echo "The runner's own default keychain: $(security default-keychain -d user)"
-          "$bin" run keyring-detect
-          keychain="$RUNNER_TEMP/keyring-ci.keychain-db"
-          security create-keychain -p "$KEYRING_TEST_PASSWORD" "$keychain"
-          security set-keychain-settings "$keychain"
-          security unlock-keychain -p "$KEYRING_TEST_PASSWORD" "$keychain"
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          security default-keychain -d user -s "$keychain"
-          echo "KEYRING_TEST_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
-      - name: Live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
-        if: ${{ runner.os == 'macOS' }}
-        env:
-          KEYRING_TESTS: "1"
-        run: |
-          dotnet test --project tests/Fx.Keyring.Tests --no-build --configuration Release
-          dotnet test --project tests/Fx.Auth.Tests --no-build --configuration Release
-          dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only keyring-
-      - name: Headless detection, natively (macOS)
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          bin="artifacts/publish/Fx.Aot.Scenarios/release_$RID/Fx.Aot.Scenarios"
-          KEYRING_EXPECT=ready "$bin" run keyring-detect
-          security lock-keychain "$KEYRING_TEST_KEYCHAIN"
-          KEYRING_EXPECT=locked "$bin" run keyring-detect
-          security unlock-keychain -p "$KEYRING_TEST_PASSWORD" "$KEYRING_TEST_KEYCHAIN"
-      - name: Delete the temporary keychain (macOS)
-        if: ${{ always() && runner.os == 'macOS' && env.KEYRING_TEST_KEYCHAIN != '' }}
-        run: |
-          security default-keychain -d user -s login.keychain-db || true
-          security delete-keychain "$KEYRING_TEST_KEYCHAIN" || true
-
-  sandbox:
-    # The sandbox drivers (docs/modules/sandbox.md) where the build job does not run them: bubblewrap
-    # on arm64 Linux and Seatbelt on Intel macOS, besides linux-x64 and osx-arm64. Each job requires
-    # its OS's driver (SANDBOX_TESTS=1): the conformance suite, sandboxed environments, the bun-ts
-    # kernel in a sandbox (the CodeAct live tests), and the sandbox scenarios of the JIT-vs-native
-    # diff, natively. Targets from the plan: every one in the full tier; linux-x64 and osx-arm64 in
-    # the fast tier when sandbox or environment code changed.
-    name: Sandbox (${{ matrix.rid }})
-    needs: plan
-    if: needs.plan.outputs.sandbox-run == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.sandbox) }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
-    defaults:
-      run:
-        shell: bash
-    env:
-      RID: ${{ matrix.rid }}
-      SANDBOX_TESTS: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-aot-${{ matrix.rid }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
-          restore-keys: nuget-aot-${{ matrix.rid }}-
-      - name: Cache native libraries
-        uses: actions/cache@v6
-        with:
-          path: artifacts/native
-          key: native-${{ matrix.rid }}-${{ hashFiles('native/**') }}
-      - name: Cache the pinned Bun
-        uses: actions/cache@v6
-        with:
-          path: artifacts/kernel-bun-ts/runtimes
-          key: pinned-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/Fx.Kernel.Tests/PinnedBun.fs') }}
+      # As in the os jobs: SANDBOX_TESTS=1 requires bubblewrap to confine. Alpine runs in a container
+      # without user namespaces, so no musl target runs the sandbox suites.
       - name: Install bubblewrap and let it create user namespaces (Linux)
-        if: runner.os == 'Linux'
+        if: ${{ matrix.sandbox && runner.os == 'Linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --ro-bind / / --unshare-all --die-with-parent -- /bin/true
       - name: Restore (locked)
-        run: dotnet restore Fx.slnx --locked-mode
-      - name: Build the sandbox tests
+        id: restore
+        run: $IN dotnet restore Fx.slnx --locked-mode
+      # The tests of this target's areas, built before the publishes below restore for the target.
+      - name: Build the area tests
+        id: area-tests
+        if: ${{ matrix.keyring || matrix.sandbox || matrix.bun }}
+        env:
+          KEYRING: ${{ matrix.keyring }}
+          SANDBOX: ${{ matrix.sandbox }}
+          BUN: ${{ matrix.bun }}
         run: |
-          for project in Fx.Environments.Tests Fx.Ext.SandboxBubblewrap.Tests Fx.Ext.SandboxSeatbelt.Tests Fx.CodeAct.Tests; do
-            dotnet build "tests/$project" --no-restore --configuration Release
+          projects=()
+          [[ "$KEYRING" == true ]] && projects+=(Fx.Keyring.Tests Fx.Auth.Tests)
+          [[ "$SANDBOX" == true ]] && projects+=(Fx.Environments.Tests Fx.Ext.SandboxBubblewrap.Tests Fx.Ext.SandboxSeatbelt.Tests Fx.CodeAct.Tests)
+          [[ "$BUN" == true ]] && projects+=(Fx.Ext.RuntimeBun.Tests Fx.Kernel.Tests Fx.Ext.InterpreterBunTs.Tests)
+          for project in "${projects[@]}"; do
+            $IN dotnet build "tests/$project" --no-restore --configuration Release
           done
+
+      # Native AOT for this target (.github/scripts/aot-smoke.sh holds the smoke tests).
+      - name: Publish the CLI
+        id: cli
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' }}
+        run: $IN dotnet publish src/Fx.Cli --configuration Release --runtime "$RID"
+      - name: Publish the AOT scenarios
+        id: scenarios
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' }}
+        run: $IN dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
+      - name: Smoke test the native binary
+        id: smoke
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' }}
+        run: bash .github/scripts/aot-smoke.sh binary "$RID"
+      - name: Smoke test envd mode
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        run: bash .github/scripts/aot-smoke.sh envd "$RID"
+      - name: Smoke test the embedded host
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        run: bash .github/scripts/aot-smoke.sh host "$RID"
+      - name: SQLite is linked into the binary
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        run: bash .github/scripts/aot-smoke.sh sqlite "$RID"
+      - name: Report binary sizes
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        run: bash .github/scripts/aot-smoke.sh sizes "$RID"
+      - name: JIT-vs-native diff
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish
+      - name: JIT-vs-native diff self-test
+        if: ${{ !cancelled() && steps.cli.outcome == 'success' && steps.scenarios.outcome == 'success' }}
+        run: $IN dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release --no-build -- --rid "$RID" --no-publish --self-test
+      - name: Upload the native binary
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.smoke.outputs.name }}-${{ matrix.rid }}
+          path: artifacts/publish/Fx.Cli/release_${{ matrix.rid }}/
+          if-no-files-found: error
+
+      # The keyring, as in the os jobs: gnome-keyring in Alpine, a temporary keychain on macOS.
+      - name: Install D-Bus and gnome-keyring (Alpine)
+        id: keyring-linux
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && steps.scenarios.outcome == 'success' && matrix.keyring && matrix.alpine }}
+        run: |
+          docker exec --user root alpine apk add --no-cache dbus gnome-keyring
+          docker exec --user root alpine dbus-uuidgen --ensure
+          # dbus-daemon refuses to start for a user that is not in the password database.
+          docker exec --user root alpine sh -c "echo 'ci:x:$(id -u):$(id -g)::/tmp:/bin/sh' >> /etc/passwd"
+      - name: Keyring headless detection, natively (Linux)
+        if: ${{ !cancelled() && steps.keyring-linux.outcome == 'success' }}
+        run: $IN sh .github/scripts/keyring-detect.sh "$RID"
+      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (Linux)
+        if: ${{ !cancelled() && steps.keyring-linux.outcome == 'success' }}
+        run: $IN sh .github/scripts/keyring-live.sh "$RID"
+      - name: Create a temporary keychain (macOS)
+        id: keychain
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && steps.scenarios.outcome == 'success' && matrix.keyring && runner.os == 'macOS' }}
+        run: bash .github/scripts/keyring-macos.sh create "$RID"
+      - name: Keyring live tests and the keyring scenarios of the JIT-vs-native diff (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
+        run: bash .github/scripts/keyring-macos.sh live "$RID"
+      - name: Keyring headless detection, natively (macOS)
+        if: ${{ !cancelled() && steps.keychain.outcome == 'success' }}
+        run: bash .github/scripts/keyring-macos.sh detect "$RID"
+      - name: Delete the temporary keychain (macOS)
+        if: ${{ always() && runner.os == 'macOS' && env.KEYRING_TEST_KEYCHAIN != '' }}
+        run: bash .github/scripts/keyring-macos.sh delete
+
+      # The sandbox drivers where the os jobs do not run them, each requiring its OS's driver
+      # (SANDBOX_TESTS=1): the conformance suite, sandboxed environments, the bun-ts kernel in a
+      # sandbox (the CodeAct live tests), and the sandbox scenarios of the JIT-vs-native diff.
       - name: Sandbox tests
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.sandbox }}
+        env:
+          SANDBOX_TESTS: "1"
         run: |
           for project in Fx.Environments.Tests Fx.Ext.SandboxBubblewrap.Tests Fx.Ext.SandboxSeatbelt.Tests Fx.CodeAct.Tests; do
             dotnet test --project "tests/$project" --no-build --configuration Release
           done
-      - name: Publish the AOT scenarios
-        run: dotnet publish tests/aot/Fx.Aot.Scenarios --configuration Release --runtime "$RID"
       - name: The sandbox scenarios of the JIT-vs-native diff, with a live sandbox
+        if: ${{ !cancelled() && steps.scenarios.outcome == 'success' && matrix.sandbox }}
+        env:
+          SANDBOX_TESTS: "1"
         run: dotnet run --project tests/aot/Fx.Aot.Diff --configuration Release -- --rid "$RID" --no-publish --only sandbox-
 
-  bun-musl:
-    # fx.runtime.bun on musl (the build job covers glibc, macOS and Windows): installs the pinned Bun's
-    # musl build from GitHub through the component installer, launches it hardened and runs the
-    # positive controls, in the Alpine container the musl AOT jobs use. Then fx.interpreter.bun-ts on
-    # it: the kernel conformance suite and the interpreter's end-to-end tests.
-    # Architectures from the plan: both in the full tier; x64 in the fast tier when the runtime, the
-    # installer or the kernel changed.
-    name: Pinned Bun on musl (${{ matrix.arch }})
-    needs: plan
-    if: needs.plan.outputs.bun-musl-run == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.bun-musl) }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
-    steps:
-      - uses: actions/checkout@v7
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-bun-musl-${{ matrix.arch }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/packages.lock.json') }}
-          restore-keys: nuget-bun-musl-${{ matrix.arch }}-
-      - name: Start the Alpine container
-        run: >-
-          docker run --detach --name alpine
-          --user "$(id -u):$(id -g)" --env HOME=/tmp
-          --env CI --env GITHUB_ACTIONS --env NUGET_PACKAGES
-          --env DOTNET_CLI_TELEMETRY_OPTOUT --env DOTNET_NOLOGO --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE
-          --env NETWORK_TESTS=1
-          --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" --workdir "$GITHUB_WORKSPACE"
-          "$ALPINE_SDK_IMAGE" sleep infinity
-      - name: Restore (locked)
-        run: docker exec alpine dotnet restore tests/Fx.Ext.RuntimeBun.Tests --locked-mode
+      # fx.runtime.bun on musl (the os jobs cover glibc, macOS and Windows): installs the pinned Bun's
+      # musl build from GitHub through the component installer, launches it hardened and runs the
+      # positive controls. Then fx.interpreter.bun-ts on it: the kernel conformance suite and the
+      # interpreter's end-to-end tests. The tests download the pinned Bun themselves and check its
+      # digest.
       - name: Install and launch the pinned Bun (network)
-        run: docker exec alpine dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-restore --configuration Release
-      - name: Restore the kernel tests (locked)
-        run: |
-          docker exec alpine dotnet restore tests/Fx.Kernel.Tests --locked-mode
-          docker exec alpine dotnet restore tests/Fx.Ext.InterpreterBunTs.Tests --locked-mode
-      # The kernel conformance suite (the bun-ts kernel on the pinned musl Bun) and the interpreter end
-      # to end. The tests download the pinned Bun themselves and check its digest.
-      - name: bun-ts kernel conformance on musl
-        run: docker exec alpine dotnet test --project tests/Fx.Kernel.Tests --no-restore --configuration Release
-      - name: bun-ts interpreter on musl
-        run: docker exec alpine dotnet test --project tests/Fx.Ext.InterpreterBunTs.Tests --no-restore --configuration Release
-
-  # The spike is superseded by packages/kernel-bun-ts: only when it changes, and nightly.
-  bun-kernel-spike:
-    name: Bun kernel spike (${{ matrix.os }})
-    needs: plan
-    if: needs.plan.outputs.spike == 'true'
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: spikes/bun-kernel
-    steps:
-      - uses: actions/checkout@v7
-      # Runs the tests only. The kernel itself runs on the pinned Bun the tests download and verify.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.5
-      - name: Install (frozen)
-        run: bun install --frozen-lockfile
-      - name: Type-check
-        run: bun check --no-script
-      - name: Test
-        run: bun test
-      - name: Benchmark
-        shell: bash
-        run: bun bench/bench.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.bun }}
+        run: $IN env NETWORK_TESTS=1 dotnet test --project tests/Fx.Ext.RuntimeBun.Tests --no-build --configuration Release
+      - name: bun-ts kernel conformance
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.bun }}
+        run: $IN dotnet test --project tests/Fx.Kernel.Tests --no-build --configuration Release
+      - name: bun-ts interpreter
+        if: ${{ !cancelled() && steps.area-tests.outcome == 'success' && matrix.bun }}
+        run: $IN dotnet test --project tests/Fx.Ext.InterpreterBunTs.Tests --no-build --configuration Release
