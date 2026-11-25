@@ -1,10 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Conformance\ProviderConformance.fs" />
+    <Compile Include="Conformance\SandboxConformance.fs" />
     <Compile Include="Local.fs" />
     <Compile Include="SpecTests.fs" />
     <Compile Include="LifecycleTests.fs" />
     <Compile Include="LocalTests.fs" />
+    <Compile Include="SandboxTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -15,6 +17,9 @@
     <ProjectReference Include="..\..\src\Fx.Environments\Fx.Environments.fsproj" />
     <ProjectReference Include="..\..\src\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxNone\Fx.Ext.SandboxNone.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxBubblewrap\Fx.Ext.SandboxBubblewrap.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxSeatbelt\Fx.Ext.SandboxSeatbelt.fsproj" />
     <!-- The fx binary: its apphost and assembly are copied next to the tests, which start its envd mode (piped). -->
     <ProjectReference Include="..\..\src\Fx.Cli\Fx.Cli.fsproj" />
   </ItemGroup>

@@ -1,5 +1,6 @@
 namespace Fx.Environments
 
+open System.Text.RegularExpressions
 open Fx.Contracts
 open Fx.Sdk
 
@@ -11,13 +12,23 @@ module EnvSpecs =
     [<Literal>]
     let ConfigMember = "environments"
 
-    /// The sandbox driver that is always there: none (spec §9.1). Drivers come with T113.
+    /// The sandbox driver that confines nothing (spec §9.1, `fx.sandbox.none`).
     [<Literal>]
-    let NoSandbox = "none"
+    let NoSandbox = SandboxDrivers.NoSandbox
 
-    /// The network policy that needs no sandbox: unrestricted.
+    /// The network policy that allows the network.
     [<Literal>]
     let OpenNetwork = "open"
+
+    /// The network policy that denies the network (enforced by a sandbox driver that confines).
+    [<Literal>]
+    let NoNetwork = "none"
+
+    /// What a network policy (`network`, `setup.network`) gives sandboxed processes; `None` is open.
+    let networkAccess (policy: string option) : NetworkAccess =
+        match policy with
+        | Some NoNetwork -> NetworkAccess.Denied
+        | _ -> NetworkAccess.Allowed
 
     let private key (name: string) = PathSegment.Key name
 
@@ -125,26 +136,29 @@ module EnvSpecs =
                 at [ "workspace"; "export" ] "exporting work is not supported yet (T503)"
 
             match spec.Sandbox with
-            | None
-            | Some NoSandbox -> ()
-            | Some driver ->
-                at [ "sandbox" ] $"{Json.quote driver}: no such sandbox driver; only \"none\" exists yet (T113)"
+            | Some driver when not (Regex.IsMatch(driver, SandboxDrivers.IdPattern)) || driver = "auto" ->
+                at
+                    [ "sandbox" ]
+                    $"{Json.quote driver}: expected a sandbox driver's id (lowercase letters, digits and \"-\")"
+            | _ -> ()
 
             match spec.Network with
             | None
-            | Some OpenNetwork -> ()
+            | Some OpenNetwork
+            | Some NoNetwork -> ()
             | Some policy ->
                 at
                     [ "network" ]
-                    $"{Json.quote policy}: network policies need a sandbox driver and the egress proxy (T113)"
+                    $"{Json.quote policy}: expected \"open\" or \"none\"; allowlists need the egress proxy (not yet)"
 
             match spec.Setup.Network with
             | None
-            | Some OpenNetwork -> ()
+            | Some OpenNetwork
+            | Some NoNetwork -> ()
             | Some policy ->
                 at
                     [ "setup"; "network" ]
-                    $"{Json.quote policy}: network policies need a sandbox driver and the egress proxy (T113)"
+                    $"{Json.quote policy}: expected \"open\" or \"none\"; allowlists need the egress proxy (not yet)"
 
             if not spec.Setup.Secrets.IsEmpty then
                 at [ "setup"; "secrets" ] "secrets for setup need the egress proxy's credential injection (not yet)"
@@ -153,3 +167,18 @@ module EnvSpecs =
             | ComponentPlacement.EnvFetch -> ()
             | other -> at [ "components"; "placement" ] $"{Json.quote (string other)}: not supported yet (T503)"
         ]
+
+    /// Whether the spec's sandbox driver is one of those in effect (by id). Whether it runs on the
+    /// environment's machine, and whether this host lets a spec choose it, is decided when the
+    /// environment connects (`EnvSandbox.choose`).
+    let checkSandbox (drivers: string list) (spec: EnvSpec) : Issue list =
+        match spec.Sandbox with
+        | Some driver when not (List.contains driver drivers) ->
+            let known = drivers |> Issue.quoteAll
+
+            [
+                Issue.at
+                    [ key "sandbox" ]
+                    $"{Json.quote driver}: no such sandbox driver is in effect (the host has {known})"
+            ]
+        | _ -> []

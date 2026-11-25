@@ -114,10 +114,33 @@ let tests =
                         { spec with
                             Sandbox = Some "bubblewrap"
                         })
-                    [ "$.sandbox" ]
-                    "no drivers yet"
+                    []
+                    "a driver's id"
 
                 Expect.equal (paths { spec with Sandbox = Some "none" }) [] "none"
+                Expect.equal (paths { spec with Sandbox = Some "auto" }) [ "$.sandbox" ] "auto is the host's"
+
+                Expect.equal
+                    (paths
+                        { spec with
+                            Sandbox = Some "Bubble Wrap"
+                        })
+                    [ "$.sandbox" ]
+                    "not an id"
+
+                Expect.equal
+                    (EnvSpecs.checkSandbox [ "none"; "bubblewrap" ] { spec with Sandbox = Some "nsjail" }
+                     |> List.map (fun i -> JsonPath.render i.Path))
+                    [ "$.sandbox" ]
+                    "a driver that is not in effect"
+
+                Expect.isEmpty
+                    (EnvSpecs.checkSandbox
+                        [ "none"; "bubblewrap" ]
+                        { spec with
+                            Sandbox = Some "bubblewrap"
+                        })
+                    "a driver in effect"
 
                 Expect.equal
                     (paths
@@ -125,7 +148,10 @@ let tests =
                             Network = Some "allowlist:dev"
                         })
                     [ "$.network" ]
-                    "network"
+                    "network allowlists need the egress proxy"
+
+                Expect.equal (paths { spec with Network = Some "none" }) [] "no network"
+                Expect.equal (paths { spec with Network = Some "open" }) [] "the network"
 
                 Expect.equal
                     (paths

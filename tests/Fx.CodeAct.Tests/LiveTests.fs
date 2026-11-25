@@ -96,9 +96,23 @@ let private bunComponent (exe: string) : InstalledComponent =
         Env = []
     }
 
+/// `SANDBOX_TESTS=1`: CI provides a confining sandbox driver on Linux and macOS.
+let private sandboxRequired () =
+    Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1"
+
+/// What sandboxed the last environment `localEnvironment` opened.
+let mutable private lastSandbox: EnvSandboxInfo option = None
+
 /// Hands in an environment of `fx.env.local` with envd embedded in this process, created on the
-/// fixture's workspace and opened through the host's `IEnvs`, as the composition root does.
-let private localEnvironment (exe: string) (root: string) (workspace: string) (cleanup: ResizeArray<unit -> Task>) =
+/// fixture's workspace and opened through the host's `IEnvs`, as the composition root does; the
+/// session's agent has these sandbox overrides.
+let private localEnvironmentWith
+    (overrides: SandboxOverrides)
+    (exe: string)
+    (root: string)
+    (workspace: string)
+    (cleanup: ResizeArray<unit -> Task>)
+    =
     let wait (task: Task<'T>) =
         task.WaitAsync(TimeSpan.FromSeconds 120.0).GetAwaiter().GetResult()
 
@@ -139,7 +153,10 @@ let private localEnvironment (exe: string) (root: string) (workspace: string) (c
             ProjectTrusted = false
             Launcher = HostEnvironment.scrub (hostEnvironment ())
             Guard = fun _ -> EffResult.ok ()
+            Sandbox = overrides
         }
+
+    lastSandbox <- Some handle.Sandbox.Info
 
     EnvHands.ofHandle
         Fx.Effects.Live.SystemClock.clock
@@ -150,14 +167,29 @@ let private localEnvironment (exe: string) (root: string) (workspace: string) (c
             Installed = [ bunComponent exe ]
         }
 
+
 /// Runs a test on a fixture whose hands are an environment of the local provider, and disposes it.
-let private inEnvironment (name: string) (body: Fixture -> Task<unit>) : unit -> Task =
+let private inEnvironmentWith
+    (overrides: SandboxOverrides)
+    (name: string)
+    (body: Fixture -> Task<unit>)
+    : unit -> Task =
     fun () ->
         task {
             let! exe = bun.Force()
-            use f = createOn name [] (localEnvironment exe) None (fun _ -> None)
+
+            use f =
+                createOn
+                    name
+                    []
+                    (fun root workspace cleanup -> localEnvironmentWith overrides exe root workspace cleanup)
+                    None
+                    (fun _ -> None)
+
             do! body(f).WaitAsync(TimeSpan.FromSeconds 180.0)
         }
+
+let private inEnvironment = inEnvironmentWith SandboxOverrides.none
 
 let private seen (f: Fixture) =
     receipts f "s1" |> List.map text |> String.concat "\n---\n"
@@ -232,6 +264,41 @@ let private hybrid (f: Fixture) : Task<unit> =
         Expect.equal (f.Read "greeting.txt") "hello, world\n" "the file changed"
         let rs = receipts f "s1"
         Expect.isFalse (rs |> List.exists (fun r -> r.IsError)) $"no errors: {seen f}"
+    }
+
+/// A reviewer's turn in a read-only sandbox (spec §7.1): its bindings refuse to write (the type
+/// level), and so does the sandbox its commands run in, wherever a driver confines them.
+let private reviewer (f: Fixture) : Task<unit> =
+    task {
+        f.Write("greeting.txt", "hello\n")
+
+        f.Model.AddAll
+            [
+                Say.cell
+                    $"// intent: try to change the workspace, then read it\nconst refused = await {g}.fs.write(\"greeting.txt\", \"changed\").then(() => \"written\", (e) => String(e.message))\nconst run = await {g}.shell.run(\"echo x > made.txt; cat greeting.txt\")\nconst file = await {g}.fs.read(\"greeting.txt\")\nfile.text.trim() + \" | \" + run.stdout.trim() + \" | \" + refused"
+                Say.cell
+                    $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"Reviewed the greeting\", evidence: [{{ kind: \"command\", summary: \"read greeting.txt\" }}] }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Review the greeting"
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+
+        match completed ending with
+        | TurnResult.Done _ -> ()
+        | other -> failtest $"{other}; receipts: {seen f}"
+
+        Expect.equal (f.Read "greeting.txt") "hello\n" "the binding did not write"
+        let first = receipts f "s1" |> List.head |> text
+        Expect.stringContains first "sandbox" $"the write was refused by the sandbox: {seen f}"
+        Expect.stringContains first "hello" "reading works"
+
+        match lastSandbox with
+        | Some sandbox when sandbox.Confines ->
+            Expect.isFalse (File.Exists(f.File "made.txt")) "the command could not write"
+        | Some _ when sandboxRequired () && not (OperatingSystem.IsWindows()) ->
+            failtest "a driver must confine the environment's processes here"
+        | _ -> ()
     }
 
 let private rejected (f: Fixture) : Task<unit> =
@@ -319,6 +386,15 @@ let tests =
 
             testTask "cells-only, in an environment of the local provider opened through IEnvs" {
                 do! inEnvironment "live-env" cellsOnly ()
+
+                match lastSandbox with
+                | Some sandbox when sandboxRequired () && not (OperatingSystem.IsWindows()) ->
+                    Expect.isTrue sandbox.Confines $"the kernel ran in the sandbox: {sandbox}"
+                | _ -> ()
+            }
+
+            testTask "a reviewer's read-only sandbox, in an environment: bindings and commands cannot write" {
+                do! inEnvironmentWith SandboxOverrides.readOnly "live-reviewer" reviewer ()
             }
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {

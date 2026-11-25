@@ -92,6 +92,35 @@ let contributed () : Contributed<EnvProvider> =
         Env = env
     }
 
+/// An extension's contributions of a type, activated as the extension host would.
+let contributionsOf
+    (extension: Extension)
+    (contributionType: ContributionType<'T>)
+    (id: 'T -> string)
+    : Contributed<'T> list =
+    let env = BasicExtensionEnv.forManifest SystemClock.clock extension.Manifest
+    let activation = wait (Eff.run env extension.Activate)
+
+    activation.Contributions
+    |> List.choose (Contribution.tryValue contributionType)
+    |> List.map (fun value ->
+        {
+            Extension = extension.Manifest.Id
+            Type = contributionType.Name
+            Id = id value
+            Value = value
+            Env = env
+        })
+
+/// The sandbox drivers as the composition root lists them: the confining ones first, then `none`.
+let sandboxes () : Contributed<SandboxDriver> list =
+    [
+        Fx.Ext.SandboxBubblewrap.Bubblewrap.extension
+        Fx.Ext.SandboxSeatbelt.Seatbelt.extension
+        Fx.Ext.SandboxNone.SandboxNone.extension
+    ]
+    |> List.collect (fun extension -> contributionsOf extension SandboxDrivers.contributionType _.Id)
+
 /// envd in this process.
 let embed (launch: EmbeddedLaunch) : Task<Result<Embedded, string>> =
     task {
@@ -120,6 +149,7 @@ let settings (dataDir: string) : EnvsSettings =
     {
         Stream = EnvsHost.stream "tests"
         Providers = [ contributed () ]
+        Sandboxes = sandboxes ()
         FsRead = LocalFs.read
         Fs = LocalFs.write
         Shell = LocalShell.create (LocalShell.defaultShell ()) dataDir
@@ -135,6 +165,14 @@ let settings (dataDir: string) : EnvsSettings =
 
 let start (settings: EnvsSettings) (log: EventLog<EnvEvent>) : EnvsHost<ProviderConformance.HostEnv> =
     wait (Eff.run (ProviderConformance.HostEnv.live ()) (EnvsHost.start settings log))
+
+/// A host whose variants have these selections (e.g. `sandbox.driver`).
+let startWith
+    (selections: (string * Fx.Contracts.Json) list)
+    (settings: EnvsSettings)
+    (log: EventLog<EnvEvent>)
+    : EnvsHost<ProviderConformance.HostEnv> =
+    wait (Eff.run (ProviderConformance.HostEnv.withSelections selections) (EnvsHost.start settings log))
 
 let providerEnv (dataDir: string) : ProviderEnv =
     let settings = settings dataDir
