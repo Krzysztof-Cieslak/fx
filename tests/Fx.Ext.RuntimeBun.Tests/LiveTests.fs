@@ -288,12 +288,21 @@ let tests =
                 requireNetwork ()
                 use client = new HttpClient()
 
-                let sums =
-                    within (
-                        client.GetStringAsync(
-                            $"https://github.com/oven-sh/bun/releases/download/bun-v{Pins.Version}/SHASUMS256.txt"
-                        )
-                    )
+                let url =
+                    $"https://github.com/oven-sh/bun/releases/download/bun-v{Pins.Version}/SHASUMS256.txt"
+
+                // GitHub's release downloads answer 503 now and then: retry for about a minute.
+                let rec fetch (attempt: int) : string =
+                    use response = within (client.GetAsync url)
+
+                    if response.IsSuccessStatusCode || attempt >= 6 then
+                        response.EnsureSuccessStatusCode() |> ignore
+                        within (response.Content.ReadAsStringAsync())
+                    else
+                        Thread.Sleep(TimeSpan.FromSeconds(2.0 * float (pown 2 (attempt - 1))))
+                        fetch (attempt + 1)
+
+                let sums = fetch 1
 
                 let listed =
                     sums.Split('\n', StringSplitOptions.RemoveEmptyEntries)
