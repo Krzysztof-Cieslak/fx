@@ -442,6 +442,7 @@ module Host =
                         {
                             Stream = EnvsHost.stream Name
                             Providers = ExtensionHost.contributions EnvProviders.contributionType extensions
+                            Sandboxes = ExtensionHost.contributions SandboxDrivers.contributionType extensions
                             FsRead = options.FsRead
                             Fs = options.Fs
                             Shell = options.Shell
@@ -604,6 +605,8 @@ module Host =
                                 ProjectTrusted = config.ProjectTrusted
                                 Launcher = launcher
                                 Guard = fun _ -> EffResult.ok ()
+                                // The session's agent's overrides come with agents (T213).
+                                Sandbox = SandboxOverrides.none
                             }
 
             let hands (turn: TurnStart) : Eff<HostEnv, Result<Hands<EnvHands>, string>> =

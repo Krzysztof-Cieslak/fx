@@ -85,7 +85,15 @@ let toReady (id: string) =
         EnvCommand.Provisioned(id, 1, Ok(lease id))
         EnvCommand.Bootstrapped(id, 1, Ok(TransportKind.InProcess, machine))
         EnvCommand.Connected(id, 1, Ok platform)
-        EnvCommand.Installed(id, 1, Ok [ "bun@1.4.5" ])
+        EnvCommand.Installed(
+            id,
+            1,
+            Ok
+                {
+                    Components = [ "bun@1.4.5" ]
+                    Sandbox = None
+                }
+        )
     ]
 
 let run (commands: EnvCommand list) : EnvsState * EnvEvent list =
@@ -112,7 +120,7 @@ let history: EnvEvent list =
                 EnvCommand.Attach "a"
                 EnvCommand.Bootstrapped("a", 2, Ok(TransportKind.Piped, machine))
                 EnvCommand.Connected("a", 2, Ok platform)
-                EnvCommand.Installed("a", 2, Ok [])
+                EnvCommand.Installed("a", 2, Ok { Components = []; Sandbox = None })
                 EnvCommand.Suspend "a"
                 EnvCommand.Suspended("a", Ok())
                 EnvCommand.Resume "a"

@@ -306,7 +306,14 @@ let tests =
                     | [ env ] ->
                         Expect.equal env.Id entry.Environment "the session's"
                         Expect.equal env.Transport (Some "in-process") "embedded"
-                        Expect.isNonEmpty env.Warnings "unsandboxed"
+                        // Unsandboxed only where no sandbox driver confines processes (Windows, or a
+                        // machine without bubblewrap): the warning says so.
+                        let confined =
+                            (wait ((Fx.Environments.EnvsHost.envs h.Environments).Get env.Id CancellationToken.None))
+                            |> Option.bind _.Sandbox
+                            |> Option.exists _.Confines
+
+                        Expect.equal env.Warnings.IsEmpty confined "a warning exactly when unsandboxed"
                         Expect.equal (c.Call(ClientProtocol.envGet, { Id = env.Id })) env "get"
                     | other -> failtest $"{other}"
 

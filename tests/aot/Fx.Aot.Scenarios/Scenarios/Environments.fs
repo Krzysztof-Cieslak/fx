@@ -145,7 +145,15 @@ let private lifecycle () : string list =
             EnvCommand.Provisioned("a", 1, Ok(lease "a"))
             EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.InProcess, machine))
             EnvCommand.Connected("a", 1, Ok platform)
-            EnvCommand.Installed("a", 1, Ok [ "bun@1.4.5" ])
+            EnvCommand.Installed(
+                "a",
+                1,
+                Ok
+                    {
+                        Components = [ "bun@1.4.5" ]
+                        Sandbox = None
+                    }
+            )
             EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine))
             EnvCommand.Disconnected("a", 1, "gone")
             EnvCommand.Attach "a"
@@ -260,6 +268,9 @@ let private settings (dataDir: string) : EnvsSettings =
 
     let binary, binaryArgs = self ()
 
+    let noneEnv =
+        BasicExtensionEnv.forManifest clock Fx.Ext.SandboxNone.SandboxNone.manifest
+
     {
         Stream = EnvsHost.stream "scenario"
         Providers =
@@ -270,6 +281,18 @@ let private settings (dataDir: string) : EnvsSettings =
                     Id = EnvLocal.Kind
                     Value = provider
                     Env = extensionEnv
+                }
+            ]
+        // The host turns sandboxing off (`hostEnv`), so the session prints the same on every machine;
+        // the sandbox-* scenarios cover the drivers.
+        Sandboxes =
+            [
+                {
+                    Extension = Fx.Ext.SandboxNone.SandboxNone.manifest.Id
+                    Type = SandboxDrivers.contributionType.Name
+                    Id = Fx.Ext.SandboxNone.SandboxNone.Id
+                    Value = Fx.Ext.SandboxNone.SandboxNone.driver
+                    Env = noneEnv
                 }
             ]
         FsRead = LocalFs.read
@@ -318,7 +341,10 @@ let private hostEnv () : HostEnv =
         Clock = SystemClock.clock
         Trace = Trace.none
         Ids = SystemIds.create SystemClock.clock
-        Variants = Fx.Variants.Fakes.FakeVariants.core []
+        Variants =
+            Fx.Variants.Fakes.FakeVariants.create
+                (Fx.Variants.Slots.all @ SandboxSlots.all)
+                [ "sandbox.driver", Fx.Contracts.Json.String "none" ]
         Scope = Scope.root
     }
 

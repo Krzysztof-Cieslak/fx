@@ -19,6 +19,10 @@ type EnvLayout =
         Assets: string
         /// Owned directories of runtime launches, one per launch (`<home>/owned/<launch>`).
         Owned: string
+        /// The temporary directory of sandboxed processes (`<home>/tmp`, their `TMPDIR`).
+        Temp: string
+        /// The sandbox driver's own files, e.g. its seccomp program (`<home>/sandbox`).
+        Sandbox: string
         /// The component install root of the machine (`<data dir>/runtimes`).
         Components: string
     }
@@ -48,6 +52,8 @@ module EnvLayout =
             EnvdState = join os home "envd"
             Assets = join os home "assets"
             Owned = join os home "owned"
+            Temp = join os home "tmp"
+            Sandbox = join os home "sandbox"
             Components = join os machine.DataDir InstallRoot.DirName
         }
 

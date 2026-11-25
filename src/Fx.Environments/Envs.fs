@@ -69,6 +69,10 @@ type EnvsSettings =
         Stream: StreamId
         /// The providers in effect (`ExtensionHost.contributions EnvProviders.contributionType`).
         Providers: Contributed<EnvProvider> list
+        /// The sandbox drivers in effect (`ExtensionHost.contributions SandboxDrivers.contributionType`):
+        /// `auto` picks the first that confines processes on an environment's OS, so list the
+        /// built-ins first. Without `none`, an environment that no driver can confine fails.
+        Sandboxes: Contributed<SandboxDriver> list
         /// The host's own files and processes, handed to providers (`IProviderEnv`).
         FsRead: FsRead
         Fs: Fs
@@ -97,15 +101,33 @@ type EnvHandle =
     {
         Id: string
         Spec: EnvSpec
+        /// envd's capability records, with every process and terminal started in the sandbox under
+        /// `Sandbox.Policy` (spec §9.1: what an agent runs there is confined).
         Client: EnvClient
         Machine: EnvMachine
         Layout: EnvLayout
         /// The components installed for it, dependencies first.
         Installed: InstalledComponent list
+        /// What confines its processes, and the policy `Client` applies.
+        Sandbox: EnvSandbox
     }
 
     override this.ToString() =
         $"environment {this.Id} ({this.Spec.Name})"
+
+[<RequireQualifiedAccess>]
+module EnvHandle =
+    /// The same environment with an agent's sandbox overrides (spec §7.1, e.g. a read-only workspace
+    /// for a reviewer): its processes and terminals start under the tighter policy. Overrides only
+    /// take access away.
+    let attenuate (overrides: SandboxOverrides) (handle: EnvHandle) : EnvHandle =
+        let policy = SandboxPolicy.tighten overrides handle.Sandbox.Policy
+        let sandbox = { handle.Sandbox with Policy = policy }
+
+        { handle with
+            Client = EnvSandbox.client sandbox policy
+            Sandbox = sandbox
+        }
 
 /// Why an environment operation failed.
 [<RequireQualifiedAccess>]
@@ -189,14 +211,19 @@ module Envs =
         fun env -> env.Envs.Destroy id env.Scope.Cancellation
 
     /// What a person must be told about an environment while it exists, e.g. that it runs without a
-    /// sandbox (spec §9.1, §18: a persistent warning).
+    /// sandbox (spec §9.1, §18: a persistent warning, the TUI's "unsandboxed" banner).
     let warnings (record: EnvRecord) : string list =
         [
-            match record.Spec.Sandbox with
-            | None
-            | Some EnvSpecs.NoSandbox ->
-                "runs unsandboxed: commands can read and change everything the user can (no sandbox driver yet, T113)"
-            | Some _ -> ()
+            match record.Sandbox with
+            | Some sandbox when sandbox.Confines -> ()
+            | Some sandbox ->
+                let why =
+                    match sandbox.Notes with
+                    | [] -> ""
+                    | notes -> " (" + String.Join("; ", notes) + ")"
+
+                $"runs unsandboxed: commands can read and change everything the user can{why}"
+            | None -> "runs unsandboxed: commands can read and change everything the user can"
         ]
 
 /// A connection the host holds to an environment's envd, for one attempt.
@@ -211,6 +238,7 @@ type internal Live =
         Stop: unit -> Task<unit>
         Client: EnvClient option
         Installed: InstalledComponent list
+        Sandbox: EnvSandbox option
     }
 
     override this.ToString() = $"Live(attempt {this.Attempt})"
@@ -589,6 +617,7 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                                 Stop = stop
                                 Client = None
                                 Installed = []
+                                Sandbox = None
                             }
 
                         match live.Register(id, entry) with
@@ -629,7 +658,7 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
             | _ -> return [ EnvCommand.Connected(id, attempt, Error "envd is not running") ]
         }
 
-    let runSetup (client: EnvClient) (workspace: string) (commands: string list) : Eff<'R, Result<unit, string>> =
+    let runSetup (shell: Shell) (workspace: string) (commands: string list) : Eff<'R, Result<unit, string>> =
         fun env ->
             task {
                 let mutable failure = None
@@ -638,7 +667,7 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                     if failure.IsNone then
                         let command = Command.script line |> Command.inDir workspace
 
-                        match! client.Shell.Run command env.Scope.Cancellation with
+                        match! shell.Run command env.Scope.Cancellation with
                         | Error e -> failure <- Some $"setup: {e}"
                         | Ok output when output.ExitCode <> 0 ->
                             let errors = (Output.stderrText output).Trim()
@@ -657,6 +686,136 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                     | Some reason -> Error reason
                     | None -> Ok()
             }
+
+    /// Runs a driver's probe in its extension's environment over envd's own (unsandboxed)
+    /// capabilities; a driver that throws fails the probe, not the host.
+    let probe
+        (contributed: Contributed<SandboxDriver>)
+        (client: EnvClient)
+        (site: SandboxSite)
+        : Eff<'R, Result<SandboxReady, SandboxUnavailable>> =
+        fun env ->
+            task {
+                let sandboxEnv: SandboxEnv =
+                    {
+                        Extension = contributed.Env
+                        FsRead = client.FsRead
+                        Fs = client.Fs
+                        Shell = client.Shell
+                    }
+
+                try
+                    return! SandboxEnv.within sandboxEnv (contributed.Value.Probe site) env
+                with e when not (e :? OperationCanceledException) ->
+                    return
+                        Error
+                            {
+                                Reason = $"the sandbox driver {contributed.Value.Id} failed ({e.GetType().Name})"
+                                Remedy = None
+                            }
+            }
+
+    /// The sandbox of a connected environment (spec §9.1): the driver the host's `sandbox.driver`
+    /// and the spec choose for its OS, probed in it; `auto` falls back to `none` (with notes that
+    /// say why) where no driver can confine processes, a required driver never does.
+    let sandboxFor (entry: Live) (client: EnvClient) (spec: EnvSpec) : Eff<'R, Result<EnvSandbox, string>> =
+        eff {
+            let! hostChoice = Variants.get SandboxSlots.driver
+            let! writable = Variants.get SandboxSlots.writable
+            let! denied = Variants.get SandboxSlots.denied
+            let machine = entry.Machine
+            let layout = entry.Layout
+
+            // The user's home on the host's machine; other machines' come with T501.
+            let home =
+                if machine.SameHost then
+                    Some settings.HostInfo.Home
+                else
+                    None
+
+            let network = EnvSpecs.networkAccess spec.Network
+            let policy = EnvSandbox.policy layout machine home writable denied network
+            let site = EnvSandbox.site layout machine client.Platform.Shell home policy
+
+            let contributedAs (driver: SandboxDriver) =
+                settings.Sandboxes |> List.find (fun c -> c.Value.Id = driver.Id)
+
+            let sandbox (contributed: Contributed<SandboxDriver>) (ready: SandboxReady) (notes: string list) =
+                {
+                    Driver = contributed.Value
+                    Ready = ready
+                    Policy = policy
+                    Info =
+                        {
+                            Driver = contributed.Value.Id
+                            Confines = contributed.Value.Confines
+                            Notes = notes @ ready.Notes
+                        }
+                    Unsandboxed = client
+                }
+
+            let unconfined (notes: string list) : Eff<'R, Result<EnvSandbox, string>> =
+                eff {
+                    match
+                        settings.Sandboxes
+                        |> List.tryFind (fun c -> c.Value.Id = SandboxDrivers.NoSandbox)
+                    with
+                    | None ->
+                        let why = String.Join("; ", notes)
+
+                        return
+                            Error
+                                $"sandbox: no driver confines processes here ({why}), and none (fx.sandbox.none) is not in effect"
+                    | Some none ->
+                        match! probe none client site with
+                        | Ok ready -> return Ok(sandbox none ready notes)
+                        | Error e -> return Error $"sandbox: {e}"
+                }
+
+            let! made =
+                fun (env: 'R) ->
+                    task {
+                        let! temp = client.Fs.CreateDirectory layout.Temp env.Scope.Cancellation
+                        let! own = client.Fs.CreateDirectory layout.Sandbox env.Scope.Cancellation
+                        return temp |> Result.bind (fun () -> own)
+                    }
+
+            match made with
+            | Error e -> return Error $"sandbox: cannot create its directories: {e}"
+            | Ok() ->
+                let drivers = settings.Sandboxes |> List.map _.Value
+
+                let! chosen =
+                    match EnvSandbox.choose hostChoice spec machine.Target.Os drivers with
+                    | Error e -> Eff.ret (Error $"sandbox: {e}")
+                    | Ok(SandboxChoice.Required driver) ->
+                        eff {
+                            let contributed = contributedAs driver
+
+                            match! probe contributed client site with
+                            | Ok ready -> return Ok(sandbox contributed ready [])
+                            | Error unavailable -> return Error $"sandbox {driver.Id}: {unavailable}"
+                        }
+                    | Ok(SandboxChoice.Preferred driver) ->
+                        eff {
+                            let contributed = contributedAs driver
+
+                            match! probe contributed client site with
+                            | Ok ready -> return Ok(sandbox contributed ready [])
+                            | Error unavailable ->
+                                return! unconfined [ $"{driver.Id} cannot sandbox here: {unavailable}" ]
+                        }
+                    | Ok(SandboxChoice.Unconfined reason) -> unconfined [ reason ]
+
+                match chosen with
+                | Ok sandbox when network = NetworkAccess.Denied && not sandbox.Driver.Confines ->
+                    let why = String.Join("; ", sandbox.Info.Notes)
+
+                    return
+                        Error
+                            $"network \"none\" needs a sandbox that confines processes, and this environment has none ({why})"
+                | chosen -> return chosen
+        }
 
     let install (id: string) (attempt: int) (spec: EnvSpec) : Eff<'R, EnvCommand list> =
         eff {
@@ -689,14 +848,45 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                 match installed with
                 | Error e -> return [ EnvCommand.Installed(id, attempt, Error e) ]
                 | Ok installed ->
-                    match! runSetup client entry.Layout.Workspace spec.Setup.Run with
+                    match! sandboxFor entry client spec with
                     | Error e -> return [ EnvCommand.Installed(id, attempt, Error e) ]
-                    | Ok() ->
-                        live.Update(id, attempt, fun entry -> { entry with Installed = installed })
-                        |> ignore
+                    | Ok sandbox ->
+                        // Setup is the project's code: it runs sandboxed, with its own network policy.
+                        let setupPolicy =
+                            { sandbox.Policy with
+                                Network = EnvSpecs.networkAccess (spec.Setup.Network |> Option.orElse spec.Network)
+                            }
 
-                        let names = installed |> List.map (fun c -> $"{c.Id}@{c.Version}")
-                        return [ EnvCommand.Installed(id, attempt, Ok names) ]
+                        match!
+                            runSetup (EnvSandbox.shell sandbox setupPolicy) entry.Layout.Workspace spec.Setup.Run
+                        with
+                        | Error e -> return [ EnvCommand.Installed(id, attempt, Error e) ]
+                        | Ok() ->
+                            live.Update(
+                                id,
+                                attempt,
+                                fun entry ->
+                                    { entry with
+                                        Installed = installed
+                                        Sandbox = Some sandbox
+                                    }
+                            )
+                            |> ignore
+
+                            let names = installed |> List.map (fun c -> $"{c.Id}@{c.Version}")
+
+                            return
+                                [
+                                    EnvCommand.Installed(
+                                        id,
+                                        attempt,
+                                        Ok
+                                            {
+                                                Components = names
+                                                Sandbox = Some sandbox.Info
+                                            }
+                                    )
+                                ]
             | _ ->
                 return
                     [
@@ -883,7 +1073,9 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
             match provider spec.Provider with
             | None -> return Error(EnvError.UnknownProvider spec.Provider)
             | Some(provider, _) ->
-                match EnvSpecs.check provider spec with
+                let drivers = settings.Sandboxes |> List.map _.Value.Id
+
+                match EnvSpecs.check provider spec @ EnvSpecs.checkSandbox drivers spec with
                 | _ :: _ as issues -> return Error(EnvError.Invalid issues)
                 | [] ->
                     let! id = Ids.newId env
@@ -911,15 +1103,19 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
 
     let handleOf (record: EnvRecord) : EnvHandle option =
         match live.Get record.Id with
-        | Some({ Client = Some client } as entry) when entry.Attempt = record.Attempt ->
+        | Some({
+                   Client = Some _
+                   Sandbox = Some sandbox
+               } as entry) when entry.Attempt = record.Attempt ->
             Some
                 {
                     Id = record.Id
                     Spec = record.Spec
-                    Client = client
+                    Client = EnvSandbox.client sandbox sandbox.Policy
                     Machine = entry.Machine
                     Layout = entry.Layout
                     Installed = entry.Installed
+                    Sandbox = sandbox
                 }
         | _ -> None
 

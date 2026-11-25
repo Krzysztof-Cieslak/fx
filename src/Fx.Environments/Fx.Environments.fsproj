@@ -13,6 +13,7 @@
     <Compile Include="EnvSpecs.fs" />
     <Compile Include="Layout.fs" />
     <Compile Include="Lifecycle.fs" />
+    <Compile Include="Sandbox.fs" />
     <Compile Include="Envs.fs" />
   </ItemGroup>
   <ItemGroup>

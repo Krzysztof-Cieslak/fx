@@ -52,8 +52,11 @@ type KernelPlan =
         /// The launcher's variables: on the host's machine, the host's scrubbed ones
         /// (`HostEnvironment.scrub`); only the runtime's allowlist reaches a kernel.
         Launcher: (string * string) list
-        /// Checked before every host call (T127b: grants).
+        /// Checked before every host call (T127b: grants), after the sandbox's own check.
         Guard: Fx.Kernel.HostCall -> Eff<EnvHands, Result<unit, HostCallError>>
+        /// What the session's agent may not do in the environment's sandbox (spec §7.1): e.g. a
+        /// reviewer's read-only workspace. Its processes, kernels and bindings get the tighter policy.
+        Sandbox: SandboxOverrides
     }
 
     override this.ToString() =
@@ -70,7 +73,9 @@ module EnvHands =
     /// A session's hands in an opened environment (`IEnvs.Open`): its capabilities, its workspace and
     /// OS, and the interpreter's kernels prepared on its filesystem (assets at `EnvLayout.Assets`, owned
     /// directories under `EnvLayout.Owned`, the components installed for it) and started with its shell.
-    /// The kernels live in `scope` (the host's), not a turn's.
+    /// The kernels live in `scope` (the host's), not a turn's. Every process (commands, kernels) starts
+    /// in the environment's sandbox under the plan's overrides, and every host call is checked against
+    /// the same policy first (`SandboxGuard`).
     let ofHandle
         (clock: Clock)
         (scope: Scope)
@@ -78,6 +83,9 @@ module EnvHands =
         (session: string)
         (handle: EnvHandle)
         : Hands<EnvHands> =
+        let handle = EnvHandle.attenuate plan.Sandbox handle
+        let policy = handle.Sandbox.Policy
+
         let interpreterSession (launch: int) : InterpreterSession =
             {
                 Provider = plan.Provider
@@ -105,6 +113,12 @@ module EnvHands =
             Os = handle.Layout.Os
             CommandEnv = Inherit []
             Interpreter = Interpreter.ofProvider plan.Options interpreterSession
-            Guard = plan.Guard
+            Guard =
+                fun call ->
+                    eff {
+                        match! SandboxGuard.check policy handle.Layout.Os call with
+                        | Error e -> return Error e
+                        | Ok() -> return! plan.Guard call
+                    }
             Snapshots = Some handle.Client.Snapshots
         }

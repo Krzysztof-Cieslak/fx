@@ -25,6 +25,7 @@
     <Compile Include="Recall.fs" />
     <Compile Include="Hybrid.fs" />
     <Compile Include="CodeAct.fs" />
+    <Compile Include="SandboxGuard.fs" />
     <Compile Include="Environment.fs" />
   </ItemGroup>
 

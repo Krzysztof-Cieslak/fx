@@ -62,6 +62,36 @@ type Step =
         | Resume -> "resume"
         | Destroy -> "destroy"
 
+/// What confines an environment's processes, as the host recorded it when the environment became
+/// ready (each attach decides again).
+type EnvSandboxInfo =
+    {
+        /// The sandbox driver's id, e.g. `bubblewrap`, `seatbelt`, `none`.
+        Driver: string
+        /// Whether the driver confines processes; `false`: the environment runs unsandboxed and
+        /// carries a persistent warning (spec §9.1).
+        Confines: bool
+        /// Why it is so, e.g. why the host's `auto` choice fell back to `none`.
+        Notes: string list
+    }
+
+    override this.ToString() =
+        if this.Confines then
+            $"sandbox {this.Driver}"
+        else
+            $"unsandboxed ({this.Driver})"
+
+/// What the install step gives a ready environment.
+type EnvInstallation =
+    {
+        /// The components installed (`id@version`).
+        Components: string list
+        Sandbox: EnvSandboxInfo option
+    }
+
+    override this.ToString() =
+        $"{this.Components.Length} components, {this.Sandbox}"
+
 /// One environment as the host records it: a fold of its events.
 type EnvRecord =
     {
@@ -81,6 +111,9 @@ type EnvRecord =
         Platform: Platform option
         /// The components installed for it (`id@version`).
         Components: string list
+        /// What confined its processes when it last became ready; `None` before that (and for
+        /// environments recorded before sandboxes existed).
+        Sandbox: EnvSandboxInfo option
         /// Why it failed, was lost or detached.
         Reason: string option
     }
@@ -166,6 +199,8 @@ type EnvReadied =
         Id: string
         Attempt: int
         Components: string list
+        /// What confines its processes (absent in events written before sandboxes existed).
+        Sandbox: EnvSandboxInfo option
     }
 
     override this.ToString() = $"{this.Id} ready"
@@ -271,7 +306,7 @@ type EnvCommand =
     | Provisioned of id: string * attempt: int * result: Result<Lease, string>
     | Bootstrapped of id: string * attempt: int * result: Result<TransportKind * EnvMachine, string>
     | Connected of id: string * attempt: int * result: Result<Platform, string>
-    | Installed of id: string * attempt: int * result: Result<string list, string>
+    | Installed of id: string * attempt: int * result: Result<EnvInstallation, string>
     | Suspended of id: string * result: Result<unit, string>
     | Resumed of id: string * result: Result<unit, string>
     | Destroyed of id: string * result: Result<unit, string>
@@ -375,6 +410,7 @@ module Lifecycle =
                     Machine = None
                     Platform = None
                     Components = []
+                    Sandbox = None
                     Reason = None
                 }
 
@@ -425,6 +461,7 @@ module Lifecycle =
                     Phase = Phase.Ready
                     Step = None
                     Components = e.Components
+                    Sandbox = e.Sandbox
                 })
         | EnvEvent.Detached e ->
             state
@@ -617,13 +654,14 @@ module Lifecycle =
             outcome
             |> result state id attempt Step.Install (fun _ ->
                 match outcome with
-                | Ok components ->
+                | Ok installation ->
                     [
                         EnvEvent.Readied
                             {
                                 Id = id
                                 Attempt = attempt
-                                Components = components
+                                Components = installation.Components
+                                Sandbox = installation.Sandbox
                             }
                     ]
                 | Error _ -> [])
@@ -843,6 +881,25 @@ module Lifecycle =
                 }
         }
 
+    /// What confines an environment's processes: `{"driver", "confines", "notes"?}`.
+    let sandboxInfo: Codec<EnvSandboxInfo> =
+        Codec.record {
+            let! driver = Codec.field "driver" (fun (s: EnvSandboxInfo) -> s.Driver) nonEmpty
+            and! confines = Codec.field "confines" (fun s -> s.Confines) Codec.bool
+
+            and! notes =
+                Codec.defaultField "notes" (fun s -> s.Notes) [] (Codec.list Codec.string)
+
+            return
+                {
+                    Driver = driver
+                    Confines = confines
+                    Notes = notes
+                }
+        }
+        |> Codec.describe "What confines an environment's processes: a sandbox driver, or none."
+        |> Codec.named "EnvSandboxInfo"
+
     let private readied: Codec<EnvReadied> =
         Codec.record {
             let! id = Codec.field "id" (fun (e: EnvReadied) -> e.Id) nonEmpty
@@ -851,11 +908,15 @@ module Lifecycle =
             and! components =
                 Codec.defaultField "components" (fun e -> e.Components) [] (Codec.list nonEmpty)
 
+            // Added with the sandbox drivers (T113): optional, so what version 1 wrote reads the same.
+            and! sandbox = Codec.optionalField "sandbox" (fun e -> e.Sandbox) sandboxInfo
+
             return
                 {
                     Id = id
                     Attempt = attempt
                     Components = components
+                    Sandbox = sandbox
                 }
         }
 

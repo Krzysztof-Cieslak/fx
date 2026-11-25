@@ -49,14 +49,20 @@ type HostEnv =
     override env.ToString() = $"HostEnv({env.Scope})"
 
 module HostEnv =
-    let live () : HostEnv =
+    /// The host's slots: the core's and the sandbox's.
+    let slots = Slots.all @ SandboxSlots.all
+
+    /// A host whose variants have these selections.
+    let withSelections (selections: (string * Json) list) : HostEnv =
         {
             Clock = SystemClock.clock
             Trace = Trace.none
             Ids = SystemIds.create SystemClock.clock
-            Variants = Fx.Variants.Fakes.FakeVariants.core []
+            Variants = Fx.Variants.Fakes.FakeVariants.create slots selections
             Scope = Scope.root
         }
+
+    let live () : HostEnv = withSelections []
 
 /// Variables the subject's host must add to its own (`EnvsSettings.HostEnvironment`), to check
 /// that environments on the host's machine get the host's variables without credentials and
@@ -175,7 +181,12 @@ let tests (subject: Subject) : Test =
                     let lease = record.Lease |> Option.get
                     Expect.equal lease.Id record.Id "the lease is named after the environment"
                     Expect.equal lease.Provider subject.Provider.Kind "the lease's provider"
-                    Expect.equal (Envs.warnings record).Length 1 "unsandboxed: one warning"
+                    let sandbox = record.Sandbox |> Option.get
+
+                    Expect.equal
+                        (Envs.warnings record).Length
+                        (if sandbox.Confines then 0 else 1)
+                        "the record says what sandboxes it; an unsandboxed environment carries one warning"
 
                     let listed = wait ((EnvsHost.envs host).List none)
                     Expect.equal (listed |> List.map (fun r -> r.Id)) [ record.Id ] "listed"

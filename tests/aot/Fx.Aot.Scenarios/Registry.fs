@@ -44,6 +44,7 @@ let all: Scenario list =
             Grants.scenarios
             Egress.scenarios
             Environments.scenarios
+            Sandbox.scenarios
             Identity.scenarios
             Keyring.scenarios
             Auth.scenarios
