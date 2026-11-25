@@ -60,6 +60,7 @@
     <Compile Include="Scenarios\Grants.fs" />
     <Compile Include="Scenarios\Egress.fs" />
     <Compile Include="Scenarios\Environments.fs" />
+    <Compile Include="Scenarios\Identity.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -94,5 +95,7 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Environments\Fx.Environments.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Identity.Host\Fx.Identity.Host.fsproj" />
+    <ProjectReference Include="..\..\..\extensions\Fx.Ext.IdentityLocalOsUser\Fx.Ext.IdentityLocalOsUser.fsproj" />
   </ItemGroup>
 </Project>
