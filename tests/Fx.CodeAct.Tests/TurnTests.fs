@@ -377,15 +377,13 @@ let tests =
                         []
                         (fun f ->
                             task {
-                                f.Model.AddAll
-                                    [
-                                        Say.cell
-                                            "// intent: spin\nlet y = 2\ncall w = fs.write [\"started.txt\", \"\"]\nspin"
-                                    ]
+                                f.Model.AddAll [ Say.cell "// intent: spin\nlet y = 2\nspin spinning" ]
 
                                 do! kickoff f "Spin"
                                 do! f.Model.Asked(1).WaitAsync(TimeSpan.FromSeconds 30.0)
-                                do! started f
+                                // Not before: a cancel that reaches the cell before it blocks the kernel
+                                // stops it, and the kernel lives on.
+                                do! printed f "s1" "spinning"
                                 let! _ = send f "s1" "stop" Command.Interrupt
                                 let! ending = ended f "s1" 1
                                 Expect.equal ending TurnEnd.Interrupted "interrupted"

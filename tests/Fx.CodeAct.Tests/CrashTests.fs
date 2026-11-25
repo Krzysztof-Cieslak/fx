@@ -416,13 +416,15 @@ let tests =
                                 [
                                     Say.cell "// intent: small\nvalue 7"
                                     Say.cell "// intent: too big\nvalue \"0123456789abcdefghij\""
-                                    Say.cell "// intent: spin\ncall w = fs.write [\"started.txt\", \"\"]\nspin"
+                                    Say.cell "// intent: spin\nspin spinning"
                                 ]
 
                             do! start f "s1"
                             do! prompt f "s1" "p1" "Spin"
                             do! f.Model.Asked(3).WaitAsync(TimeSpan.FromSeconds 30.0)
-                            do! until "the cell started" (fun () -> IO.File.Exists(f.File "started.txt"))
+                            // Not before: a cancel that reaches the cell before it blocks the kernel stops
+                            // it, and the kernel lives on.
+                            do! printed f "s1" "spinning"
                             let! _ = send f "s1" "stop" Command.Interrupt
                             let! _ = ended f "s1" 1
 

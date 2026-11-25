@@ -634,6 +634,16 @@ let until (what: string) (condition: unit -> bool) : Task =
             do! Task.Delay 10
     }
 
+/// Waits until a cell of the session printed this text (its output reached the host). A cell that ends
+/// `spin <text>` has the kernel blocked by then: an interrupt can only kill it.
+let printed (f: Fixture) (session: string) (text: string) : Task =
+    until $"a cell printed {text}" (fun () ->
+        journal f session
+        |> List.exists (fun r ->
+            match r.Event with
+            | StepEvent.Printed p -> p.Text.Contains text
+            | _ -> false))
+
 /// Waits until the session has the open request.
 let opened (f: Fixture) (session: string) (id: string) : Task<PendingRequest> =
     task {
