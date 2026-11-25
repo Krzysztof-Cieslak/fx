@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.identity.local-os-user package (spec §3, §11.2, §16.4): the identity provider that
+    signs in clients running as the host's own OS account, from what the host established about
+    their connection. A native extension: like every package under extensions/, it references the
+    public SDK (src/Fx.Sdk) and nothing else. See README.md and docs/modules/identity.md.
+  -->
+  <ItemGroup>
+    <Compile Include="LocalOsUser.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

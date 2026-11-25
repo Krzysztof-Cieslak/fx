@@ -55,6 +55,7 @@
     <Project Path="extensions/Fx.Ext.ModelAnthropic/Fx.Ext.ModelAnthropic.fsproj" />
     <Project Path="extensions/Fx.Ext.EgressExclusions/Fx.Ext.EgressExclusions.fsproj" />
     <Project Path="extensions/Fx.Ext.EnvLocal/Fx.Ext.EnvLocal.fsproj" />
+    <Project Path="extensions/Fx.Ext.IdentityLocalOsUser/Fx.Ext.IdentityLocalOsUser.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -111,6 +112,7 @@
     <Project Path="tests/Fx.Ext.EgressExclusions.Tests/Fx.Ext.EgressExclusions.Tests.fsproj" />
     <Project Path="tests/Fx.Identity.Tests/Fx.Identity.Tests.fsproj" />
     <Project Path="tests/Fx.Identity.Host.Tests/Fx.Identity.Host.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.IdentityLocalOsUser.Tests/Fx.Ext.IdentityLocalOsUser.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />
