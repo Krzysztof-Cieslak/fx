@@ -493,7 +493,9 @@ type CodeAct<'R, 'K
                 let started = EventRef.create (Session.stream session) start.Seq
                 let state = TurnState settings
 
-                let record (what: string) (event: ContextEvent) =
+                // Typed: a generic local function (its environment left open) is a constrained generic
+                // construct, and the turn would not compile to a state machine in Debug (FS3511).
+                let record (what: string) (event: ContextEvent) : Eff<'R, unit> =
                     ContextLog.record
                         config.Sessions
                         config.Contexts
