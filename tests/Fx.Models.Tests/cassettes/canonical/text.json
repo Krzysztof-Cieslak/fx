@@ -1,0 +1,134 @@
+{
+  "name": "text",
+  "endpoint": "https://models.example.test/v1",
+  "request": {
+    "model": "example/echo-1",
+    "system": [
+      {
+        "kind": "text",
+        "text": "Be brief."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "short"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hello there, canonical world"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "temperature": 0.2,
+      "stop": []
+    },
+    "maxOutputTokens": 1024,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://models.example.test/v1/chat",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream"
+          },
+          "json": {
+            "model": "example/echo-1",
+            "system": [
+              {
+                "kind": "text",
+                "text": "Be brief."
+              },
+              {
+                "kind": "cacheBreakpoint",
+                "ttl": "short"
+              }
+            ],
+            "messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "kind": "text",
+                    "text": "Hello there, canonical world"
+                  }
+                ]
+              }
+            ],
+            "tools": [],
+            "toolChoice": {
+              "kind": "auto"
+            },
+            "sampling": {
+              "temperature": 0.2,
+              "stop": []
+            },
+            "maxOutputTokens": 1024,
+            "output": {
+              "kind": "text"
+            },
+            "cache": {},
+            "metadata": {}
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream"
+          },
+          "body": "event: started\ndata: {\"kind\":\"started\",\"id\":\"echo-1\",\"model\":\"echo-1\"}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":0,\"part\":{\"kind\":\"reasoning\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":0,\"text\":\"echoing\"}\n\nevent: partState\ndata: {\"kind\":\"partState\",\"index\":0,\"state\":{\"family\":\"canonical\",\"model\":\"example/echo-1\",\"kind\":\"echo\",\"data\":\"turn-1\"}}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":0}\n\nevent: partStarted\ndata: {\"kind\":\"partStarted\",\"index\":1,\"part\":{\"kind\":\"text\"}}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\"Hello\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" there,\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" canonical\"}\n\nevent: delta\ndata: {\"kind\":\"delta\",\"index\":1,\"text\":\" world\"}\n\nevent: partEnded\ndata: {\"kind\":\"partEnded\",\"index\":1}\n\nevent: usage\ndata: {\"kind\":\"usage\",\"usage\":{\"input\":28,\"output\":35,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0}}\n\nevent: finished\ndata: {\"kind\":\"finished\",\"stop\":{\"kind\":\"endTurn\"}}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "echo-1",
+      "model": "echo-1",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "echoing",
+          "state": {
+            "family": "canonical",
+            "model": "example/echo-1",
+            "kind": "echo",
+            "data": "turn-1"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Hello there, canonical world"
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 28,
+        "output": 35,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

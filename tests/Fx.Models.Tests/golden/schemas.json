@@ -1,0 +1,1325 @@
+{
+  "ChatRequest": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "$ref": "#/$defs/ModelRef"
+      },
+      "system": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Part"
+        },
+        "default": []
+      },
+      "messages": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Message"
+        }
+      },
+      "tools": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/ToolSpec"
+        },
+        "default": []
+      },
+      "toolChoice": {
+        "$ref": "#/$defs/ToolChoice",
+        "default": {
+          "kind": "auto"
+        }
+      },
+      "parallelToolCalls": {
+        "type": "boolean"
+      },
+      "sampling": {
+        "$ref": "#/$defs/Sampling",
+        "default": {
+          "stop": []
+        }
+      },
+      "reasoning": {
+        "$ref": "#/$defs/ReasoningRequest"
+      },
+      "maxOutputTokens": {
+        "type": "integer"
+      },
+      "output": {
+        "$ref": "#/$defs/OutputFormat",
+        "default": {
+          "kind": "text"
+        }
+      },
+      "cache": {
+        "$ref": "#/$defs/CacheHints",
+        "default": {}
+      },
+      "metadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "default": {}
+      }
+    },
+    "required": [
+      "model",
+      "messages"
+    ],
+    "description": "A request to a chat model, in no provider's terms.",
+    "$defs": {
+      "CacheHints": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "tools": {
+            "$ref": "#/$defs/CacheTtl"
+          }
+        }
+      },
+      "CacheTtl": {
+        "type": "string",
+        "enum": [
+          "short",
+          "long"
+        ]
+      },
+      "Effort": {
+        "type": "string",
+        "enum": [
+          "off",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "max"
+        ],
+        "description": "How hard a model reasons."
+      },
+      "MediaKind": {
+        "type": "string",
+        "enum": [
+          "image",
+          "pdf",
+          "audio",
+          "video"
+        ]
+      },
+      "MediaSource": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "base64"
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "url"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "url"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "blob"
+              },
+              "digest": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "digest"
+            ]
+          }
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/$defs/Role"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Part"
+            }
+          }
+        },
+        "required": [
+          "role",
+          "parts"
+        ]
+      },
+      "ModelRef": {
+        "type": "string",
+        "description": "A model: `provider/model`."
+      },
+      "OutputFormat": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "text"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "json"
+              },
+              "name": {
+                "type": "string"
+              },
+              "schema": {},
+              "strict": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "schema"
+            ]
+          }
+        ]
+      },
+      "Part": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "text"
+              },
+              "text": {
+                "type": "string"
+              },
+              "state": {
+                "$ref": "#/$defs/ProviderState"
+              }
+            },
+            "required": [
+              "kind",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "media"
+              },
+              "media": {
+                "$ref": "#/$defs/MediaKind"
+              },
+              "mediaType": {
+                "type": "string"
+              },
+              "source": {
+                "$ref": "#/$defs/MediaSource"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "media",
+              "mediaType",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "reasoning"
+              },
+              "text": {
+                "type": "string"
+              },
+              "state": {
+                "$ref": "#/$defs/ProviderState"
+              }
+            },
+            "required": [
+              "kind",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "toolCall"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "string"
+              },
+              "state": {
+                "$ref": "#/$defs/ProviderState"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "name",
+              "arguments"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "toolResult"
+              },
+              "callId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ToolContent"
+                }
+              },
+              "isError": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "kind",
+              "callId",
+              "name",
+              "content"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "refusal"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "cacheBreakpoint"
+              },
+              "ttl": {
+                "$ref": "#/$defs/CacheTtl",
+                "default": "short"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ],
+        "description": "A typed part of a message."
+      },
+      "ProviderState": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/$defs/ModelRef"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "model",
+          "kind",
+          "data"
+        ],
+        "description": "Opaque provider state, replayed byte for byte."
+      },
+      "ReasoningRequest": {
+        "type": "object",
+        "properties": {
+          "effort": {
+            "$ref": "#/$defs/Effort"
+          },
+          "budgetTokens": {
+            "type": "integer"
+          },
+          "visible": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ]
+      },
+      "Sampling": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number"
+          },
+          "topP": {
+            "type": "number"
+          },
+          "topK": {
+            "type": "integer"
+          },
+          "seed": {
+            "type": "integer"
+          },
+          "stop": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        }
+      },
+      "ToolChoice": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "auto"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "none"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "required"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "tool"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ]
+          }
+        ]
+      },
+      "ToolContent": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "text"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "media"
+              },
+              "media": {
+                "$ref": "#/$defs/MediaKind"
+              },
+              "mediaType": {
+                "type": "string"
+              },
+              "source": {
+                "$ref": "#/$defs/MediaSource"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "media",
+              "mediaType",
+              "source"
+            ]
+          }
+        ]
+      },
+      "ToolSpec": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "parameters": {},
+          "strict": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "name",
+          "parameters"
+        ],
+        "description": "A tool the model may call, with the JSON Schema of its input."
+      }
+    }
+  },
+  "ChatEvent": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "started"
+          },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "partStarted"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "part": {
+            "$ref": "#/$defs/PartStart"
+          }
+        },
+        "required": [
+          "kind",
+          "index",
+          "part"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "delta"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "index",
+          "text"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "partState"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/$defs/ProviderState"
+          }
+        },
+        "required": [
+          "kind",
+          "index",
+          "state"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "partEnded"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "index"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "usage"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "required": [
+          "kind",
+          "usage"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "finished"
+          },
+          "stop": {
+            "$ref": "#/$defs/StopReason"
+          }
+        },
+        "required": [
+          "kind",
+          "stop"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "failed"
+          },
+          "error": {
+            "$ref": "#/$defs/ChatError"
+          }
+        },
+        "required": [
+          "kind",
+          "error"
+        ]
+      }
+    ],
+    "description": "One event of a streamed model response.",
+    "$defs": {
+      "ChatError": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "rateLimited"
+              },
+              "retryAfterMs": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "quotaExhausted"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "contextOverflow"
+              },
+              "tokens": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "refused"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "authFailed"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "permissionDenied"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "notFound"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "invalidRequest"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "overloaded"
+              },
+              "retryAfterMs": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "serverError"
+              },
+              "status": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind",
+              "status"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "transport"
+              },
+              "error": {
+                "$ref": "#/$defs/HttpError"
+              }
+            },
+            "required": [
+              "kind",
+              "error"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "cancelled"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "invalidResponse"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "egressBlocked"
+              },
+              "ask": {
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "kind",
+              "ask"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "message": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ],
+        "description": "Why a model call failed."
+      },
+      "HttpError": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "invalidRequest"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "refused"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "connectFailed"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "reset"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "timedOut"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "response",
+                  "body"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "phase"
+            ]
+          }
+        ]
+      },
+      "ModelRef": {
+        "type": "string",
+        "description": "A model: `provider/model`."
+      },
+      "PartStart": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "text"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "reasoning"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "toolCall"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "name"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "refusal"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
+      "ProviderState": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/$defs/ModelRef"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "model",
+          "kind",
+          "data"
+        ],
+        "description": "Opaque provider state, replayed byte for byte."
+      },
+      "StopReason": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "endTurn"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "toolUse"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "maxTokens"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "stopSequence"
+              },
+              "sequence": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "refusal"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "contentFilter"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "contextWindow"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "pause"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "other"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ]
+          }
+        ],
+        "description": "Why a response ended normally."
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "integer",
+            "default": 0
+          },
+          "output": {
+            "type": "integer",
+            "default": 0
+          },
+          "cacheRead": {
+            "type": "integer",
+            "default": 0
+          },
+          "cacheWrite": {
+            "type": "integer",
+            "default": 0
+          },
+          "reasoning": {
+            "type": "integer",
+            "default": 0
+          }
+        },
+        "description": "Tokens used: input (cached included), output (reasoning included), and their parts."
+      }
+    }
+  }
+}
