@@ -18,11 +18,52 @@ let tests =
     testList
         "Cli"
         [
-            test "no arguments prints usage" {
-                let o = printed []
-                Expect.equal o.ExitCode 0 "exit code"
-                Expect.stringContains o.Stdout "Usage:" "usage"
-                Expect.equal o.Stderr "" "stderr"
+            test "no arguments is the TUI; the usage names it and attach" {
+                match Cli.parse [] with
+                | Cli.Tui(args, []) -> Expect.equal args Fx.Tui.Live.TuiArgs.defaults "defaults"
+                | other -> failtest $"{other}"
+
+                Expect.stringContains Cli.usage "attach [--session <id> | --continue]" "attach"
+                Expect.isFalse (Cli.usage.Contains "not there yet") "the TUI is there"
+            }
+
+            test "the TUI's options: a session, the newest, a title, selections; attach" {
+                match Cli.parse [ "--session"; "01ABC" ] with
+                | Cli.Tui(args, []) -> Expect.equal args.Session (Some "01ABC") "session"
+                | other -> failtest $"{other}"
+
+                match Cli.parse [ "-c"; "--model"; "anthropic/claude-sonnet-5-5"; "--surface"; "hybrid" ] with
+                | Cli.Tui(args, selections) ->
+                    Expect.isTrue args.Continue "continue"
+
+                    Expect.equal
+                        selections
+                        [
+                            "model.role.main", Json.String "anthropic/claude-sonnet-5-5"
+                            "agent.actionSurface", Json.String "hybrid"
+                        ]
+                        "selections"
+                | other -> failtest $"{other}"
+
+                match Cli.parse [ "--title"; "first"; "--variant"; "codeact.budget.steps=5" ] with
+                | Cli.Tui(args, [ slot, _ ]) ->
+                    Expect.equal args.Title (Some "first") "title"
+                    Expect.equal slot "codeact.budget.steps" "a variant"
+                | other -> failtest $"{other}"
+
+                match Cli.parse [ "attach"; "--session"; "01ABC" ] with
+                | Cli.Attach args -> Expect.equal args.Session (Some "01ABC") "attach"
+                | other -> failtest $"{other}"
+
+                for wrong in
+                    [
+                        [ "--session"; "a"; "--continue" ]
+                        [ "--model"; "nope" ]
+                        [ "attach"; "--model"; "anthropic/x" ]
+                        [ "--session" ]
+                    ] do
+                    let o = printed wrong
+                    Expect.equal o.ExitCode 2 (String.concat " " wrong)
             }
 
             test "--help prints usage" {

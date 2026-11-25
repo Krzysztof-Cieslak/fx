@@ -8,6 +8,7 @@ open Fx.Contracts
 open Fx.Envd.Live
 open Fx.Host
 open Fx.Sqlite
+open Fx.Tui.Live
 open Fx.Variants
 
 type Outcome =
@@ -65,6 +66,10 @@ type Command =
     | Serve of tcp: int option
     /// Replay a recorded session exactly and report the first difference (`replay <session>`).
     | Replay of Fx.Replay.ReplayArgs
+    /// The TUI on a host in this process (`fx` with no command), with the command line's selections.
+    | Tui of TuiArgs * selections: (string * Json) list
+    /// The TUI of the host `fx serve` runs for this data directory.
+    | Attach of TuiArgs
 
     override this.ToString() =
         match this with
@@ -77,6 +82,8 @@ type Command =
         | Serve None -> "serve"
         | Serve(Some port) -> $"serve --tcp {port}"
         | Replay args -> string args
+        | Tui(args, selections) -> $"{args} ({selections.Length} selections)"
+        | Attach args -> "attach " + string args
 
 let versionText = $"{Product.Name} {Product.Version}\n"
 
@@ -89,6 +96,11 @@ let private bin = Product.binaryName
 let usage =
     $"{Product.Name} {Product.Version}: exploration stage.\n\n"
     + "Usage:\n"
+    + $"  {bin} [--session <id> | --continue] [--title <text>] [--model <provider/model>]\n"
+    + "      [--surface cells-only|hybrid] [--variant <slot>=<value>]...\n"
+    + "      The interactive interface (TUI) on a host for the current directory, in this process.\n"
+    + $"  {bin} attach [--session <id> | --continue]\n"
+    + $"      The TUI of the host `{bin} serve` runs.\n"
     + $"  {bin} run -p <prompt> [--json] [--model <provider/model>] [--surface cells-only|hybrid]\n"
     + $"      [--variant <slot>=<value>]... [--session <id>] [--title <text>]\n"
     + "      Runs one prompt in the current directory, headless, and prints how its turn ended.\n"
@@ -103,7 +115,6 @@ let usage =
     + $"  {bin} replay <session> [--json] [--stall <seconds>]\n"
     + "      Replays a recorded session exactly and reports the first difference from the recording.\n"
     + $"  {bin} --help | --version | --build-info\n"
-    + "\nThe interactive interface is not there yet.\n"
 
 let private envdUsage =
     $"Usage: {bin} envd --stdio [--workspace <dir>] [--state <dir>] [--shell pwsh|powershell|sh] [--retain <bytes>]\n"
@@ -144,6 +155,45 @@ let private parseEnvd (args: string list) : Command =
         | other :: _ -> failure $"unknown envd argument: {other}" envdUsage
 
     loop EnvdOptions.defaults false args
+
+let private tuiUsage =
+    $"Usage: {bin} [--session <id> | --continue] [--title <text>] [--model <provider/model>] [--surface cells-only|hybrid] [--variant <slot>=<value>]...\n       {bin} attach [--session <id> | --continue]\n"
+
+/// A selection of the explicit layer from the command line (`--model`, `--surface`, `--variant`).
+let private selection (flag: string) (value: string) : Result<string * Json, string> =
+    match flag with
+    | "--model" ->
+        if value.Contains '/' && not (value.StartsWith '/') && not (value.EndsWith '/') then
+            Ok((Slots.modelRole "main").Id.Value, Json.String value)
+        else
+            Error $"--model takes <provider>/<model>, e.g. anthropic/claude-sonnet-5-5; got {value}"
+    | "--surface" ->
+        match value with
+        | "cells-only"
+        | "hybrid" -> Ok(Slots.actionSurface.Id.Value, Json.String value)
+        | other -> Error $"--surface is cells-only or hybrid, not {other}"
+    | _ -> Selections.parseArgument value |> Result.mapError (fun e -> $"--variant: {e}")
+
+/// The TUI's arguments (`fx [options]`), and with `attach` those of `fx attach`.
+let private parseTui (attach: bool) (args: string list) : Command =
+    let rec loop (tui: TuiArgs) (selections: (string * Json) list) (args: string list) =
+        match args with
+        | [] when tui.Session.IsSome && tui.Continue -> failure "--session and --continue are one or the other" tuiUsage
+        | [] when attach -> Attach tui
+        | [] -> Tui(tui, selections)
+        | "--session" :: id :: rest when id <> "" && not (id.StartsWith '-') ->
+            loop { tui with Session = Some id } selections rest
+        | ("-c" | "--continue") :: rest -> loop { tui with Continue = true } selections rest
+        | "--title" :: title :: rest when not attach -> loop { tui with Title = Some title } selections rest
+        | ("--model" | "--surface" | "--variant" as flag) :: value :: rest when not attach ->
+            match selection flag value with
+            | Ok chosen -> loop tui (selections @ [ chosen ]) rest
+            | Error e -> failure e tuiUsage
+        | _ ->
+            let given = String.concat " " args
+            failure $"unknown arguments: {given}" usage
+
+    loop TuiArgs.defaults [] args
 
 /// `run` arguments.
 let private parseRun (args: string list) : Command =
@@ -203,7 +253,7 @@ let private parseRun (args: string list) : Command =
 
 let parse (args: string list) : Command =
     match args with
-    | []
+    | [] -> Tui(TuiArgs.defaults, [])
     | [ "-h" ]
     | [ "--help" ] ->
         Print
@@ -254,6 +304,8 @@ let parse (args: string list) : Command =
         match Fx.Replay.ReplayCommand.parse rest with
         | Ok args -> Replay args
         | Error e -> failure e Fx.Replay.ReplayCommand.usage
+    | "attach" :: rest -> parseTui true rest
+    | first :: _ when first.StartsWith '-' -> parseTui false args
     | other ->
         let given = String.concat " " other
         failure $"unknown arguments: {given}" usage

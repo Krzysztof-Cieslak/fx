@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────
+ fx · …/src/billing · env: default (fx.env.local) · anthropic/claude-so… ● held
+ ! runs unsandboxed: commands can read and change everything the user can
+
+
+
+
+
+
+
+
+
+
+
+
+
+› 翻訳を確認して 👍🏽 — vérifie les traductions
+  日本語のファイルを読みます。
+  ◇ Read     docs/日本語.md                                               ✗ 0.4s
+      no such file: docs/日本語.md
+
+  ✗ Failed  the model call failed: overloaded
+
+held: the last turn did not finish; a prompt goes on
+›
+────────────────────────────────────────────────────────────────────────────────
+cursor 23,2

@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · anthr… ● starting
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+⠋ starting: creating the session and it…
+›
+────────────────────────────────────────
+cursor 19,2

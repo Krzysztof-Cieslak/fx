@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/b… ● turn 1
+ ! runs unsandboxed: co…
+
+┃ Decision
+┃ The host stopped while
+┃ this cell ran. What
+┃ happened?
+┃   // intent: run the …
+┃   await fx.shell.run(…
+┃ It printed:
+┃   applying 0001
+┃   applying 0002
+● turn 1 · waiting for …
+›
+────────────────────────
+cursor hidden

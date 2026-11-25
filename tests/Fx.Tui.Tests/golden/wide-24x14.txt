@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/bil… ● held
+ ! runs unsandboxed: co…
+  traductions
+  日本語のファイルを読み
+  ます。
+  ◇ Read     doc… ✗ 0.4s
+      no such file: doc…
+
+  ✗ Failed  the model
+            call failed:
+            overloaded
+
+held: the last turn did…
+›
+────────────────────────
+cursor 13,2

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Script.fs" />
+    <Compile Include="Screens.fs" />
+    <Compile Include="UnitTests.fs" />
+    <Compile Include="AppTests.fs" />
+    <Compile Include="RuntimeTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="golden\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Tui\Fx.Tui.fsproj" />
+    <!-- The session kinds and cards CodeAct opens, so scripted streams are what a host records. -->
+    <ProjectReference Include="..\..\src\Fx.CodeAct\Fx.CodeAct.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/b… ● turn 1
+ ! runs unsandboxed: co…
+  ◇ Run      mak… ⠋ 0.0s
+
+┃ Permission  (1 of 2)
+┃ Run make deploy
+┃ shell.exec  make depl…
+┃ cell: await fx.shell.…
+┃ [y] once
+┃ [s] this session
+┃ [h] always on this ho…
+┃ [n] deny
+● turn 1 · waiting for …
+›
+────────────────────────
+cursor hidden

@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · env: de… ● turn 1
+ ! runs unsandboxed: commands can read …
+
+
+
+
+
+
+
+› ship it
+  ◇ Run      make deploy          ⠋ 0.0s
+
+┃ Permission  (1 of 2)
+┃ Run make deploy
+┃ shell.exec  make deploy
+┃ cell: await fx.shell.run("make deploy…
+┃ [y] once  [s] this session
+┃ [h] always on this host  [n] deny
+● turn 1 · waiting for an answer
+›
+────────────────────────────────────────
+cursor hidden

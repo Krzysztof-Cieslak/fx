@@ -23,5 +23,6 @@
     <ProjectReference Include="..\Fx.Sqlite\Fx.Sqlite.fsproj" />
     <ProjectReference Include="..\Fx.Envd.Live\Fx.Envd.Live.fsproj" />
     <ProjectReference Include="..\Fx.Host\Fx.Host.fsproj" />
+    <ProjectReference Include="..\Fx.Tui.Live\Fx.Tui.Live.fsproj" />
   </ItemGroup>
 </Project>

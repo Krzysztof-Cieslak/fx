@@ -69,6 +69,9 @@
     <Compile Include="Scenarios\CodeAct.fs" />
     <Compile Include="Scenarios\Host.fs" />
     <Compile Include="Scenarios\Replay.fs" />
+    <Compile Include="..\..\Fx.Tui.Tests\Script.fs" Link="Scenarios\TuiScript.fs" />
+    <Compile Include="..\..\Fx.Tui.Tests\Screens.fs" Link="Scenarios\TuiScreens.fs" />
+    <Compile Include="Scenarios\Tui.fs" />
     <Compile Include="Scenarios\Canary.fs" />
     <Compile Include="Registry.fs" />
     <Compile Include="Program.fs" />
@@ -117,5 +120,6 @@
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreFile\Fx.Ext.StoreFile.fsproj" />
     <ProjectReference Include="..\..\..\extensions\Fx.Ext.StoreEphemeral\Fx.Ext.StoreEphemeral.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Host\Fx.Host.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.Tui.Live\Fx.Tui.Live.fsproj" />
   </ItemGroup>
 </Project>

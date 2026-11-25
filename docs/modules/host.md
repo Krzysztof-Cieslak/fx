@@ -68,7 +68,8 @@ One per user: `FX_HOME` if set (absolute), else `~/.<product>` (Unix) or `%LOCAL
 - **Trust before execution** (spec §18): a project's config (and so its environments' setup commands)
   is read only once the project is trusted. Trust is host-local (`trust.json`), never in the project:
   a cloned repository cannot trust itself. A trusted directory covers what is below it.
-  `fx trust [<dir>]`, `fx trust --remove [<dir>]`, `fx trust --list`. (The TUI's trust prompt: T130.)
+  `fx trust [<dir>]`, `fx trust --remove [<dir>]`, `fx trust --list`. The TUI says when a project is
+  not trusted and how to trust it.
 - `fx variants [list|explain|schema]`: every slot (id, default, choices, privileged, description),
   the values in effect here and where they come from, or the JSON Schema of `variants` for editors.
   Neither takes the lock nor opens a store.
@@ -175,6 +176,7 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 | `session/close`, `session/reopen` | `{session, key}` → `{after, count}` (closing ends the session's grants) | collaborator |
 | `session/offers` | `{session}` → the open requests this client can answer | viewer |
 | `session/subscribe` | `{session, after}` → runs until cancelled, sending `session/event` `{session, item}` (`SessionFeed`: replay after `after`, a snapshot first if far behind, then live) | viewer |
+| `session/context` | `{session, after}` → runs until cancelled, sending `session/contextEvent` `{session, item}` (a context event with its envelope, after `after` of the context log, then live) and `session/streaming` `{session, turn, fresh, text, tool?}` as the running turn's model writes (T130) | viewer |
 | `grants/*` | `GrantsProtocol` ([grants.md](grants.md)); answering, granting and revoking need an owner who is a person (`notAPerson` otherwise) | viewer / owner |
 | `identity/whoami` | → `SessionInfo` (no token) | viewer |
 | `identity/sessions` | → the live client sessions | owner |
@@ -204,7 +206,13 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 - `listener.json` says where; `HostClient.locate` reads it and the token, `HostClient.connect` dials.
 
 Embedded mode is the same protocol in process: `HostClient.embedded host service answers` (the
-in-process transport, signed in as the OS user). The TUI (T130) uses it, or a serving host.
+in-process transport, signed in as the OS user). The TUI ([tui.md](tui.md)) uses it (`fx`), or a
+serving host (`fx attach`).
+
+**Streaming** (T130): the host wraps CodeAct's runner (`Streams.runner`) so each turn's model access
+taps its responses (`ChatStream.tap`): text deltas and tool calls started go to the session's
+`session/context` subscribers (`Host.Streams`). Not durable: the reply is recorded in the context log
+when complete.
 
 ## Service credentials and `fx auth`
 
@@ -270,7 +278,8 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
 Exit codes: 0 done (or waiting), 3 needs input (the questions are printed), 130 interrupted, 1 failed
 or abandoned, 2 bad arguments.
 
-`fx` without arguments prints the usage; the interactive interface is T130's.
+`fx` without arguments runs the TUI on a host in this process ([tui.md](tui.md)); without a terminal
+it prints the usage.
 
 ## Native AOT
 
@@ -313,11 +322,10 @@ install's approval (no terminal).
 
 | What | Task |
 |---|---|
-| `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T130, T509 |
-| The TUI (`fx` without arguments), the trust prompt, showing warnings | T130 |
+| `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T509 |
 | Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase | T115, with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
 | Machine retry delays and store page sizes as slots | when tuned |
-| Choosing an environment per session (the picker) | T130 |
+| Choosing an environment per session (the picker) | after T130 |
 | Epoch-fenced takeover and sharing with other people | T507 |
 | The HTTP/SSE offset-read mirror of the protocol (spec §17 fallbacks), binary channels for bulk data (`blobs/*`, `pty/*`) | with their method groups |

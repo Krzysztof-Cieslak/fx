@@ -13,6 +13,8 @@
     <Project Path="src/Fx.Contracts.TypeScript/Fx.Contracts.TypeScript.fsproj" />
     <Project Path="src/Fx.Cli/Fx.Cli.fsproj" />
     <Project Path="src/Fx.Host/Fx.Host.fsproj" />
+    <Project Path="src/Fx.Tui/Fx.Tui.fsproj" />
+    <Project Path="src/Fx.Tui.Live/Fx.Tui.Live.fsproj" />
     <Project Path="src/Fx.Effects/Fx.Effects.fsproj" />
     <Project Path="src/Fx.Effects.Live/Fx.Effects.Live.fsproj" />
     <Project Path="src/Fx.Machines/Fx.Machines.fsproj" />
@@ -84,6 +86,8 @@
     <Project Path="tests/Fx.Contracts.Tests/Fx.Contracts.Tests.fsproj" />
     <Project Path="tests/Fx.Contracts.TypeScript.Tests/Fx.Contracts.TypeScript.Tests.fsproj" />
     <Project Path="tests/Fx.Cli.Tests/Fx.Cli.Tests.fsproj" />
+    <Project Path="tests/Fx.Tui.Tests/Fx.Tui.Tests.fsproj" />
+    <Project Path="tests/Fx.Tui.Live.Tests/Fx.Tui.Live.Tests.fsproj" />
     <Project Path="tests/Fx.Host.Tests/Fx.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Aot.Tests/Fx.Aot.Tests.fsproj" />
     <Project Path="tests/Fx.Analyzers.Tests/Fx.Analyzers.Tests.fsproj" />
