@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Models (spec §10.2–10.3): the canonical chat model (typed parts, opaque provider state, requests,
+    streamed events and the fold that aggregates them), typed errors, model catalogs and provider
+    definitions, the ILlm capability, the event-stream (SSE, NDJSON) parsers adapters share, and the
+    HTTP cassettes that record and replay wire exchanges. Pure: no I/O, so the EFF analyzers apply
+    to every file. Fx.Sdk exposes it to extensions; the wire contract, the model-egress hooks and the
+    entry point that runs them are in Fx.Sdk. Spec: docs/modules/models.md.
+  -->
+  <ItemGroup>
+    <Compile Include="Model.fs" />
+    <Compile Include="Chat.fs" />
+    <Compile Include="Events.fs" />
+    <Compile Include="Aggregate.fs" />
+    <Compile Include="Stream.fs" />
+    <Compile Include="Llm.fs" />
+    <Compile Include="Sse.fs" />
+    <Compile Include="Provider.fs" />
+    <Compile Include="Cassette.fs" />
+    <Compile Include="Replay.fs" />
+    <Compile Include="Fit.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Prelude\Fx.Prelude.fsproj" />
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Effects\Fx.Effects.fsproj" />
+  </ItemGroup>
+</Project>
