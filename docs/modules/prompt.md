@@ -48,6 +48,10 @@ of the prefix or a view in the suffix.
   them in its `Sources` (`Piece.sources`: the path and each range of lines, or the whole file), so the
   model-egress hooks can redact a file excluded after it was recorded ([egress.md](egress.md)). Empty sources
   leave a part's JSON unchanged.
+- `Quote` (`{text, sources}`) is text that may quote files without showing them as such: what a cell
+  printed after it read them through the bridge (T127). Its sources are its part's provenance; the render
+  withholds it (as its first excluded source) when one of them is excluded, and it never counts in
+  `SeenRanges`, since which lines it shows is unknown. Adding the case kept version 1 of the JSON.
 - Receipt helpers bound content when it is recorded: `Piece.output maxChars text` keeps the head and the tail
   with how much was left out (never splitting a surrogate pair), `Piece.preview name preview` and
   `Piece.value limits name codec value` show a value's preview (`values.previewLimits`). Large values travel by
@@ -73,8 +77,9 @@ The history is the fold of two kinds of facts, in log order, each at its positio
 | `Pinned {name, pin}`, `Unpinned name` | `fx.context.pin` (a value as it was) and `pinFile` (a live view of a file's lines) |
 | `Collapsed {from, to, summary}` | compaction (T206): the entries from `from` to `to` show as the summary; the originals stay in the log |
 
-Where context events are stored is the strategy's choice (T127): in the session's stream or one of its own; the
-fold needs only one order and distinct positions. A fork's history is its parent's items up to the fork point
+Where context events are stored is the strategy's choice: the CodeAct strategy (T127, [codeact.md](codeact.md))
+keeps them in `context/<session>`, each placed after the session event its envelope's cause names; the fold
+needs only one order and distinct positions. A fork's history is its parent's items up to the fork point
 followed by its own (`Transcript.ofItems`); positions name their stream, so they stay distinct.
 
 `ContextCodecs.event` is version 1 of their JSON (`ContextCodecs.Version`). Events are facts kept forever:
@@ -278,14 +283,12 @@ kept JSON of version 1's context events.
 
 | What | Task |
 |---|---|
-| The CodeAct loop that records context events and calls models with these requests; where context events are stored | T127 |
 | `Value` references and handles in receipts (`Piece.Ref`), `fx.context.pin`/`pinFile`, `fx.recall` | T201 |
 | Type-aware previews and outlines in receipts | T203 |
 | The edit guard over `SeenRanges` | T204 |
 | Choosing and summarizing ranges to collapse, cache-sharing summary requests, `fx.history.*` | T206 |
 | The repo map's content | T202 |
 | The agent list from the agents registry | T213 |
-| Building `RenderConfig.Exclusions` with `ContentExclusions.compile` from the session's settings; receipts that show what a cell read as `Piece.File` | T127 |
 | Copilot organization exclusions (a provider's own egress hooks) | T210 |
 | Registering `PromptSlots.all` in the host's registry | T129 |
 | A per-message render for clients (`/context` with cost, the prompt and seen-range viewer) | T130, T205 |

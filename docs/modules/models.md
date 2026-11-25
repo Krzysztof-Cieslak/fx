@@ -664,7 +664,6 @@ prompt's placement) on all eight targets.
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
 | Auth methods resolving `ResolvedAuth` from stored credentials | T121 |
 | Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
-| The CodeAct loop and the action surfaces on `ILlm` | T127 |
 | Building `ModelAccess` from the host's contributions (with the adapters' replay scopes, `Anthropic.withReplay`), `ILlm` in session environments | T129 |
 | Journaling streams for exact replay | T131 |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |

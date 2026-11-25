@@ -262,4 +262,4 @@ reconciles, destroy; piped runs the scenarios program's own `envd --stdio` mode)
 | `fx.env.docker`, benchmark containers; suspend, fork and provider snapshots | T216, T502 |
 | Providers in extension processes and on Bun (a remote form of the contribution type) | T510 |
 | Policy: idle suspend, TTL, budgets; cost tracking | with the run kernel's budgets (T212) |
-| Interpreters' assets and owned directories at `EnvLayout.Assets`/`EnvLayout.owned`, kernels on remote envd | T127, T129 |
+| Kernels per session on an opened environment (`EnvHands.ofHandle`: assets at `EnvLayout.Assets`, owned directories per launch under `EnvLayout.Owned`) are T127's ([codeact.md](codeact.md)); serving runtimes and kernels to a remote envd | T129, T501 |
