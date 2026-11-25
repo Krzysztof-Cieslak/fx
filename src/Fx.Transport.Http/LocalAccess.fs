@@ -1,8 +1,10 @@
 /// Access control for local listeners (spec §18: "localhost listeners require token + Origin check").
 ///
-/// Pure: the server reduces a request to `RequestFacts` and acts on the decision. A request must
-/// name an allowed host (against DNS rebinding), must not come from a foreign browser origin, and
-/// must carry the bearer token. There is no CORS: responses never carry `Access-Control-Allow-*`.
+/// Pure (given the policy's `Sessions` lookup): the server reduces a request to `RequestFacts` and
+/// acts on the decision. A request must name an allowed host (against DNS rebinding), must not come
+/// from a foreign browser origin, and must carry a bearer token: the listener's own, or a session
+/// token the host issued (spec §17, docs/modules/identity.md). There is no CORS: responses never
+/// carry `Access-Control-Allow-*`.
 module Fx.Transport.Http.LocalAccess
 
 open System
@@ -21,6 +23,10 @@ type AccessPolicy =
         AllowedOrigins: string list
         /// Host names, without a port, that the `Host` header may name.
         AllowedHosts: string list
+        /// Resolves a bearer token that is not the listener's to the id of a live session token the
+        /// host issued (`SessionTokens.lookup` in Fx.Identity.Host); `None` refuses it. `policy` sets
+        /// one that refuses every other token.
+        Sessions: string -> string option
     }
 
     // Never shows the token.
@@ -47,16 +53,35 @@ type RequestFacts =
         let show = Option.defaultValue "-"
         $"host {show this.Host}, origin {show this.Origin}"
 
+/// Which token a request presented.
+[<RequireQualifiedAccess>]
+type Bearer =
+    /// The listener's own token. Kept in an owner-only file (`TokenFile`), it shows that the client
+    /// runs as the host's OS account, or that the account's user handed it over.
+    | Listener
+    /// A session token the host issued, by its public id (never the secret).
+    | Session of id: string
+
+    override this.ToString() =
+        match this with
+        | Listener -> "listener token"
+        | Session id -> "session " + id
+
 /// An allowed request.
 type Granted =
     {
         /// The offered WebSocket subprotocols without the one that carries the token. A server must
         /// select from these and never echo the token protocol back.
         Protocols: string list
+        Bearer: Bearer
     }
 
     override this.ToString() =
-        "granted, protocols [" + String.Join(", ", this.Protocols) + "]"
+        "granted to "
+        + string this.Bearer
+        + ", protocols ["
+        + String.Join(", ", this.Protocols)
+        + "]"
 
 /// Why a request was rejected.
 type Denied =
@@ -97,6 +122,7 @@ let policy (token: string) : AccessPolicy =
         Token = token
         AllowedOrigins = []
         AllowedHosts = loopbackHosts
+        Sessions = fun _ -> None
     }
 
 /// The host name in a `Host` header value, without the port: `[::1]:80` is `[::1]`.
@@ -150,16 +176,27 @@ let decide (policy: AccessPolicy) (request: RequestFacts) : Result<Granted, Deni
         match request.Origin with
         | Some origin when not (contains policy.AllowedOrigins origin) -> Error(ForbiddenOrigin origin)
         | _ ->
-            if tokens.IsEmpty then
-                Error MissingToken
-            // Every token offered must be right, so a wrong one cannot hide behind a right one.
-            elif not (tokens |> List.forall (sameToken policy.Token)) then
-                Error InvalidToken
-            else
+            let protocols = request.WebSocketProtocols |> List.filter (isTokenProtocol >> not)
+
+            // Every token offered must be the same, so a wrong one cannot hide behind a right one.
+            match List.distinct tokens with
+            | [] -> Error MissingToken
+            | [ token ] when sameToken policy.Token token ->
                 Ok
                     {
-                        Protocols = request.WebSocketProtocols |> List.filter (isTokenProtocol >> not)
+                        Protocols = protocols
+                        Bearer = Bearer.Listener
                     }
+            | [ token ] ->
+                match policy.Sessions token with
+                | Some id ->
+                    Ok
+                        {
+                            Protocols = protocols
+                            Bearer = Bearer.Session id
+                        }
+                | None -> Error InvalidToken
+            | _ -> Error InvalidToken
 
 /// The response text for a rejection. It does not echo the request's host or origin.
 let reason (denied: Denied) : string =

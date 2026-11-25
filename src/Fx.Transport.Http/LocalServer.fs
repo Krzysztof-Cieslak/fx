@@ -45,6 +45,9 @@ type Request =
     {
         Context: HttpContext
         Access: Granted
+        /// The OS account of the client process, as the system reports it for Unix sockets and named
+        /// pipes (`PeerCredentials`); `None` over loopback TCP, or when the system does not say.
+        Peer: PeerCredentials.PeerAccount option
         /// Cancelled when the server begins to stop. Long-lived handlers (event streams, sockets)
         /// must end then, or the stop waits for them until the shutdown timeout.
         Stopping: CancellationToken
@@ -190,6 +193,11 @@ let private dispatch (options: Options) (stopping: CancellationToken) (context: 
             {
                 Context = context
                 Access = granted
+                Peer =
+                    match options.Listener with
+                    | Loopback _ -> None
+                    | UnixSocket _
+                    | NamedPipe _ -> PeerCredentials.ofContext context
                 Stopping = stopping
             }
 
