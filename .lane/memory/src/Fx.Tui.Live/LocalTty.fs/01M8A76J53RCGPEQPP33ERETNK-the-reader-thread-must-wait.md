@@ -3,6 +3,10 @@ id: 01M8A76J53RCGPEQPP33ERETNK
 anchor: '@file'
 created: 2026-11-25T20:43:49Z
 norm: '1'
+sig: 41275802be33b25c
+body_hash: f876ddc1fbe70a7a
+raw_hash: e5c9eb3dfc81636a
+lines: 1-371
 supersedes: 01M8A6FY73K13R0PD1N7KWGX7J
 ---
 
