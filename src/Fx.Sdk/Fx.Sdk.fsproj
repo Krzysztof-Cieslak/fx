@@ -33,6 +33,7 @@
     <Compile Include="Runtime.fs" />
     <Compile Include="Models\Wire.fs" />
     <Compile Include="Models\Access.fs" />
+    <Compile Include="Models\Egress.fs" />
     <Compile Include="Interpreter.fs" />
     <Compile Include="Grants.fs" />
   </ItemGroup>

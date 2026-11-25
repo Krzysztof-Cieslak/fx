@@ -115,6 +115,7 @@
           "Fx.Contracts.TypeScript": "[0.0.0, )",
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Envd.Live": "[0.0.0, )",
+          "Fx.Ext.EgressExclusions": "[0.0.0, )",
           "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
           "Fx.Ext.ModelAnthropic": "[0.0.0, )",
           "Fx.Ext.ModelCanonical": "[0.0.0, )",
@@ -197,6 +198,13 @@
           "Fx.Effects.Live": "[0.0.0, )",
           "Fx.Envd": "[0.0.0, )",
           "Fx.Store.Live": "[0.0.0, )"
+        }
+      },
+      "fx.ext.egressexclusions": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
         }
       },
       "fx.ext.interpreterbunts": {

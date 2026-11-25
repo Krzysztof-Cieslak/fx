@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelCanonical\Fx.Ext.ModelCanonical.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
     <!-- SampleHost, and the ext-peer child process (its apphost and assembly are copied next to the tests). -->
     <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
   </ItemGroup>
