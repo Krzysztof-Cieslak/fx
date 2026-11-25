@@ -374,7 +374,7 @@ module Record =
             Pid = proc.Pid
             Write =
                 fun bytes cancellation ->
-                    journal.Run(
+                    journal.RunActing(
                         lane,
                         Ops.Write,
                         Inputs.bytes bytes,
@@ -382,7 +382,7 @@ module Record =
                         unitJson,
                         fun () -> proc.Write bytes cancellation
                     )
-            CloseStdin = fun () -> journal.Run(lane, Ops.CloseStdin, Inputs.none, "", unitJson, proc.CloseStdin)
+            CloseStdin = fun () -> journal.RunActing(lane, Ops.CloseStdin, Inputs.none, "", unitJson, proc.CloseStdin)
             Read =
                 fun cancellation ->
                     journal.Run(
@@ -396,7 +396,7 @@ module Record =
             Wait =
                 fun cancellation ->
                     journal.Run(lane, Ops.Wait, Inputs.none, "", Json.int, (fun () -> proc.Wait cancellation))
-            Kill = fun () -> journal.Run(lane, Ops.Kill, Inputs.none, "", unitJson, proc.Kill)
+            Kill = fun () -> journal.RunActing(lane, Ops.Kill, Inputs.none, "", unitJson, proc.Kill)
         }
 
     /// Journals commands with their outputs, and spawned processes with everything written to them

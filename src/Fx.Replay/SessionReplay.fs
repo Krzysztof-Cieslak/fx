@@ -58,6 +58,8 @@ type ReplayReport =
         StepEvents: int
         /// The first difference; `None`: replay matched the recording.
         Divergence: Divergence option
+        /// What replay matched last before it diverged (the journal entries it claimed and completed).
+        Trace: string list
     }
 
     member this.Matched = this.Divergence.IsNone
@@ -68,7 +70,14 @@ type ReplayReport =
 
         match this.Divergence with
         | None -> head + "; replay matches the recording"
-        | Some divergence -> head + "; replay diverged: " + string divergence
+        | Some divergence ->
+            head
+            + "; replay diverged: "
+            + string divergence
+            + (if this.Trace.IsEmpty then
+                   ""
+               else
+                   "\n  replay's last steps:\n    " + String.concat "\n    " this.Trace)
 
 /// A segment of the journal as loaded: its entries with their values.
 type internal LoadedSegment =
@@ -677,6 +686,7 @@ module SessionReplay =
             let mutable turns = 0
             let mutable entries = 0
             let mutable requests = 0
+            let mutable trace = []
 
             if segments.IsEmpty then
                 divergence <-
@@ -702,6 +712,10 @@ module SessionReplay =
                         + (loaded.Entries |> List.filter (fun (e, _) -> e.Op = Ops.Stream) |> List.length)
 
                     divergence <- segment.Divergence
+
+                    if divergence.IsSome then
+                        let all = segment.Trace
+                        trace <- all |> List.skip (max 0 (all.Length - 60))
 
             let contexts = ContextLog.stream session
             let steps = StepJournal.stream session
@@ -772,5 +786,6 @@ module SessionReplay =
                     ContextEvents = recordedContext.Length
                     StepEvents = recordedSteps.Length
                     Divergence = divergence
+                    Trace = trace
                 }
         }
