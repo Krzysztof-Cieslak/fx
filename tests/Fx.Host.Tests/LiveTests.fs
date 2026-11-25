@@ -386,6 +386,8 @@ let tests =
                         finish "Wrote what the sandbox allows" "\"made.txt\""
                     ]
 
+                // The person allows everything the grants log asks about (T127b): the write outside the
+                // workspace and the command the shell expands. So the sandbox alone keeps the file out.
                 let person = Person always
                 let host = start (options p model [ "model.role.main", Json.String modelId ])
 
@@ -401,6 +403,20 @@ let tests =
                             }
 
                     Expect.equal (done' outcome person) "Wrote what the sandbox allows" "done"
+
+                    let asked =
+                        person.Asked
+                        |> List.filter (fun r -> r.Action.Value <> "component.install")
+                        |> List.map (fun r -> r.Action.Value + " " + r.Resource)
+                        |> List.sort
+
+                    Expect.equal
+                        asked
+                        [
+                            "fs.write " + Fx.Models.WorkspacePath.normalize escaped
+                            "shell.exec echo $TMPDIR|$XDG_CACHE_HOME"
+                        ]
+                        "the grants log asked, and the person allowed"
 
                     let sandbox =
                         match HostSessions.entries host with
@@ -424,5 +440,102 @@ let tests =
                     | _ -> ()
                 finally
                     stop host
+            }
+
+            testTask
+                "fx run -p: a turn's command asks the grants log, a person's answer lets it run; with nobody to answer it is denied" {
+                do! network.Force()
+                let p = place "grant"
+                let model = Model()
+
+                model.AddAll
+                    [
+                        $"// intent: make a directory\nconst made = await {g}.shell.run(\"mkdir made\")\nmade.exitCode"
+                        finish "Made it" "\"mkdir made\""
+                    ]
+
+                let person = Person always
+                let host = start (options p model [ "model.role.main", Json.String modelId ])
+
+                let first =
+                    try
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Make a directory"
+                                Session = None
+                                Title = None
+                            }
+                    finally
+                        stop host
+
+                Expect.equal (done' first person) "Made it" "done"
+                Expect.isTrue (IO.Directory.Exists(p.File "made")) "the command ran"
+
+                match person.Asked |> List.filter (fun r -> r.Action.Value = "shell.exec") with
+                | [ request ] ->
+                    Expect.equal request.Resource "mkdir made" "the command"
+                    Expect.equal request.Context.Session (Some first.Session) "the run's session"
+
+                    Expect.isTrue
+                        (request.Evidence |> List.exists (fun e -> e.Label = "asked by"))
+                        "which turn and call asked"
+                | other -> failtest $"asked {other}"
+
+                // Nobody at a terminal: the next command is denied once, the cell fails, and the model
+                // reads why.
+                model.AddAll
+                    [
+                        $"// intent: make another\nawait {g}.shell.run(\"mkdir other\")"
+                        finish "Could not" "\"denied\""
+                    ]
+
+                let lines = ResizeArray<string>()
+
+                let nobody: RunIo =
+                    {
+                        Show = fun line -> lock lines (fun () -> lines.Add line)
+                        Answer = fun _ -> Task.FromResult None
+                        Decide = fun _ -> Task.FromResult None
+                        Interrupt = CancellationToken.None
+                    }
+
+                let host = start (options p model [])
+
+                let second =
+                    try
+                        match
+                            waitFor
+                                300.0
+                                (Headless.run
+                                    host
+                                    {
+                                        Prompt = "Make another"
+                                        Session = Some first.Session
+                                        Title = None
+                                    }
+                                    nobody
+                                    CancellationToken.None)
+                        with
+                        | Ok outcome -> outcome
+                        | Error e -> failtest $"the run failed: {e}"
+                    finally
+                        stop host
+
+                match second.Ending with
+                | TurnEnd.Completed(TurnResult.Done("Could not", _, _)) -> ()
+                | other -> failtest $"{other}"
+
+                Expect.isFalse (IO.Directory.Exists(p.File "other")) "nothing ran"
+
+                Expect.isTrue
+                    (lines |> Seq.exists (fun l -> l.Contains "nobody can answer here"))
+                    "the run says it denied the request"
+
+                Expect.stringContains
+                    (Fx.Effects.HttpRequest.bodyText (List.last model.Requests))
+                    "was denied"
+                    "the model reads the denial"
             }
         ]

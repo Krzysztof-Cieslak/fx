@@ -51,46 +51,22 @@ let private facts () : ProcessFacts =
                 []
     }
 
-/// Asks the person at the terminal to answer a grant request; nobody can when input is redirected.
+/// Asks the person at the terminal to answer a grant request (what it asks, its evidence; once, for the
+/// session, or no); nobody can when input is redirected, and the run denies it once, saying so.
 let private answer (request: GrantRequest) : Task<GrantAnswer option> =
     if Console.IsInputRedirected then
-        show $"  ! {request.Summary}: needs a person's approval ({request.Action} {request.Resource}); denied once"
         Task.FromResult None
     else
         Task.Run(fun () ->
             lock console (fun () ->
-                stderr.WriteLine $"? {request.Summary}"
-                stderr.WriteLine $"  {request.Action} {request.Resource}"
-                stderr.Write "  Allow? [y] once, [a] always on this host, [N] no: "
+                for line in GrantPrompts.lines request do
+                    stderr.WriteLine line
+
+                stderr.Write(GrantPrompts.question request)
                 stderr.Flush()
 
-                let reply =
-                    (stdin.ReadLine() |> Option.ofObj |> Option.defaultValue "").Trim().ToLowerInvariant()
-
-                let allow (scope: ScopeChoice) =
-                    Some
-                        {
-                            Effect = GrantEffect.Allow
-                            Scope = scope
-                            Resource = None
-                            Expires = None
-                            Reason = None
-                        }
-
-                match reply with
-                | "y"
-                | "yes" -> allow ScopeChoice.Once
-                | "a"
-                | "always" -> allow ScopeChoice.Host
-                | _ ->
-                    Some
-                        {
-                            Effect = GrantEffect.Deny
-                            Scope = ScopeChoice.Once
-                            Resource = None
-                            Expires = None
-                            Reason = Some "denied at the terminal"
-                        }))
+                let reply = stdin.ReadLine() |> Option.ofObj |> Option.defaultValue ""
+                Some(GrantPrompts.parse request reply)))
 
 /// Asks the person at the terminal what happened to a call that was running when the host stopped;
 /// nobody can when input is redirected.

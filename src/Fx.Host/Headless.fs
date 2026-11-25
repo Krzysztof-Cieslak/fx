@@ -91,31 +91,41 @@ module Headless =
                 }
         }
 
-    /// Puts each grant request that opens to the person, until cancelled.
-    let private answering (host: Host) (by: Attribution) (io: RunIo) (cancellation: CancellationToken) : Task =
+    /// Puts each grant request of the run to the person, until cancelled: requests of its session (a
+    /// turn's host calls, T127b) and requests of no session (the components the run installs). One the
+    /// person cannot answer (no terminal) is denied once, saying so.
+    let private answering
+        (host: Host)
+        (by: Attribution)
+        (io: RunIo)
+        (session: string option ref)
+        (cancellation: CancellationToken)
+        : Task =
         let env = Host.within host cancellation
 
         let from = (GrantsService.snapshot host.Grants).Seq
 
+        let ours (request: GrantRequest) =
+            match request.Context.Session with
+            | None -> true
+            | Some asking -> session.Value = Some asking
+
         let handle (notice: GrantNotice) : Eff<HostEnv, bool> =
             eff {
                 match notice.Event with
-                | GrantEvent.Requested request ->
+                | GrantEvent.Requested request when ours request ->
                     let! answer = Eff.ofTask (fun () -> io.Answer request)
 
                     let answer =
-                        answer
-                        |> Option.defaultValue
-                            {
-                                Effect = GrantEffect.Deny
-                                Scope = ScopeChoice.Once
-                                Resource = None
-                                Expires = None
-                                Reason = Some "nobody could answer (not run from a terminal)"
-                            }
+                        match answer with
+                        | Some answer -> answer
+                        | None ->
+                            io.Show(GrantPrompts.deniedUnasked request)
+                            GrantPrompts.unanswered
 
                     match! GrantsService.answer host.Grants by request.Id answer with
                     | Ok _ -> ()
+                    | Error(GrantError.NotPending _) -> ()
                     | Error e -> io.Show $"  ✗ the answer to {request.Summary} was refused: {e}"
 
                     return true
@@ -255,7 +265,9 @@ module Headless =
             | Ok signedIn ->
                 let by = ClientSession.attribution signedIn
                 use watching = CancellationTokenSource.CreateLinkedTokenSource cancellation
-                let answers = answering host by io watching.Token
+                // The run's session, once known: its turns' requests are the run's to answer.
+                let running = ref request.Session
+                let answers = answering host by io running watching.Token
 
                 try
                     let! session =
@@ -275,6 +287,7 @@ module Headless =
                     | Error e -> return Error e
                     | Ok entry ->
                         let id = entry.Session
+                        running.Value <- Some id
 
                         // What a person must know about the session's environment, once: e.g. that it
                         // runs unsandboxed (spec §9.1, §19.5).
