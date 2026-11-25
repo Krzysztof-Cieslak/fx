@@ -9,7 +9,10 @@
     <Compile Include="Golden.fs" />
     <Compile Include="Support.fs" />
     <Compile Include="Harness.fs" />
+    <Compile Include="UnitTests.fs" />
     <Compile Include="SessionTests.fs" />
+    <Compile Include="SecretTests.fs" />
+    <Compile Include="GoldenTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,6 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.Replay\Fx.Replay.fsproj" />
     <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+    <!-- A real wire with credentials (secrets are never journaled). -->
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
     <!-- The script kernel, as a process of a shell (ScriptProc). -->
     <ProjectReference Include="..\aot\Fx.Aot.Scenarios\Fx.Aot.Scenarios.fsproj" />
   </ItemGroup>
