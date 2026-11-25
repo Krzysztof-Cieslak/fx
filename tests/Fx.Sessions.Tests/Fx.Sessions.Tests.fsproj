@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Golden.fs" />
+    <Compile Include="Support.fs" />
+    <Compile Include="MachineTests.fs" />
+    <Compile Include="PropertyTests.fs" />
+    <Compile Include="CodecTests.fs" />
+    <Compile Include="ArchitectureTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="golden\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Expecto.FsCheck" />
+    <PackageReference Include="FsCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sessions\Fx.Sessions.fsproj" />
+  </ItemGroup>
+</Project>

@@ -30,6 +30,7 @@
     <Project Path="src/Fx.Envd.Live/Fx.Envd.Live.fsproj" />
     <Project Path="src/Fx.Models/Fx.Models.fsproj" />
     <Project Path="src/Fx.Interpreters/Fx.Interpreters.fsproj" />
+    <Project Path="src/Fx.Sessions/Fx.Sessions.fsproj" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -72,6 +73,7 @@
     <Project Path="tests/Fx.Variants.Tests/Fx.Variants.Tests.fsproj" />
     <Project Path="tests/Fx.Envd.Tests/Fx.Envd.Tests.fsproj" />
     <Project Path="tests/Fx.Envd.Live.Tests/Fx.Envd.Live.Tests.fsproj" />
+    <Project Path="tests/Fx.Sessions.Tests/Fx.Sessions.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/support/">
     <File Path="tests/support/Directory.Build.props" />

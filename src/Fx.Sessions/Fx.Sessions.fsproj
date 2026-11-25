@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The session machine (spec §5): commands, events, state and intents of a session, the pure machine
+    (Evolve/Handle/React/Recover), request kinds, and the codecs of all of them. Clients share Evolve
+    (Fable, spec §17), so this project references only FSharp.Core, Fx.Machines and Fx.Contracts;
+    Fx.Sessions.Tests checks the compiled assembly. The actor wiring, the turn-runner boundary and
+    subscriptions are Fx.Sessions.Host. Spec: docs/modules/sessions.md.
+  -->
+
+  <ItemGroup>
+    <Compile Include="Model.fs" />
+    <Compile Include="RequestKinds.fs" />
+    <Compile Include="Session.fs" />
+    <Compile Include="Codecs.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fx.Contracts\Fx.Contracts.fsproj" />
+    <ProjectReference Include="..\Fx.Machines\Fx.Machines.fsproj" />
+  </ItemGroup>
+</Project>
