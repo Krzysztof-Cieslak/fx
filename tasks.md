@@ -348,8 +348,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T114,T116,T117,T118 done
-  class T125 inprogress
+  class T001,T002,T003,T004,T005,T006,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T114,T116,T117,T118,T125 done
 ```
 
 <!-- /tasks:generated -->
@@ -401,7 +400,7 @@ flowchart LR
 | T122 | Identity + tokens | T108 | §11.2 | todo | `IdentityProvider` contract, `fx.identity.local-os-user`, principals, host-issued session tokens. |
 | T123 | Grants log | T104, T105, T108 | §13 | todo | Grant machine, host-local `GrantStore`, effective-rules projection (deny wins, most specific, else ask), grant request/answer protocol. |
 | T124 | Egress hooks | T108, T118 | §18 | todo | Model-egress hook kind (transform + gate) on every model-bound payload; built-in `fx.egress.exclusions` (path/glob content exclusions). |
-| T125 | Session machine | T101b, T104, T105, T107 | §5 | in-progress | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
+| T125 | Session machine | T101b, T104, T105, T107 | §5 | done | Session machine: commands with idempotency keys, steer/queue/interrupt, serialized attributed multi-client inputs, durable pending requests, subscribe(afterSeq). |
 | T126 | Prompt render | T118, T125 | §5 | todo | Pure render (prefix/history/suffix), stable receipts, cache-breakpoint mapping, `SeenRanges`, content-exclusion filtering; prefix-stability property tests. |
 | T127 | CodeAct strategy | T106, T117, T119, T120, T123, T124, T126 | §4.5, §6.9 | todo | CodeAct loop with both action surfaces (`cells-only`, `hybrid`) as variants; `TurnResult` + `Ensure` validation; loop guard; text-only/length/empty policies. |
 | T128 | Crash recovery | T125, T127 | §5 | todo | Journaled steps; in-flight tool calls become `OutcomeUnknown`, run pauses and opens a session decision with evidence; `fx.recall`. |
