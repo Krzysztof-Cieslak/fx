@@ -1,0 +1,8 @@
+---
+id: 01M88A0TQW8GD4NS5P46AN08WY
+anchor: '@file'
+created: 2026-11-25T02:54:38Z
+norm: '1'
+---
+
+Fx.Sdk.Process may reference only Fx.Sdk, Fx.Rpc and Fx.Effects.Live: it is everything an F# extension process may use (processSdkSurface in tests/Fx.Extensions.Tests/ArchitectureTests.fs changes with it).
