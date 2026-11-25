@@ -79,6 +79,7 @@
     <Project Path="tests/Fx.Envd.Live.Tests/Fx.Envd.Live.Tests.fsproj" />
     <Project Path="tests/Fx.Sessions.Tests/Fx.Sessions.Tests.fsproj" />
     <Project Path="tests/Fx.Sessions.Host.Tests/Fx.Sessions.Host.Tests.fsproj" />
+    <Project Path="tests/Fx.Prompt.Tests/Fx.Prompt.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/support/">
     <File Path="tests/support/Directory.Build.props" />

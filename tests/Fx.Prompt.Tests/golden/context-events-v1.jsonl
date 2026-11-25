@@ -1,0 +1,12 @@
+{"kind":"framed","sections":[{"id":"instructions","pieces":[{"kind":"text","text":"You are a careful coding agent."}]},{"id":"interpreter","pieces":[{"kind":"text","text":"Write TypeScript cells."}]},{"id":"agents","pieces":[{"kind":"text","text":"Agents you can call:\n- fx.agents.explorer: Finds code.\n- fx.agents.reviewer: Reviews a change."}]}]}
+{"kind":"replied","parts":[{"kind":"reasoning","state":{"data":"sig-1","family":"anthropic.messages","kind":"signature","model":"anthropic/claude-test"},"text":"Search."},{"arguments":"{\"code\":\"grep\"}","id":"c1","kind":"toolCall","name":"cell"}],"shown":[],"step":0,"turn":1}
+{"call":"c1","isError":false,"kind":"returned","name":"cell","pieces":[{"digest":"sha256:5bea8cff6a8db201905be63e093c6e19c63b9bf666fa18be5d6a7e5896dc80df","kind":"file","lines":[{"first":7,"last":7}],"path":"src/a.fs","text":"let x = 1 / 0"}],"step":0,"turn":1}
+{"kind":"replied","parts":[{"kind":"text","text":"Division by zero in src/a.fs:7."}],"shown":[],"step":0,"turn":1}
+{"kind":"replied","parts":[{"kind":"reasoning","state":{"data":"sig-2","family":"anthropic.messages","kind":"signature","model":"anthropic/claude-test"},"text":"Patch."},{"kind":"text","text":"Fixed."}],"shown":[],"step":0,"turn":2}
+{"from":{"seq":3,"stream":"session/collapsed"},"kind":"collapsed","summary":[{"kind":"text","text":"Found a division by zero at src/a.fs:7."}],"to":{"seq":4,"stream":"context/collapsed"}}
+{"changed":[{"id":"instructions","pieces":[{"kind":"text","text":"You are a careful coding agent. Prefer small diffs."}]}],"kind":"updated","removed":[]}
+{"kind":"replied","parts":[{"kind":"reasoning","state":{"data":"sig-3","family":"anthropic.messages","kind":"signature","model":"anthropic/claude-test"},"text":"Test."},{"kind":"text","text":"Added."}],"shown":[],"step":0,"turn":3}
+{"kind":"pinned","name":"plan","pin":{"kind":"value","pieces":[{"kind":"text","text":"plan"}]}}
+{"kind":"unpinned","name":"plan"}
+{"kind":"framed","sections":[{"id":"instructions","pieces":[{"kind":"text","text":"New frame."}]}]}
+{"isError":false,"kind":"returned","name":"cell","pieces":[{"kind":"ref","ref":{"id":"sha256:0f","kind":"blob","preview":{"text":"\"lo…\"(len=9000)","truncated":true},"type":"string"}},{"kind":"withheld","path":".env"},{"kind":"media","media":"image","mediaType":"image/png","name":"a.png","source":{"kind":"url","url":"https://example.com/a.png"}}],"step":1,"turn":3}

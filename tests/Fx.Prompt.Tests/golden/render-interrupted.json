@@ -1,0 +1,134 @@
+{
+  "request": {
+    "model": "anthropic/claude-test",
+    "system": [
+      {
+        "kind": "text",
+        "text": "You are a careful coding agent."
+      },
+      {
+        "kind": "text",
+        "text": "Write TypeScript cells."
+      },
+      {
+        "kind": "text",
+        "text": "Agents you can call:\n- fx.agents.explorer: Finds code.\n- fx.agents.reviewer: Reviews a change."
+      },
+      {
+        "kind": "cacheBreakpoint",
+        "ttl": "short"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Run the slow tests."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "kind": "toolCall",
+            "id": "call_1",
+            "name": "cell",
+            "arguments": "{\"code\":\"slow\"}"
+          },
+          {
+            "kind": "toolCall",
+            "id": "call_2",
+            "name": "cell",
+            "arguments": "{\"code\":\"slower\"}"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "toolResult",
+            "callId": "call_1",
+            "name": "cell",
+            "content": [
+              {
+                "kind": "text",
+                "text": "passed"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "kind": "toolResult",
+            "callId": "call_2",
+            "name": "cell",
+            "content": [
+              {
+                "kind": "text",
+                "text": "No result: the turn was interrupted."
+              }
+            ],
+            "isError": true
+          },
+          {
+            "kind": "text",
+            "text": "[Turn 1 was interrupted.]"
+          },
+          {
+            "kind": "text",
+            "text": "Never mind, check the build."
+          },
+          {
+            "kind": "text",
+            "text": "[Turn 2 failed: the model was unreachable]"
+          },
+          {
+            "kind": "text",
+            "text": "Try again."
+          },
+          {
+            "kind": "cacheBreakpoint",
+            "ttl": "short"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "cell",
+        "description": "Runs a TypeScript cell.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            }
+          }
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "seen": {},
+  "withheld": [],
+  "stale": 0,
+  "issues": []
+}
