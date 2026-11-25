@@ -121,6 +121,7 @@
           "Fx.Prelude": "[0.0.0, )",
           "Fx.Prompt": "[0.0.0, )",
           "Fx.Pty": "[0.0.0, )",
+          "Fx.Replay": "[0.0.0, )",
           "Fx.Rpc": "[0.0.0, )",
           "Fx.Sessions.Host": "[0.0.0, )",
           "Fx.Sqlite": "[0.0.0, )",
