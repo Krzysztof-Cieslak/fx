@@ -42,4 +42,4 @@ Quirks (any provider of the family may set them, e.g. a gateway or another Claud
   records what it sent and received (credentials redacted) into
   `artifacts/cassettes/anthropic.messages/`. Review a recorded case, then copy it into
   `cassettes/anthropic.messages/` to make it part of the suite. Without the key the test is skipped.
-- The `models-anthropic` scenario replays the cassettes through the wire under Native AOT and the JIT.
+- The `models-anthropic-*` scenarios of the JIT-vs-native diff (`tests/aot`) replay a hand-written cassette through the wire, decode, map errors and build request bodies under Native AOT and the JIT.
