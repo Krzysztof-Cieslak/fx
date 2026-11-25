@@ -388,7 +388,11 @@ let tests =
             }
 
             testTask "terminals are refused in recorded hands" {
-                let terminal = Record.terminal { Spawn = fun _ _ -> failwith "spawned" }
+                let terminal =
+                    Record.terminal
+                        {
+                            Spawn = fun _ _ -> failwith "spawned"
+                        }
 
                 let! spawned =
                     terminal.Spawn
