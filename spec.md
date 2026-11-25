@@ -871,17 +871,22 @@ Tool/command approvals, component installs, budget extensions, model enablement,
 
 ```fsharp
 type Grant =
-  { Id: GrantId; Action: string; Resource: Pattern
-    Effect: Allow | Deny; Scope: Once | Session | Repo of path: string option | Host
-    By: PrincipalId; At: Instant; Expires: Instant option; Reason: string option; Origin: Origin }
+  { Id: GrantId; Action: ActionName; Resource: Pattern
+    Effect: Allow | Deny; Scope: Once of RequestId | Session of SessionId | Repo of RepoId * path: string option | Host
+    By: PrincipalId; At: Instant; Expires: Instant option; Reason: string option
+    Origin: Answer of RequestId | Direct of via: string }
 
-type GrantEvent = Requested of GrantRequest | Granted of Grant | Denied of GrantRequest * PrincipalId
+type GrantEvent = Requested of GrantRequest | Granted of Grant   // a grant from an answer also answers its request
+                | Denied of RequestId * PrincipalId              // "deny, just this once"
                 | Revoked of GrantId * PrincipalId | Expired of GrantId
+                | Closed of RequestId * CloseReason              // withdrawn, covered by a later grant, refused, timed out, session ended
 ```
 
-- Effective rules are a projection: deny wins, then most-specific grant, else ask. Policy only tightens.
-- **`GrantStore` is an extension point**; default host-local; a repo-policy store can use the same API.
-- Agents can only **request** grants.
+- **Actions** are an open vocabulary (`shell.exec`, `fs.write`, `net.connect`, `component.install`, `budget.raise`, `model.enable`, `model.paidFallback`, `secret.read`, `env.dotenv`, `safeOutput.apply`, `workflow.approval`, …; extensions add theirs). Each names its resource kind (path, command, name) and the scopes an answer may choose. **Patterns** are globs over canonical resources (`*` within a segment, `?`, `**` across segments, `\` escapes); allows match exactly, denies and policy ignoring case (fail closed).
+- **Answers** choose a scope (*once / session / repo (+path) / host*, §19.4), filled in from the request's context, and may broaden the resource to a pattern that matches it.
+- Effective rules are a projection: deny wins, then most-specific grant, else ask. Policy only tightens: policy rules and gates can only ask or deny.
+- **`GrantStore` is an extension point**; default host-local (a stream of the host's event store); a repo-policy store can use the same API.
+- Agents can only **request** grants (`IGrants`: check, request, await, withdraw); people answer, grant and revoke through the client protocol (`grants/*`). Module spec: `docs/modules/grants.md`.
 
 ---
 
