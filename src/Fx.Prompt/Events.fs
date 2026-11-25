@@ -121,11 +121,9 @@ type ContextEvent =
 
 [<RequireQualifiedAccess>]
 module ContextEvent =
-    let private pieces (exclusions: Exclusions) (pieces: Piece list) =
-        fst (Exclusions.filter exclusions pieces)
+    let private pieces (exclusions: Exclusions) (pieces: Piece list) = fst (Withhold.pieces exclusions pieces)
 
-    let private block (exclusions: Exclusions) (block: Block) =
-        fst (Exclusions.filterBlock exclusions block)
+    let private block (exclusions: Exclusions) (block: Block) = fst (Withhold.block exclusions block)
 
     /// The event with the content of excluded files withheld. Record context events through it: the
     /// log then never holds what the exclusions withhold, and a later render has nothing to rewrite.

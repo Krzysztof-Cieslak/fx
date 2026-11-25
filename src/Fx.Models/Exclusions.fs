@@ -4,19 +4,6 @@ open System
 open System.Text
 open Fx.Contracts
 
-/// How paths compare when matched against exclusions: per the filesystem the paths come from
-/// (case-sensitive on Linux, insensitive on Windows and macOS). Where that is unknown, as at the
-/// model-egress hooks, `Insensitive`: excluding too much is the safe side.
-[<RequireQualifiedAccess>]
-type PathCase =
-    | Sensitive
-    | Insensitive
-
-    override this.ToString() =
-        match this with
-        | Sensitive -> "case-sensitive"
-        | Insensitive -> "case-insensitive"
-
 /// Paths as exclusions see them (docs/modules/egress.md): `/`-separated, whatever the producer's
 /// operating system wrote.
 [<RequireQualifiedAccess>]
@@ -27,7 +14,7 @@ module WorkspacePath =
     /// `\` becomes `/`; repeated separators, `.` segments and a trailing separator go; `..` removes
     /// the segment before it where there is one (a relative path above the workspace keeps its
     /// `..`s); a leading `./` goes. Absolute paths keep their root (`/`, `C:/`, `//server/`). Case
-    /// and Unicode normalization are left alone (matching handles case).
+    /// and Unicode normalization are left alone (matching ignores case).
     let normalize (path: string) : string =
         let unified = path.Replace('\\', '/')
         let unc = unified.StartsWith("//", StringComparison.Ordinal)
@@ -95,21 +82,20 @@ type internal GlobNode =
         | Token t -> string t
         | Alt alternatives -> $"{{{alternatives.Length}}}"
 
-/// A compiled pattern: gitignore's syntax and semantics (docs/modules/egress.md), with `{a,b}`
-/// alternatives. Pure; matching is linear in the pattern times the path, never backtracking.
+/// A compiled pattern: `.gitignore` syntax and semantics without negation or escapes, with `{a,b}`
+/// alternatives (docs/modules/egress.md). Matching ignores case and is linear in the pattern times
+/// the path, never backtracking.
 [<Sealed>]
-type Glob private (pattern: string, negated: bool, directoryOnly: bool, alternatives: GlobToken array list) =
+type Glob private (pattern: string, directoryOnly: bool, alternatives: GlobToken array list) =
     /// The pattern as written.
     member _.Pattern = pattern
-    /// `!pattern`: re-includes what an earlier pattern of its list excluded.
-    member _.Negated = negated
     /// `pattern/`: matches directories only (and so everything inside them).
     member _.DirectoryOnly = directoryOnly
     member internal _.Alternatives = alternatives
     override _.ToString() = pattern
 
-    static member internal Create(pattern, negated, directoryOnly, alternatives) =
-        Glob(pattern, negated, directoryOnly, alternatives)
+    static member internal Create(pattern, directoryOnly, alternatives) =
+        Glob(pattern, directoryOnly, alternatives)
 
 [<RequireQualifiedAccess>]
 module Glob =
@@ -132,22 +118,9 @@ module Glob =
 
         member _.Ok = error.IsNone
 
-    /// Reads one character of a class, after `\` if escaped; `None` at the end.
-    let private classChar (text: string) (reader: Reader) (i: byref<int>) : char =
-        if text[i] = '\\' then
-            if i + 1 >= text.Length then
-                reader.Fail "a \\ at the end of the pattern"
-                i <- text.Length
-                '\000'
-            else
-                i <- i + 2
-                text[i - 1]
-        else
-            i <- i + 1
-            text[i - 1]
-
-    /// Parses `[…]` starting after the `[`; returns the token and the index after `]`.
-    let private parseClass (text: string) (reader: Reader) (start: int) : GlobToken * int =
+    /// Parses `[…]` starting after the `[`: the token and the index after `]`, or `None` if the class
+    /// is not closed (then `[` is a literal character).
+    let private parseClass (text: string) (reader: Reader) (start: int) : (GlobToken * int) option =
         let mutable i = start
         let mutable negated = false
 
@@ -159,33 +132,32 @@ module Glob =
         let mutable closed = false
         let mutable first = true
 
-        while reader.Ok && not closed do
-            if i >= text.Length then
-                reader.Fail "an unclosed [ (write \\[ for a literal one)"
-            elif text[i] = ']' && not first then
+        while reader.Ok && not closed && i < text.Length do
+            if text[i] = ']' && not first then
                 i <- i + 1
                 closed <- true
+            elif i + 2 < text.Length && text[i + 1] = '-' && text[i + 2] <> ']' then
+                let low, high = text[i], text[i + 2]
+
+                if high < low then
+                    reader.Fail $"the range {low}-{high} is reversed: it would match nothing"
+                else
+                    ranges.Add((low, high))
+
+                i <- i + 3
             else
-                let low = classChar text reader &i
-
-                if reader.Ok then
-                    if i + 1 < text.Length && text[i] = '-' && text[i + 1] <> ']' then
-                        i <- i + 1
-                        let high = classChar text reader &i
-
-                        if reader.Ok then
-                            if high < low then
-                                reader.Fail $"the range {low}-{high} is reversed"
-                            else
-                                ranges.Add((low, high))
-                    else
-                        ranges.Add((low, low))
+                ranges.Add((text[i], text[i]))
+                i <- i + 1
 
             first <- false
 
-        GlobToken.Class(negated, List.ofSeq ranges), i
+        if closed then
+            Some(GlobToken.Class(negated, List.ofSeq ranges), i)
+        else
+            None
 
-    /// Parses a sequence until the end, or (inside braces) until `,` or `}`.
+    /// Parses a sequence until the end, or (inside braces) until `,` or `}`. An unclosed `{` or `[`
+    /// is a literal character.
     let rec private parseSeq (text: string) (reader: Reader) (start: int) (inBraces: bool) : GlobNode list * int =
         let nodes = ResizeArray<GlobNode>()
         let mutable i = start
@@ -195,13 +167,6 @@ module Glob =
             match text[i] with
             | ',' when inBraces -> stop <- true
             | '}' when inBraces -> stop <- true
-            | '\\' ->
-                if i + 1 >= text.Length then
-                    reader.Fail "a \\ at the end of the pattern"
-                else
-                    let c = text[i + 1]
-                    nodes.Add(GlobNode.Token(if c = '/' then GlobToken.Slash else GlobToken.Char c))
-                    i <- i + 2
             | '/' ->
                 nodes.Add(GlobNode.Token GlobToken.Slash)
                 i <- i + 1
@@ -212,28 +177,35 @@ module Glob =
                 nodes.Add(GlobNode.Token GlobToken.Star)
                 i <- i + 1
             | '[' ->
-                let token, after = parseClass text reader (i + 1)
-                nodes.Add(GlobNode.Token token)
-                i <- after
+                match parseClass text reader (i + 1) with
+                | Some(token, after) ->
+                    nodes.Add(GlobNode.Token token)
+                    i <- after
+                | None ->
+                    nodes.Add(GlobNode.Token(GlobToken.Char '['))
+                    i <- i + 1
             | '{' ->
                 let alternatives = ResizeArray<GlobNode list>()
                 let mutable j = i + 1
                 let mutable closed = false
+                let mutable unclosed = false
 
-                while reader.Ok && not closed do
+                while reader.Ok && not closed && not unclosed do
                     let alternative, after = parseSeq text reader j true
                     alternatives.Add alternative
 
-                    if not reader.Ok then
-                        ()
-                    elif after >= text.Length then
-                        reader.Fail "an unclosed { (write \\{ for a literal one)"
+                    if after >= text.Length then
+                        unclosed <- true
                     else
                         closed <- text[after] = '}'
                         j <- after + 1
 
-                nodes.Add(GlobNode.Alt(List.ofSeq alternatives))
-                i <- j
+                if closed then
+                    nodes.Add(GlobNode.Alt(List.ofSeq alternatives))
+                    i <- j
+                else
+                    nodes.Add(GlobNode.Token(GlobToken.Char '{'))
+                    i <- i + 1
             | c ->
                 nodes.Add(GlobNode.Token(GlobToken.Char c))
                 i <- i + 1
@@ -308,7 +280,31 @@ module Glob =
     /// One alternative: whether it is directory-only, and its tokens, anchored; `None` if it has
     /// only separators.
     let private compileAlternative (tokens: GlobToken list) : (bool * GlobToken array) option =
-        let mutable tokens = Array.ofList tokens
+        // `.` segments name nothing: `./a` is `a`.
+        let mutable tokens =
+            let segments = ResizeArray<GlobToken list>()
+            let current = ResizeArray<GlobToken>()
+
+            for token in tokens do
+                if token = GlobToken.Slash then
+                    segments.Add(List.ofSeq current)
+                    current.Clear()
+                else
+                    current.Add token
+
+            segments.Add(List.ofSeq current)
+
+            segments
+            |> Seq.filter (fun segment -> segment <> [ GlobToken.Char '.' ])
+            |> Seq.map Array.ofList
+            |> Array.ofSeq
+            |> fun segments ->
+                // Keep the separators of the original layout (leading, trailing, repeated).
+                if segments.Length = 0 then
+                    [||]
+                else
+                    Array.reduce (fun a b -> Array.concat [ a; [| GlobToken.Slash |]; b ]) segments
+
         let mutable directoryOnly = false
 
         while tokens.Length > 0 && tokens[tokens.Length - 1] = GlobToken.Slash do
@@ -335,23 +331,28 @@ module Glob =
 
             Some(directoryOnly, Array.ofList converted)
 
-    /// Compiles a pattern. `None` for blank lines and `#` comments (so lists can be written like a
-    /// `.gitignore`); `Error` with the reason for one that cannot be read.
+    /// Compiles a pattern. `None` for a `#` comment (lists can be written like a `.gitignore`);
+    /// `Error` with the reason for one that cannot be used: an exclusion silently ignored would leak
+    /// what it was meant to withhold, so blank patterns, negations and patterns that match nothing are
+    /// errors.
     let parse (pattern: string) : Result<Glob option, string> =
         let text = pattern.Trim()
 
-        if text.Length = 0 || text.StartsWith('#') then
+        if text.Length = 0 then
+            Error "an exclusion pattern is empty"
+        elif text.StartsWith('#') then
             Ok None
+        elif text.StartsWith('!') then
+            Error $"\"{pattern}\": negations are not supported: exclusions only withhold more"
         elif text.Length > maxLength then
             Error $"the pattern is longer than {maxLength} characters"
         else
-            let negated = text.StartsWith('!')
-            let body = if negated then text.Substring 1 else text
+            // `\` separates segments, as on Windows: there are no escapes (`[*]` matches a `*`).
+            let body = text.Replace('\\', '/')
             let reader = Reader()
             let nodes, _ = parseSeq body reader 0 false
 
             match reader.Error with
-            | _ when body.Length = 0 -> Error "! needs a pattern after it"
             | Some message -> Error message
             | None ->
                 match expand nodes with
@@ -360,7 +361,7 @@ module Glob =
                     let compiled = expanded |> List.map compileAlternative
 
                     if compiled |> List.exists Option.isNone then
-                        Error "the pattern matches nothing (it is only separators)"
+                        Error $"\"{pattern}\" names no path"
                     else
                         let compiled = compiled |> List.choose id
                         let directoryOnly = compiled |> List.forall fst
@@ -375,25 +376,24 @@ module Glob =
                                 else
                                     tokens)
 
-                        Ok(Some(Glob.Create(text, negated, directoryOnly, alternatives)))
+                        Ok(Some(Glob.Create(text, directoryOnly, alternatives)))
 
-    let private equal (case: PathCase) (a: char) (b: char) =
+    let private equal (a: char) (b: char) =
         a = b
-        || (case = PathCase.Insensitive
-            && (Char.ToUpperInvariant a = Char.ToUpperInvariant b
-                || Char.ToLowerInvariant a = Char.ToLowerInvariant b))
+        || Char.ToUpperInvariant a = Char.ToUpperInvariant b
+        || Char.ToLowerInvariant a = Char.ToLowerInvariant b
 
-    let private inClass (case: PathCase) (ranges: (char * char) list) (c: char) =
+    let private inClass (ranges: (char * char) list) (c: char) =
         let inRanges (c: char) =
             ranges |> List.exists (fun (low, high) -> c >= low && c <= high)
 
         inRanges c
-        || (case = PathCase.Insensitive
-            && (inRanges (Char.ToUpperInvariant c) || inRanges (Char.ToLowerInvariant c)))
+        || inRanges (Char.ToUpperInvariant c)
+        || inRanges (Char.ToLowerInvariant c)
 
     /// Whether one token sequence matches the whole text: dynamic programming over (token, position),
     /// one row at a time from the last token.
-    let private matchesTokens (case: PathCase) (tokens: GlobToken array) (text: string) : bool =
+    let private matchesTokens (tokens: GlobToken array) (text: string) : bool =
         let m = text.Length
         let mutable next = Array.init (m + 1) (fun j -> j = m)
 
@@ -403,7 +403,7 @@ module Glob =
             match tokens[i] with
             | GlobToken.Char c ->
                 for j in 0 .. m - 1 do
-                    current[j] <- next[j + 1] && equal case text[j] c
+                    current[j] <- next[j + 1] && equal text[j] c
             | GlobToken.Slash ->
                 for j in 0 .. m - 1 do
                     current[j] <- next[j + 1] && text[j] = '/'
@@ -412,7 +412,7 @@ module Glob =
                     current[j] <- next[j + 1] && text[j] <> '/'
             | GlobToken.Class(negated, ranges) ->
                 for j in 0 .. m - 1 do
-                    current[j] <- next[j + 1] && text[j] <> '/' && (inClass case ranges text[j] <> negated)
+                    current[j] <- next[j + 1] && text[j] <> '/' && (inClass ranges text[j] <> negated)
             | GlobToken.Star ->
                 current[m] <- next[m]
 
@@ -441,16 +441,15 @@ module Glob =
 
         next[0]
 
-    /// Whether the glob matches a normalized path (`WorkspacePath.normalize`) that is a directory
-    /// or a file. Negation is not applied here: it is the list's business.
-    let isMatch (case: PathCase) (glob: Glob) (path: string) (isDirectory: bool) : bool =
+    /// Whether the glob matches a normalized path (`WorkspacePath.normalize`) that is a directory or
+    /// a file, ignoring case.
+    let isMatch (glob: Glob) (path: string) (isDirectory: bool) : bool =
         (isDirectory || not glob.DirectoryOnly)
-        && glob.Alternatives |> List.exists (fun tokens -> matchesTokens case tokens path)
+        && glob.Alternatives |> List.exists (fun tokens -> matchesTokens tokens path)
 
-/// Patterns from one origin (host config, project config, policy, a provider's policy), in the
-/// order written. Within a list, the last pattern that matches decides (`!` re-includes), as in a
-/// `.gitignore`; lists never re-include what another list excludes, so adding a list only excludes
-/// more.
+/// Patterns from one origin (host config, project config, policy, a provider's policy). Every pattern
+/// only excludes more: there are no negations, so neither the order of patterns nor that of lists
+/// matters, and adding a list or a pattern never re-includes anything.
 type ExclusionList =
     {
         /// Who set the patterns, e.g. `host`, `project`, `policy`, `copilot`: shown with every match.
@@ -461,7 +460,7 @@ type ExclusionList =
     override this.ToString() =
         $"exclusions({this.Origin}, {this.Patterns.Length} patterns)"
 
-/// Why a path is excluded: the first list that excludes it, and its pattern that decided.
+/// Why a path is excluded: the first list that excludes it, and its first pattern that matched.
 type ExclusionMatch =
     {
         /// The path, normalized.
@@ -475,18 +474,22 @@ type ExclusionMatch =
 
 type internal CompiledList = { Origin: string; Globs: Glob array }
 
-/// Compiled exclusion lists and how paths compare: what `Exclusions.test` matches against.
+/// Compiled exclusion lists: what `Exclusions.test` matches against.
 [<Sealed>]
-type Exclusions private (case: PathCase, lists: CompiledList list) =
-    member _.Case = case
+type Exclusions private (lists: CompiledList list) =
     member internal _.Lists = lists
     /// No list has a pattern.
     member _.IsEmpty = lists |> List.forall (fun l -> l.Globs.Length = 0)
 
-    override _.ToString() =
-        $"Exclusions({case}, {lists.Length} lists)"
+    /// Every pattern, list by list.
+    member _.Patterns =
+        lists |> List.collect (fun l -> l.Globs |> Array.toList |> List.map _.Pattern)
 
-    static member internal Create(case, lists) = Exclusions(case, lists)
+    override _.ToString() =
+        let count = lists |> List.sumBy (fun l -> l.Globs.Length)
+        $"exclusions({lists.Length} lists, {count} patterns)"
+
+    static member internal Create(lists) = Exclusions(lists)
 
 [<RequireQualifiedAccess>]
 module ExclusionList =
@@ -503,7 +506,7 @@ module ExclusionList =
         |> Codec.describe "Content exclusion patterns from one origin."
         |> Codec.named "ExclusionList"
 
-    /// The issue of each pattern that cannot be read, at its index.
+    /// The issue of each pattern that cannot be used, at its index.
     let check (patterns: string list) : Issue list =
         patterns
         |> List.indexed
@@ -512,7 +515,7 @@ module ExclusionList =
             | Ok _ -> None
             | Error message -> Some(Issue.create message |> Issue.under (PathSegment.Index i)))
 
-    /// Patterns (gitignore syntax), checked when read: for config values and variant slots.
+    /// Patterns, checked when read: for config values and variant slots.
     let patterns: Codec<string list> =
         Codec.list Codec.string
         |> Codec.refine (fun patterns ->
@@ -520,7 +523,7 @@ module ExclusionList =
             | [] -> Ok()
             | issues -> Error(String.Join("; ", issues |> List.map string)))
         |> Codec.describe
-            "Paths to keep out of model requests, gitignore syntax: relative to the workspace; * ? [..] {a,b} **; / anchors; a trailing / matches directories; ! re-includes within the list."
+            "Files whose content never goes to models, .gitignore syntax relative to the workspace: * ? [..] {a,b} **; / or \\ separates; a leading or inner / anchors; a trailing / matches directories; no negations."
 
 [<RequireQualifiedAccess>]
 module ExclusionMatch =
@@ -544,10 +547,10 @@ module ExclusionMatch =
 [<RequireQualifiedAccess>]
 module Exclusions =
     /// No exclusions.
-    let none: Exclusions = Exclusions.Create(PathCase.Insensitive, [])
+    let none: Exclusions = Exclusions.Create []
 
-    /// Compiles lists; every pattern that cannot be read is an issue (under `[list].patterns[i]`).
-    let create (case: PathCase) (lists: ExclusionList list) : Validation<Exclusions, Issue> =
+    /// Compiles lists; every pattern that cannot be used is an issue (under `[list].patterns[i]`).
+    let create (lists: ExclusionList list) : Validation<Exclusions, Issue> =
         let compiled =
             lists
             |> List.mapi (fun index list ->
@@ -573,18 +576,8 @@ module Exclusions =
                 List.choose id issues)
 
         match compiled |> List.collect snd with
-        | [] -> Ok(Exclusions.Create(case, compiled |> List.map fst))
+        | [] -> Ok(Exclusions.Create(compiled |> List.map fst))
         | issues -> Error issues
-
-    /// The last pattern of the list that matches, if it excludes.
-    let private decide (case: PathCase) (list: CompiledList) (path: string) (isDirectory: bool) : Glob option =
-        let mutable last: Glob option = None
-
-        for glob in list.Globs do
-            if Glob.isMatch case glob path isDirectory then
-                last <- Some glob
-
-        last |> Option.filter (fun glob -> not glob.Negated)
 
     /// The directories above a normalized path, the outermost first (not the root itself).
     let private ancestors (path: string) : string list =
@@ -600,19 +593,16 @@ module Exclusions =
         if normalized.Length = 0 || exclusions.IsEmpty then
             None
         else
-            let inList (list: CompiledList) =
-                // As in git: nothing inside an excluded directory can be re-included.
-                let above =
-                    ancestors normalized
-                    |> List.tryPick (fun dir -> decide exclusions.Case list dir true)
-
-                match above with
-                | Some glob -> Some glob
-                | None -> decide exclusions.Case list normalized isDirectory
+            // The path, or a directory above it (a matched directory excludes everything under it).
+            let entries =
+                (normalized, isDirectory)
+                :: (ancestors normalized |> List.map (fun dir -> dir, true))
 
             exclusions.Lists
             |> List.tryPick (fun list ->
-                inList list
+                list.Globs
+                |> Array.tryFind (fun glob ->
+                    entries |> List.exists (fun (entry, isDir) -> Glob.isMatch glob entry isDir))
                 |> Option.map (fun glob ->
                     {
                         Path = normalized
@@ -625,6 +615,9 @@ module Exclusions =
 
     /// Why a directory (and so everything in it) is excluded, if it is.
     let testDirectory (exclusions: Exclusions) (path: string) : ExclusionMatch option = testEntry exclusions path true
+
+    /// Whether a file's content is excluded.
+    let excludes (exclusions: Exclusions) (path: string) : bool = (test exclusions path).IsSome
 
     /// The first of the sources that is excluded.
     let firstExcluded (exclusions: Exclusions) (sources: ContentSource list) : ExclusionMatch option =

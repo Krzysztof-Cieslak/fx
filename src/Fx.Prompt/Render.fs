@@ -196,7 +196,7 @@ module Render =
         let mutable seen = SeenRanges.empty
 
         let filter (pieces: Piece list) : Piece list * bool =
-            let pieces, changed = Exclusions.filter cfg.Exclusions pieces
+            let pieces, changed = Withhold.pieces cfg.Exclusions pieces
 
             for piece in pieces do
                 match piece with
@@ -287,6 +287,7 @@ module Render =
                                     Name = receipt.Name
                                     Content = Piece.toolContent pieces
                                     IsError = receipt.IsError
+                                    Sources = pieces |> List.collect Piece.sources
                                 }
                         ]
                 | EntryContent.Receipt(receipt, false) ->
@@ -307,6 +308,7 @@ module Render =
                                 Name = call.Name
                                 Content = [ ToolContent.Text $"No result: {reason}." ]
                                 IsError = true
+                                Sources = []
                             })
                     |> user
                 | EntryContent.Ended(turn, ended) -> user [ Part.text (endedText turn ended) ]
@@ -341,16 +343,18 @@ module Render =
             Stale = stale
         }
 
-    /// The prefix as the request's system parts: one text part per section.
+    /// The prefix as the request's system parts: one text part per section, quoting (`Sources`) the
+    /// files its pieces show.
     let system (prompt: Prompt) : Part list =
         prompt.Prefix
-        |> List.map Block.render
-        |> List.filter (fun text -> text <> "")
-        |> List.map Part.text
+        |> List.map (fun block -> Block.render block, block.Pieces |> List.collect Piece.sources)
+        |> List.filter (fun (text, _) -> text <> "")
+        |> List.map (fun (text, sources) -> Part.quoting sources text)
 
     /// A stable key for the prefix (the system parts and the tools): the first 32 hex digits of the
-    /// SHA-256 of their canonical JSON. Sent as the cache key (OpenAI `prompt_cache_key`) where the
-    /// model takes one; it changes only when the prefix does.
+    /// SHA-256 of their canonical JSON, as they leave for the model (without provenance). Sent as the
+    /// cache key (OpenAI `prompt_cache_key`) where the model takes one; it changes only when the prefix
+    /// does.
     let cacheKey (system: Part list) (tools: ToolSpec list) : string =
         let parts =
             system
@@ -358,6 +362,7 @@ module Render =
                 match p with
                 | Part.CacheBreakpoint _ -> false
                 | _ -> true)
+            |> List.map Part.withoutSources
 
         let json =
             Json.Object

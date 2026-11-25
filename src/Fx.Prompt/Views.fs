@@ -2,6 +2,7 @@ namespace Fx.Prompt
 
 open System
 open System.Globalization
+open Fx.Models
 
 /// What the strategy knows at the moment of a call that is not in the log, gathered through its
 /// capabilities before it renders (the render itself does no I/O).

@@ -269,7 +269,6 @@ let tests =
                         let exclusions =
                             match
                                 Fx.Models.Exclusions.create
-                                    (ContentExclusions.caseOf os)
                                     [
                                         {
                                             Origin = "host"

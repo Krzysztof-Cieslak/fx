@@ -57,7 +57,11 @@ type LineRange =
         Last: int
     }
 
-    override this.ToString() = $"{this.First}-{this.Last}"
+    override this.ToString() =
+        if this.First = this.Last then
+            string this.First
+        else
+            string this.First + "-" + string this.Last
 
 /// Where content in a part came from (spec §18 content exclusions, §5 `SeenRanges`): a file, as the
 /// code that put its content in the part saw it. The model-egress hooks match these against the
@@ -334,6 +338,32 @@ module CacheTtl =
         |> Codec.named "CacheTtl"
 
 module LineRange =
+    let create (first: int) (last: int) : LineRange = { First = first; Last = last }
+
+    /// Sorted, overlapping and adjacent ranges merged, empty and invalid ones (before line 1, or
+    /// ending before they start) left out.
+    let normalize (ranges: LineRange list) : LineRange list =
+        ranges
+        |> List.choose (fun r ->
+            let first = max 1 r.First
+
+            if r.Last < first then
+                None
+            else
+                Some { First = first; Last = r.Last })
+        |> List.sortBy (fun r -> r.First, r.Last)
+        |> List.fold
+            (fun merged r ->
+                match merged with
+                | last :: rest when int64 r.First <= int64 last.Last + 1L ->
+                    { last with
+                        Last = max last.Last r.Last
+                    }
+                    :: rest
+                | _ -> r :: merged)
+            []
+        |> List.rev
+
     let codec: Codec<LineRange> =
         Codec.record {
             let! first =
@@ -343,10 +373,10 @@ module LineRange =
             return { First = first; Last = last }
         }
         |> Codec.refine (fun r ->
-            if r.Last >= r.First then
-                Ok()
+            if r.Last < r.First then
+                Error $"a range must not end ({r.Last}) before its first line ({r.First})"
             else
-                Error $"expected last ({r.Last}) at least first ({r.First})")
+                Ok())
         |> Codec.describe "Lines of a file, 1-based and inclusive."
         |> Codec.named "LineRange"
 

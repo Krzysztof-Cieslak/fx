@@ -67,7 +67,8 @@ module ContentExclusions =
             []
         |> Slot.privileged
 
-    /// Patterns from the trusted project's config. They add to the others; none can remove another's.
+    /// Patterns from the trusted project's config. They add to the others: patterns only ever exclude
+    /// more (there are no negations), so no list can undo another's.
     let projectPatterns: Slot<string list> =
         Slot.create
             "egress.exclusions.project"
@@ -157,18 +158,9 @@ module ContentExclusions =
     /// environment.
     let ofVariants<'R> (variants: Variants) : Eff<'R, ExclusionSettings> = fun _ -> read { Variants = variants }
 
-    /// How an environment's paths compare: case-sensitive on Linux, insensitive on Windows and macOS
-    /// (their default filesystems).
-    let caseOf (os: Os) : PathCase =
-        match os with
-        | Os.Linux -> PathCase.Sensitive
-        | Os.MacOs
-        | Os.Windows -> PathCase.Insensitive
-
-    /// The compiled exclusions of settings. The model-egress hooks compare without case (the paths
-    /// may come from any environment, and excluding too much is the safe side).
-    let compile (case: PathCase) (settings: ExclusionSettings) : Validation<Exclusions, Issue> =
-        Exclusions.create case settings.Lists
+    /// The compiled exclusions of settings: the same matcher and the same lists for the model-egress
+    /// hooks, the prompt render (T126) and the host bindings.
+    let compile (settings: ExclusionSettings) : Validation<Exclusions, Issue> = Exclusions.create settings.Lists
 
     /// The priority of the exclusions' transform: before every other egress transform, so the others
     /// (redaction, T601) see placeholders, never excluded content.
@@ -185,7 +177,7 @@ module ContentExclusions =
                 match last with
                 | Some(previous, compiled) when previous = settings -> compiled
                 | _ ->
-                    let compiled = compile PathCase.Insensitive settings
+                    let compiled = compile settings
                     last <- Some(settings, compiled)
                     compiled)
 

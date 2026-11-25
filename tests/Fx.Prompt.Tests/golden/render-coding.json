@@ -29,7 +29,16 @@
           },
           {
             "kind": "text",
-            "text": "Pinned retry:\nsrc/billing/Retry.fs:14-31 (sha256:fad44d063264)\ntype RetryConfig = { Attempts: int }"
+            "text": "Pinned retry:\nsrc/billing/Retry.fs:14-31 (sha256:fad44d063264)\ntype RetryConfig = { Attempts: int }",
+            "sources": [
+              {
+                "path": "src/billing/Retry.fs",
+                "lines": {
+                  "first": 14,
+                  "last": 31
+                }
+              }
+            ]
           },
           {
             "kind": "text",
@@ -71,7 +80,16 @@
                 "text": "FileText(lines=412)\nsrc/billing/Retry.fs:14-31 (sha256:fad44d063264)\ntype RetryConfig = { Attempts: int }"
               }
             ],
-            "isError": false
+            "isError": false,
+            "sources": [
+              {
+                "path": "src/billing/Retry.fs",
+                "lines": {
+                  "first": 14,
+                  "last": 31
+                }
+              }
+            ]
           }
         ]
       },

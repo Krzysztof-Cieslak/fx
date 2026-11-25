@@ -1,6 +1,7 @@
 namespace Fx.Prompt
 
 open Fx.Contracts
+open Fx.Models
 
 /// What of one version of a file has entered the context.
 type Seen =

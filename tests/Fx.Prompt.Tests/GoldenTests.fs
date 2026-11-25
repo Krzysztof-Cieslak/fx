@@ -156,6 +156,7 @@ let private everyKind: Sim =
                                 MediaType = "image/png"
                                 Source = MediaSource.Url "https://example.com/a.png"
                                 Name = Some "a.png"
+                                Sources = []
                             }
                     ]
                 IsError = false
