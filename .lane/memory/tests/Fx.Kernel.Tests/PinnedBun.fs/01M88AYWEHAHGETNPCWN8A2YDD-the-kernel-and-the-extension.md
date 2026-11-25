@@ -3,9 +3,10 @@ id: 01M88AYWEHAHGETNPCWN8A2YDD
 anchor: '@file'
 created: 2026-11-25T03:11:03Z
 norm: '1'
-sig: e240cf2a5f0b9e04
-body_hash: a127b189b20f4b06
-raw_hash: 9b8b53709b8c25b9
+sig: 5d1438b506ec7a84
+body_hash: c859197f20ecca43
+raw_hash: b62e14bf0dd10d4f
+vouched: 2026-11-25T05:00:54Z
 lines: 1-241
 ---
 
