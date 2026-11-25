@@ -9,6 +9,7 @@
     <Compile Include="ComponentTests.fs" />
     <Compile Include="RuntimeTests.fs" />
     <Compile Include="SlotTests.fs" />
+    <Compile Include="SandboxTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
