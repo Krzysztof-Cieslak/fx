@@ -146,6 +146,9 @@ type EnvSummary =
         Reason: string option
         /// What a person must be told while it exists (no sandbox, …).
         Warnings: string list
+        /// The sandbox driver that confines its processes (`bubblewrap`, `seatbelt`, `none`), once it
+        /// is ready.
+        Sandbox: string option
     }
 
     override this.ToString() =
@@ -455,6 +458,9 @@ module ClientProtocol =
             and! warnings =
                 Codec.field "warnings" (fun (e: EnvSummary) -> e.Warnings) (Codec.list Codec.string)
 
+            and! sandbox =
+                Codec.optionalField "sandbox" (fun (e: EnvSummary) -> e.Sandbox) Codec.string
+
             return
                 {
                     Id = id
@@ -465,6 +471,7 @@ module ClientProtocol =
                     Workspace = workspace
                     Reason = reason
                     Warnings = warnings
+                    Sandbox = sandbox
                 }
         }
         |> Codec.describe "An environment: where sessions' hands are."

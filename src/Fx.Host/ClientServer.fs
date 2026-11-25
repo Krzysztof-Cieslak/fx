@@ -331,6 +331,7 @@ module ClientServer =
             Workspace = record.Spec.Workspace.Path
             Reason = record.Reason
             Warnings = Envs.warnings record
+            Sandbox = record.Sandbox |> Option.map _.Driver
         }
 
     let private envHandlers (host: Host) (client: ClientState) : Handler<HostEnv> list =

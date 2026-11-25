@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/bil… ● idle
+          call sites to
+          RetryPolicy.
+    Evidence  dotnet
+              test tests
+              /Billing →
+              214 passed
+    Verify    dotnet
+              test tests
+              /Billing
+    1m39s
+
+Enter send · Alt+Enter …
+›
+────────────────────────
+cursor 13,2

@@ -329,12 +329,15 @@ let tests =
                         Expect.equal env.Transport (Some "in-process") "embedded"
                         // Unsandboxed only where no sandbox driver confines processes (Windows, or a
                         // machine without bubblewrap): the warning says so.
-                        let confined =
+                        let sandbox =
                             (wait ((Fx.Environments.EnvsHost.envs h.Environments).Get env.Id CancellationToken.None))
                             |> Option.bind _.Sandbox
-                            |> Option.exists _.Confines
+
+                        let confined = sandbox |> Option.exists _.Confines
 
                         Expect.equal env.Warnings.IsEmpty confined "a warning exactly when unsandboxed"
+                        Expect.equal env.Sandbox (sandbox |> Option.map _.Driver) "the driver"
+                        Expect.isSome env.Sandbox "ready: its driver is known"
                         Expect.equal (c.Call(ClientProtocol.envGet, { Id = env.Id })) env "get"
                     | other -> failtest $"{other}"
 

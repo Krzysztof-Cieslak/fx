@@ -92,7 +92,12 @@ module View =
                         ))
                 ]
                 match model.Env with
-                | Some env -> [ s bar $"env: {env.Name} ({env.Provider})" ]
+                | Some env ->
+                    [ s bar $"env: {env.Name} ({env.Provider})" ]
+
+                    match env.Sandbox with
+                    | Some driver -> [ s bar ("sandbox: " + driver) ]
+                    | None -> ()
                 | None -> ()
                 match model.Setup.Model with
                 | Some m -> [ s bar m ]
@@ -382,6 +387,9 @@ module View =
 
     // ---- what is asked --------------------------------------------------------------------------
 
+    /// The most pieces of a permission's evidence shown.
+    let private maxEvidence = 6
+
     let private cardRows (model: Model) (card: Card) (total: int) : Row list =
         let width = model.Width
         let bar (color: Style) = s color "┃ "
@@ -437,8 +445,11 @@ module View =
                         s dim (request.Action.Value + "  ")
                         p (Text.firstLine request.Resource)
                     ]
-                for evidence in List.truncate 3 request.Evidence do
+                // As much evidence as `fx run` shows at the terminal (`GrantPrompts`).
+                for evidence in List.truncate maxEvidence request.Evidence do
                     Row.fit width [ bar c; s dim (evidence.Label + ": "); p (Text.firstLine evidence.Text) ]
+                if request.Evidence.Length > maxEvidence then
+                    Row.fit width [ bar c; s dim $"(and {request.Evidence.Length - maxEvidence} more)" ]
                 yield! options c
             ]
         | Card.Decision(_, question, action, output, choices) ->

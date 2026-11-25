@@ -1,5 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (fx.env.local) · anthropic/claude-… ● turn 1
+ fx · …/src/billing · env: default (local) · sandbox: none · anthropi… ● turn 1
  ! runs unsandboxed: commands can read and change everything the user can
 
 

@@ -210,7 +210,7 @@ let tests =
                         | [ Card.Grant next ] ->
                             Expect.equal next.Id (RequestId "g-2") "the next one"
                             let choices = App.choices model (Card.Grant next) |> List.map (fun (k, _, _) -> k)
-                            Expect.equal choices [ "y"; "h"; "n" ] "no session scope for a host-level request"
+                            Expect.equal choices [ "y"; "a"; "n" ] "no session scope for a host-level request"
                         | other -> failtest $"{other}"
 
                         let _, cmds = play model [ key (KeyCode.Char "n") ]

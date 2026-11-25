@@ -80,6 +80,7 @@ module TuiClient =
             Provider = environment.Provider
             Phase = environment.Phase
             Warnings = environment.Warnings
+            Sandbox = environment.Sandbox
         }
 
     let private infoOf (entry: SessionEntry) : SessionInfo =
