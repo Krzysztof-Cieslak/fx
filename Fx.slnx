@@ -45,6 +45,7 @@
     <Project Path="extensions/Fx.Ext.RuntimeBun/Fx.Ext.RuntimeBun.fsproj" />
     <Project Path="extensions/Fx.Ext.ModelCanonical/Fx.Ext.ModelCanonical.fsproj" />
     <Project Path="extensions/Fx.Ext.InterpreterBunTs/Fx.Ext.InterpreterBunTs.fsproj" />
+    <Project Path="extensions/Fx.Ext.ModelAnthropic/Fx.Ext.ModelAnthropic.fsproj" />
   </Folder>
   <Folder Name="/tools/">
     <File Path="tools/Directory.Build.props" />
@@ -92,6 +93,7 @@
     <Project Path="tests/Fx.Models.Tests/Fx.Models.Tests.fsproj" />
     <Project Path="tests/Fx.Interpreters.Tests/Fx.Interpreters.Tests.fsproj" />
     <Project Path="tests/Fx.Ext.InterpreterBunTs.Tests/Fx.Ext.InterpreterBunTs.Tests.fsproj" />
+    <Project Path="tests/Fx.Ext.ModelAnthropic.Tests/Fx.Ext.ModelAnthropic.Tests.fsproj" />
   </Folder>
   <Folder Name="/tests/aot/">
     <File Path="tests/aot/Directory.Build.props" />

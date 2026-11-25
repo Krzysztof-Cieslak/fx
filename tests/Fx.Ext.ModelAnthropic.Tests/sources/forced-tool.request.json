@@ -1,0 +1,16 @@
+{
+  "model": "claude-haiku-5-5",
+  "max_tokens": 512,
+  "messages": [
+    { "role": "user", "content": [ { "type": "text", "text": "What is in this directory?" } ] }
+  ],
+  "tools": [
+    {
+      "name": "list_files",
+      "description": "Lists the files of the working directory.",
+      "input_schema": { "type": "object", "properties": {} }
+    }
+  ],
+  "tool_choice": { "type": "tool", "name": "list_files", "disable_parallel_tool_use": true },
+  "stream": true
+}

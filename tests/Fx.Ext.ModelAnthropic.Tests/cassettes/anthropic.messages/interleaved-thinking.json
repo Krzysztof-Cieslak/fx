@@ -1,0 +1,369 @@
+{
+  "name": "interleaved-thinking",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-fable-5-2",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Rename x to count in src/main.fs."
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Reads a file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "strict": false
+      },
+      {
+        "name": "edit_file",
+        "description": "Replaces a file's text.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "text"
+          ]
+        },
+        "strict": false
+      }
+    ],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "reasoning": {
+      "effort": "max",
+      "visible": true
+    },
+    "maxOutputTokens": 64000,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-fable-5-2",
+            "max_tokens": 64000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Rename x to count in src/main.fs."
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "read_file",
+                "description": "Reads a file.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path"
+                  ]
+                }
+              },
+              {
+                "name": "edit_file",
+                "description": "Replaces a file's text.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "text"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive",
+              "display": "summarized"
+            },
+            "output_config": {
+              "effort": "max"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01Vq7mJ2wFh1hCxT8R4ZbN6s\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-fable-5-2\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":1210,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":4}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Read both files before changing anything.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"EBRQ15ruemhJMWup63/5BJNRDr4CqDK+mba4jV6q8r4TYIK9ra7H3h0XG2yc3J5tFXPMO840o7tNLw+bhDrJhV2PhT/WasTepXwLDKP0cTjMkpHorsuFRVdpq/bgs2eKUWooOS1OFbrvo1UdDGJxc4R8hXX/VN3ZGSwGYOw9ptK0rnXbi2MNrhnBgNekDr5TmfOVX8c0Znvz94HeAZWZhU4JOX1+vC8vver1rWMccWSW0BXP\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01AaReadMainFs00000000001\",\"name\":\"read_file\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" \\\"src/main.fs\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01BbReadTestsFs0000000002\",\"name\":\"read_file\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\": \\\"tests/main.fs\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":97,\"output_tokens_details\":{\"thinking_tokens\":38}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-fable-5-2",
+            "max_tokens": 64000,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Rename x to count in src/main.fs."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "thinking",
+                    "thinking": "Read both files before changing anything.",
+                    "signature": "EBRQ15ruemhJMWup63/5BJNRDr4CqDK+mba4jV6q8r4TYIK9ra7H3h0XG2yc3J5tFXPMO840o7tNLw+bhDrJhV2PhT/WasTepXwLDKP0cTjMkpHorsuFRVdpq/bgs2eKUWooOS1OFbrvo1UdDGJxc4R8hXX/VN3ZGSwGYOw9ptK0rnXbi2MNrhnBgNekDr5TmfOVX8c0Znvz94HeAZWZhU4JOX1+vC8vver1rWMccWSW0BXP"
+                  },
+                  {
+                    "type": "tool_use",
+                    "id": "toolu_01AaReadMainFs00000000001",
+                    "name": "read_file",
+                    "input": {
+                      "path": "src/main.fs"
+                    }
+                  },
+                  {
+                    "type": "tool_use",
+                    "id": "toolu_01BbReadTestsFs0000000002",
+                    "name": "read_file",
+                    "input": {
+                      "path": "tests/main.fs"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_01AaReadMainFs00000000001",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "let x = 1"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_01BbReadTestsFs0000000002",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "no such file: tests/main.fs"
+                      }
+                    ],
+                    "is_error": true
+                  },
+                  {
+                    "type": "text",
+                    "text": "There are no tests yet."
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "read_file",
+                "description": "Reads a file.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path"
+                  ]
+                }
+              },
+              {
+                "name": "edit_file",
+                "description": "Replaces a file's text.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "text"
+                  ]
+                }
+              }
+            ],
+            "thinking": {
+              "type": "adaptive",
+              "display": "summarized"
+            },
+            "output_config": {
+              "effort": "max"
+            },
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01Wr8nK3xGi2iDyU9S5AcO7t\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-fable-5-2\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":64,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":1311,\"output_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"One binding to rename; no tests to update.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"ES5+XfF21mqr6rzNaoRbxeb5Wuky6hfcb+fjDZk7PwwLh9xL+hfVh+/n2+qRHK81CZInoYwxyGanDfMBvqQbfNlwgkDs36o7d6r9tBU105s+PlZJBlzB343laCnAoLNmW3bO+QVFBml4hZFGKce1w7L49B4ittk8Ck0TMJ7Eg0rcoOrnOuWsEobTQSOA3CZMGvrGFZMAORXFD24lZU8QS7PUQSGQl5CxieQbUTQClakrol5z\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Renaming x in src/main.fs.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"Es8CCkYICxIMprogressUpdate0001+/=\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01CcEditMainFs00000000003\",\"name\":\"edit_file\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\": \\\"src/main.fs\\\", \\\"text\\\": \\\"let count = 1\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":75,\"output_tokens_details\":{\"thinking_tokens\":30}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "msg_01Vq7mJ2wFh1hCxT8R4ZbN6s",
+      "model": "claude-fable-5-2",
+      "parts": [
+        {
+          "kind": "reasoning",
+          "text": "Read both files before changing anything.",
+          "state": {
+            "family": "anthropic.messages",
+            "model": "anthropic/claude-fable-5-2",
+            "kind": "signature",
+            "data": "EBRQ15ruemhJMWup63/5BJNRDr4CqDK+mba4jV6q8r4TYIK9ra7H3h0XG2yc3J5tFXPMO840o7tNLw+bhDrJhV2PhT/WasTepXwLDKP0cTjMkpHorsuFRVdpq/bgs2eKUWooOS1OFbrvo1UdDGJxc4R8hXX/VN3ZGSwGYOw9ptK0rnXbi2MNrhnBgNekDr5TmfOVX8c0Znvz94HeAZWZhU4JOX1+vC8vver1rWMccWSW0BXP"
+          }
+        },
+        {
+          "kind": "toolCall",
+          "id": "toolu_01AaReadMainFs00000000001",
+          "name": "read_file",
+          "arguments": "{\"path\": \"src/main.fs\"}"
+        },
+        {
+          "kind": "toolCall",
+          "id": "toolu_01BbReadTestsFs0000000002",
+          "name": "read_file",
+          "arguments": "{\"path\": \"tests/main.fs\"}"
+        }
+      ],
+      "stop": {
+        "kind": "toolUse"
+      },
+      "usage": {
+        "input": 1210,
+        "output": 97,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 38
+      }
+    }
+  },
+  "followUp": {
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "There are no tests yet."
+          },
+          {
+            "kind": "toolResult",
+            "callId": "toolu_01AaReadMainFs00000000001",
+            "name": "read_file",
+            "content": [
+              {
+                "kind": "text",
+                "text": "let x = 1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "kind": "toolResult",
+            "callId": "toolu_01BbReadTestsFs0000000002",
+            "name": "read_file",
+            "content": [
+              {
+                "kind": "text",
+                "text": "no such file: tests/main.fs"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      }
+    ],
+    "statesVerbatim": true
+  }
+}

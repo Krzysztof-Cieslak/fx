@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Tests of the fx.model.anthropic package: the wire-conformance suite on hand-written cassettes of
+    Anthropic's documented formats (sources/, kept as case files in cassettes/anthropic.messages/),
+    the request mapping per option, the stream decoder, the error mapping, the provider's data, and
+    (ANTHROPIC_API_KEY set) a live smoke test that records cassettes.
+  -->
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <!-- The wire-conformance suite, shared with every adapter. -->
+    <Compile Include="..\Fx.Models.Tests\Conformance\WireConformance.fs" Link="Conformance\WireConformance.fs" />
+    <Compile Include="Cases.fs" />
+    <Compile Include="ConformanceTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ModelAnthropic\Fx.Ext.ModelAnthropic.fsproj" />
+    <ProjectReference Include="..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
+  </ItemGroup>
+</Project>

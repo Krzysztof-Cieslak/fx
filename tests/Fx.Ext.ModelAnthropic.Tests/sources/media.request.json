@@ -1,0 +1,22 @@
+{
+  "model": "claude-haiku-5-5",
+  "max_tokens": 2048,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Describe the image and the document." },
+        {
+          "type": "image",
+          "source": { "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==" }
+        },
+        {
+          "type": "document",
+          "source": { "type": "url", "url": "https://example.com/invoice.pdf" },
+          "title": "invoice.pdf"
+        }
+      ]
+    }
+  ],
+  "stream": true
+}

@@ -1,0 +1,129 @@
+{
+  "name": "media",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-haiku-5-5",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Describe the image and the document."
+          },
+          {
+            "kind": "media",
+            "media": "image",
+            "mediaType": "image/png",
+            "source": {
+              "kind": "base64",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+            }
+          },
+          {
+            "kind": "media",
+            "media": "pdf",
+            "mediaType": "application/pdf",
+            "source": {
+              "kind": "url",
+              "url": "https://example.com/invoice.pdf"
+            },
+            "name": "invoice.pdf"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 2048,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-haiku-5-5",
+            "max_tokens": 2048,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Describe the image and the document."
+                  },
+                  {
+                    "type": "image",
+                    "source": {
+                      "type": "base64",
+                      "media_type": "image/png",
+                      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+                    }
+                  },
+                  {
+                    "type": "document",
+                    "source": {
+                      "type": "url",
+                      "url": "https://example.com/invoice.pdf"
+                    },
+                    "title": "invoice.pdf"
+                  }
+                ]
+              }
+            ],
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "content-type": "text/event-stream; charset=utf-8",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy"
+          },
+          "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01MdX2nB7uY3pQ9sVwK4cR1e\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-haiku-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":1650,\"output_tokens\":1}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"A red square; the PDF is a one-page invoice.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"output_tokens\":14}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "id": "msg_01MdX2nB7uY3pQ9sVwK4cR1e",
+      "model": "claude-haiku-5-5",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "A red square; the PDF is a one-page invoice."
+        }
+      ],
+      "stop": {
+        "kind": "endTurn"
+      },
+      "usage": {
+        "input": 1650,
+        "output": 14,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0
+      }
+    }
+  }
+}

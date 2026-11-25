@@ -1,0 +1,81 @@
+{
+  "name": "rate-limited",
+  "endpoint": "https://api.anthropic.com/v1",
+  "request": {
+    "model": "anthropic/claude-opus-5-5",
+    "system": [],
+    "messages": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Hi"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "toolChoice": {
+      "kind": "auto"
+    },
+    "sampling": {
+      "stop": []
+    },
+    "maxOutputTokens": 256,
+    "output": {
+      "kind": "text"
+    },
+    "cache": {},
+    "metadata": {}
+  },
+  "cassette": {
+    "interactions": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "headers": {
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+            "anthropic-version": "2026-10-21"
+          },
+          "json": {
+            "model": "claude-opus-5-5",
+            "max_tokens": 256,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Hi"
+                  }
+                ]
+              }
+            ],
+            "stream": true
+          }
+        },
+        "response": {
+          "status": 429,
+          "headers": {
+            "content-type": "application/json",
+            "request-id": "req_011CSHoEeqs5C35K2UUqR7Fy",
+            "retry-after": "30",
+            "anthropic-ratelimit-input-tokens-remaining": "0"
+          },
+          "body": "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your organization's rate limit of 400,000 input tokens per minute.\"},\"request_id\":\"req_011CSHoEeqs5C35K2UUqR7Fy\"}",
+          "end": "complete"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "failure": {
+      "kind": "rateLimited",
+      "retryAfterMs": 30000,
+      "message": "This request would exceed your organization's rate limit of 400,000 input tokens per minute."
+    }
+  }
+}
