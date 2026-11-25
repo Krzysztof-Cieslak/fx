@@ -335,6 +335,37 @@ let tests (name: string) (create: unit -> Fixture) : Test =
                 Expect.equal limited.Matches.Length 2 "limited"
                 Expect.isTrue limited.Truncated "truncated")
 
+            test "paths longer than Windows' old 260-character limit work" (fun f at ->
+                let segments = [ for i in 1..6 -> String('d', 45) + string i ]
+                let directory = at segments
+                ok (wait (f.Fs.CreateDirectory directory none))
+                let file = Path.Combine(directory, String('f', 60) + ".txt")
+                Expect.isGreaterThan file.Length 300 "a long path"
+                ok (wait (f.Ops.WriteAtomic file (utf8 "one\n") none))
+
+                ok (
+                    patch
+                        f
+                        [
+                            Edit(
+                                file,
+                                None,
+                                [
+                                    {
+                                        Line = 2
+                                        Count = 0
+                                        Lines = [ "two" ]
+                                    }
+                                ]
+                            )
+                        ]
+                )
+                |> ignore
+
+                Expect.equal (text (ok (wait (f.Ops.ReadRange file 0L 100 none))).Content) "one\ntwo\n" "read back"
+                let found = ok (wait (f.Ops.Search (SearchQuery.lines f.Root "two") none))
+                Expect.equal (found.Matches |> List.map (fun m -> m.Line)) [ 2 ] "found")
+
             test "an invalid query or a missing root is an error" (fun f at ->
                 match wait (f.Ops.Search (SearchQuery.lines f.Root "(unclosed") none) with
                 | Error(InvalidQuery _) -> ()
