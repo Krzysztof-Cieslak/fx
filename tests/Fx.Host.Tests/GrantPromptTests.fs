@@ -110,12 +110,132 @@ let tests =
                     Expect.equal (GrantLog.checkAnswer Actions.builtIn asked answer 11L) (Ok()) "a valid answer"
             }
 
-            test "nobody at a terminal: denied once, saying what and why" {
+            test "nobody at a terminal: not done, saying what, why, and the command that allows it beforehand" {
                 let asked = request inSession []
-                Expect.equal GrantPrompts.unanswered.Effect GrantEffect.Deny "denied"
-                Expect.equal GrantPrompts.unanswered.Scope ScopeChoice.Once "once"
-                let shown = GrantPrompts.deniedUnasked asked
+                let shown = GrantPrompts.unasked asked
                 Expect.stringContains shown "shell.exec mkdir made" "what"
                 Expect.stringContains shown "nobody can answer here" "why"
+                Expect.isFalse (shown.Contains "denied") "nobody denied it"
+
+                Expect.stringContains
+                    shown
+                    $"`{Fx.Product.binaryName} grants allow shell.exec 'mkdir made'`"
+                    "the command, quoted"
+
+                let install =
+                    match
+                        GrantLog.request
+                            Actions.builtIn
+                            {
+                                Key = "component.install/bun@1.4.5-abc/environment:e1/1"
+                                Action = ActionName.create "component.install"
+                                Resource = "bun@1.4.5"
+                                Context = GrantContext.none
+                                Requester =
+                                    {
+                                        Principal = "system"
+                                        Agent = None
+                                        Extension = None
+                                    }
+                                Summary = "Install bun 1.4.5 for linux-x64-glibc"
+                                Evidence = []
+                                Suggestions = [ "bun@*" ]
+                                Scopes = []
+                                Expires = None
+                            }
+                            (RequestId "q2")
+                            10L
+                    with
+                    | Ok made -> made
+                    | Error e -> failtest (string e)
+
+                Expect.stringContains
+                    (GrantPrompts.unasked install)
+                    $"Allow it beforehand with `{Fx.Product.binaryName} grants allow component.install bun@1.4.5`, or run from a terminal."
+                    "an install's command needs no quotes"
+
+                // Only once: no command allows it beforehand.
+                let budget =
+                    match
+                        GrantLog.request
+                            Actions.builtIn
+                            {
+                                Key = "budget/r1"
+                                Action = ActionName.create "budget.raise"
+                                Resource = "r1/steps"
+                                Context = GrantContext.none
+                                Requester =
+                                    {
+                                        Principal = "system"
+                                        Agent = None
+                                        Extension = None
+                                    }
+                                Summary = "Raise the step budget"
+                                Evidence = []
+                                Suggestions = []
+                                Scopes = []
+                                Expires = None
+                            }
+                            (RequestId "q3")
+                            10L
+                    with
+                    | Ok made -> made
+                    | Error e -> failtest (string e)
+
+                Expect.isNone (GrantsCommand.allowing budget) "nothing to run"
+                Expect.stringContains (GrantPrompts.unasked budget) "Run from a terminal" "only a terminal"
+            }
+
+            test "fx grants drafts only grants of known actions, for scopes they allow" {
+                let draft = GrantsCommand.draft Actions.builtIn GrantEffect.Allow
+
+                match draft "component.install" "bun@*" GrantScope.Host (Some "ci") with
+                | Ok d ->
+                    Expect.equal
+                        (d.Action.Value, d.Resource, d.Scope, d.Reason)
+                        ("component.install", "bun@*", GrantScope.Host, Some "ci")
+                        "host"
+                | Error e -> failtest e
+
+                match draft "shell.exec" "git **" (GrantScope.Session "s1") None with
+                | Ok d -> Expect.equal d.Scope (GrantScope.Session "s1") "a session"
+                | Error e -> failtest e
+
+                let refused action scope =
+                    match draft action "x" scope None with
+                    | Ok d -> failtest $"drafted {d}"
+                    | Error e -> e
+
+                Expect.stringContains
+                    (refused "component.install" (GrantScope.Session "s1"))
+                    "component.install grants are not for session scope (they are for: repo, host)"
+                    "installs are not per session"
+
+                Expect.stringContains
+                    (refused "nothing.known" GrantScope.Host)
+                    "no action is named nothing.known"
+                    "unknown"
+
+                Expect.stringContains (refused "install" GrantScope.Host) "not an action name" "not a name"
+            }
+
+            test "commands are quoted as a shell reads them, and patterns match exactly what was asked" {
+                Expect.equal (GrantsCommand.quote "bun@1.4.5") "bun@1.4.5" "plain"
+                Expect.equal (GrantsCommand.quote "") "''" "empty"
+
+                if System.OperatingSystem.IsWindows() then
+                    Expect.equal (GrantsCommand.quote "it's") "'it''s'" "PowerShell"
+                else
+                    Expect.equal (GrantsCommand.quote "it's") "'it'\\''s'" "sh"
+
+                let star =
+                    { request inSession [] with
+                        Resource = "ls *"
+                    }
+
+                Expect.equal
+                    (GrantsCommand.allowing star)
+                    (Some $"{Fx.Product.binaryName} grants allow shell.exec 'ls \\*'")
+                    "the wildcard escaped: exactly this command"
             }
         ]

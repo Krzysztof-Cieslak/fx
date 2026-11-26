@@ -88,10 +88,17 @@ module GrantPrompts =
         | "always" when offersHost request -> answer GrantEffect.Allow ScopeChoice.Host None
         | _ -> answer GrantEffect.Deny ScopeChoice.Once (Some "denied at the terminal")
 
-    /// The answer when nobody can answer (no terminal): denied once, saying why.
-    let unanswered: GrantAnswer =
-        answer GrantEffect.Deny ScopeChoice.Once (Some "nobody could answer: not run from a terminal")
+    /// Why a run withdraws a request nobody can answer (no terminal). Not a person's answer: nobody
+    /// answered, so the next run that asks asks a person again.
+    [<Literal>]
+    let Unanswered = "nobody could answer: not run from a terminal"
 
-    /// What the run shows when it denies a request nobody can answer.
-    let deniedUnasked (request: GrantRequest) : string =
-        $"  ! {line request.Summary} ({request.Action.Value} {line request.Resource}) needs a person's approval, and nobody can answer here (input is not a terminal): denied once. Grant it beforehand, or run from a terminal."
+    /// What the run shows when it withdraws a request nobody can answer: what it was, and how a
+    /// person approves it beforehand.
+    let unasked (request: GrantRequest) : string =
+        let how =
+            match GrantsCommand.allowing request with
+            | Some command -> $"Allow it beforehand with `{command}`, or run from a terminal."
+            | None -> "Run from a terminal to answer it."
+
+        $"  ! {line request.Summary} ({request.Action.Value} {line request.Resource}) needs a person's approval, and nobody can answer here (input is not a terminal): not done. {how}"

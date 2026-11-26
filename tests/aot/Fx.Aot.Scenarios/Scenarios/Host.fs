@@ -2,7 +2,8 @@
 /// credential store, the start (lock, config, the built-ins, the variant registry, the SQLite stores,
 /// grants, service credentials, identity, environments, model access, sessions), signing in the OS
 /// user in process, a headless run in an embedded environment, a restart that continues the session,
-/// `fx replay` of the recorded session, and the codecs of what `fx run --json` prints.
+/// `fx replay` of the recorded session, `fx grants` (allow, list, revoke; refused beside a running host),
+/// and the codecs of what `fx run --json` prints.
 /// The interpreter is disabled in host config, so turns end at their hands: no network, no Bun.
 module Fx.Aot.Scenarios.Host
 
@@ -118,6 +119,45 @@ let private embedded () : Task<string list> =
                     for line in lines do
                         say ("  " + line.Replace(root, "<root>"))
 
+            // `fx grants`: the person running it allows an install beforehand, lists and revokes.
+            match!
+                Commands.grants
+                    opts
+                    (GrantsCommand.Grant(
+                        Fx.Grants.GrantEffect.Allow,
+                        "component.install",
+                        "bun@*",
+                        GrantsScope.Host,
+                        Some "scenario"
+                    ))
+            with
+            | Error errors -> say ("grants allow failed: " + String.concat "; " errors)
+            | Ok made ->
+                let id =
+                    made
+                    |> List.tryHead
+                    |> Option.map (fun l -> l.Split(' ').[0])
+                    |> Option.defaultValue "-"
+
+                let person = made |> List.exists (fun l -> l.Contains " by user:local-os-user:")
+                let shown = made |> List.map (fun l -> l.Substring(id.Length).Split(" by ").[0])
+                let shown = String.concat " | " shown
+                say $"grants allow: {shown}, by a person {person}"
+
+                match! Commands.grants opts (GrantsCommand.List false) with
+                | Error errors -> say ("grants list failed: " + String.concat "; " errors)
+                | Ok listed -> say $"grants list: {listed.Length} grants, it among them {listed = made}"
+
+                match! Commands.grants opts (GrantsCommand.Revoke(id, None)) with
+                | Error errors -> say ("grants revoke failed: " + String.concat "; " errors)
+                | Ok lines ->
+                    let revoked = lines = [ "revoked " + id ]
+                    say $"grants revoke: {revoked}"
+
+                match! Commands.grants opts (GrantsCommand.List false) with
+                | Error errors -> say ("grants list failed: " + String.concat "; " errors)
+                | Ok listed -> say ("grants list: " + String.concat " | " listed)
+
             match! Host.start opts with
             | Error errors -> say ("start failed: " + String.concat "; " errors)
             | Ok host ->
@@ -145,6 +185,12 @@ let private embedded () : Task<string list> =
                     | Error errors ->
                         let held = (String.concat "; " errors).Contains "a host is running"
                         say $"fx auth beside the host refused: {held}"
+
+                    match! Commands.grants opts (GrantsCommand.List false) with
+                    | Ok _ -> say "fx grants ran beside the host"
+                    | Error errors ->
+                        let held = (String.concat "; " errors).Contains "a host is running"
+                        say $"fx grants beside the host refused: {held}"
 
                     match! Host.start opts with
                     | Ok second ->

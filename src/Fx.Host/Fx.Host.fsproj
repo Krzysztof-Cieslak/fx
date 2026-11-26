@@ -21,6 +21,7 @@
     <Compile Include="Setup.fs" />
     <Compile Include="Host.fs" />
     <Compile Include="Activity.fs" />
+    <Compile Include="GrantsCommand.fs" />
     <Compile Include="GrantPrompts.fs" />
     <Compile Include="HostSessions.fs" />
     <Compile Include="Headless.fs" />

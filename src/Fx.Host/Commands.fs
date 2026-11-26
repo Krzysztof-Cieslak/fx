@@ -212,6 +212,152 @@ module Commands =
                             (replayed config)
             })
 
+    /// `fx grants …` (host.md): the person who runs it — the OS user, signed in in process through
+    /// `local-os-user`, as embedded mode signs them in — lists, makes or revokes grants on the data
+    /// directory's grants log, under its lock (as `fx auth`: beside a running host it fails). Only a
+    /// person who owns the host grants (spec §13); nothing here is reachable by an agent or extension.
+    /// The lines to print.
+    let grants (options: HostOptions) (command: GrantsCommand) : Task<Result<string list, string list>> =
+        let paths = options.Paths
+
+        let withExtensions (config: HostConfig) (extensions: Fx.Extensions.Host) =
+            effResult {
+                let! registry = Setup.registry extensions
+                let! resolution = Setup.resolve registry config
+                let variants = Variants.ofResolution resolution
+                let! env0 = Eff.ask<HostEnv>
+                let env = { env0 with Variants = variants }
+
+                let! actions =
+                    Fx.Grants.Actions.withContributed (
+                        ExtensionHost.contributions Fx.Sdk.GrantActions.contributionType extensions
+                        |> List.map _.Value
+                    )
+
+                // Who runs this: the person embedded mode signs in.
+                let! machine = Host.machineId paths.MachineId |> EffResult.mapError List.singleton
+
+                let authenticator =
+                    Fx.Identity.Host.Authenticator.create
+                        (ExtensionHost.contributions Fx.Sdk.IdentityProviders.contributionType extensions)
+                        {
+                            Machine = machine
+                            Account = options.Account
+                        }
+                        (Fx.Identity.Host.SessionTokens())
+
+                let! signedIn =
+                    Eff.provide
+                        env
+                        (Fx.Identity.Host.Authenticator.signIn
+                            authenticator
+                            Fx.Identity.Host.ConnectionFacts.inProcess
+                            "cli"
+                            (Some(
+                                Fx.Identity.SignIn.Provider(
+                                    Fx.Ext.IdentityLocalOsUser.LocalOsUser.ProviderId,
+                                    Json.Null
+                                )
+                            )))
+                    |> EffResult.mapError (fun failure -> [ $"signing in failed: {failure}" ])
+
+                let session = signedIn.Session
+
+                do!
+                    if Fx.Identity.Role.allows Fx.Identity.Role.Owner session.Roles then
+                        Ok()
+                    else
+                        Error
+                            [
+                                $"{session.Principal.Id.Value} does not own this host: only its owner grants here"
+                            ]
+
+                let by = Fx.Identity.Host.ClientSession.attribution session
+
+                do!
+                    Fs.createDirectory (IO.Path.GetDirectoryName paths.Events |> nonNull)
+                    |> EffResult.mapError (fun e -> [ $"the event store's directory could not be created: {e}" ])
+
+                do!
+                    Fs.createDirectory paths.Blobs
+                    |> EffResult.mapError (fun e -> [ $"the blob store's directory could not be created: {e}" ])
+
+                let! stores =
+                    options.OpenStores paths (Setup.value HostSlots.durability variants)
+                    |> Result.mapError List.singleton
+
+                let granting
+                    (service: Fx.Grants.Host.GrantsService<HostEnv>)
+                    : Eff<HostEnv, Result<string list, string list>> =
+                    effResult {
+                        match command with
+                        | GrantsCommand.List all ->
+                            return GrantsCommand.render (Fx.Grants.Host.GrantsService.list service all).Grants
+                        | GrantsCommand.Grant(effect, action, pattern, scope, reason) ->
+                            let! scope =
+                                match scope with
+                                | GrantsScope.Host -> EffResult.ok Fx.Grants.GrantScope.Host
+                                | GrantsScope.Session id ->
+                                    eff {
+                                        let! indexed = SessionIndex.entries (SessionIndex.typed stores.Log)
+
+                                        if indexed |> List.exists (fun e -> e.Session = id) then
+                                            return Ok(Fx.Grants.GrantScope.Session id)
+                                        else
+                                            return Error [ $"no session {id} on this host" ]
+                                    }
+
+                            let! draft =
+                                GrantsCommand.draft actions effect action pattern scope reason
+                                |> Result.mapError List.singleton
+
+                            let! grant =
+                                Fx.Grants.Host.GrantsService.grant service by draft
+                                |> EffResult.mapError (fun e -> [ e.Message ])
+
+                            return
+                                [
+                                    GrantsCommand.line
+                                        {
+                                            Grant = grant
+                                            Status = Fx.Grants.GrantStatus.Active
+                                        }
+                                ]
+                        | GrantsCommand.Revoke(id, reason) ->
+                            do!
+                                Fx.Grants.Host.GrantsService.revoke service by (Fx.Grants.GrantId id) reason
+                                |> EffResult.mapError (fun e -> [ e.Message ])
+
+                            return [ $"revoked {id}" ]
+                    }
+
+                return!
+                    Eff.bracket (Eff.ret stores) (fun stores -> eff { stores.Close() }) (fun _ ->
+                        Eff.provide
+                            env
+                            (Eff.bracket
+                                (Fx.Grants.Host.GrantsService.start
+                                    { Fx.Grants.Host.GrantsSettings.create (
+                                          Fx.Grants.Host.GrantStoreLog.hostLocal stores.Log
+                                      ) with
+                                        Actions = actions
+                                    })
+                                Fx.Grants.Host.GrantsService.stop
+                                granting))
+            }
+
+        underLock
+            options
+            (effResult {
+                let! config = Setup.readConfig options
+
+                return!
+                    Eff.bracket
+                        (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
+                        ExtensionHost.stop
+                        (withExtensions config)
+            })
+
     /// `fx auth …` (auth.md): runs the command against the service credentials the host would start
     /// with, under the data directory's lock (one writer of the credential stores at a time). The exit
     /// code and the lines to print, which never hold a secret; `runFlow` runs a login's flow at the

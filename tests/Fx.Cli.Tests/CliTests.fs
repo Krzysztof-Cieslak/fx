@@ -232,4 +232,80 @@ let tests =
                 Expect.equal (printed [ "serve"; "--x" ]).ExitCode 2 "unknown"
                 Expect.stringContains Cli.usage "serve" "in the usage"
             }
+
+            test "grants lists, allows, denies and revokes, host-wide or for a session" {
+                let parsed (args: string list) =
+                    match Cli.parse ("grants" :: args) with
+                    | Cli.Grants command -> command
+                    | other -> failtest $"{other}"
+
+                Expect.equal (parsed []) (Fx.Host.GrantsCommand.List false) "list by default"
+                Expect.equal (parsed [ "list" ]) (Fx.Host.GrantsCommand.List false) "list"
+                Expect.equal (parsed [ "list"; "--all" ]) (Fx.Host.GrantsCommand.List true) "everything"
+
+                Expect.equal
+                    (parsed [ "allow"; "component.install"; "bun@1.4.5" ])
+                    (Fx.Host.GrantsCommand.Grant(
+                        Fx.Grants.GrantEffect.Allow,
+                        "component.install",
+                        "bun@1.4.5",
+                        Fx.Host.GrantsScope.Host,
+                        None
+                    ))
+                    "host-wide by default"
+
+                Expect.equal
+                    (parsed
+                        [
+                            "deny"
+                            "shell.exec"
+                            "git push **"
+                            "--scope"
+                            "session:01ABC"
+                            "--reason"
+                            "not here"
+                        ])
+                    (Fx.Host.GrantsCommand.Grant(
+                        Fx.Grants.GrantEffect.Deny,
+                        "shell.exec",
+                        "git push **",
+                        Fx.Host.GrantsScope.Session "01ABC",
+                        Some "not here"
+                    ))
+                    "a session, a reason"
+
+                Expect.equal
+                    (parsed [ "allow"; "shell.exec"; "ls"; "--scope"; "host" ])
+                    (Fx.Host.GrantsCommand.Grant(
+                        Fx.Grants.GrantEffect.Allow,
+                        "shell.exec",
+                        "ls",
+                        Fx.Host.GrantsScope.Host,
+                        None
+                    ))
+                    "host, said"
+
+                Expect.equal (parsed [ "revoke"; "01G" ]) (Fx.Host.GrantsCommand.Revoke("01G", None)) "revoke"
+
+                Expect.equal
+                    (parsed [ "revoke"; "01G"; "--reason"; "done" ])
+                    (Fx.Host.GrantsCommand.Revoke("01G", Some "done"))
+                    "with a reason"
+
+                for bad in
+                    [
+                        [ "grants"; "allow"; "component.install" ]
+                        [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "repo" ]
+                        [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "session:" ]
+                        [ "grants"; "allow"; "component.install"; "bun@*"; "--bogus" ]
+                        [ "grants"; "revoke" ]
+                        [ "grants"; "bogus" ]
+                    ] do
+                    let o = printed bad
+                    Expect.equal o.ExitCode 2 (String.concat " " bad)
+                    Expect.stringContains o.Stderr "grants allow <action> <pattern>" "the usage"
+
+                Expect.equal (printed [ "grants"; "--help" ]).ExitCode 0 "help"
+                Expect.stringContains Cli.usage "grants list" "in the usage"
+            }
         ]
