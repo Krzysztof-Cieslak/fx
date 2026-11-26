@@ -211,13 +211,6 @@ type CellRecord =
 
     override this.ToString() = $"cell record ({this.Reads})"
 
-/// How a cell's run ended for the turn.
-[<RequireQualifiedAccess>]
-type private Ran =
-    | Answered of Result<CellResult, KernelFailure>
-    /// The turn was cancelled; how the cell was stopped.
-    | Interrupted of Interruption
-
 /// The cell running in a session's kernel: what its host calls and `finish` are attributed to.
 type private RunningCell(id: string) =
     member val Id = id
@@ -432,46 +425,59 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                             return Ok(started, KernelNote.Same)
         }
 
-    /// Runs a cell, shielded from the turn: if the turn is cancelled (an interrupt), the cell is
-    /// stopped in stages (`Kernel.interrupt`: cancel, then kill), and the cancellation goes on. A kernel
-    /// that exited or was killed is dropped; the next cell starts a new one.
+    /// Runs a cell, shielded from the turn: if the turn is cancelled (an interrupt) while the cell
+    /// runs, the cell is stopped in stages (`Kernel.interrupt`: cancel, then kill), and the cancellation
+    /// goes on. A kernel that exited or was killed is dropped; the next cell starts a new one.
     member _.Run(k: Kernel, cell: CellRun, turn: CancellationToken) : Eff<'K, CellRecord> =
         eff {
             let state = RunningCell cell.CellId
             lock gate (fun () -> running <- Some state)
 
-            let untilCancelled: Eff<'K, unit> =
+            // `true` once the turn was cancelled while the cell ran, `false` once the cell answered.
+            let cancelled =
+                TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+            let answer: Eff<'K, Result<CellResult, KernelFailure>> =
+                eff {
+                    try
+                        let! result = Kernel.run k cell
+                        return result
+                    finally
+                        cancelled.TrySetResult false |> ignore
+                }
+
+            let decided: Eff<'K, bool> =
                 fun env ->
                     task {
-                        let signal =
-                            TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+                        use _ = turn.Register(fun () -> cancelled.TrySetResult true |> ignore)
 
-                        use _ = turn.Register(fun () -> signal.TrySetResult() |> ignore)
-                        use _ = env.Scope.Cancellation.Register(fun () -> signal.TrySetCanceled() |> ignore)
-                        do! signal.Task
+                        use _ =
+                            env.Scope.Cancellation.Register(fun () -> cancelled.TrySetCanceled() |> ignore)
+
+                        return! cancelled.Task
                     }
 
-            // How the interrupt stopped the cell, also when the cell's answer won the race (a kill ends
-            // the cell's run too): the race waits for both, so this is known after it.
-            let stopped = ref None
-
-            let interrupt: Eff<'K, Ran> =
+            let interrupt: Eff<'K, Interruption option> =
                 eff {
-                    do! untilCancelled
-                    let! how = Kernel.interrupt k
-                    stopped.Value <- Some how
-                    return Ran.Interrupted how
+                    match! decided with
+                    | true ->
+                        let! how = Kernel.interrupt k
+                        return Some how
+                    | false -> return None
                 }
 
             try
-                let! outcome =
-                    Eff.shield (Eff.race [ Kernel.run k cell |> Eff.map Ran.Answered; interrupt ])
+                // Not a race: an interrupt that began ends on its own (the cell stopped, or the kernel
+                // was killed), also when the cell's answer comes first. Cut short, its `cell/cancel`
+                // would be cancelled at the kernel (`$/cancelRequest`) or not depending on whether the
+                // kernel's answer to it was handled yet: timing, which replay cannot take again.
+                let! answered, how = Eff.shield (Eff.both answer interrupt)
 
-                // A killed kernel is closed here, whichever branch won: deciding it from what was done
-                // rather than from whether its connection has ended yet keeps it deterministic (replay).
+                // A killed kernel is closed here: deciding it from what was done rather than from
+                // whether its connection has ended yet keeps it deterministic (replay).
                 let exited =
-                    match outcome, stopped.Value with
-                    | Ran.Answered(Error(KernelFailure.Exited _)), _
+                    match answered, how with
+                    | Error(KernelFailure.Exited _), _
                     | _, Some Interruption.Killed -> true
                     | _ -> (Kernel.exited k).IsCompleted
 
@@ -483,15 +489,13 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
 
                     do! Eff.shield (Kernel.close k |> Eff.ignore)
 
-                // Interrupted is interrupted, whichever branch finished first.
-                match outcome with
-                | Ran.Interrupted _ -> return raise (OperationCanceledException turn)
-                | Ran.Answered _ when turn.IsCancellationRequested -> return raise (OperationCanceledException turn)
-                | Ran.Answered result ->
+                if how.IsSome || turn.IsCancellationRequested then
+                    return raise (OperationCanceledException turn)
+                else
                     return
                         lock gate (fun () ->
                             {
-                                Result = result
+                                Result = answered
                                 Finished = state.Finished
                                 Reads = state.Reads
                             })
