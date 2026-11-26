@@ -223,7 +223,13 @@ type private RunningCell(id: string) =
 /// `finish` validated by the turn result's codec and the turn's checks. One turn at a time uses it.
 [<Sealed>]
 type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IClock and 'K :> IScopeWith<'K>>
-    (session: string, watch: Watch<'K>, journal: KernelJournal<'K>, extra: HostBinding<'K> list) =
+    (
+        session: string,
+        watch: Watch<'K>,
+        journal: KernelJournal<'K>,
+        groups: (string * string) list,
+        extra: HostBinding<'K> list
+    ) =
     let gate = obj ()
     let turns = new SemaphoreSlim(1, 1)
     let mutable kernel: Kernel option = None
@@ -265,7 +271,8 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     let bindings (current: CoreSettings) : HostBinding<'K> list = CoreBindings.all current @ extra
 
     let bridge (current: CoreSettings) : Bridge<'K> =
-        Bridge.create finishing |> Bridge.add CoreBindings.groups (bindings current)
+        Bridge.create finishing
+        |> Bridge.add (CoreBindings.groups @ groups) (bindings current)
 
     let current () =
         lock gate (fun () ->
@@ -286,7 +293,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
         | _ -> ()
 
     /// A session's kernel without a step journal (launches count from 1 in this process).
-    new(session: string) = SessionKernel<'K>(session, Watch.none, KernelJournal.none, [])
+    new(session: string) = SessionKernel<'K>(session, Watch.none, KernelJournal.none, [], [])
 
     member _.Session = session
 

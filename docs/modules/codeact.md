@@ -4,7 +4,7 @@ Spec: §4.3–4.5 (functions, machines, strategies, turn results), §5 (sessions
 boundaries, prompt = pure render), §6.5 (kernel behaviour: host bridge, finishing, activity), §6.9
 (action surfaces), §6.10 (example cells), §10 (models), §13 (grants), §15 (variants), §18 (egress,
 sandbox, guardrails).
-Tasks: T127, T127b (grants), T128 (crash recovery). Builds on [sessions.md](sessions.md) (the turn-runner boundary),
+Tasks: T127, T127b (grants), T128 (crash recovery), T206 (steering, compaction). Builds on [sessions.md](sessions.md) (the turn-runner boundary),
 [prompt.md](prompt.md) (the render and context events), [models.md](models.md) (`ILlm`),
 [interpreters.md](interpreters.md) (the bridge and kernels), [kernel-protocol.md](kernel-protocol.md),
 [egress.md](egress.md), [environments.md](environments.md) and [grants.md](grants.md).
@@ -30,6 +30,7 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | Kernels per session, the host's side of the protocol, `Ensure` (`SessionKernel`, `Interpreter`, `Hands`, `Watch`, `KernelJournal`) | `Kernels.fs` |
 | Cells' values kept for `recall` (`Recall`: keep, restore, the `recall` binding) | `Recall.fs` |
 | The hybrid tools over the bridge's bindings (`Hybrid`) | `Hybrid.fs` |
+| What cells ask of the history, the `history.compact` binding (`HistoryAsks`, `HistoryBindings`) | `History.fs` |
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
@@ -86,17 +87,30 @@ Each step:
    `Updated` at the end of the history.
 4. **Budgets** (`codeact.budget.steps`, `codeact.budget.tokens`): over budget, the turn asks the user to
    go on (a question, below).
-5. **Render and request**: `Render.render` with the notes for this call (`Live.Notes`), then
+5. **Compaction** (below): a summary prepared during the last step is recorded first; otherwise the
+   history is compacted now if a cell asked, the window filled during the last reply, or the prompt reached
+   the threshold.
+6. **Render and request**: `Render.render` with the notes for this call (`Live.Notes`), then
    `Render.request` with the template (the model of `model.role.main`, the surface's tools,
    `codeact.maxOutputTokens`) and the catalog's caching caps.
-6. **Model call** through `ILlm`, folded with `ChatAggregate` (the policies below).
-7. **Reply**: recorded (`Replied`) with the suffix its prompt ended with (`Shown`).
-8. **Actions**: every tool call in order, each journaled before it runs (`callStarted`, after a workspace
+7. **Model call** through `ILlm`, folded with `ChatAggregate` (the policies below). A request that
+   overflows the window is compacted and sent again, once a step.
+8. **Reply**: recorded (`Replied`) with the suffix its prompt ended with (`Shown`).
+9. **Actions**: every tool call in order, each journaled before it runs (`callStarted`, after a workspace
    snapshot for the step's first; "Crash recovery" below) and answered by a receipt (`Returned`) before
    the next call, also calls that did not run (invalid arguments, an unknown tool, calls after an
    accepted `finish`).
-9. **Ending**: an accepted `finish` ends the turn with its result; otherwise the loop guard, the length
-   and text-only policies decide whether the turn goes on.
+   When the reply's prompt reached the threshold, the summary is prepared beside them (below).
+10. **Ending**: an accepted `finish` ends the turn with its result; otherwise the loop guard, the length
+    and text-only policies decide whether the turn goes on. A summary prepared during the last step, or
+    asked for by its last cell, is recorded before the turn ends, so the next turn starts compacted.
+
+**Steering and queueing** (spec §5, [sessions.md](sessions.md#prompts-steer-and-queue-spec-5-192)): a steer
+that arrives while a turn runs waits in the session's inbox until the next step boundary, so the model
+reads it after every result of the step's reply (a tool call is always followed by its result) and before
+its next call; a queued prompt waits for the turn to end and starts a turn of its own. Steps never stop
+in the middle for a steer: an interrupt is the control path. (A grant request a call waits on is
+withdrawn when a steer arrives: below, "Grants".)
 
 A turn ends only with a `TurnResult` (spec §4.5): `Done` from a cell's `finish`, `NeedInput` on a
 question the strategy opened, or the `Error` of a policy (`FailTurn`: the session records the reason).
@@ -201,7 +215,8 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 | A reply cut at the output limit (`maxTokens`) | `codeact.policy.lengthCut` = `continue` \| `fail`, `codeact.policy.lengthRetries` (2) | its calls run if their arguments decode (a cut call does not), the next call says to go on in smaller steps; more cuts in a row than the retries fail the turn |
 | An empty reply (no text, no call) | `codeact.policy.emptyRetries` (2) | asked for again, unrecorded (the same request); then the turn fails |
 | A retryable model error (rate limit, overload, server, transport, invalid response) | `codeact.policy.modelRetries` (4), `codeact.policy.retryDelayMs` (1000) | retried after the provider's `Retry-After`, else a doubling delay (at most a minute) |
-| The request does not fit (`contextOverflow`), or the window filled while replying (`contextWindow`) | — | the turn fails saying the conversation needs compaction (T206 compacts and retries) |
+| The request does not fit (`contextOverflow`) | `codeact.compaction.mode` | compacted (the provider's limit, else the catalog's window) and sent again, once a step; with nothing to summarize, or mode `off`, the turn fails |
+| The window filled while replying (`contextWindow`) | `codeact.compaction.mode` | the reply's calls run, and the next call compacts first (it fails the turn if it cannot); mode `off` fails the turn |
 | Another model error (auth, quota, refusal, egress blocked, …) | — | the turn fails with the error |
 | A refusal or a content filter without calls | — | the turn fails with the model's text |
 | `pause` | — | the conversation is sent again |
@@ -212,6 +227,51 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 (`{question, reason}`, answered with text; reply as input, open across turns), opened through
 `TurnContext.Open` with id `q-<turn>-<step>`. The answer is the next turn's input (`Request q-1-2 was
 answered: …`). The loop guard fingerprints the tool, its canonical arguments and the receipt.
+
+## Compaction (spec §5)
+
+A conversation that fills the model's context window has its oldest part replaced by a summary the model
+writes: a `Collapsed` context event ([prompt.md](prompt.md#compaction-compaction-t206), which has the
+pure part: cuts, the summary request, the collapse). The originals stay in the logs; the frame (the prefix)
+is never touched.
+
+**When** (`codeact.compaction.mode`, read once per turn):
+
+| Trigger | `auto` | `overflow` | `off` |
+|---|---|---|---|
+| A reply's prompt reached `codeact.compaction.threshold` (80%) of the window: the provider's `Usage.Input` and output, else the estimate | prepared in the background | — | — |
+| The prompt about to be sent reached the threshold (estimated: `Tokens`) and nothing was prepared | compacted first | — | — |
+| The request overflowed (`contextOverflow`), or the window filled during the last reply | compacted, sent again | same | the turn fails |
+| A cell called `fx.history.compact(focus?)` | compacted before the next call | same | the binding refuses (`off`) |
+
+- **The window** is the catalog's (`ModelInfo.Limits.Context`); on overflow the provider's limit, when it
+  says. Without one, only overflow and cells' asks compact (the threshold needs a window).
+- **The cut** (`Compaction.choose`): the latest that keeps `codeact.compaction.keep` (30%) of the window as
+  it is, among those whose summary request leaves room for the summary
+  (`codeact.compaction.summaryTokens`, 8192, plus 1024; at most half the window); failing that, the
+  earliest that fits.
+- **The summary request** is the conversation's own request up to the cut (the call that ended there, or
+  this one), with its breakpoints, then the instruction (`Instructions.summarize`: what to keep, ids for
+  `fx.recall`, and the cell's focus): same model, tools, tool choice and reasoning, so the provider's cache
+  hits; only the output limit is the summary's. It goes through the turn's `ILlm` (`ModelAccess`: the
+  egress hooks, recorded and replayed like every call). Only the reply's text counts; the model's retry and
+  empty-reply policies apply.
+- **Background preparation**: when a reply's prompt reached the threshold, the summary is asked for beside
+  the step's actions (`Eff.both`, each in its flow); the next call records it first if it still applies.
+  Nothing else waits on it until then. A summary that fails changes nothing: the threshold starts no other
+  in the turn (overflow and asks still do), and a defect in it fails the summary, never the cell beside it.
+- **Recorded** through the strategy's `record`, keyed `<turn start>/collapse/<k>`: one collapse per step at
+  most from the threshold, another after an overflow. The summary is a `Quote` of the files its request
+  quoted, so exclusions added later withhold it.
+- **What the model sees afterwards**: `[Summary of an earlier part of this conversation:]` and the summary
+  where the range began; pins hidden by the range show again; the frame and the cache key are unchanged.
+  Replies after the range's start lose their reasoning (prompt.md's boundary; CodeAct requests no reasoning,
+  so providers' checks on it do not apply).
+- **Activity**: clients show a collapse as an activity line (the TUI's `◇ Compact`, `fx run`'s `◇ compacted`).
+
+`fx.history.compact(focus?)` (`HistoryBindings.compact`, group `history`): the model asks for a compaction
+before its next step, keeping `focus` in particular; it answers at once, and the next step compacts first
+(if nothing is old enough yet, a note says so). Asks of an earlier turn are forgotten when a turn starts.
 
 ## Crash recovery (spec §5, §6.5, §12.1, §19.1)
 
@@ -402,6 +462,7 @@ recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, t
 | `codeact.journal.snapshots` | true |
 | `codeact.recall.maxBytes`, `codeact.recall.restore` | 1048576, 20 |
 | `codeact.grants.mode`, `.allowCommands`, `.protectedPaths`, `.timeoutMs` | see Grants |
+| `codeact.compaction.mode`, `.threshold`, `.keep`, `.summaryTokens` | `auto`, 80 (percent of the window), 30 (percent), 8192 |
 
 Defaults are provisional until evals decide (spec §1, principle 7).
 
@@ -429,6 +490,12 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   host stopping and crashing mid-wait), with replay and determinism of the logs and requests.
 - **Replay**: the recorded logs render, through the render alone, to exactly the requests sent; the same
   inputs give the same context log, requests and session events.
+- **Compaction** (`CompactionTests`, a catalog with a small window): prepared in the background beside a
+  step's cell and recorded before the next call, the summary request being the previous call's request plus
+  the instruction; the threshold before a call; an overflow compacted and sent again; a cell's
+  `history.compact` with a focus, also in the turn's last cell; the window filled during a reply; a failed
+  summary; modes `off` and `overflow`; each replays into the requests sent.
+- **Steering**: a steer after every result of a step's reply, a queued prompt in a turn of its own.
 - **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back; finding the
   call in doubt; the card and its answers; each decision's receipt; kept values. End to end, the host
   process is stopped mid-cell as a crash would stop it and started again on the same stores (with a
@@ -463,6 +530,8 @@ fake clock), on all eight targets.
 | Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
 | Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
-| Compaction on overflow (`Collapsed`), steering and queueing UX | T206 |
+| A person's compaction (a session command, the TUI's `/compact`) beside the model's `fx.history.compact` | when clients ask (T130's successors) |
+| Reading collapsed originals back (`fx.history.*` beyond `compact`), and `fx.context.pin` | T201 |
+| Compaction as the bundled extension `fx.compaction` (spec §16.4), a summarizer contributed by extensions | with a strategy contribution type (below) |
 | Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents, values and handles) | T201, T213 and their tasks |
 | A strategy contribution type for extensions (the SDK would need sessions, the render and interpreters) | when a second strategy exists |

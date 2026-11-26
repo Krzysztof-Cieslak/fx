@@ -799,7 +799,9 @@ module App =
         | Msg.Context recorded ->
             let streaming =
                 match recorded.Event with
-                | ContextEvent.Replied _ -> None
+                // What streamed was the reply, or the summary a compaction recorded.
+                | ContextEvent.Replied _
+                | ContextEvent.Collapsed _ -> None
                 | _ -> model.Streaming
 
             { model with

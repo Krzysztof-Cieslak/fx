@@ -79,6 +79,8 @@ type TurnItem =
     | Asked of PendingRequest
     | Settled of RequestResolved
     | Interrupted of by: string
+    /// The conversation's oldest part was replaced by this summary in the model's context (compaction).
+    | Compacted of summary: string
 
     override this.ToString() =
         match this with
@@ -88,6 +90,7 @@ type TurnItem =
         | Asked request -> "asked " + request.Request.Id
         | Settled resolved -> "settled " + resolved.Request
         | Interrupted by -> "interrupted by " + by
+        | Compacted summary -> "compacted " + string summary.Length
 
 type TurnView =
     {
@@ -394,6 +397,8 @@ module Timeline =
                         current <- Some { turn with Items = items }
                         lastEnd <- at
                     | _ -> ()
+                | ContextEvent.Collapsed collapse ->
+                    add (TurnItem.Compacted(collapse.Summary |> List.map Piece.render |> String.concat "\n"))
                 | _ -> ()
 
         flush ()

@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/bil… ● idle
+ ! runs unsandboxed: co…
+  ◇ Cell     rea… ✓ 0.3s
+  ◇ Cell     por… ✓ 9.0s
+  ◇ Compact  the earlie…
+  ◇ Cell     run… ✓ 3.0s
+  ▸ 3 c… [Ctrl+O expand]
+
+  ✓ Done  Ported the
+          parser
+    20s
+
+Enter send · Alt+Enter …
+›
+────────────────────────
+cursor 13,2

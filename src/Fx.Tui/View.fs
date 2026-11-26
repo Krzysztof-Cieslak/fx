@@ -318,6 +318,21 @@ module View =
 
                     yield Row.fit width [ indent 4; s dim ("· " + text) ]
                 | TurnItem.Interrupted by -> yield Row.fit width [ indent 2; s yellow ("⏹ interrupted by " + by) ]
+                | TurnItem.Compacted summary ->
+                    yield
+                        Row.fit
+                            width
+                            [
+                                indent 2
+                                s cyan "◇"
+                                p " "
+                                s bold (Text.pad 8 "Compact")
+                                p " "
+                                p "the earlier conversation is summarized"
+                            ]
+
+                    if verbosity = Verbosity.Verbose then
+                        yield! (Text.firstLines 12 summary |> List.collect (lines width 6 dim))
 
             if not cells.IsEmpty && verbosity <> Verbosity.Verbose then
                 let count = cells |> List.sumBy (fun code -> (Text.clean code).Split('\n').Length)

@@ -99,6 +99,8 @@ type Reply =
     | Events of ChatEvent list
     /// Parts and a stop reason; tool calls get ids `call-<n>` in order.
     | Parts of Part list * StopReason
+    /// A reply whose provider said its request had this many input tokens.
+    | Measured of input: int * Reply
 
 /// A scripted model: answers requests in order with its replies, records every request, and can hold
 /// a request until the test lets it go (to steer or interrupt while a turn runs).
@@ -119,9 +121,15 @@ type Model() =
             asked[n] <- s
             s
 
-    let events (reply: Reply) : ChatEvent list =
+    let rec events (reply: Reply) : ChatEvent list =
         match reply with
         | Reply.Events events -> events
+        | Reply.Measured(input, reply) ->
+            events reply
+            |> List.map (fun event ->
+                match event with
+                | ChatEvent.UsageUpdated used -> ChatEvent.UsageUpdated { used with Input = input }
+                | other -> other)
         | Reply.Parts(parts, stop) ->
             let parts =
                 parts
@@ -216,6 +224,9 @@ module Say =
     let failed (error: ChatError) : Reply = Reply.Events [ ChatEvent.Failed error ]
 
     let empty: Reply = Reply.Parts([], StopReason.EndTurn)
+
+    /// The reply, from a request of this many input tokens.
+    let sized (input: int) (reply: Reply) : Reply = Reply.Measured(input, reply)
 
     /// A cell that ends the turn `done`.
     let finish (summary: string) : Reply =
@@ -673,11 +684,17 @@ let opened (f: Fixture) (session: string) (id: string) : Task<PendingRequest> =
 let private canonicalRequest (request: ChatRequest) =
     Json.serializeCanonical (ChatRequest.codec.Encode request)
 
+/// Whether a request asked for a summary (compaction) rather than the turn's next step.
+let isSummary (request: ChatRequest) : bool =
+    match request.Messages |> List.tryLast |> Option.bind (fun m -> List.tryLast m.Parts) with
+    | Some(Part.Text text) -> text.Text.StartsWith "[Compaction:"
+    | _ -> false
+
 /// Replay: the session's recorded logs render, through the pure render alone, to exactly the requests
-/// the model was sent (with the suffix each reply recorded it saw).
+/// the model was sent (with the suffix each reply recorded it saw); summary requests aside.
 let expectReplays (f: Fixture) (session: string) : Task<unit> =
     task {
-        let requests = f.Model.Requests
+        let requests = f.Model.Requests |> List.filter (not << isSummary)
 
         let! history =
             run f (ContextLog.load (SessionLog.typed f.Store.Log) (ContextLog.typed f.Store.Log) session)
@@ -722,7 +739,16 @@ let expectReplays (f: Fixture) (session: string) : Task<unit> =
                 (canonicalRequest sent)
                 $"request of turn {reply.Turn} step {reply.Step} replays"
 
-        // Append-only: every request is the one before it plus what happened since.
-        for a, b in List.pairwise requests do
-            Expect.equal (b.Messages |> List.truncate a.Messages.Length) a.Messages "append-only"
+        let collapsed =
+            history.Items
+            |> List.exists (fun item ->
+                match item with
+                | LogItem.Context(_, ContextEvent.Collapsed _) -> true
+                | _ -> false)
+
+        // Append-only: every request is the one before it plus what happened since (a collapse is the
+        // documented rewrite).
+        if not collapsed then
+            for a, b in List.pairwise requests do
+                Expect.equal (b.Messages |> List.truncate a.Messages.Length) a.Messages "append-only"
     }

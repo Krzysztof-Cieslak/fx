@@ -389,6 +389,80 @@ let tests =
                         ()
             }
 
+            testTask "a steer comes after every result of the step's reply; a queued prompt waits for a turn of its own" {
+                do!
+                    within
+                        "steer-queue"
+                        [ "agent.actionSurface", Json.String "hybrid" ]
+                        (fun f ->
+                            task {
+                                f.Write("a.txt", "alpha\n")
+                                let hold = f.Model.Hold 1
+
+                                f.Model.AddAll
+                                    [
+                                        Reply.Parts(
+                                            [
+                                                Say.call "read" (Json.Object [ "path", Json.String "a.txt" ])
+                                                Say.call "bash" (Json.Object [ "command", Json.String "echo two" ])
+                                            ],
+                                            StopReason.ToolUse
+                                        )
+                                        Say.finish "First done"
+                                        Say.finish "Second done"
+                                    ]
+
+                                do! kickoff f "First"
+                                do! f.Model.Asked(1).WaitAsync(TimeSpan.FromSeconds 30.0)
+
+                                match!
+                                    send f "s1" "p2" (Command.Prompt("Queued: count the sheep", PromptMode.Queue))
+                                with
+                                | Fx.Machines.Accepted _ -> ()
+                                | other -> failtest $"the queued prompt was not taken: {other}"
+
+                                do! prompt f "s1" "p3" "Steered: say three"
+                                hold.SetResult()
+
+                                let! first = ended f "s1" 1
+
+                                Expect.equal
+                                    (completed first)
+                                    (TurnResult.Done("First done", [], None))
+                                    "the first turn"
+
+                                let! second = ended f "s1" 2
+
+                                Expect.equal
+                                    (completed second)
+                                    (TurnResult.Done("Second done", [], None))
+                                    "its own turn"
+
+                                let requests = f.Model.Requests
+                                Expect.equal requests.Length 3 "two calls, then the queued prompt's turn"
+
+                                match (List.last requests[1].Messages).Parts with
+                                | [ Part.ToolResult read; Part.ToolResult bash; Part.Text steer ] ->
+                                    Expect.equal
+                                        [ read.CallId; bash.CallId ]
+                                        [ "call-1"; "call-2" ]
+                                        "both results first"
+
+                                    Expect.equal steer.Text "Steered: say three" "then the steer"
+                                | other -> failtest $"{other}"
+
+                                Expect.isFalse
+                                    ((requestText requests[1]).Contains "count the sheep")
+                                    "the queued prompt waits for the turn's end"
+
+                                match (List.last requests[2].Messages).Parts |> List.last with
+                                | Part.Text queued ->
+                                    Expect.equal queued.Text "Queued: count the sheep" "turn 2's input"
+                                | other -> failtest $"{other}"
+                            })
+                        ()
+            }
+
             testTask "an interrupt stops a running cell; the kernel and its names live on" {
                 do!
                     within
@@ -713,7 +787,7 @@ let tests =
                         ()
             }
 
-            testTask "model errors: retryable ones are retried, an overflow asks for compaction, others fail" {
+            testTask "model errors: retryable ones are retried, an overflow with nothing to compact fails, others fail" {
                 do!
                     within
                         "rate-limit"
@@ -760,7 +834,18 @@ let tests =
 
                                 do! kickoff f "Do it"
                                 let! ending = ended f "s1" 1
-                                Expect.stringContains (failedWith ending) "needs compaction" "compaction"
+
+                                Expect.stringContains
+                                    (failedWith ending)
+                                    "does not fit the model's context window"
+                                    "overflow"
+
+                                Expect.stringContains
+                                    (failedWith ending)
+                                    "could not be compacted: there is nothing old enough to summarize yet"
+                                    "nothing to compact"
+
+                                Expect.equal f.Model.Requests.Length 1 "no summary asked for"
                             })
                         ()
 

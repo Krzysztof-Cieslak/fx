@@ -88,15 +88,17 @@ to send, and a pure `view` that draws the model as a frame.
 - **Transcript**: each turn's prompts (`›`), what the model wrote, one activity line per action
   (`◇` reads and runs, `◆` changes; `Cell` with its `// intent:` line, `Read`, `Edit`, `Run`), its
   status (a spinner and the time while it runs, `✓`/`✗` and how long it took), the first line of an
-  error under a failed one, steering delivered at a step (`↳`), requests asked and settled, and the
+  error under a failed one, steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
+  conversation is summarized; the summary in verbose), requests asked and settled, and the
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`
   with the questions; `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The cells' code is
   folded into one line (`▸ N cells (M lines)`).
 - **Streaming**: what the model writes in the running turn shows (dimmed) as it arrives
-  (`session/streaming`), and the status line says when it writes a cell; the recorded reply replaces it.
+  (`session/streaming`), and the status line says when it writes a cell; the recorded reply replaces it
+  (a compaction's summary streams too, and its recorded collapse replaces it).
 - **Verbosity** (`Ctrl+O` cycles): *quiet* (prompts, activity lines, result cards), *normal* (also what
   the model wrote and errors; the default), *verbose* (also every cell's code and what each action
-  returned).
+  returned, and a compaction's summary).
 - **Pending inputs**: steered prompts waiting for the next step and queued prompts, under the
   transcript, until a turn takes them.
 - **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice), and
@@ -188,8 +190,8 @@ terminal check's P/Invoke without a terminal).
   cut between reads, pastes); the editor over grapheme clusters; frames on a `VtScreen` and the frame
   difference; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session
   machine itself) at 80×24, 40×20 and 24×14 (starting, a finished turn, a running turn with steering
-  and a queued prompt, the agent's question, permissions, a decision, wide characters and a failure,
-  verbose); keys and cards through `update`; streaming; snapshots; resizes; the loop on a `FakeTty`.
+  and a queued prompt, the agent's question, permissions, a decision, wide characters and a failure, a
+  compacted turn, verbose); keys and cards through `update`; streaming; snapshots; resizes; the loop on a `FakeTty`.
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
   session started, a prompt to its result card, a permission given on the card, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn

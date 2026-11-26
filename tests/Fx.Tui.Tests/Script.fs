@@ -137,6 +137,17 @@ type Session(id: string) =
                 }
         )
 
+    /// A compaction: the session's history from its first event to `upTo` shown as a summary.
+    member this.Collapse(upTo: int64, summary: string) =
+        this.Context(
+            ContextEvent.Collapsed
+                {
+                    From = EventRef.create stream 1L
+                    To = EventRef.create stream upTo
+                    Summary = [ Piece.Quote { Text = summary; Sources = [] } ]
+                }
+        )
+
     member this.End(result: TurnResult) =
         this.Send(Command.EndTurn(this.Running, result), host)
 

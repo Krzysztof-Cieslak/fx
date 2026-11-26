@@ -288,7 +288,7 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    question, the call, what it printed, and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
    answer) the run ends with an error saying what waits, and the decision stays open.
 4. The prompt is steered in; activity lines go to standard error (`◇ cell  <intent>`, `◆ edit`, `✗`
-   for failures); when the turn ends, the result card goes to standard output, or with `--json` one
+   for failures, `◇ compacted` when the conversation's oldest part was summarized); when the turn ends, the result card goes to standard output, or with `--json` one
    object: `{"session", "turn", "ending", "questions"}` (`Headless.outcomeCodec`; `ending` is the
    session's `TurnEnd` JSON).
 5. Ctrl+C interrupts the turn on the control path; a second Ctrl+C exits (130).
