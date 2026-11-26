@@ -203,7 +203,7 @@ terminal check's P/Invoke without a terminal).
 | What | Task |
 |---|---|
 | Changes and `[d]iff [u]ndo [r]eview` on the result card, activity lines from cells' host calls (`Refs`, `Read` inside cells) | T205 |
-| `/` commands (`/context`, `/env`, `/model`, `/goal`), the environment picker | T206, T215, later |
+| `/` commands (`/context`, `/compact`, `/env`, `/model`, `/goal`), the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
 | Mouse, themes and the TUI style variant | later |

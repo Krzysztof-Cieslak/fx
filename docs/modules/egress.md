@@ -71,7 +71,7 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 | The CodeAct loop: a cell's result as a tool result or message | every file the cell read through the bridge (`fs.read` calls of its cell), as a `Piece.Quote` | T127 (done), T205 |
 | Hybrid tools (`read`, `edit` diffs) | the file read or edited (`Piece.File`) | T127 (done) |
 | Per-cell diffs shown to the model | the files changed | T205 |
-| Summaries (compaction) | the union of the sources summarized | T206 |
+| Summaries (compaction): the collapse's summary as a `Piece.Quote` | every file the summary request quoted, whole (`Compaction.sources`) | T206 (done) |
 | `fx.llm` from cells | the files the cell read through the bridge before the call (its `Read` activity) | T213 |
 
 - Provenance is host metadata. Every stage keeps it with its part (fitting, replay rules, the hooks);
