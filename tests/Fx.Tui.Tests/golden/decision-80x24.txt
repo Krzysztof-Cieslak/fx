@@ -22,6 +22,6 @@
   ● turn 1 · waiting for an answer
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
-fx · …/src/billing · session …00000003   keys in [ ] answer · ←→ Enter  ● turn 1
+fx · …/src/billing:main · session …00000003         keys in [ ] answer  ● turn 1
 ────────────────────────────────────────────────────────────────────────────────
 cursor hidden

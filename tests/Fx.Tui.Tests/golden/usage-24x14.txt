@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: co…
+  format has no speed
+  option.
+  ▸ 1 c… [Ctrl+O expand]
+
+  ✓ Done  Fast mode
+          needs a speed
+          option in
+          ChatRequest
+  ▣ fx · anthropic/clau…
+
+┃ ›
+┃ anthropic/claude-sonn…
+73.6K (7%) · $2.11  ● i…
+────────────────────────
+cursor 11,4

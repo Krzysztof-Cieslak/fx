@@ -92,6 +92,10 @@ let tests =
                             Golden.expect $"styles-{name}.txt" (drawn + "\n")
                         }
 
+                    test "a wide terminal has the sidebar" {
+                        Golden.expect "usage-130x24.txt" (Screens.render (Screens.usage 130 24))
+                    }
+
                     test "verbose shows a reply the text-only nudge superseded" {
                         let model =
                             { Screens.question 80 24 with

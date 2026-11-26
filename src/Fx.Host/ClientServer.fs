@@ -332,6 +332,7 @@ module ClientServer =
             Reason = record.Reason
             Warnings = Envs.warnings record
             Sandbox = record.Sandbox |> Option.map _.Driver
+            Branch = None
         }
 
     let private envHandlers (host: Host) (client: ClientState) : Handler<HostEnv> list =
@@ -348,6 +349,18 @@ module ClientServer =
                     let! _ = caller host client ClientProtocol.envGet.Name
 
                     match! Envs.get p.Id with
+                    | Some record when record.Phase = Fx.Environments.Phase.Ready ->
+                        // Its workspace's branch, read through its own files; nothing when that fails.
+                        match! Envs.openEnv p.Id |> Eff.map Result.toOption with
+                        | Some handle ->
+                            let! branch =
+                                GitHead.read
+                                    handle.Client.FsRead
+                                    (EnvLayout.join handle.Layout.Os)
+                                    handle.Layout.Workspace
+
+                            return { summary record with Branch = branch }
+                        | None -> return summary record
                     | Some record -> return summary record
                     | None -> return! EffResult.error (ClientError.UnknownEnvironment p.Id)
                 })

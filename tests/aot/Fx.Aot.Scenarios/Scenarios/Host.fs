@@ -583,6 +583,7 @@ let private protocolCodecs () : string list =
                 Reason = None
                 Warnings = [ "unsandboxed" ]
                 Sandbox = Some "none"
+                Branch = Some "main"
             }
 
         for name in [ "session/get"; "session/prompt"; "identity/revoke"; "ext/x/y" ] do

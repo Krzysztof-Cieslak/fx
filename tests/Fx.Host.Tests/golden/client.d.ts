@@ -128,6 +128,7 @@ export interface EnvSummary {
   reason?: string;
   warnings: string[];
   sandbox?: string;
+  branch?: string;
 }
 
 export interface EventRef {

@@ -13,4 +13,4 @@
 12 {fg=indexed-111 bg=indexed-235}┃ {fg=indexed-117 bg=indexed-235 bold}› {fg=indexed-254 bg=indexed-235}                                                        
 13 {fg=indexed-111 bg=indexed-235}┃ {fg=indexed-245 bg=indexed-235}anthropic/claude-sonnet-5-5 · env: default (local) · sand…
 14 {fg=indexed-111 bg=indexed-235}┃{fg=indexed-254 bg=indexed-235}                                                           
-15 {fg=indexed-254 bg=indexed-234 bold}fx{fg=indexed-245 bg=indexed-234} · …/src/billing · session …00000000{fg=indexed-254 bg=indexed-234}    {fg=indexed-245 bg=indexed-234}Enter send  ● idle
+15 {fg=indexed-254 bg=indexed-234 bold}fx{fg=indexed-245 bg=indexed-234} · …/src/billing:main · session …00000000{fg=indexed-254 bg=indexed-234}           {fg=indexed-245 bg=indexed-234}● idle

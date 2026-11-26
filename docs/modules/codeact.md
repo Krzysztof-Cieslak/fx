@@ -95,7 +95,9 @@ Each step:
    `codeact.maxOutputTokens`) and the catalog's caching caps.
 7. **Model call** through `ILlm`, folded with `ChatAggregate` (the policies below). A request that
    overflows the window is compacted and sent again, once a step.
-8. **Reply**: recorded (`Replied`) with the suffix its prompt ended with (`Shown`).
+8. **Reply**: recorded (`Replied`) with the suffix its prompt ended with (`Shown`) and what the call
+   used (`Used`: the request's model, the response's usage, the catalog's context window, and the
+   cost at the catalog's prices).
 9. **Actions**: every tool call in order, each journaled before it runs (`callStarted`, after a workspace
    snapshot for the step's first; "Crash recovery" below) and answered by a receipt (`Returned`) before
    the next call, also calls that did not run (invalid arguments, an unknown tool, calls after an

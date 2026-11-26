@@ -249,6 +249,35 @@ let markdown (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// A session whose replies recorded what they used: the turn's footer has the model and its speed,
+/// the footer (or the sidebar, on a wide terminal) the context used and the cost.
+let usage (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000008"
+
+    let msgs =
+        [
+            yield! s.Start(Some "Fast mode for Opus")
+            yield! s.Prompt "can fx use opus fast mode?"
+            yield! s.Boundary 1
+            s.Advance 4.0
+            yield
+                s.Reply(
+                    1,
+                    [
+                        cell "toolu_1" "// intent: look for a speed option\nawait fx.fs.read(\"src/Fx.Models/Chat.fs\")"
+                    ],
+                    used 60_000 400 0.95m
+                )
+            s.Advance 0.5
+            yield s.Receipt(1, "toolu_1", "cell", "no speed option")
+            yield! s.Boundary 2
+            s.Advance 6.0
+            yield s.Reply(2, [ text "Not yet: the request format has **no speed option**." ], used 73_016 600 1.16m)
+            yield! s.End(TurnResult.Done("Fast mode needs a speed option in `ChatRequest`", [], None))
+        ]
+
+    ready s width height msgs
+
 /// Every screen, by name.
 let all: (string * (int -> int -> Model)) list =
     [
@@ -263,6 +292,7 @@ let all: (string * (int -> int -> Model)) list =
         "wide", wide
         "compacted", compacted
         "markdown", markdown
+        "usage", usage
     ]
 
 /// A frame as text, with the cursor's place.

@@ -18,6 +18,6 @@
 
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/billing · session …00… ● idle
+fx · …/src/billing:main · sessio… ● idle
 ────────────────────────────────────────
 cursor 17,4

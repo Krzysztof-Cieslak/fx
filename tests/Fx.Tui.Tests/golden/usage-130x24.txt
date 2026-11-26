@@ -1,0 +1,27 @@
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ! runs unsandboxed: commands can read and change everything the user can                       │
+                                                                                                │ billing
+┃ can fx use opus fast mode?                                                                    │
+                                                                                                │ Context
+  ◇ Cell     look for a speed option                                                      ✓ 0.5s│ 73,616 tokens
+  Not yet: the request format has no speed option.                                              │ 7% used
+  ▸ 1 cell (2 lines)                                                             [Ctrl+O expand]│ $2.11 spent
+                                                                                                │ anthropic/claude-opus-5-5
+  ✓ Done  Fast mode needs a speed option in ChatRequest                                         │
+  ▣ fx · anthropic/claude-opus-5-5 · 10s · 100.0 tok/s                                          │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+                                                                                                │
+┃ ›                                                                                             │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none                            │ …/src/billing:main
+fx · …/src/billing:main · session …00000008               Enter send · Alt+Enter newline  ● idle│
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ ! runs unsandboxed: commands can read …
+
+┃ can fx use opus fast mode?
+
+  ◇ Cell     look for a speed op… ✓ 0.5s
+  Not yet: the request format has no
+  speed option.
+  ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
+  ✓ Done  Fast mode needs a speed option
+          in ChatRequest
+  ▣ fx · anthropic/claude-opus-5-5 · 10…
+
+
+
+
+
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/b… 73.6K (7%) · $2.11  ● idle
+────────────────────────────────────────
+cursor 17,4

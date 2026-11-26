@@ -183,7 +183,7 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 | `identity/sessions` | → the live client sessions | owner |
 | `identity/revoke` | `{id}` → revoked (its connections end) | owner |
 | `identity/signOut` | → revokes this connection's token (and ends it) | viewer |
-| `env/list`, `env/get` | → `EnvSummary` (id, name, provider, phase, transport, workspace, reason, warnings, the sandbox driver once ready) | viewer |
+| `env/list`, `env/get` | → `EnvSummary` (id, name, provider, phase, transport, workspace, reason, warnings, the sandbox driver once ready; `env/get` also the branch its workspace has checked out, read from git's files through the environment, `GitHead`) | viewer |
 | `env/destroy` | `{id}` → `EnvSummary` | owner |
 | `ext/<id>/<name>` | the method's JSON params → its JSON result; `ExtCallError` (`failed` with the `MethodFailure`) | collaborator |
 
