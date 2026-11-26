@@ -4,6 +4,7 @@
     <Compile Include="Script.fs" />
     <Compile Include="Screens.fs" />
     <Compile Include="UnitTests.fs" />
+    <Compile Include="MarkdownTests.fs" />
     <Compile Include="AppTests.fs" />
     <Compile Include="RuntimeTests.fs" />
   </ItemGroup>

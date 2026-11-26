@@ -156,6 +156,28 @@ module View =
     let private paragraph (width: int) (lead: Span list) (style: Style) (text: string) : Row list =
         Paragraph.wrap width lead style text
 
+    /// Markdown drawn after `lead` on its first row, every other row indented as far.
+    let private markdown (t: Theme) (width: int) (lead: Span list) (text: string) : Row list =
+        let w = Row.width lead
+
+        Markdown.render t (width - w) text
+        |> List.mapi (fun i row -> (if i = 0 then lead else [ indent w ]) @ row)
+        |> List.map (Row.fit width)
+
+    /// The same with every colour muted (what is less important: drafts).
+    let private muted (t: Theme) (rows: Row list) : Row list =
+        rows
+        |> List.map (
+            List.map (fun span ->
+                { span with
+                    Style =
+                        { span.Style with
+                            Fg = t.Muted.Fg
+                            Dim = t.Muted.Dim
+                        }
+                })
+        )
+
     let private lines (width: int) (lead: int) (style: Style) (text: string) : Row list =
         Text.wrap (max 1 (width - lead)) text
         |> List.map (fun line -> Row.fit width [ indent lead; s style line ])
@@ -244,11 +266,11 @@ module View =
         match ended with
         | TurnEnd.Completed(TurnResult.Done(summary, evidence, verify)) ->
             [
-                yield! paragraph width [ indent 2; s (Style.withBold t.Success) "✓ Done  " ] Style.plain summary
+                yield! markdown t width [ indent 2; s (Style.withBold t.Success) "✓ Done  " ] summary
                 for e in evidence do
-                    yield! paragraph width [ indent 4; s (bold t) "Evidence  " ] Style.plain e.Summary
+                    yield! markdown t width [ indent 4; s (bold t) "Evidence  " ] e.Summary
                 match verify with
-                | Some verify -> yield! paragraph width [ indent 4; s (bold t) "Verify    " ] Style.plain verify
+                | Some verify -> yield! markdown t width [ indent 4; s (bold t) "Verify    " ] verify
                 | None -> ()
                 yield Row.fit width [ indent 4; tookAlone ]
             ]
@@ -257,7 +279,7 @@ module View =
             [
                 Row.fit width [ indent 2; s (Style.withBold t.Warning) "? Needs input"; took ]
                 for question in unasked turn ids do
-                    yield! paragraph width [ indent 4 ] Style.plain question
+                    yield! markdown t width [ indent 4 ] question
             ]
         | TurnEnd.Completed(TurnResult.Waiting(jobs, note)) ->
             [
@@ -305,11 +327,10 @@ module View =
 
             for item in turn.Items do
                 match item with
-                | TurnItem.Said text when verbosity <> Verbosity.Quiet ->
-                    yield! paragraph width [ indent 2 ] Style.plain text
+                | TurnItem.Said text when verbosity <> Verbosity.Quiet -> yield! markdown t width [ indent 2 ] text
                 | TurnItem.Said _ -> ()
                 | TurnItem.Superseded text when verbosity = Verbosity.Verbose ->
-                    yield! paragraph width [ indent 2 ] t.Muted text
+                    yield! muted t (markdown t width [ indent 2 ] text)
                 | TurnItem.Superseded _ -> ()
                 | TurnItem.Call call -> yield! callRows t width verbosity model.Now live (Some call.Id = firstOpen) call
                 | TurnItem.Steered inputs ->
@@ -320,7 +341,7 @@ module View =
                 | TurnItem.Asked request ->
                     // The agent's question is often the reply just shown: it is not shown again.
                     if not (verbosity <> Verbosity.Quiet && Set.contains request.Request.Id echoes) then
-                        yield! paragraph width [ indent 2; s t.Warning "? " ] Style.plain (Timeline.asks request)
+                        yield! markdown t width [ indent 2; s t.Warning "? " ] (Timeline.asks request)
                 | TurnItem.Settled resolved ->
                     let text =
                         match resolved.Resolution with
