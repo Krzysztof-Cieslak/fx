@@ -21,6 +21,15 @@
     <None Include="golden\**" />
   </ItemGroup>
 
+  <!--
+    T135: idle thread-pool threads end after 1 s here instead of 20 s, so that a process which dies with
+    the thread that started it (PR_SET_PDEATHSIG: bubblewrap's die-with-parent) dies within the tests,
+    as a dogfooding session's kernels did between turns and while cells waited for a person.
+  -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Threading.ThreadPool.ThreadTimeoutMs" Value="1000" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fx.Host\Fx.Host.fsproj" />
   </ItemGroup>

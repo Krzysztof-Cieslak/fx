@@ -405,7 +405,12 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   processes recorded and `fx replay` matching it, and nothing journaled with `session.record` off; a
   long turn compacting (spec §5) beside a cell when the provider's count reached the threshold of the
   catalog's window and when a cell asks (`fx.history.compact`): two `◇ compacted` lines, each summary
-  request the call before it on the Messages API's wire plus the instruction, and `fx replay` matching.
+  request the call before it on the Messages API's wire plus the instruction, and `fx replay` matching;
+  one kernel for a session's turns (sandboxed where a driver confines): a name declared in turn 1 used
+  in turn 2 after the host idled longer than its thread pool keeps idle threads (`ThreadTimeoutMs` is 1 s
+  in this project, so a kernel that died with the thread that started it would die here, T135), then a
+  kernel that kills itself: its cell's receipt and the journal say how (SIGKILL, exit code 137), the next
+  cell's receipt and `fx run`'s activity say why a new kernel started, and `fx replay` matches.
 - `GrantPromptTests`: what the terminal shows of a grant request, replies as answers, what a run shows
   when nobody can answer (the `fx grants allow` command for requests that offer host scope, quoted for
   the shell, the resource escaped as an exact pattern).
