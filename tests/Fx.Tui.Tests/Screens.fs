@@ -136,6 +136,43 @@ let wide (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// A long turn whose oldest part was compacted: its activity line between the steps.
+let compacted (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000005"
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "port the parser"
+            yield! s.Boundary 1
+            s.Advance 2.0
+            yield
+                s.Reply(
+                    1,
+                    [
+                        cell "toolu_1" "// intent: read the grammar\nawait fx.fs.read(\"grammar.y\")"
+                    ]
+                )
+            s.Advance 0.3
+            yield s.Receipt(1, "toolu_1", "cell", "1200 lines")
+            yield! s.Boundary 2
+            s.Advance 1.0
+            yield s.Reply(2, [ cell "toolu_2" "// intent: port the rules\nawait port()" ])
+            s.Advance 9.0
+            yield s.Receipt(2, "toolu_2", "cell", "ported 84 rules")
+            yield! s.Boundary 3
+            s.Advance 4.0
+            yield
+                s.Collapse(s.Seq, "Porting the parser: read grammar.y (1200 lines), ported 84 rules.\nNext: the tests.")
+            s.Advance 1.0
+            yield s.Reply(3, [ cell "toolu_3" "// intent: run the tests\nawait fx.shell.run(\"make test\")" ])
+            s.Advance 3.0
+            yield s.Receipt(3, "toolu_3", "cell", "all passed")
+            yield! s.End(TurnResult.Done("Ported the parser", [], None))
+        ]
+
+    ready s width height msgs
+
 /// Every screen, by name.
 let all: (string * (int -> int -> Model)) list =
     [
@@ -147,6 +184,7 @@ let all: (string * (int -> int -> Model)) list =
         "grant", grant
         "decision", decision
         "wide", wide
+        "compacted", compacted
     ]
 
 /// A frame as text, with the cursor's place.

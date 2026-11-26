@@ -49,6 +49,23 @@ type EvidencePolicy =
         | Optional -> "optional"
         | Required -> "required"
 
+/// When the strategy compacts a conversation (spec §5 compaction).
+[<RequireQualifiedAccess>]
+type CompactionMode =
+    /// When the prompt reaches `codeact.compaction.threshold` of the model's window (prepared in the
+    /// background while the step's actions run), when the window overflows, and when the model asks.
+    | Auto
+    /// Only when the window overflows, and when the model asks.
+    | Overflow
+    /// Never: a conversation that does not fit fails the turn, and the model cannot ask.
+    | Off
+
+    override this.ToString() =
+        match this with
+        | Auto -> "auto"
+        | Overflow -> "overflow"
+        | Off -> "off"
+
 /// The CodeAct strategy's variant slots (spec §15): its policies, budgets and bounds. Core slots defined
 /// next to the code that reads them: the host registers `CodeActSlots.all` (with `PromptSlots.all`,
 /// `Slots.all` and `ContentExclusions.slots`). Defaults are provisional until evals decide.
@@ -210,6 +227,42 @@ module CodeActSlots =
             (count 0)
             20
 
+    /// `codeact.compaction.mode`: `auto`, `overflow` or `off`.
+    let compactionMode: Slot<CompactionMode> =
+        Slot.enum
+            "codeact.compaction.mode"
+            "When the conversation's oldest part is replaced by a summary the model writes: auto (when the prompt reaches codeact.compaction.threshold of the model's context window, when the window overflows, and when the model asks), overflow (only when the window overflows, and when the model asks), or off."
+            [
+                CompactionMode.Auto, "auto"
+                CompactionMode.Overflow, "overflow"
+                CompactionMode.Off, "off"
+            ]
+            CompactionMode.Auto
+
+    /// `codeact.compaction.threshold`: the share of the window that starts a compaction.
+    let compactionThreshold: Slot<int> =
+        Slot.create
+            "codeact.compaction.threshold"
+            "The percentage of the model's context window the prompt may fill before it is compacted (mode auto)."
+            (Codec.int |> Codec.atLeast 10 |> Codec.atMost 95)
+            80
+
+    /// `codeact.compaction.keep`: the share of the window the newest history keeps as it is.
+    let compactionKeep: Slot<int> =
+        Slot.create
+            "codeact.compaction.keep"
+            "The percentage of the model's context window the newest part of the conversation keeps as it is when the part before it is summarized."
+            (Codec.int |> Codec.atLeast 0 |> Codec.atMost 90)
+            30
+
+    /// `codeact.compaction.summaryTokens`: the output limit of a summary.
+    let summaryTokens: Slot<int> =
+        Slot.create
+            "codeact.compaction.summaryTokens"
+            "The most tokens the model may write for a summary of the conversation's oldest part."
+            (count 256)
+            8192
+
     /// The strategy's slots, for the host's registry.
     let all: SlotInfo list =
         [
@@ -232,12 +285,30 @@ module CodeActSlots =
             Slot.info snapshots
             Slot.info recallMaxBytes
             Slot.info recallRestore
+            Slot.info compactionMode
+            Slot.info compactionThreshold
+            Slot.info compactionKeep
+            Slot.info summaryTokens
         ]
 
     /// Every slot a turn reads: the core's, the render's, content exclusions', the strategy's and its
     /// grants guard's.
     let read: SlotInfo list =
         Slots.all @ PromptSlots.all @ ContentExclusions.slots @ all @ GrantSlots.all
+
+/// When and how a conversation is compacted (`codeact.compaction.*`).
+type CompactionSettings =
+    {
+        Mode: CompactionMode
+        /// Percent of the model's context window.
+        Threshold: int
+        /// Percent of the model's context window.
+        Keep: int
+        SummaryTokens: int
+    }
+
+    override this.ToString() =
+        $"compaction {this.Mode} (at {this.Threshold} percent, keep {this.Keep} percent, summary {this.SummaryTokens} tokens)"
 
 /// What a turn runs with, read once at its start through `IVariants` (recorded and replayable).
 type CodeActSettings =
@@ -274,6 +345,8 @@ type CodeActSettings =
         RecallMaxBytes: int
         /// `codeact.recall.restore`.
         RecallRestore: int
+        /// `codeact.compaction.*`.
+        Compaction: CompactionSettings
     }
 
     override this.ToString() =
@@ -308,6 +381,10 @@ module CodeActSettings =
             let! snapshots = Variants.get CodeActSlots.snapshots
             let! recallMaxBytes = Variants.get CodeActSlots.recallMaxBytes
             let! recallRestore = Variants.get CodeActSlots.recallRestore
+            let! compactionMode = Variants.get CodeActSlots.compactionMode
+            let! compactionThreshold = Variants.get CodeActSlots.compactionThreshold
+            let! compactionKeep = Variants.get CodeActSlots.compactionKeep
+            let! summaryTokens = Variants.get CodeActSlots.summaryTokens
 
             return
                 {
@@ -336,6 +413,13 @@ module CodeActSettings =
                     Snapshots = snapshots
                     RecallMaxBytes = recallMaxBytes
                     RecallRestore = recallRestore
+                    Compaction =
+                        {
+                            Mode = compactionMode
+                            Threshold = compactionThreshold
+                            Keep = compactionKeep
+                            SummaryTokens = summaryTokens
+                        }
                 }
         }
 

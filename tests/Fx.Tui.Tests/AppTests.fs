@@ -46,6 +46,15 @@ let tests =
 
                         Golden.expect "finished-verbose-80x40.txt" (Screens.render model)
                     }
+
+                    test "verbose shows the summary a compaction recorded" {
+                        let model =
+                            { Screens.compacted 80 30 with
+                                Verbosity = Verbosity.Verbose
+                            }
+
+                        Golden.expect "compacted-verbose-80x30.txt" (Screens.render model)
+                    }
                 ]
 
             testList
@@ -323,6 +332,20 @@ let tests =
 
                         Expect.isNone model.Streaming "replaced by the reply"
                         Expect.stringContains (screen model) "all in billing." "the recorded reply"
+                    }
+
+                    test "a compaction's streamed summary gives way to its activity line" {
+                        let s, model = ready ()
+                        let model, _ = play model (s.Prompt "summarize")
+                        let turn = s.Running
+
+                        let model, _ =
+                            play model [ Msg.Streaming(turn, true, "Summary: the change ", None) ]
+
+                        Expect.isSome model.Streaming "streamed"
+                        let model, _ = play model [ s.Collapse(s.Seq, "Summary: the change is small.") ]
+                        Expect.isNone model.Streaming "replaced by the collapse"
+                        Expect.stringContains (screen model) "Compact" "the activity line"
                     }
 
                     test "a snapshot replaces earlier events" {

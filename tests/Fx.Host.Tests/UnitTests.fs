@@ -276,6 +276,22 @@ let tests =
                             "lines"
                     }
 
+                    test "a compaction is an activity line" {
+                        let at = EventRef.create (Session.stream "s1") 1L
+
+                        Expect.equal
+                            (Activity.ofContext (
+                                ContextEvent.Collapsed
+                                    {
+                                        From = at
+                                        To = at
+                                        Summary = [ Piece.Quote { Text = "Read a.txt."; Sources = [] } ]
+                                    }
+                            ))
+                            [ "◇ compacted  the earlier conversation into a summary (11 characters)" ]
+                            "one line"
+                    }
+
                     test "the ending reads like a result card" {
                         Expect.equal
                             (Activity.ending

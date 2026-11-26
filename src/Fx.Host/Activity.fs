@@ -69,11 +69,20 @@ module Activity =
         else
             []
 
+    /// A compaction: the summary that now stands for the conversation's oldest part.
+    let ofCollapse (collapse: Collapse) : string list =
+        let text = collapse.Summary |> List.map Piece.render |> String.concat "\n"
+
+        [
+            $"◇ compacted  the earlier conversation into a summary ({text.Length} characters)"
+        ]
+
     /// The lines of a context event.
     let ofContext (event: ContextEvent) : string list =
         match event with
         | ContextEvent.Replied reply -> ofReply reply
         | ContextEvent.Returned receipt -> ofReceipt receipt
+        | ContextEvent.Collapsed collapse -> ofCollapse collapse
         | _ -> []
 
     /// How a turn ended, for a person: the result card of spec §19.2 in plain lines.

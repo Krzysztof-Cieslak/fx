@@ -47,6 +47,32 @@ type CodeActConfig<'R, 'K> =
 type private Called =
     | Reply of ChatResponse
     | Failed of reason: string
+    /// The request did not fit the model's context window (its limit, if the provider said).
+    | Overflow of limit: int option * reason: string
+
+/// Why the history was not compacted.
+[<RequireQualifiedAccess>]
+type private NotCompacted =
+    /// No cut: nothing old enough to summarize yet (or nothing whose summary request would fit).
+    | Nothing
+    | Failed of reason: string
+
+    override this.ToString() =
+        match this with
+        | Nothing -> "there is nothing old enough to summarize yet"
+        | Failed reason -> reason
+
+/// A summary the model wrote of the history up to a cut (compaction, spec §5).
+type private Summary =
+    {
+        Cut: Cut
+        Text: string
+        /// The files the summary request quoted.
+        Sources: ContentSource list
+    }
+
+    override this.ToString() =
+        $"summary of {this.Cut} ({this.Text.Length} chars)"
 
 /// A turn the host stopped during, going on after people decided what happened to its call in doubt.
 type private Resumed =
@@ -69,6 +95,16 @@ type private TurnState(settings: CodeActSettings) =
     member val Nudged = false with get, set
     /// Notes for the next call's suffix.
     member val Notes: Block list = [] with get, set
+    /// A summary prepared while the last step's actions ran, to record before the next call.
+    member val Prepared: Summary option = None with get, set
+    /// The window filled during the last reply: the next call compacts first.
+    member val Force = false with get, set
+    /// An automatic compaction failed in this turn: the threshold starts none again.
+    member val AutoFailed = false with get, set
+    /// The collapses this turn recorded (their keys).
+    member val Collapses = 0 with get, set
+    /// The last call's render configuration, live data and request template.
+    member val Shape: (RenderConfig * Live * ChatRequest) option = None with get, set
     member _.Settings = settings
 
 /// The CodeAct strategy (spec §4.4–4.5, §6.9): a turn runner that, step by step, takes steers at the
@@ -94,6 +130,11 @@ type CodeAct<'R, 'K
 
     let writerOf (session: string) : JournalWriter =
         writers.GetOrAdd(session, (fun id -> JournalWriter(config.Steps, id)))
+
+    let asks = ConcurrentDictionary<string, HistoryAsks>(StringComparer.Ordinal)
+
+    let asksOf (session: string) : HistoryAsks =
+        asks.GetOrAdd(session, (fun _ -> HistoryAsks()))
 
     let journalOf (session: string) : Eff<'E, Recorded<StepEvent> list> when 'E :> IScope =
         StepJournal.load config.Steps session
@@ -200,7 +241,16 @@ type CodeAct<'R, 'K
                                 }
                     }
 
-                SessionKernel<'K>(id, watchOf writer, journal, [ Recall.binding (journalOf id) config.Blobs ])
+                SessionKernel<'K>(
+                    id,
+                    watchOf writer,
+                    journal,
+                    HistoryBindings.groups,
+                    [
+                        Recall.binding (journalOf id) config.Blobs
+                        HistoryBindings.compact (asksOf id)
+                    ]
+                )
         )
 
     /// The cell id of a call's attempt in its kernel.
@@ -280,10 +330,17 @@ type CodeAct<'R, 'K
                         do! Clock.sleep (delay settings empties None)
                 | Ok response -> result <- Some(Called.Reply response)
                 | Error failure when ChatError.needsCompaction failure.Error ->
+                    let limit =
+                        match failure.Error with
+                        | ChatError.ContextOverflow overflow -> overflow.Limit
+                        | _ -> None
+
                     result <-
                         Some(
-                            Called.Failed
-                                $"the conversation does not fit the model's context window and needs compaction: {failure.Error}"
+                            Called.Overflow(
+                                limit,
+                                $"the conversation does not fit the model's context window ({failure.Error})"
+                            )
                         )
                 | Error failure when ChatError.isRetryable failure.Error && failures < settings.ModelRetries ->
                     failures <- failures + 1
@@ -307,6 +364,198 @@ type CodeAct<'R, 'K
             match! context.Open(Questions.request id { Question = question; Reason = reason }) with
             | Ok _ -> return Ok(TurnResult.NeedInput [ id ])
             | Error rejection -> return Error $"the agent's question could not be asked: {rejection.Message}"
+        }
+
+    /// Asks the model for a summary of the history up to a cut (compaction, spec §5). The request
+    /// shares the conversation's cache (`Compaction.request`); only the reply's text counts.
+    let summarize
+        (settings: CodeActSettings)
+        (cfg: RenderConfig)
+        (template: ChatRequest)
+        (rendered: Rendered)
+        (cut: Cut)
+        (focus: string option)
+        : Eff<'R, Result<Summary, string>> =
+        eff {
+            let request =
+                Compaction.request
+                    cfg
+                    { template with
+                        MaxOutputTokens = Some settings.Compaction.SummaryTokens
+                    }
+                    rendered
+                    cut
+                    (Instructions.summarize focus)
+
+            match! call settings request with
+            | Called.Reply response ->
+                let text =
+                    response.Parts
+                    |> List.choose (fun part ->
+                        match part with
+                        | Part.Text t when not (String.IsNullOrWhiteSpace t.Text) -> Some(t.Text.Trim())
+                        | _ -> None)
+                    |> String.concat "\n\n"
+
+                if text = "" then
+                    return Error "the model wrote no summary"
+                else
+                    return
+                        Ok
+                            {
+                                Cut = cut
+                                Text = text
+                                Sources = Compaction.sources request
+                            }
+            | Called.Failed reason
+            | Called.Overflow(_, reason) -> return Error reason
+        }
+
+    /// `summarize` beside a step's actions: a defect in it fails the summary, never the actions (a
+    /// failure in one branch would cancel the cell running in the other).
+    let prepare
+        (settings: CodeActSettings)
+        (cfg: RenderConfig)
+        (template: ChatRequest)
+        (rendered: Rendered)
+        (cut: Cut)
+        : Eff<'R, Result<Summary, string>> =
+        eff {
+            try
+                return! summarize settings cfg template rendered cut None
+            with e when not (e :? OperationCanceledException) ->
+                return Error $"the summary failed ({e.GetType().Name})"
+        }
+
+    /// The tokens a cut keeps as they are, and the most its summary request may have: shares of the
+    /// model's window, or of the prompt's estimate when the window is not known.
+    let budgetOf (settings: CodeActSettings) (window: int option) (estimate: int) : int * int option =
+        let compaction = settings.Compaction
+
+        match window with
+        | Some window ->
+            let reserve = min (compaction.SummaryTokens + 1024) (window / 2)
+            int (int64 window * int64 compaction.Keep / 100L), Some(window - reserve)
+        | None -> int (int64 estimate * int64 compaction.Keep / 100L), None
+
+    /// Records a summary's collapse if it still applies to the history: the transcript after it.
+    let collapse
+        (record: string -> ContextEvent -> Eff<'R, unit>)
+        (reload: Eff<'R, Transcript>)
+        (state: TurnState)
+        (transcript: Transcript)
+        (summary: Summary)
+        : Eff<'R, Transcript option> =
+        eff {
+            let event = Compaction.collapse summary.Cut summary.Text summary.Sources
+
+            if Compaction.applies transcript event then
+                state.Collapses <- state.Collapses + 1
+                do! record $"collapse/{state.Collapses}" (ContextEvent.Collapsed event)
+                let! after = reload
+                return Some after
+            else
+                return None
+        }
+
+    /// Compacts the history now: the cut this render allows, its summary, its collapse; the
+    /// transcript after it, or why not.
+    let compactNow
+        (record: string -> ContextEvent -> Eff<'R, unit>)
+        (reload: Eff<'R, Transcript>)
+        (state: TurnState)
+        (window: int option)
+        (cfg: RenderConfig)
+        (template: ChatRequest)
+        (transcript: Transcript, rendered: Rendered)
+        (focus: string option)
+        : Eff<'R, Result<Transcript, NotCompacted>> =
+        eff {
+            let settings = state.Settings
+            let estimate = Tokens.ofRequest (Render.request cfg template rendered)
+            let keep, fits = budgetOf settings window estimate
+
+            match Compaction.choose keep fits (Compaction.cuts transcript rendered template.Tools) with
+            | None -> return Error NotCompacted.Nothing
+            | Some cut ->
+                match! summarize settings cfg template rendered cut focus with
+                | Error reason -> return Error(NotCompacted.Failed reason)
+                | Ok summary ->
+                    match! collapse record reload state transcript summary with
+                    | Some after -> return Ok after
+                    | None -> return Error(NotCompacted.Failed "the summary's range is no longer in the history")
+        }
+
+    /// Before a step's call (compaction, spec §5): a summary prepared during the last step is
+    /// recorded; otherwise the history is compacted now if the model asked (`asked`: with what to keep
+    /// in particular), if the window filled during the last reply, or if the prompt reached the
+    /// threshold. The transcript to render and notes for the call, or why the turn cannot go on.
+    let compactBefore
+        (record: string -> ContextEvent -> Eff<'R, unit>)
+        (reload: Eff<'R, Transcript>)
+        (state: TurnState)
+        (window: int option)
+        (asked: string option option)
+        (cfg: RenderConfig, live: Live, template: ChatRequest)
+        (transcript: Transcript)
+        : Eff<'R, Result<Transcript * Block list, string>> =
+        eff {
+            let compaction = state.Settings.Compaction
+            let prepared = state.Prepared
+            let forced = state.Force
+            state.Prepared <- None
+            state.Force <- false
+
+            let! applied =
+                match prepared with
+                | Some summary -> collapse record reload state transcript summary
+                | None -> Eff.ret None
+
+            // Only the threshold needs the prompt's estimate.
+            let measure =
+                compaction.Mode = CompactionMode.Auto && not state.AutoFailed && window.IsSome
+
+            match applied with
+            | Some after -> return Ok(after, [])
+            | None when
+                compaction.Mode = CompactionMode.Off
+                || (asked.IsNone && not forced && not measure)
+                ->
+                return Ok(transcript, [])
+            | None ->
+                let rendered = Render.render cfg transcript live
+                let estimate = Tokens.ofRequest (Render.request cfg template rendered)
+
+                let over =
+                    compaction.Mode = CompactionMode.Auto
+                    && not state.AutoFailed
+                    && (window
+                        |> Option.exists (fun w -> int64 estimate * 100L >= int64 w * int64 compaction.Threshold))
+
+                if compaction.Mode = CompactionMode.Off || (asked.IsNone && not forced && not over) then
+                    return Ok(transcript, [])
+                else
+                    match!
+                        compactNow record reload state window cfg template (transcript, rendered) (Option.flatten asked)
+                    with
+                    | Ok after -> return Ok(after, [])
+                    | Error reason when forced ->
+                        return
+                            Error
+                                $"the context window filled up during the model's reply, and the conversation could not be compacted: {reason}"
+                    | Error reason ->
+                        // A summary that failed is not asked for again in this turn by the threshold;
+                        // with nothing to cut yet, the next step may have something.
+                        match reason with
+                        | NotCompacted.Failed _ when over -> state.AutoFailed <- true
+                        | _ -> ()
+
+                        let notes =
+                            match asked with
+                            | Some _ -> [ Instructions.compactionFailed (string reason) ]
+                            | None -> []
+
+                        return Ok(transcript, notes)
         }
 
     /// Runs one action and gives its receipt, and the result `finish` accepted in it. A cell's value
@@ -488,6 +737,14 @@ type CodeAct<'R, 'K
                     |> Option.map (fun info -> info.Caps.Caching)
                     |> Option.defaultValue ModelCaps.minimal.Caching
 
+                // The context window compaction keeps the prompt within.
+                let window = config.Catalog model |> Option.map (fun info -> info.Limits.Context)
+
+                // What earlier turns' cells asked of the history is theirs.
+                let asks = asksOf session
+                asks.Mode <- settings.Compaction.Mode
+                asks.TakeCompact() |> ignore
+
                 kernel.Begin(core, [ Ensure.summary ])
                 let interpreter = hands.Interpreter.Prompt(kernel.Surface core)
                 let started = EventRef.create (Session.stream session) start.Seq
@@ -502,6 +759,10 @@ type CodeAct<'R, 'K
                         session
                         $"{started}/{what}"
                         (ContextEvent.withhold exclusions event)
+
+                let reload: Eff<'R, Transcript> =
+                    ContextLog.load config.Sessions config.Contexts session
+                    |> Eff.map (fun history -> Transcript.ofItems history.Items)
 
                 let prefix = string started
 
@@ -643,7 +904,6 @@ type CodeAct<'R, 'K
                             }
 
                         state.Notes <- []
-                        let rendered = Render.render cfg transcript live
 
                         let template =
                             { ChatRequest.create model [] with
@@ -651,173 +911,319 @@ type CodeAct<'R, 'K
                                 MaxOutputTokens = settings.MaxOutputTokens
                             }
 
-                        let request = Render.request cfg template rendered
+                        state.Shape <- Some(cfg, live, template)
 
-                        match! call settings request with
-                        | Called.Failed reason -> state.Outcome <- Some(Error reason)
-                        | Called.Reply response ->
-                            state.Tokens <- state.Tokens + int64 response.Usage.Input + int64 response.Usage.Output
-
-                            do!
+                        match!
+                            compactBefore
                                 record
-                                    $"step/{step}/reply"
-                                    (ContextEvent.Replied
-                                        {
-                                            Turn = start.Turn
-                                            Step = step
-                                            Shown = rendered.Prompt.Suffix
-                                            Parts = response.Parts
-                                        })
+                                reload
+                                state
+                                window
+                                (asks.TakeCompact())
+                                (cfg, live, template)
+                                transcript
+                        with
+                        | Error reason -> state.Outcome <- Some(Error reason)
+                        | Ok(compacted, notes) ->
+                            let live = { live with Notes = live.Notes @ notes }
 
-                            let calls = callsOf response.Parts
-                            let cut = response.Stop = StopReason.MaxTokens
-                            let mutable stop = None
-                            let mutable snapshot = None
+                            // The call; a request that overflows the window is compacted and sent again,
+                            // once a step.
+                            let mutable transcript = compacted
+                            let mutable outcome = None
+                            let mutable overflowed = false
 
-                            for index, toolCall in List.indexed calls do
-                                let decoded =
-                                    if state.Outcome.IsSome then
-                                        None
-                                    else
-                                        Some(Tools.decode surface toolCall)
+                            while outcome.IsNone do
+                                let rendered = Render.render cfg transcript live
+                                let request = Render.request cfg template rendered
 
-                                // The workspace before the step's first action.
-                                match decoded, snapshot with
-                                | Some(Ok _), None ->
-                                    let! before = snapshotOf hands settings $"{prefix} step {step}"
-                                    snapshot <- Some before
-                                | _ -> ()
+                                match! call settings request with
+                                | Called.Overflow(limit, reason) when
+                                    not overflowed && settings.Compaction.Mode <> CompactionMode.Off
+                                    ->
+                                    overflowed <- true
 
-                                let! executed, finished =
-                                    match decoded with
-                                    | None ->
-                                        Eff.ret (
-                                            {
-                                                Pieces = Receipts.skipped
-                                                IsError = true
-                                            },
+                                    match!
+                                        compactNow
+                                            record
+                                            reload
+                                            state
+                                            (limit |> Option.orElse window)
+                                            cfg
+                                            template
+                                            (transcript, rendered)
                                             None
+                                    with
+                                    | Ok after -> transcript <- after
+                                    | Error why ->
+                                        outcome <-
+                                            Some(
+                                                Called.Failed $"{reason}, and it could not be compacted: {why}",
+                                                transcript,
+                                                rendered,
+                                                request
+                                            )
+                                | Called.Overflow(_, reason) ->
+                                    outcome <-
+                                        Some(
+                                            Called.Failed $"{reason}, and compaction is off",
+                                            transcript,
+                                            rendered,
+                                            request
                                         )
-                                    | Some(Error message) ->
-                                        Eff.ret (
-                                            {
-                                                Pieces = Receipts.failed message
-                                                IsError = true
-                                            },
-                                            None
-                                        )
-                                    | Some(Ok action) ->
-                                        let call: CallRef =
-                                            {
-                                                Turn = start.Turn
-                                                Step = step
-                                                Index = index + 1
-                                                Id = toolCall.Id
-                                                Attempt = 1
-                                            }
+                                | called -> outcome <- Some(called, transcript, rendered, request)
 
-                                        runAction
-                                            prefix
-                                            hands
-                                            kernel
-                                            settings
-                                            limits
-                                            call
-                                            toolCall
-                                            action
-                                            (snapshot |> Option.flatten)
+                            let called, transcript, rendered, request = outcome.Value
+
+                            match called with
+                            | Called.Failed reason
+                            | Called.Overflow(_, reason) -> state.Outcome <- Some(Error reason)
+                            | Called.Reply response ->
+                                state.Tokens <- state.Tokens + int64 response.Usage.Input + int64 response.Usage.Output
 
                                 do!
                                     record
-                                        $"step/{step}/receipt/{index + 1}"
-                                        (ContextEvent.Returned
+                                        $"step/{step}/reply"
+                                        (ContextEvent.Replied
                                             {
                                                 Turn = start.Turn
                                                 Step = step
-                                                Call = Some toolCall.Id
-                                                Name = toolCall.Name
-                                                Pieces = executed.Pieces
-                                                IsError = executed.IsError
+                                                Shown = rendered.Prompt.Suffix
+                                                Parts = response.Parts
                                             })
 
-                                match finished with
-                                | Some result -> state.Outcome <- Some(Ok result)
-                                | None ->
-                                    let print = LoopGuard.fingerprint toolCall.Name toolCall.Arguments executed.Pieces
+                                let calls = callsOf response.Parts
+                                let cut = response.Stop = StopReason.MaxTokens
 
-                                    let guard, verdict = LoopGuard.observe settings.LoopRepeats print state.Guard
-                                    state.Guard <- guard
+                                // Every call of the reply, in order, each answered by its receipt; the loop
+                                // guard's verdict.
+                                let actions: Eff<'R, (string * int) option> =
+                                    eff {
+                                        let mutable stop = None
+                                        let mutable snapshot = None
 
-                                    match verdict with
-                                    | LoopVerdict.Stop count when stop.IsNone -> stop <- Some(toolCall.Name, count)
-                                    | LoopVerdict.Warn count ->
-                                        state.Notes <- state.Notes @ [ Instructions.loopWarning count ]
-                                    | _ -> ()
+                                        for index, toolCall in List.indexed calls do
+                                            let decoded =
+                                                if state.Outcome.IsSome then
+                                                    None
+                                                else
+                                                    Some(Tools.decode surface toolCall)
 
-                            if state.Outcome.IsNone then
-                                if cut then
-                                    if settings.LengthCut = LengthPolicy.Fail then
-                                        state.Outcome <- Some(Error "the model's reply was cut at the output limit")
+                                            // The workspace before the step's first action.
+                                            match decoded, snapshot with
+                                            | Some(Ok _), None ->
+                                                let! before = snapshotOf hands settings $"{prefix} step {step}"
+                                                snapshot <- Some before
+                                            | _ -> ()
+
+                                            let! executed, finished =
+                                                match decoded with
+                                                | None ->
+                                                    Eff.ret (
+                                                        {
+                                                            Pieces = Receipts.skipped
+                                                            IsError = true
+                                                        },
+                                                        None
+                                                    )
+                                                | Some(Error message) ->
+                                                    Eff.ret (
+                                                        {
+                                                            Pieces = Receipts.failed message
+                                                            IsError = true
+                                                        },
+                                                        None
+                                                    )
+                                                | Some(Ok action) ->
+                                                    let call: CallRef =
+                                                        {
+                                                            Turn = start.Turn
+                                                            Step = step
+                                                            Index = index + 1
+                                                            Id = toolCall.Id
+                                                            Attempt = 1
+                                                        }
+
+                                                    runAction
+                                                        prefix
+                                                        hands
+                                                        kernel
+                                                        settings
+                                                        limits
+                                                        call
+                                                        toolCall
+                                                        action
+                                                        (snapshot |> Option.flatten)
+
+                                            do!
+                                                record
+                                                    $"step/{step}/receipt/{index + 1}"
+                                                    (ContextEvent.Returned
+                                                        {
+                                                            Turn = start.Turn
+                                                            Step = step
+                                                            Call = Some toolCall.Id
+                                                            Name = toolCall.Name
+                                                            Pieces = executed.Pieces
+                                                            IsError = executed.IsError
+                                                        })
+
+                                            match finished with
+                                            | Some result -> state.Outcome <- Some(Ok result)
+                                            | None ->
+                                                let print =
+                                                    LoopGuard.fingerprint
+                                                        toolCall.Name
+                                                        toolCall.Arguments
+                                                        executed.Pieces
+
+                                                let guard, verdict =
+                                                    LoopGuard.observe settings.LoopRepeats print state.Guard
+
+                                                state.Guard <- guard
+
+                                                match verdict with
+                                                | LoopVerdict.Stop count when stop.IsNone ->
+                                                    stop <- Some(toolCall.Name, count)
+                                                | LoopVerdict.Warn count ->
+                                                    state.Notes <- state.Notes @ [ Instructions.loopWarning count ]
+                                                | _ -> ()
+
+                                        return stop
+                                    }
+
+                                // Compaction prepared in the background (spec §5): when the prompt reached
+                                // the threshold, the model summarizes the oldest history while the actions
+                                // run; the next call records it first.
+                                let background =
+                                    match settings.Compaction.Mode, window with
+                                    | CompactionMode.Auto, Some w when not state.AutoFailed ->
+                                        let used =
+                                            if response.Usage.Input > 0 then
+                                                int64 response.Usage.Input + int64 response.Usage.Output
+                                            else
+                                                int64 (Tokens.ofRequest request) + int64 response.Usage.Output
+
+                                        if used * 100L >= int64 w * int64 settings.Compaction.Threshold then
+                                            let keep, fits = budgetOf settings window (int (min used 2000000000L))
+
+                                            Compaction.choose
+                                                keep
+                                                fits
+                                                (Compaction.cuts transcript rendered template.Tools)
+                                        else
+                                            None
+                                    | _ -> None
+
+                                let! stop =
+                                    match background with
+                                    | None -> actions
+                                    | Some cut ->
+                                        eff {
+                                            let! stop, prepared =
+                                                Eff.both actions (prepare settings cfg template rendered cut)
+
+                                            match prepared with
+                                            | Ok summary -> state.Prepared <- Some summary
+                                            | Error _ -> state.AutoFailed <- true
+
+                                            return stop
+                                        }
+
+                                if state.Outcome.IsNone then
+                                    if cut then
+                                        if settings.LengthCut = LengthPolicy.Fail then
+                                            state.Outcome <- Some(Error "the model's reply was cut at the output limit")
+                                        else
+                                            state.Cuts <- state.Cuts + 1
+
+                                            if state.Cuts > settings.LengthRetries then
+                                                state.Outcome <-
+                                                    Some(
+                                                        Error
+                                                            $"the model's replies were cut at the output limit {state.Cuts} times in a row"
+                                                    )
+                                            else
+                                                state.Notes <- state.Notes @ [ Instructions.lengthCut ]
                                     else
-                                        state.Cuts <- state.Cuts + 1
+                                        state.Cuts <- 0
 
-                                        if state.Cuts > settings.LengthRetries then
+                                if state.Outcome.IsNone then
+                                    match stop with
+                                    | Some(tool, count) ->
+                                        let! asked =
+                                            ask
+                                                context
+                                                step
+                                                "loop"
+                                                $"The agent did the same thing ({tool}) {count} times with the same result and stopped. How should it go on?"
+
+                                        state.Outcome <- Some asked
+                                    | None ->
+                                        match response.Stop with
+                                        | StopReason.ContextWindow when settings.Compaction.Mode = CompactionMode.Off ->
                                             state.Outcome <-
                                                 Some(
                                                     Error
-                                                        $"the model's replies were cut at the output limit {state.Cuts} times in a row"
+                                                        "the context window filled up during the model's reply, and compaction is off"
                                                 )
-                                        else
-                                            state.Notes <- state.Notes @ [ Instructions.lengthCut ]
-                                else
-                                    state.Cuts <- 0
+                                        | StopReason.ContextWindow -> state.Force <- true
+                                        | StopReason.Refusal
+                                        | StopReason.ContentFilter when calls.IsEmpty ->
+                                            let text = textOf response.Parts
 
-                            if state.Outcome.IsNone then
-                                match stop with
-                                | Some(tool, count) ->
-                                    let! asked =
-                                        ask
-                                            context
-                                            step
-                                            "loop"
-                                            $"The agent did the same thing ({tool}) {count} times with the same result and stopped. How should it go on?"
+                                            state.Outcome <- Some(Error $"the model refused ({response.Stop}): {text}")
+                                        | StopReason.Pause when calls.IsEmpty -> ()
+                                        | _ when calls.IsEmpty && not cut ->
+                                            let text = textOf response.Parts
 
-                                    state.Outcome <- Some asked
-                                | None ->
-                                    match response.Stop with
-                                    | StopReason.ContextWindow ->
-                                        state.Outcome <-
-                                            Some(
-                                                Error
-                                                    "the context window filled up during the model's reply: the conversation needs compaction"
-                                            )
-                                    | StopReason.Refusal
-                                    | StopReason.ContentFilter when calls.IsEmpty ->
-                                        let text = textOf response.Parts
-
-                                        state.Outcome <- Some(Error $"the model refused ({response.Stop}): {text}")
-                                    | StopReason.Pause when calls.IsEmpty -> ()
-                                    | _ when calls.IsEmpty && not cut ->
-                                        let text = textOf response.Parts
-
-                                        match settings.TextOnly with
-                                        | TextOnlyPolicy.Nudge when not state.Nudged ->
-                                            state.Nudged <- true
-                                            state.Notes <- state.Notes @ [ Instructions.nudge ]
-                                        | TextOnlyPolicy.Done when
-                                            (Ensure.all settings.Evidence history.State
-                                             |> List.collect (fun check -> check (TurnResult.Done(text, [], None))))
-                                                .IsEmpty
-                                            ->
-                                            state.Outcome <- Some(Ok(TurnResult.Done(text, [], None)))
+                                            match settings.TextOnly with
+                                            | TextOnlyPolicy.Nudge when not state.Nudged ->
+                                                state.Nudged <- true
+                                                state.Notes <- state.Notes @ [ Instructions.nudge ]
+                                            | TextOnlyPolicy.Done when
+                                                (Ensure.all settings.Evidence history.State
+                                                 |> List.collect (fun check -> check (TurnResult.Done(text, [], None))))
+                                                    .IsEmpty
+                                                ->
+                                                state.Outcome <- Some(Ok(TurnResult.Done(text, [], None)))
+                                            | _ ->
+                                                let! asked = ask context step "reply" text
+                                                state.Outcome <- Some asked
                                         | _ ->
-                                            let! asked = ask context step "reply" text
-                                            state.Outcome <- Some asked
-                                    | _ ->
-                                        let left = settings.MaxSteps - step
+                                            let left = settings.MaxSteps - step
 
-                                        if left = 3 then
-                                            state.Notes <- state.Notes @ [ Instructions.budgetWarning left ]
+                                            if left = 3 then
+                                                state.Notes <- state.Notes @ [ Instructions.budgetWarning left ]
+
+                // The turn ends: a summary prepared during its last step, or one its last cell asked for,
+                // is recorded now, so the next turn starts compacted.
+                let asked = asks.TakeCompact()
+
+                if state.Prepared.IsSome || asked.IsSome then
+                    let! transcript = reload
+
+                    match state.Prepared, state.Shape with
+                    | Some summary, _ ->
+                        state.Prepared <- None
+                        let! _ = collapse record reload state transcript summary
+                        ()
+                    | None, Some(cfg, live, template) when settings.Compaction.Mode <> CompactionMode.Off ->
+                        let rendered = Render.render cfg transcript { live with Notes = [] }
+
+                        let! _ =
+                            compactNow
+                                record
+                                reload
+                                state
+                                window
+                                cfg
+                                template
+                                (transcript, rendered)
+                                (Option.flatten asked)
+
+                        ()
+                    | _ -> ()
 
                 return state.Outcome.Value
         }

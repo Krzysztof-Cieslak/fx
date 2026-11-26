@@ -96,3 +96,27 @@ module Instructions =
     /// When a turn has few steps left.
     let budgetWarning (left: int) : Block =
         note "budget" $"[Note: this turn has {left} steps left. Finish, or reply with what is left to do.]"
+
+    /// What a summary request asks after the conversation (compaction, spec §5): a summary that
+    /// replaces the conversation so far in the model's context, written as plain text.
+    let summarize (focus: string option) : string =
+        lines
+            [
+                "[Compaction: your context is filling up. Everything above this note will be replaced in your context by a summary you write now; what comes after it stays as it is. Reply with that summary only, as plain text, and call no tool.]"
+                ""
+                "Write it for yourself, to go on with the work without the details:"
+                "- the user's requests and instructions (quote short ones), and decisions made and why;"
+                "- what you did and found: the files you read and changed (their paths), the commands that mattered and what they showed, errors and how they were solved;"
+                "- the current state, and what is left to do, in order;"
+                $"- the cells and tool calls whose values or results you may need again, by id: `{g}.recall(id)` gives back a cell's value."
+                match focus with
+                | Some focus when not (System.String.IsNullOrWhiteSpace focus) ->
+                    ""
+                    "Keep in particular: " + focus.Trim()
+                | _ -> ()
+            ]
+
+    /// After the model asked to compact and it did not happen (nothing to summarize yet, or the summary
+    /// failed).
+    let compactionFailed (reason: string) : Block =
+        note "compaction" $"[Note: the conversation was not compacted: {reason}.]"
