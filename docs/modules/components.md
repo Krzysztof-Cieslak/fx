@@ -140,11 +140,17 @@ The root is given by the composition root: `InstallRoot.defaultFor` is `~/.fx/ru
 2. **Inspect**: an install directory whose receipt matches the key is installed (perhaps by another
    installer): `Found`, with no approval and no download.
 3. **Ask**: the first install of a component is a **grant** (spec §13). `InstallerSettings.Approve`
-   answers it: the caller asks a person or applies a policy (default "ask"); tests approve. Approval
-   is per component id and journaled (`Approved`), so a restart does not ask again and upgrades
-   need none. `Approvals.viaGrants grants requester context` is the callback over the grants log
-   ([grants.md](grants.md)): it asks `component.install` on `<id>@<version>` (keyed by the install,
-   suggesting `<id>@*`) and waits for a person if the rules say ask; the composition root passes it.
+   answers it for an attempt (`ApprovalRequest`: the install, the holder whose `Ensure` started the
+   attempt, and the attempt): the caller asks a person or applies a policy (default "ask"); tests
+   approve. Approval is per component id and journaled (`Approved`), so a restart does not ask again
+   and upgrades need none. `Approvals.viaGrants grants requester context` is the callback over the
+   grants log ([grants.md](grants.md)): it asks `component.install` on `<id>@<version>`, suggesting
+   `<id>@*`, and waits for a person if the rules say ask; the composition root passes it. Its key is
+   what asks, `component.install/<install>/<holder>/<attempt>` (`Approvals.key`): the same attempt
+   asking again is the same request, while a later attempt or another holder (the environment of a
+   later run) is a new one, so an answer ("once", or a request withdrawn because nobody could answer)
+   is final for its attempt only. The prompt's evidence shows the sizes as people read them
+   (`Approvals.sizes`: `download 51.9 MiB, installed 110.0 MiB`).
 4. **Fetch** (under the install's lock): an install that appeared meanwhile is `Found`. Otherwise
    an archive left by an earlier attempt is reused if its digest matches; else it downloads to
    `.partial`, checks the SHA-256 computed while writing, and renames it into place. Network errors,

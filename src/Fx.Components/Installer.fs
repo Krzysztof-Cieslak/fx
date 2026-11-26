@@ -58,6 +58,21 @@ type ApprovalAnswer =
         | Approved by -> $"approved by {by}"
         | Rejected reason -> $"rejected: {reason}"
 
+/// What an install asks a person to approve (spec §6.1, §13): the install, and what asked for it.
+/// The holder and the attempt tell one asking from another, so an answer for one attempt (once,
+/// or nobody could answer) never stands in for a later one.
+type ApprovalRequest =
+    {
+        Spec: InstallSpec
+        /// The holder whose `Ensure` started this attempt, e.g. `environment:<id>`.
+        Holder: string
+        /// The installer's attempt at the install: 1, then one more for each try after a failure.
+        Attempt: int
+    }
+
+    override this.ToString() =
+        $"{this.Spec.Key} for {this.Holder} (attempt {this.Attempt})"
+
 /// A downloaded archive whose digest matched.
 type FetchedArchive =
     {
@@ -86,6 +101,8 @@ type InstalledInfo =
 type InstallProgress =
     {
         Spec: InstallSpec
+        /// The holder whose `Ensure` started this attempt.
+        Holder: string
         Attempt: int
         Step: InstallStep
         /// The verified archive, once fetched.
@@ -215,7 +232,7 @@ type InstallerIntent =
     /// sharing the root prunes them.
     | Publish of keys: InstallKey list
     | Inspect of spec: InstallSpec
-    | Ask of spec: InstallSpec
+    | Ask of request: ApprovalRequest
     | Fetch of spec: InstallSpec
     | Build of spec: InstallSpec * archive: FetchedArchive
     | Sweep of round: int
@@ -224,7 +241,7 @@ type InstallerIntent =
         match this with
         | Publish keys -> $"publish {keys.Length} roots"
         | Inspect spec -> $"inspect {spec.Key}"
-        | Ask spec -> $"ask to install {spec.Key}"
+        | Ask request -> $"ask to install {request}"
         | Fetch spec -> $"fetch {spec.Key}"
         | Build(spec, _) -> $"build {spec.Key}"
         | Sweep round -> $"sweep (round {round})"
@@ -268,7 +285,7 @@ module Installer =
 
     let evolve (state: InstallerState) (event: InstallerEvent) : InstallerState =
         match event with
-        | InstallerEvent.Requested(_, spec, attempt) ->
+        | InstallerEvent.Requested(holder, spec, attempt) ->
             { state with
                 Installs =
                     state.Installs.Add(
@@ -276,6 +293,7 @@ module Installer =
                         InProgress
                             {
                                 Spec = spec
+                                Holder = holder
                                 Attempt = attempt
                                 Step = InstallStep.Inspecting
                                 Archive = None
@@ -370,6 +388,14 @@ module Installer =
                         | _ -> true)
             }
 
+    /// What an install that awaits approval asks.
+    let approval (progress: InstallProgress) : ApprovalRequest =
+        {
+            Spec = progress.Spec
+            Holder = progress.Holder
+            Attempt = progress.Attempt
+        }
+
     let private stale (key: InstallKey) (what: string) =
         reject "installer.stale" $"{key} is not {what}; this result is from an earlier attempt"
 
@@ -451,7 +477,7 @@ module Installer =
             | None -> []
         | InstallerEvent.ApprovalRequested key ->
             match stepIs state key InstallStep.AwaitingApproval with
-            | Some p -> [ InstallerIntent.Ask p.Spec ]
+            | Some p -> [ InstallerIntent.Ask(approval p) ]
             | None -> []
         | InstallerEvent.Approved(id, _) ->
             // Every install of the component that waited for this approval goes on.
@@ -490,7 +516,7 @@ module Installer =
                 | InProgress p ->
                     match p.Step, p.Archive with
                     | InstallStep.Inspecting, _ -> Some(InstallerIntent.Inspect p.Spec)
-                    | InstallStep.AwaitingApproval, _ -> Some(InstallerIntent.Ask p.Spec)
+                    | InstallStep.AwaitingApproval, _ -> Some(InstallerIntent.Ask(approval p))
                     | InstallStep.Fetching, _ -> Some(InstallerIntent.Fetch p.Spec)
                     | InstallStep.Building, Some archive -> Some(InstallerIntent.Build(p.Spec, archive))
                     // `Fetched` records the archive with the step, so this does not happen.

@@ -109,9 +109,9 @@ type InstallerSettings<'R> =
         /// This installer's name among the installers sharing the root (its roots file), e.g. the
         /// host's or environment's id. Two installers running at once must not share a name.
         Name: string
-        /// Answers the first-install grant (spec §13). The caller decides: ask a person, apply a
-        /// policy, or approve (tests). The grants log (T123) takes this over.
-        Approve: InstallSpec -> Eff<'R, ApprovalAnswer>
+        /// Answers the first-install grant (spec §13) of an install attempt. The caller decides: ask a
+        /// person (`Approvals.viaGrants`), apply a policy, or approve (tests).
+        Approve: ApprovalRequest -> Eff<'R, ApprovalAnswer>
         Limits: ExtractLimits
         MaxDownloadBytes: int64
         /// Tries per download when failures are transient (network errors, HTTP 5xx and 429).
@@ -131,7 +131,11 @@ type InstallerSettings<'R> =
 
 module InstallerSettings =
     /// Settings with the default limits and timeouts.
-    let create (root: string) (name: string) (approve: InstallSpec -> Eff<'R, ApprovalAnswer>) : InstallerSettings<'R> =
+    let create
+        (root: string)
+        (name: string)
+        (approve: ApprovalRequest -> Eff<'R, ApprovalAnswer>)
+        : InstallerSettings<'R> =
         {
             Root = root
             Name = name
@@ -266,10 +270,10 @@ module Pipeline =
             return [ InstallerCommand.Inspected(spec.Key, found) ]
         }
 
-    let private ask<'R> (settings: InstallerSettings<'R>) (spec: InstallSpec) : Eff<'R, InstallerCommand list> =
+    let private ask<'R> (settings: InstallerSettings<'R>) (request: ApprovalRequest) : Eff<'R, InstallerCommand list> =
         eff {
-            let! answer = settings.Approve spec
-            return [ InstallerCommand.Answered(spec.Key, answer) ]
+            let! answer = settings.Approve request
+            return [ InstallerCommand.Answered(request.Spec.Key, answer) ]
         }
 
     /// Downloads into `.partial`, checks the digest, then renames it into place. Retries transient
@@ -741,7 +745,7 @@ module Pipeline =
         match intent with
         | InstallerIntent.Publish keys -> publish settings keys
         | InstallerIntent.Inspect spec -> inspect settings spec
-        | InstallerIntent.Ask spec -> ask settings spec
+        | InstallerIntent.Ask request -> ask settings request
         | InstallerIntent.Fetch spec -> fetch settings spec
         | InstallerIntent.Build(spec, archive) -> build settings spec archive
         | InstallerIntent.Sweep round -> sweep settings round
