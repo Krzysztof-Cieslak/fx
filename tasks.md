@@ -364,6 +364,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a done
+  class T206 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -437,7 +438,7 @@ flowchart LR
 | T203 | Smart previews | T201, T202 | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
 | T204 | Anchored edits + guard | T201, T202, T126 | §6.8 | todo | `fx.fs.edit` with anchors, stale detection, fresh anchors; edit guard over `SeenRanges` with off/warn/require modes. |
 | T205 | Activity, diffs, undo | T111, T127 | §6.5, §5 | todo | Semantic activity events, per-cell workspace diffs, step snapshots, two-phase undo of agent-attributed changes. |
-| T206 | Steering + compaction | T126, T127 | §5 | todo | Steer vs queue at step boundaries; `Collapsed` compaction with cache-sharing summaries, background preparation, model-callable APIs. |
+| T206 | Steering + compaction | T126, T127 | §5 | in-progress | Steer vs queue at step boundaries; `Collapsed` compaction with cache-sharing summaries, background preparation, model-callable APIs. |
 | T207 | openai.chat | T118 | §10.1 | todo | Chat Completions adapter for local models and gateways; passes wire conformance. |
 | T208 | Catalog + probes + roles | T106, T118, T123 | §10.4 | todo | Bundled catalog + live discovery, `fx connect` probes, model roles as variant slots, fallback chains (paid fallback = grant). |
 | T209 | Sign in with ChatGPT | T120, T121 | §10.5 | todo | `oauth_pkce` method + SIWC provider with enforced request constraints and per-host ID. |
