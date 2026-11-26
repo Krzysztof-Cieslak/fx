@@ -99,4 +99,55 @@ let tests =
                 let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
                 Expect.isTrue final.Quitting "quit"
                 Expect.equal sent.Count 1 "one command"
+
+            testCase "the mouse wheel scrolls the transcript; while scrolled up, new output leaves the view where it is"
+            <| fun () ->
+                let tty = FakeTty(40, 14)
+
+                let env =
+                    {
+                        Clock = SystemClock.clock
+                        Tty = tty.Tty
+                        Scope = Scope.root
+                    }
+
+                let inbox = Inbox<Msg>()
+                let interpret (_: Cmd) : Eff<TestEnv, unit> = eff { return () }
+                // The session `Screens.finished` shows, to go on with.
+                let s, _ = finishedTurn ()
+
+                let start =
+                    { Screens.finished 40 14 with
+                        Now = (SystemClock.clock.Now()).UnixMicroseconds
+                    }
+
+                let footer () = List.last tty.Lines
+                let running = Eff.run env (Runtime.run inbox interpret start)
+                waitFor tty "the footer" (fun _ -> (footer ()).Contains "● idle")
+
+                for msg in s.Prompt "now update the changelog" do
+                    inbox.Post msg
+
+                inbox.Post(Msg.Streaming(s.Running, true, "first", None))
+                waitFor tty "what the model writes" (fun text -> text.Contains "first")
+                // Two notches up, in one read, the second cut short; then a key, drawn once they were.
+                tty.Type "\u001b[<64;5;5M\u001b[<64;5"
+                tty.Type ";5Mx"
+                waitFor tty "the key typed" (fun text -> text.Contains "› x")
+                Expect.stringContains (footer ()) "↑ scrolled" "the indicator"
+                Expect.isFalse (tty.Text.Contains "first") "scrolled away from the end"
+                let top = tty.Lines |> List.take 8
+                inbox.Post(Msg.Streaming(s.Running, false, "\n\nsecond\n\nthird", None))
+                // Typed after the output came, so drawn after it.
+                tty.Type "y"
+                waitFor tty "the key typed" (fun text -> text.Contains "› xy")
+                Expect.equal (tty.Lines |> List.take 8) top "the view stays where it was"
+                tty.Type(String.replicate 6 "\u001b[<65;5;5M")
+                waitFor tty "the end again" (fun text -> text.Contains "third")
+                Expect.isFalse ((footer ()).Contains "↑") "no indicator at the end"
+                inbox.Post(Msg.Streaming(s.Running, false, "\n\nfourth", None))
+                waitFor tty "new output, followed" (fun text -> text.Contains "fourth")
+                tty.Type "\u0003\u0003"
+                let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
+                Expect.isTrue final.Quitting "quit"
         ]
