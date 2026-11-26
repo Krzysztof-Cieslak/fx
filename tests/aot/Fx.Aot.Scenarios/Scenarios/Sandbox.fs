@@ -352,6 +352,62 @@ let private live =
                             }
                     }
 
+                // T135: a confined process lives until it ends, also when the thread that started it
+                // ends first (bubblewrap's --die-with-parent ties it to that thread).
+                let outlives () : string =
+                    let talker =
+                        { request with
+                            Process =
+                                { request.Process with
+                                    Program = Program.Script "echo ready; read line; echo \"got $line\""
+                                }
+                        }
+
+                    match driver.Wrap talker with
+                    | Error e -> failwith e
+                    | Ok spec ->
+                        let output = System.Text.StringBuilder()
+
+                        let readUntil (proc: Proc) (stop: string -> bool) =
+                            let mutable reading = true
+
+                            while reading do
+                                match wait (proc.Read Threading.CancellationToken.None) with
+                                | Some(Stdout bytes) ->
+                                    output.Append(System.Text.Encoding.UTF8.GetString bytes) |> ignore
+                                    reading <- not (stop (output.ToString()))
+                                | Some(Stderr _) -> ()
+                                | None -> reading <- false
+
+                        let mutable spawned = None
+
+                        let asker =
+                            Threading.Thread(fun () ->
+                                match wait (shell.Spawn spec Threading.CancellationToken.None) with
+                                | Ok proc ->
+                                    readUntil proc (fun text -> text.Contains "ready")
+                                    spawned <- Some proc
+                                | Error e -> failwith (string e))
+
+                        asker.Start()
+
+                        if not (asker.Join(TimeSpan.FromSeconds 60.0)) then
+                            failwith "the process did not start"
+
+                        Threading.Thread.Sleep 500
+
+                        match spawned with
+                        | None -> failwith "nothing was spawned"
+                        | Some proc ->
+                            wait (
+                                proc.Write (System.Text.Encoding.UTF8.GetBytes "x\n") Threading.CancellationToken.None
+                            )
+
+                            wait (proc.CloseStdin())
+                            readUntil proc (fun _ -> false)
+                            let code = wait (proc.Wait Threading.CancellationToken.None)
+                            $"outlives the thread that started it: {escape (output.ToString())} exit {code}"
+
                 match driver.Wrap request with
                 | Error e -> failwith e
                 | Ok spec ->
@@ -365,6 +421,7 @@ let private live =
                             "stdout " + escape (Output.stdoutText output)
                             $"exit {output.ExitCode}"
                             $"outside written {written}"
+                            outlives ()
                         ]
         finally
             try

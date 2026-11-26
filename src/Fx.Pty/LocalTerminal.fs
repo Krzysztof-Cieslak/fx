@@ -15,17 +15,23 @@ module LocalTerminal =
         else
             ShellSpec.posix
 
-    /// Starts one process on a new terminal.
-    let spawn (shell: ShellSpec) (cwd: string) (spec: PtySpec) : Result<Pty, PtyError> =
+    /// Starts one process on a new terminal, on the starter thread (`ProcessStarter`): never on the
+    /// caller's, which may be a thread-pool thread that ends while the process runs.
+    let private start (shell: ShellSpec) (cwd: string) (spec: PtySpec) : Task<Result<Pty, PtyError>> =
         if not (PtySize.isValid spec.Size) then
-            Error(InvalidSize spec.Size)
+            Task.FromResult(Error(InvalidSize spec.Size))
         else
             let info = StartInfo.create shell cwd spec
 
-            if OperatingSystem.IsWindows() then
-                WindowsPty.spawn info spec.Size
-            else
-                UnixPty.spawn info spec.Size
+            ProcessStarter.run (fun () ->
+                if OperatingSystem.IsWindows() then
+                    WindowsPty.spawn info spec.Size
+                else
+                    UnixPty.spawn info spec.Size)
+
+    /// Starts one process on a new terminal, and waits until it has started.
+    let spawn (shell: ShellSpec) (cwd: string) (spec: PtySpec) : Result<Pty, PtyError> =
+        (start shell cwd spec).GetAwaiter().GetResult()
 
     /// A terminal that runs `Script` programs with `shell` and starts processes in `cwd` unless a
     /// spec says otherwise.
@@ -36,5 +42,5 @@ module LocalTerminal =
                     if cancellation.IsCancellationRequested then
                         Task.FromCanceled<Result<Pty, PtyError>> cancellation
                     else
-                        Task.FromResult(spawn shell cwd spec)
+                        start shell cwd spec
         }

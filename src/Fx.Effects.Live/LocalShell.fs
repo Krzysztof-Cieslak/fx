@@ -53,18 +53,21 @@ module LocalShell =
 
         info
 
-    let private start (info: ProcessStartInfo) : Result<Process, ShellError> =
+    /// Starts a process on the starter thread (`ProcessStarter`): never on the caller's, which may be a
+    /// thread-pool thread that ends while the process runs.
+    let private start (info: ProcessStartInfo) : Task<Result<Process, ShellError>> =
         let notStarted (reason: string) =
             Error(NotStarted(info.FileName, reason))
 
-        try
-            match Process.Start info with
-            | null -> notStarted "the process did not start"
-            | proc -> Ok proc
-        with
-        | :? Win32Exception as e -> notStarted e.Message
-        | :? IOException as e -> notStarted e.Message
-        | :? InvalidOperationException as e -> notStarted e.Message
+        ProcessStarter.run (fun () ->
+            try
+                match Process.Start info with
+                | null -> notStarted "the process did not start"
+                | proc -> Ok proc
+            with
+            | :? Win32Exception as e -> notStarted e.Message
+            | :? IOException as e -> notStarted e.Message
+            | :? InvalidOperationException as e -> notStarted e.Message)
 
     /// Copies a stream into the channel until it ends.
     let private pump (stream: Stream) (chunk: byte array -> OutputChunk) (output: ChannelWriter<OutputChunk>) =
@@ -182,17 +185,20 @@ module LocalShell =
                     if cancellation.IsCancellationRequested then
                         Task.FromCanceled<Result<Output, ShellError>> cancellation
                     else
-                        match start (startInfo shell cwd command.Spec) with
-                        | Error e -> Task.FromResult(Error e)
-                        | Ok proc ->
-                            task {
+                        task {
+                            match! start (startInfo shell cwd command.Spec) with
+                            | Error e -> return Error e
+                            | Ok proc ->
                                 let! output = Proc.collect (ofProcess proc) command.Stdin cancellation
                                 return Ok output
-                            }
+                        }
             Spawn =
                 fun spec cancellation ->
                     if cancellation.IsCancellationRequested then
                         Task.FromCanceled<Result<Proc, ShellError>> cancellation
                     else
-                        Task.FromResult(start (startInfo shell cwd spec) |> Result.map ofProcess)
+                        task {
+                            let! started = start (startInfo shell cwd spec)
+                            return started |> Result.map ofProcess
+                        }
         }

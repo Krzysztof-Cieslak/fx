@@ -130,6 +130,12 @@ brackets; all definitions in `EnvProtocol`):
 - Processes envd started die with it only if it stops cleanly (end of input on stdio): a killed envd
   leaves them running. Containment is the sandbox drivers' ([sandbox.md](sandbox.md)): with bubblewrap
   a sandboxed process dies with envd (`--die-with-parent`, a pid namespace per process).
+- **Processes start on one thread that lives as long as envd** (`ProcessStarter`, in `LocalShell` and in
+  `Fx.Pty`'s `LocalTerminal`; T135). On Linux, `--die-with-parent` (`PR_SET_PDEATHSIG`) ties a process to
+  the *thread* that forked it, not to envd: started from a thread-pool thread, a sandboxed process got
+  SIGKILL when the pool retired that thread after 20 seconds idle, which killed sessions' kernels between
+  turns. Never start a process another way (the conformance suites start one from a thread that ends
+  and check that it lives on).
 - envd does not sandbox: the host wraps each process it asks envd to start for an agent
   (`EnvHandle.Client`, [sandbox.md](sandbox.md)); envd's own processes (git) and file operations run
   as envd does.
