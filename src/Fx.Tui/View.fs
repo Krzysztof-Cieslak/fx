@@ -911,10 +911,10 @@ module View =
         else
             Row.fill width { t.Text with Bg = t.Background } row |> Row.normalize
 
-    /// The main column: the warnings, the transcript from the top, what is asked, the prompts
-    /// waiting, what happens, the prompt's box and the footer (painted, not lowered yet).
-    let private main (model: Model) (sidebar: bool) : Frame =
-        let t = theme model
+    /// The main column's parts, cut to fit its height: what does not fit goes, least important
+    /// first (the banner stays, the transcript shrinks). `Room` is the rows left for the transcript,
+    /// `All` the transcript's rows (with a row of margin above them).
+    let private layout (model: Model) (sidebar: bool) =
         let width = model.Width
         let height = model.Height
         let banner = banner model
@@ -952,8 +952,32 @@ module View =
             | [] -> []
             | rows -> Row.empty :: rows
 
-        let maxScroll = max 0 (all.Length - room)
-        let scroll = min model.Scroll maxScroll
+        {|
+            Banner = banner
+            Asked = asked
+            Pending = pending
+            Status = status
+            Editor = editor
+            Cursor = (cursorRow, cursorColumn)
+            Footer = footer
+            Room = room
+            All = all
+        |}
+
+    /// How far the transcript can be scrolled up: until its first row is at the top.
+    let private maxScroll (all: Row list) (room: int) = max 0 (all.Length - room)
+
+    /// The main column: the warnings, the transcript from the top, what is asked, the prompts
+    /// waiting, what happens, the prompt's box and the footer (painted, not lowered yet).
+    let private main (model: Model) (sidebar: bool) : Frame =
+        let t = theme model
+        let width = model.Width
+        let height = model.Height
+        let l = layout model sidebar
+        let banner, asked, pending, status, editor, footer = l.Banner, l.Asked, l.Pending, l.Status, l.Editor, l.Footer
+        let cursorRow, cursorColumn = l.Cursor
+        let room, all = l.Room, l.All
+        let scroll = min model.Scroll (maxScroll all room)
 
         let visible =
             all |> List.skip (max 0 (all.Length - room - scroll)) |> List.truncate room
@@ -1173,6 +1197,42 @@ module View =
         }
 
     /// The whole screen: the main column, with the sidebar at its right on a wide terminal.
+    /// The model as the next frame shows it: the scroll kept within the transcript (so scrolling back
+    /// down starts at once), and, while scrolled up, kept on the same rows as the transcript grows.
+    /// The runtime settles the model before each frame.
+    let settle (model: Model) : Model =
+        if isStart model then
+            model
+        else
+            let sidebar = hasSidebar model
+
+            let column =
+                if sidebar then
+                    { model with
+                        Width = model.Width - sidebarWidth
+                    }
+                else
+                    model
+
+            let l = layout column sidebar
+            let total = l.All.Length
+
+            let scroll =
+                if model.Scroll > 0 && model.TranscriptRows > 0 && total > model.TranscriptRows then
+                    model.Scroll + (total - model.TranscriptRows)
+                else
+                    model.Scroll
+
+            let scroll = min scroll (maxScroll l.All l.Room)
+
+            if scroll = model.Scroll && total = model.TranscriptRows then
+                model
+            else
+                { model with
+                    Scroll = scroll
+                    TranscriptRows = total
+                }
+
     let view (model: Model) : Frame =
         let t = theme model
 

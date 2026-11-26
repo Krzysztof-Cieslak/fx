@@ -320,6 +320,9 @@ type Model =
         Verbosity: Verbosity
         /// Rows the transcript is scrolled up from its end.
         Scroll: int
+        /// The transcript's rows when the model was last settled (`View.settle`): a scrolled view
+        /// stays on its rows as the transcript grows.
+        TranscriptRows: int
         Notice: Notice option
         /// When Ctrl+C was pressed with nothing to clear or interrupt: a second press soon exits.
         ExitArmed: int64 option
@@ -362,6 +365,7 @@ module App =
             History = None
             Verbosity = Verbosity.Normal
             Scroll = 0
+            TranscriptRows = 0
             Notice = None
             ExitArmed = None
             Count = 0
@@ -807,6 +811,9 @@ module App =
 
     let private transcriptPage (model: Model) = max 1 (model.Height / 2)
 
+    /// Rows one notch of the mouse wheel scrolls.
+    let private wheelRows = 3
+
     let private edit (key: Key) (model: Model) : Model * Cmd list =
         let editor = model.Editor
         let set (editor: Editor) = { model with Editor = editor }, []
@@ -897,8 +904,22 @@ module App =
                 },
                 []
             )
+        | KeyCode.WheelUp, _, _ ->
+            Some(
+                { model with
+                    Scroll = model.Scroll + wheelRows
+                },
+                []
+            )
+        | KeyCode.WheelDown, _, _ ->
+            Some(
+                { model with
+                    Scroll = max 0 (model.Scroll - wheelRows)
+                },
+                []
+            )
         | KeyCode.Char "o", true, false -> Some(cycleDetail model, [])
-        | KeyCode.Char "l", true, false -> Some(model, [ Cmd.Redraw ])
+        | KeyCode.Char "l", true, false
         | _ -> None
 
     let private onKey (key: Key) (model: Model) : Model * Cmd list =
