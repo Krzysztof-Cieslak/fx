@@ -75,6 +75,12 @@ let cli: Subject =
                     { case "replay without a session" [ "replay" ] with
                         MustSucceed = false
                     }
+                    case "grants --help" [ "grants"; "--help" ]
+                    { case
+                          "grants with a scope it does not offer"
+                          [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "repo" ] with
+                        MustSucceed = false
+                    }
                 ]
     }
 

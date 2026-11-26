@@ -93,7 +93,8 @@ module Headless =
 
     /// Puts each grant request of the run to the person, until cancelled: requests of its session (a
     /// turn's host calls, T127b) and requests of no session (the components the run installs). One the
-    /// person cannot answer (no terminal) is denied once, saying so.
+    /// person cannot answer (no terminal) is withdrawn by the host, saying so and how to allow it
+    /// beforehand: nobody answered it, so it is no person's answer, and the next run asks again.
     let private answering
         (host: Host)
         (by: Attribution)
@@ -114,19 +115,19 @@ module Headless =
             eff {
                 match notice.Event with
                 | GrantEvent.Requested request when ours request ->
-                    let! answer = Eff.ofTask (fun () -> io.Answer request)
+                    match! Eff.ofTask (fun () -> io.Answer request) with
+                    | Some answer ->
+                        match! GrantsService.answer host.Grants by request.Id answer with
+                        | Ok _ -> ()
+                        | Error(GrantError.NotPending _) -> ()
+                        | Error e -> io.Show $"  ✗ the answer to {request.Summary} was refused: {e}"
+                    | None ->
+                        io.Show(GrantPrompts.unasked request)
 
-                    let answer =
-                        match answer with
-                        | Some answer -> answer
-                        | None ->
-                            io.Show(GrantPrompts.deniedUnasked request)
-                            GrantPrompts.unanswered
-
-                    match! GrantsService.answer host.Grants by request.Id answer with
-                    | Ok _ -> ()
-                    | Error(GrantError.NotPending _) -> ()
-                    | Error e -> io.Show $"  ✗ the answer to {request.Summary} was refused: {e}"
+                        match! GrantsService.withdraw host.Grants request.Id GrantPrompts.Unanswered with
+                        | Ok _ -> ()
+                        | Error(GrantError.NotPending _) -> ()
+                        | Error e -> io.Show $"  ✗ {request.Summary} could not be withdrawn: {e}"
 
                     return true
                 | _ -> return true

@@ -42,11 +42,206 @@ let private run (host: Host) (request: RunRequest) (lines: ResizeArray<string>) 
         let shown = String.concat "\n" lines
         failtest $"the run failed: {e}; shown: {shown}"
 
+/// Downloads that fail: an install that gets past its approval stops at the download (no network).
+let private noDownloads: Fx.Components.Fetch =
+    {
+        Download = fun request _ -> Task.FromResult(Error(Fx.Components.FetchError.HttpStatus(request.Url, 404)))
+    }
+
+/// A run whose person answers grant requests with `answer` (`None`: nobody can, no terminal), keeping
+/// what was asked and shown.
+type private Terminal(answer: GrantAnswer option) =
+    let asked = ResizeArray<GrantRequest>()
+    let lines = ResizeArray<string>()
+
+    member _.Asked = lock asked (fun () -> List.ofSeq asked)
+    member _.Lines = lock lines (fun () -> List.ofSeq lines)
+
+    member _.Io: RunIo =
+        {
+            Show = fun line -> lock lines (fun () -> lines.Add line)
+            Answer =
+                fun request ->
+                    lock asked (fun () -> asked.Add request)
+                    Task.FromResult answer
+            Decide = fun card -> failtest $"no decision should be asked for: {card}"
+            Interrupt = CancellationToken.None
+        }
+
+let private reply (effect: GrantEffect) : GrantAnswer option =
+    Some
+        {
+            Effect = effect
+            Scope = ScopeChoice.Once
+            Resource = None
+            Expires = None
+            Reason = Some "at the terminal"
+        }
+
+/// One `fx run -p` in its own host process: the error it ended with (these runs never reach a turn).
+let private failedRun (options: HostOptions) (terminal: Terminal) : string =
+    let host = start options
+
+    try
+        match
+            waitFor
+                120.0
+                (Headless.run
+                    host
+                    {
+                        Prompt = "Install what you need"
+                        Session = None
+                        Title = None
+                    }
+                    terminal.Io
+                    CancellationToken.None)
+        with
+        | Error e -> e
+        | Ok outcome -> failtest $"the run ended {outcome}"
+    finally
+        stop host
+
+let private grantsCommand (options: HostOptions) (command: GrantsCommand) : string list =
+    match waitFor 60.0 (Commands.grants options command) with
+    | Ok lines -> lines
+    | Error errors -> failtest (String.concat "\n" errors)
+
 [<Tests>]
 let tests =
     testList
         "Host"
         [
+            testCase
+                "an install nobody can answer is withdrawn, never a person's denial: the next run asks again, in either order"
+            <| fun () ->
+                let p = place "headless-install"
+
+                let opts =
+                    { options p (Model()) [ "model.role.main", Json.String modelId ] with
+                        Fetch = noDownloads
+                    }
+
+                let installs (terminal: Terminal) =
+                    terminal.Asked
+                    |> List.filter (fun r -> r.Action.Value = "component.install")
+                    |> List.map (fun r -> r.Resource)
+
+                // Headless first: the request is withdrawn by the host, saying how to allow it beforehand.
+                let nobody = Terminal None
+                let e = failedRun opts nobody
+                Expect.stringContains e "not approved" "the install did not happen"
+                Expect.stringContains e "nobody could answer" "why"
+                Expect.isFalse (e.Contains "denied by") "nobody denied it"
+
+                let bun =
+                    match installs nobody with
+                    | [ resource ] -> resource
+                    | other -> failtest $"asked {other}"
+
+                Expect.stringStarts bun "bun@" "Bun"
+
+                Expect.isTrue
+                    (nobody.Lines
+                     |> List.exists (fun l ->
+                         l.Contains "needs a person's approval"
+                         && l.Contains $"`{Fx.Product.binaryName} grants allow component.install {bun}`"))
+                    $"the command to run beforehand: {nobody.Lines}"
+
+                // Then from a terminal: a person is asked again, and denies once.
+                let person = Terminal(reply GrantEffect.Deny)
+                let e = failedRun opts person
+                Expect.equal (installs person) [ bun ] "asked again"
+                Expect.stringContains e "denied by user:" "the person's denial"
+
+                // Once means once: the next run asks again, and the person allows it this time.
+                let person = Terminal(reply GrantEffect.Allow)
+                let e = failedRun opts person
+                Expect.equal (installs person) [ bun ] "asked again after a denial once"
+                Expect.stringContains e "download failed" "approved: the install went on to its download"
+
+                // A terminal first, headless next: the allowance was for that attempt only.
+                let nobody = Terminal None
+                let e = failedRun opts nobody
+                Expect.equal (installs nobody) [ bun ] "asked, nobody answered"
+                Expect.stringContains e "nobody could answer" "withdrawn again"
+
+                // The grants log records a person's answers only: the allowance once, spent; nothing for
+                // the requests nobody answered.
+                Expect.equal (grantsCommand opts (GrantsCommand.List false)) [ "no grants" ] "none in force"
+
+                match grantsCommand opts (GrantsCommand.List true) with
+                | [ line ] ->
+                    Expect.stringContains line $"allow component.install {bun}  (once:" line
+                    Expect.stringContains line "[spent]" line
+                | other -> failtest $"{other}"
+
+                // The person allows it beforehand: a headless run installs without asking anyone.
+                let made =
+                    grantsCommand
+                        opts
+                        (GrantsCommand.Grant(GrantEffect.Allow, "component.install", bun, GrantsScope.Host, None))
+
+                let id =
+                    match made with
+                    | [ line ] ->
+                        Expect.stringContains line $"allow component.install {bun}  (host) by user:local-os-user:" line
+                        line.Split(' ').[0]
+                    | other -> failtest $"{other}"
+
+                Expect.equal (grantsCommand opts (GrantsCommand.List false)) made "listed"
+
+                let nobody = Terminal None
+                let e = failedRun opts nobody
+                Expect.isEmpty nobody.Asked "nobody asked"
+                Expect.stringContains e "download failed" "approved by the grant"
+
+                Expect.equal (grantsCommand opts (GrantsCommand.Revoke(id, Some "done"))) [ $"revoked {id}" ] "revoked"
+
+                Expect.equal (grantsCommand opts (GrantsCommand.List false)) [ "no grants" ] "none in force"
+
+                match
+                    grantsCommand opts (GrantsCommand.List true)
+                    |> List.filter (fun l -> l.StartsWith id)
+                with
+                | [ line ] -> Expect.stringContains line "[revoked" "kept, revoked"
+                | other -> failtest $"{other}"
+
+            testCase "fx grants refuses what the grants log does not take, and waits for a running host"
+            <| fun () ->
+                let p = place "grants-command"
+                let opts = options p (Model()) []
+
+                let refused (command: GrantsCommand) =
+                    match waitFor 60.0 (Commands.grants opts command) with
+                    | Ok lines -> failtest $"granted: {lines}"
+                    | Error errors -> String.concat "\n" errors
+
+                Expect.stringContains
+                    (refused (GrantsCommand.Grant(GrantEffect.Allow, "install", "bun@*", GrantsScope.Host, None)))
+                    "not an action name"
+                    "a bad name"
+
+                Expect.stringContains
+                    (refused (GrantsCommand.Grant(GrantEffect.Allow, "nothing.known", "x", GrantsScope.Host, None)))
+                    "nothing.known"
+                    "an unknown action"
+
+                Expect.stringContains
+                    (refused (
+                        GrantsCommand.Grant(GrantEffect.Allow, "shell.exec", "ls", GrantsScope.Session "nope", None)
+                    ))
+                    "no session nope"
+                    "an unknown session"
+
+                Expect.stringContains (refused (GrantsCommand.Revoke("g-unknown", None))) "g-unknown" "an unknown grant"
+
+                let host = start opts
+
+                try
+                    Expect.stringContains (refused (GrantsCommand.List false)) "a host is running" "one writer"
+                finally
+                    stop host
+
             testCase "a host starts, signs in its OS user, and holds its data directory against a second host"
             <| fun () ->
                 let p = place "lock"

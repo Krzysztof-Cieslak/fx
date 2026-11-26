@@ -53,7 +53,7 @@ let private facts () : ProcessFacts =
     }
 
 /// Asks the person at the terminal to answer a grant request (what it asks, its evidence; once, for the
-/// session, or no); nobody can when input is redirected, and the run denies it once, saying so.
+/// session, or no); nobody can when input is redirected, and the run withdraws it, saying so.
 let private answer (request: GrantRequest) : Task<GrantAnswer option> =
     if Console.IsInputRedirected then
         Task.FromResult None
@@ -299,6 +299,21 @@ let private replay (args: Fx.Replay.ReplayArgs) : int =
             stderr.Write output.Stderr
             output.ExitCode
 
+/// `grants`: the person running it lists, makes or revokes grants on the data directory's grants log.
+let private grants (command: GrantsCommand) : int =
+    let facts = facts ()
+
+    match hostOptions facts [] with
+    | Error e -> fail [ e ]
+    | Ok options ->
+        match (Commands.grants options command).GetAwaiter().GetResult() with
+        | Error errors -> fail errors
+        | Ok lines ->
+            for line in lines do
+                stdout.WriteLine line
+
+            0
+
 /// `serve`: the host for the current directory, serving clients until Ctrl+C.
 let private serve (tcp: int option) : int =
     let facts = facts ()
@@ -384,5 +399,6 @@ let main argv =
     | Cli.Auth command -> auth command
     | Cli.Serve tcp -> serve tcp
     | Cli.Replay args -> replay args
+    | Cli.Grants command -> grants command
     | Cli.Tui(args, selections) -> tui (argv.Length = 0) args selections
     | Cli.Attach args -> attach args

@@ -66,6 +66,8 @@ type Command =
     | Serve of tcp: int option
     /// Replay a recorded session exactly and report the first difference (`replay <session>`).
     | Replay of Fx.Replay.ReplayArgs
+    /// List, make or revoke grants as the person running the command (`grants …`).
+    | Grants of GrantsCommand
     /// The TUI on a host in this process (`fx` with no command), with the command line's selections.
     | Tui of TuiArgs * selections: (string * Json) list
     /// The TUI of the host `fx serve` runs for this data directory.
@@ -82,6 +84,7 @@ type Command =
         | Serve None -> "serve"
         | Serve(Some port) -> $"serve --tcp {port}"
         | Replay args -> string args
+        | Grants command -> "grants " + string command
         | Tui(args, selections) -> $"{args} ({selections.Length} selections)"
         | Attach args -> "attach " + string args
 
@@ -114,6 +117,8 @@ let usage =
     + "      Runs the host for the current directory and serves clients on its local listener.\n"
     + $"  {bin} replay <session> [--json] [--stall <seconds>]\n"
     + "      Replays a recorded session exactly and reports the first difference from the recording.\n"
+    + $"  {bin} grants list [--all] | allow|deny <action> <pattern> [--scope host|session:<id>] | revoke <id>\n"
+    + "      Lists the grants, or grants or revokes one beforehand (e.g. allow component.install bun@1.4.5).\n"
     + $"  {bin} --help | --version | --build-info\n"
 
 let private envdUsage =
@@ -126,6 +131,12 @@ let private authUsage =
     "Usage:\n"
     + (AuthCommand.usage
        |> List.map (fun line -> "  " + line + "\n")
+       |> String.concat "")
+
+let private grantsUsage =
+    "Usage:\n"
+    + (GrantsCommand.usage
+       |> List.map (fun line -> $"  {bin} {line}\n")
        |> String.concat "")
 
 let private failure (message: string) (help: string) =
@@ -251,6 +262,48 @@ let private parseRun (args: string list) : Command =
         None
         args
 
+/// `grants` arguments.
+let private parseGrants (args: string list) : Command =
+    let granting (effect: Fx.Grants.GrantEffect) (action: string) (pattern: string) (rest: string list) =
+        let rec loop (scope: GrantsScope) (reason: string option) (args: string list) =
+            match args with
+            | [] -> Grants(GrantsCommand.Grant(effect, action, pattern, scope, reason))
+            | "--scope" :: "host" :: rest -> loop GrantsScope.Host reason rest
+            | "--scope" :: given :: rest when
+                given.StartsWith("session:", StringComparison.Ordinal)
+                && given.Length > "session:".Length
+                ->
+                loop (GrantsScope.Session(given.Substring "session:".Length)) reason rest
+            | "--scope" :: given :: _ -> failure $"--scope is host or session:<id>, not {given}" grantsUsage
+            | "--reason" :: text :: rest when text.Trim() <> "" -> loop scope (Some text) rest
+            | other :: _ -> failure $"unknown grants argument: {other}" grantsUsage
+
+        if action.StartsWith '-' || pattern.StartsWith '-' then
+            failure "grants allow and deny take an action and a pattern" grantsUsage
+        else
+            loop GrantsScope.Host None rest
+
+    match args with
+    | []
+    | [ "list" ] -> Grants(GrantsCommand.List false)
+    | [ "list"; "--all" ] -> Grants(GrantsCommand.List true)
+    | "allow" :: action :: pattern :: rest -> granting Fx.Grants.GrantEffect.Allow action pattern rest
+    | "deny" :: action :: pattern :: rest -> granting Fx.Grants.GrantEffect.Deny action pattern rest
+    | [ "revoke"; id ] when not (id.StartsWith '-') -> Grants(GrantsCommand.Revoke(id, None))
+    | [ "revoke"; id; "--reason"; reason ] when not (id.StartsWith '-') && reason.Trim() <> "" ->
+        Grants(GrantsCommand.Revoke(id, Some reason))
+    | [ "-h" ]
+    | [ "--help" ] ->
+        Print
+            {
+                ExitCode = 0
+                Stdout = grantsUsage
+                Stderr = ""
+            }
+    | _ ->
+        let given = String.concat " " args
+        failure $"grants takes list, allow, deny or revoke; got: {given}" grantsUsage
+
 let parse (args: string list) : Command =
     match args with
     | [] -> Tui(TuiArgs.defaults, [])
@@ -304,6 +357,7 @@ let parse (args: string list) : Command =
         match Fx.Replay.ReplayCommand.parse rest with
         | Ok args -> Replay args
         | Error e -> failure e Fx.Replay.ReplayCommand.usage
+    | "grants" :: rest -> parseGrants rest
     | "attach" :: rest -> parseTui true rest
     | first :: _ when first.StartsWith '-' -> parseTui false args
     | other ->

@@ -443,7 +443,7 @@ let tests =
             }
 
             testTask
-                "fx run -p: a turn's command asks the grants log, a person's answer lets it run; with nobody to answer it is denied" {
+                "fx run -p: a turn's command asks the grants log, a person's answer lets it run; nobody's answer is no answer, and a later run asks again" {
                 do! network.Force()
                 let p = place "grant"
                 let model = Model()
@@ -483,27 +483,24 @@ let tests =
                         "which turn and call asked"
                 | other -> failtest $"asked {other}"
 
-                // Nobody at a terminal: the next command is denied once, the cell fails, and the model
-                // reads why.
-                model.AddAll
-                    [
-                        $"// intent: make another\nawait {g}.shell.run(\"mkdir other\")"
-                        finish "Could not" "\"denied\""
-                    ]
+                // Nobody at a terminal: the next command's request is withdrawn (nobody denied it), the cell
+                // fails, and the model reads why.
+                let nobody () =
+                    let lines = ResizeArray<string>()
 
-                let lines = ResizeArray<string>()
+                    let io: RunIo =
+                        {
+                            Show = fun line -> lock lines (fun () -> lines.Add line)
+                            Answer = fun _ -> Task.FromResult None
+                            Decide = fun _ -> Task.FromResult None
+                            Interrupt = CancellationToken.None
+                        }
 
-                let nobody: RunIo =
-                    {
-                        Show = fun line -> lock lines (fun () -> lines.Add line)
-                        Answer = fun _ -> Task.FromResult None
-                        Decide = fun _ -> Task.FromResult None
-                        Interrupt = CancellationToken.None
-                    }
+                    lines, io
 
-                let host = start (options p model [])
+                let runAs (io: RunIo) (prompt: string) =
+                    let host = start (options p model [])
 
-                let second =
                     try
                         match
                             waitFor
@@ -511,11 +508,11 @@ let tests =
                                 (Headless.run
                                     host
                                     {
-                                        Prompt = "Make another"
+                                        Prompt = prompt
                                         Session = Some first.Session
                                         Title = None
                                     }
-                                    nobody
+                                    io
                                     CancellationToken.None)
                         with
                         | Ok outcome -> outcome
@@ -523,20 +520,62 @@ let tests =
                     finally
                         stop host
 
+                let other = $"// intent: make another\nawait {g}.shell.run(\"mkdir other\")"
+
+                let unanswered (lines: ResizeArray<string>) =
+                    lines
+                    |> Seq.exists (fun l ->
+                        l.Contains "nobody can answer here"
+                        && l.Contains $"grants allow shell.exec 'mkdir other'")
+
+                model.AddAll [ other; finish "Could not" "\"not answered\"" ]
+                let lines, io = nobody ()
+                let second = runAs io "Make another"
+
                 match second.Ending with
                 | TurnEnd.Completed(TurnResult.Done("Could not", _, _)) -> ()
                 | other -> failtest $"{other}"
 
                 Expect.isFalse (IO.Directory.Exists(p.File "other")) "nothing ran"
-
-                Expect.isTrue
-                    (lines |> Seq.exists (fun l -> l.Contains "nobody can answer here"))
-                    "the run says it denied the request"
+                Expect.isTrue (unanswered lines) "the run says nobody could answer, and how to allow it"
 
                 Expect.stringContains
                     (Fx.Effects.HttpRequest.bodyText (List.last model.Requests))
-                    "was denied"
-                    "the model reads the denial"
+                    "its grant request was not answered"
+                    "the model reads that nobody answered"
+
+                // Then from a terminal, the same command in a later run: a person is asked again.
+                model.AddAll [ other; finish "Made another" "\"mkdir other\"" ]
+
+                let once =
+                    Person
+                        {
+                            Effect = GrantEffect.Allow
+                            Scope = ScopeChoice.Once
+                            Resource = None
+                            Expires = None
+                            Reason = None
+                        }
+
+                let third = runAs (once.Io CancellationToken.None) "Make another, please"
+                Expect.equal (done' third once) "Made another" "done"
+                Expect.isTrue (IO.Directory.Exists(p.File "other")) "the command ran"
+
+                Expect.equal
+                    (once.Asked |> List.map (fun r -> r.Action.Value + " " + r.Resource))
+                    [ "shell.exec mkdir other" ]
+                    "asked again"
+
+                // A terminal first, headless next: the allowance was for that call only.
+                model.AddAll [ other; finish "Could not again" "\"not answered\"" ]
+                let lines, io = nobody ()
+                let fourth = runAs io "Once more"
+
+                match fourth.Ending with
+                | TurnEnd.Completed(TurnResult.Done("Could not again", _, _)) -> ()
+                | other -> failtest $"{other}"
+
+                Expect.isTrue (unanswered lines) "asked, and nobody could answer"
             }
 
             testTask "fx run -p is recorded and fx replay replays it exactly; with session.record off nothing is" {
