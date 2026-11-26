@@ -3,21 +3,21 @@
 
 
 
+               ████ █  █
+               █    █  █
+               ███   ██
+               █    █  █
+               █    █  █
+
+    ⠋ starting: creating the session …
+  ┃ ›
+  ┃ anthropic/claude-sonnet-5-5
+
+  …/src/billing        Ctrl+P commands
 
 
 
 
-
-
-
-
-
-
-
-
-  ⠋ starting: creating the session and …
-┃ ›
-┃ anthropic/claude-sonnet-5-5
 fx · …/src/billing            ● starting
 ────────────────────────────────────────
-cursor 17,4
+cursor 11,6

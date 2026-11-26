@@ -5,23 +5,23 @@
 
 
 
+                                   ████ █  █
+                                   █    █  █
+                                   ███   ██
+                                   █    █  █
+                                   █    █  █
+
+    ⠋ starting: creating the session and its environment
+  ┃ ›
+  ┃ anthropic/claude-sonnet-5-5
+
+  …/src/billing                                                Ctrl+P commands
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-  ⠋ starting: creating the session and its environment
-┃ ›
-┃ anthropic/claude-sonnet-5-5
 fx · …/src/billing  Enter send · Ctrl+P commands · Alt+Enter newline  ● starting
 ────────────────────────────────────────────────────────────────────────────────
-cursor 21,4
+cursor 13,6

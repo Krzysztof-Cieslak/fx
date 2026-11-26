@@ -23,6 +23,8 @@ to send, and a pure `view` that draws the model as a frame.
 | Colours (16, the 256 of the xterm palette, 24-bit) and their lowering, styles, spans, rows, frames (`Ui`) | `Fx.Tui/Ui.fs` |
 | What the terminal draws (`Terminal`), themes (`Theme`), the TUI's slots (`TuiSlots`) | `Fx.Tui/Theme.fs` |
 | Markdown parsed and drawn as rows (`Markdown`), code highlighting (`Highlight`) | `Fx.Tui/Markdown.fs` |
+| The product's name in blocks (`Wordmark`) | `Fx.Tui/Wordmark.fs` |
+| Commands (`TuiCommand`, `Commands`) | `Fx.Tui/Commands.fs` |
 | VT output: entering and leaving, SGR, the difference between two frames (`Vt`) | `Fx.Tui/Vt.fs` |
 | A small terminal emulator for tests and the fake (`VtScreen`) | `Fx.Tui/VtScreen.fs` |
 | Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste (`Keys`) | `Fx.Tui/Keys.fs` |
@@ -84,6 +86,12 @@ to send, and a pure `view` that draws the model as a frame.
 fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline  ● idle
 ```
 
+- **Start screen**: a session without turns (nothing running, queued or asked, no history a
+  snapshot replaced, not stopped) shows the product's name in blocks (`Wordmark`, drawn from
+  `Product.Name`, so a rename redraws it; plain text when the terminal is too small) over the prompt's
+  box in the middle of the screen, with the workspace and its branch and `Ctrl+P commands` under it
+  and the notes a person should read first (an untrusted project, the host's warnings). The palette
+  takes the name's place while it is open; the first prompt turns the screen into the transcript.
 - **Layout**: the warnings at the top, the transcript under them from the top of the screen (its end
   when it is longer than the room), then what is asked, the prompts waiting, what happens, the
   prompt's box and the footer at the bottom.
@@ -272,7 +280,8 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: commands (parsing, the palette's search, `Ctrl+P`, `/model`, `/theme`, `/new`
+- `Fx.Tui.Tests`: the start screen (the wordmark, the first prompt to the transcript, golden
+  renders with and without the palette); commands (parsing, the palette's search, `Ctrl+P`, `/model`, `/theme`, `/new`
   and `/sessions`, completion, golden renders of the palette and of `/` suggestions); usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
   width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark
   theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and

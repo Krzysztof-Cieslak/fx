@@ -429,6 +429,31 @@ let tests =
                 ]
 
             testList
+                "start screen"
+                [
+                    test "a session without turns shows the name in blocks; the first prompt the transcript" {
+                        let model = Screens.fresh 80 24
+                        Expect.isTrue (View.isStart model) "the start screen"
+                        Expect.stringContains (screen model) "█" "the wordmark"
+                        let s = Session "01JD2W7Z9Q0000000000000009"
+                        let model, _ = play model (s.Start None @ s.Prompt "hello")
+                        Expect.isFalse (View.isStart model) "a turn"
+                        Expect.stringContains (screen model) "┃ hello" "the transcript"
+                    }
+
+                    test "a permission waiting shows the usual screen" {
+                        Expect.isFalse (View.isStart (Screens.grant 80 24)) "the card"
+                    }
+
+                    test "the wordmark: five rows as wide as it says" {
+                        let rows = Wordmark.draw Style.plain Style.bold "fx"
+                        Expect.equal rows.Length Wordmark.Height "rows"
+                        Expect.equal (rows |> List.map Row.width |> List.max) (Wordmark.width "fx") "width"
+                        Expect.equal (Wordmark.width "ab") 9 "two glyphs and a gap"
+                    }
+                ]
+
+            testList
                 "commands"
                 [
                     test "a `/` prompt names a command, with what follows it" {

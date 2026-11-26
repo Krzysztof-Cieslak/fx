@@ -288,6 +288,16 @@ let slash (width: int) (height: int) : Model =
     let s, msgs = finishedTurn ()
     ready s width height (msgs @ typing "/")
 
+/// A new session with no turns yet: the start screen.
+let fresh (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000009"
+    ready s width height (s.Start None)
+
+/// The start screen with the palette open.
+let freshPalette (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000009"
+    ready s width height (s.Start None @ [ ctrl 'p' ])
+
 /// Every screen, by name.
 let all: (string * (int -> int -> Model)) list =
     [
@@ -305,6 +315,8 @@ let all: (string * (int -> int -> Model)) list =
         "usage", usage
         "palette", palette
         "slash", slash
+        "fresh", fresh
+        "fresh-palette", freshPalette
     ]
 
 /// A frame as text, with the cursor's place.

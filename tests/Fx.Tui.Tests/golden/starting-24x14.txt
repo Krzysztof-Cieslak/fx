@@ -1,17 +1,17 @@
 ────────────────────────
 
+       ████ █  █
+       █    █  █
+       ███   ██
+       █    █  █
+       █    █  █
 
+    ⠋ starting: creat…
+  ┃ ›
+  ┃ anthropic/claude-…
 
+  …/s… Ctrl+P commands
 
-
-
-
-
-
-
-  ⠋ starting: creating …
-┃ ›
-┃ anthropic/claude-sonn…
 fx · …/src/b… ● starting
 ────────────────────────
-cursor 11,4
+cursor 8,6
