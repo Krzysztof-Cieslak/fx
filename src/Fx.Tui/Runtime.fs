@@ -24,8 +24,9 @@ type Inbox<'Msg>() =
 
     override _.ToString() = "Inbox"
 
-/// The Elm loop (spec §20: an Elm-style TUI): messages folded by `App.update`, the screen drawn by
-/// `View.view` and written as the difference from the last frame, commands handed to the shell's
+/// The Elm loop (spec §20: an Elm-style TUI): messages folded by `App.update`, the model settled and
+/// the screen drawn by `View.render` and written as the difference from the last frame (the settled
+/// model kept: the scroll follows the transcript), commands handed to the shell's
 /// interpreter. Keys come from the terminal, decoded; ticks move time on and notice resizes.
 [<RequireQualifiedAccess>]
 module Runtime =
@@ -107,8 +108,8 @@ module Runtime =
 
             let draw: Eff<'R, unit> =
                 eff {
-                    model.Value <- View.settle model.Value
-                    let next = View.view model.Value
+                    let settled, next = View.render model.Value
+                    model.Value <- settled
                     let text = Vt.diff frame.Value next
                     do! Tty.write text
                     frame.Value <- Some next

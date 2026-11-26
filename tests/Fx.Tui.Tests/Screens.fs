@@ -288,6 +288,33 @@ let slash (width: int) (height: int) : Model =
     let s, msgs = finishedTurn ()
     ready s width height (msgs @ typing "/")
 
+/// Scrolled up a page (`PgUp`, after a frame was drawn) while the running turn's reply streams in:
+/// the view stays where it was, and the footer says it is scrolled.
+let scrolled (width: int) (height: int) : Model =
+    let s, earlier = finishedTurn ()
+
+    let writing (fresh: bool) (text: string) =
+        Msg.Streaming(s.Running, fresh, text, None)
+
+    let model =
+        ready
+            s
+            width
+            height
+            (earlier
+             @ s.Prompt "now update the changelog"
+             @ [ writing true "Updating CHANGELOG.md: the entry goes under *Unreleased*." ])
+
+    let model, _ = play (View.settle model) [ key KeyCode.PageUp ]
+
+    fst (
+        play
+            (View.settle model)
+            [
+                writing false "\n\nThen the version in `Directory.Build.props`, and the tests again."
+            ]
+    )
+
 /// A new session with no turns yet: the start screen.
 let fresh (width: int) (height: int) : Model =
     let s = Session "01JD2W7Z9Q0000000000000009"
@@ -315,6 +342,7 @@ let all: (string * (int -> int -> Model)) list =
         "usage", usage
         "palette", palette
         "slash", slash
+        "scrolled", scrolled
         "fresh", fresh
         "fresh-palette", freshPalette
     ]

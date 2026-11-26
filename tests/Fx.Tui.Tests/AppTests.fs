@@ -24,6 +24,14 @@ let private ready () : Session * Model =
 
 let private screen (model: Model) = Frame.text (View.view model)
 
+/// The rows the transcript shows (of a settled model whose banner fits): under the banner, as many
+/// as its room.
+let private transcriptRows (model: Model) : string list =
+    (screen model).Split('\n')
+    |> List.ofArray
+    |> List.skip (View.banner model).Length
+    |> List.truncate model.TranscriptRoom
+
 [<Tests>]
 let tests =
     testList
@@ -209,49 +217,131 @@ let tests =
                         let _, model = ready ()
                         let model, _ = play model [ key KeyCode.WheelUp; key KeyCode.WheelUp ]
                         Expect.equal model.Scroll 6 "three rows a notch"
-                        let model, _ = play model [ key KeyCode.WheelDown; key KeyCode.WheelDown; key KeyCode.WheelDown ]
+
+                        let model, _ =
+                            play model [ key KeyCode.WheelDown; key KeyCode.WheelDown; key KeyCode.WheelDown ]
+
                         Expect.equal model.Scroll 0 "never below the end"
                     }
 
-                    test "settling keeps the scroll within the transcript, and on its rows as it grows" {
-                        let _, model = ready ()
-
-                        let small =
-                            { model with
-                                Width = 24
-                                Height = 14
-                            }
-
-                        let top = View.settle { small with Scroll = 10_000 }
-                        Expect.isGreaterThan top.Scroll 0 "the transcript is longer than the screen"
-                        Expect.isLessThan top.Scroll 10_000 "no further than its first row"
-                        Expect.equal (screen { top with Scroll = top.Scroll + 1 }) (screen top) "the first row at the top"
-                        let down, _ = play top [ key KeyCode.PageDown ]
-                        Expect.notEqual (screen (View.settle down)) (screen top) "scrolling down starts at once"
-                        let at = min 2 top.Scroll
-
-                        let grown =
-                            View.settle
-                                { top with
-                                    Scroll = at
-                                    TranscriptRows = top.TranscriptRows - 2
-                                }
-
-                        Expect.equal grown.Scroll (min (at + 2) top.Scroll) "kept on the same rows"
-                        let pinned = View.settle { top with Scroll = 0; TranscriptRows = top.TranscriptRows - 2 }
-                        Expect.equal pinned.Scroll 0 "at the end, it follows the end"
-                    }
-
-                    test "PageUp scrolls the transcript, PageDown back; Ctrl+O changes the detail" {
+                    test "PgUp and PgDn scroll a page: the transcript's rows on the screen but two" {
                         let _, model = ready ()
                         let model, _ = play model [ key KeyCode.PageUp ]
-                        Expect.equal model.Scroll 12 "half a screen"
-                        let model, _ = play model [ key KeyCode.PageDown; key KeyCode.PageDown ]
-                        Expect.equal model.Scroll 0 "never below the end"
+                        Expect.equal model.Scroll 12 "half the screen before a frame was drawn"
+                        let _, model = ready ()
+                        let model = View.settle { model with Width = 30; Height = 12 }
+                        Expect.isGreaterThan model.TranscriptRoom 4 "the room the frame had"
+                        Expect.isGreaterThan model.TranscriptRows (2 * model.TranscriptRoom) "longer than two pages"
+                        let up, _ = play model [ key KeyCode.PageUp ]
+                        Expect.equal up.Scroll (model.TranscriptRoom - 2) "a page"
+                        let shown = transcriptRows model
+                        let above = transcriptRows (View.settle up)
+                        // The page's top rows are kept at its bottom, for context.
+                        Expect.equal (List.skip (shown.Length - 2) above) (List.take 2 shown) "two rows kept"
+                        let back, _ = play (View.settle up) [ key KeyCode.PageDown; key KeyCode.PageDown ]
+                        Expect.equal back.Scroll 0 "never below the end"
+                    }
+
+                    test "Ctrl+Home goes to the transcript's top; Ctrl+End, and Esc with no turn running, to its end" {
+                        let s, model = ready ()
+                        let model = View.settle { model with Width = 40; Height = 14 }
+
+                        let top, _ =
+                            play
+                                model
+                                [
+                                    Msg.Key
+                                        { Keys.key KeyCode.Home with
+                                            Ctrl = true
+                                        }
+                                ]
+
+                        let top = View.settle top
+                        Expect.equal top.Scroll (top.TranscriptRows - top.TranscriptRoom) "the first row at the top"
+
+                        Expect.equal
+                            (screen (View.settle { top with Scroll = top.Scroll + 5 }))
+                            (screen top)
+                            "no further"
+
+                        let down, _ = play top [ key KeyCode.WheelDown ]
+                        Expect.equal (View.settle down).Scroll (top.Scroll - 3) "scrolling down starts at once"
+
+                        let ended, _ =
+                            play
+                                top
+                                [
+                                    Msg.Key
+                                        { Keys.key KeyCode.End with
+                                            Ctrl = true
+                                        }
+                                ]
+
+                        Expect.equal ended.Scroll 0 "Ctrl+End"
+                        let ended, cmds = play top [ key KeyCode.Escape ]
+                        Expect.equal (ended.Scroll, cmds) (0, []) "Esc, idle"
+                        let running, _ = play top (s.Prompt "go on")
+                        let running, _ = play { running with Scroll = 3 } [ key KeyCode.Escape ]
+                        Expect.equal running.Scroll 3 "Esc interrupts a running turn, and only that"
+                        let typed, _ = play model (typing "ab" @ [ key KeyCode.Home; key KeyCode.Delete ])
+                        Expect.equal (typed.Editor.Text, typed.Scroll) ("b", 0) "Home is the prompt's"
+                    }
+
+                    test "while scrolled up, new output leaves the view where it is; at the end, it follows" {
+                        let s, model = ready ()
+                        let model, _ = play model (s.Prompt "now update the changelog")
+                        let model = View.settle { model with Width = 40; Height = 14 }
+
+                        let lines (n: int) =
+                            List.init n (fun i -> $"line {i}") |> String.concat "\n\n"
+
+                        let write (fresh: bool) (text: string) =
+                            Msg.Streaming(s.Running, fresh, text, None)
+
+                        let model = View.settle (fst (play model [ write true (lines 2) ]))
+                        let up = View.settle (fst (play model [ key KeyCode.WheelUp; key KeyCode.WheelUp ]))
+                        Expect.equal up.Scroll 6 "scrolled up"
+                        let grown = View.settle (fst (play up [ write false ("\n\n" + lines 5) ]))
+                        Expect.isGreaterThan grown.TranscriptRows up.TranscriptRows "the transcript grew"
+                        Expect.equal (transcriptRows grown) (transcriptRows up) "the same rows"
+                        Expect.stringContains (screen grown) "↑ scrolled" "and says so"
+                        let replaced = View.settle (fst (play grown [ write true "short" ]))
+                        Expect.isLessThan replaced.TranscriptRows grown.TranscriptRows "the transcript shrank"
+                        Expect.equal (transcriptRows replaced) (transcriptRows up) "still the same rows"
+                        let pinned = View.settle (fst (play model [ write false "\n\nthe newest line" ]))
+                        Expect.equal pinned.Scroll 0 "at the end"
+
+                        let last =
+                            transcriptRows pinned |> List.filter (fun row -> row.Trim() <> "") |> List.last
+
+                        Expect.equal (last.Trim()) "the newest line" "following the end"
+                        Expect.isFalse ((screen pinned).Contains "↑ scrolled") "not scrolled"
+                    }
+
+                    test "the view keeps the scroll within the transcript" {
+                        let _, model = ready ()
+                        Expect.equal (View.settle { model with Scroll = 7 }).Scroll 0 "it fits: nothing to scroll"
+                        Expect.isFalse ((screen { model with Scroll = 7 }).Contains "↑") "no indicator"
+                        let small = { model with Width = 24; Height = 14 }
+                        let top = View.settle { small with Scroll = 10_000 }
+
+                        Expect.equal
+                            top.Scroll
+                            (top.TranscriptRows - top.TranscriptRoom)
+                            "no further than its first row"
+
+                        let started = View.settle { Screens.fresh 80 24 with Scroll = 4 }
+                        Expect.equal started.Scroll 0 "the start screen has nothing to scroll"
+                    }
+
+                    test "Ctrl+O changes the detail; Ctrl+L draws everything again" {
+                        let _, model = ready ()
                         let model, _ = play model [ ctrl 'o' ]
                         Expect.equal model.Verbosity Verbosity.Verbose "more"
                         let model, _ = play model [ ctrl 'o' ]
                         Expect.equal model.Verbosity Verbosity.Quiet "around"
+                        let _, cmds = play model [ ctrl 'l' ]
+                        Expect.equal cmds [ Cmd.Redraw ] "redraw"
                     }
                 ]
 

@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: co…
+    Evidence  dotnet
+              test tests
+              /Billing →
+              214 passed
+    Verify    dotnet
+              test tests
+              /Billing
+  ▣ fx · anthropic/clau…
+
+  ⠴ turn 2 · writing 0.…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/b… ↑ ● turn 2
+────────────────────────
+cursor 11,4

@@ -27,7 +27,7 @@ to send, and a pure `view` that draws the model as a frame.
 | Commands (`TuiCommand`, `Commands`) | `Fx.Tui/Commands.fs` |
 | VT output: entering and leaving, SGR, the difference between two frames (`Vt`) | `Fx.Tui/Vt.fs` |
 | A small terminal emulator for tests and the fake (`VtScreen`) | `Fx.Tui/VtScreen.fs` |
-| Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste (`Keys`) | `Fx.Tui/Keys.fs` |
+| Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste, the mouse wheel (`Keys`) | `Fx.Tui/Keys.fs` |
 | The prompt editor (`Editor`) | `Fx.Tui/Editor.fs` |
 | The session as a client sees it: state and the merged log (`Timeline`) | `Fx.Tui/Timeline.fs` |
 | Model, messages, commands, cards, `update` (`App`) | `Fx.Tui/App.fs` |
@@ -38,7 +38,8 @@ to send, and a pure `view` that draws the model as a frame.
 | The client (`TuiClient`) and the composition roots (`TuiMain`) | `Fx.Tui.Live/TuiClient.fs`, `TuiMain.fs` |
 
 - **The loop** (`Runtime.run`) folds messages from an `Inbox` (keys, ticks, the host's
-  notifications, commands' outcomes), draws after each batch, and writes only the rows that changed
+  notifications, commands' outcomes), draws after each batch (`View.render`: the model settled, and
+  its frame; the settled model is kept), and writes only the rows that changed
   (`Vt.diff`, in a synchronized update). Commands run one at a time in order on a worker; those sent
   before quitting go out before it returns. Keys come from the terminal through `Keys.decode`; a lone
   `ESC` waits 40 ms for the rest of a sequence. Ticks (100 ms while something moves, else 500 ms)
@@ -149,6 +150,22 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   transcript, until a turn takes them.
 - **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice);
   no row when nothing does.
+- **Scrolling**: at its end the transcript follows new output. Scrolled up (`PgUp`, the wheel), it
+  stays on the rows it shows while output arrives, and the footer says `↑ scrolled · PgDn` (an arrow
+  alone where the words do not fit): before each frame the runtime settles the model
+  (`View.render`), which moves the scroll by the rows the transcript gained or lost and keeps it
+  within the transcript, so scrolling back down starts at once. Back at the end (`PgDn` or the wheel,
+  `Ctrl+End`, `Esc` with no turn running, or sending a prompt) it follows again.
+- **The mouse**: the TUI asks for mouse reports (`?1000h`, in SGR's encoding `?1006h`): in the
+  alternate screen terminals keep no scrollback and would send the wheel as `↑` `↓`, which go through
+  the prompts sent. Only the wheel's vertical notches act (`KeyCode.WheelUp`/`WheelDown`, with their
+  modifiers); clicks, releases and the horizontal wheel are dropped. xterm's first encoding
+  (`ESC [ M` and three characters) is read too, for terminals without SGR's (GNU screen 4, mosh
+  before 1.4), so their reports never land in the prompt as text; a report cut between reads waits
+  for its rest. Selecting text takes `Shift` while the TUI runs (`Option` in iTerm2, `Fn` in
+  Terminal.app). `Vt.leave` turns the reports off with everything else on every way out (quit, the
+  process's exit, an unhandled exception); a killed process leaves them on, as it leaves the
+  alternate screen.
 
 ## Colours and themes (spec §19.6)
 
@@ -182,13 +199,14 @@ core slot the host registers) picks it:
 | `Enter` | sends the prompt: **steered** into the running turn (delivered at its next step), or a new turn when idle; on the agent's question it is the answer |
 | `Tab` | sends the prompt **queued**: its own turn after the work in progress |
 | `Alt+Enter`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+J` | a new line in the prompt (Shift and Ctrl only where the terminal reports them) |
-| `Esc` | interrupts the running turn (the control path) |
+| `Esc` | interrupts the running turn (the control path); with none running, goes back to the transcript's end |
 | `Ctrl+C` | clears the prompt, else interrupts the running turn; pressed again within 3 s, exits |
 | `Ctrl+D` | exits when the prompt is empty |
 | `↑` `↓` | moves between the prompt's lines; past the first or last, goes through the prompts sent |
 | `←` `→` `Home` `End`, `Ctrl+A/E/B/F`, `Ctrl/Alt+←/→`, `Alt+B/F` | moves the cursor |
 | `Backspace` `Delete`, `Ctrl+W`, `Alt+Backspace`, `Ctrl+U`, `Ctrl+K` | deletes |
-| `PgUp` `PgDn`, the mouse wheel (or a trackpad) | scrolls the transcript (half a screen a page, three rows a notch); while scrolled up, new output does not move it, and `Esc` goes back to the end. The TUI asks for mouse reports (SGR), so selecting text takes `Shift` (`Option` in some macOS terminals) |
+| `PgUp` `PgDn`, the mouse wheel (or a trackpad) | scrolls the transcript: a page (its rows on the screen but two, kept for context), three rows a notch |
+| `Ctrl+Home` `Ctrl+End` | goes to the transcript's top, its end |
 | `Ctrl+O` | cycles the detail (quiet, normal, verbose) |
 | `Ctrl+L` | draws everything again |
 | `Ctrl+P` | opens the command palette (`Esc` or `Ctrl+P` closes it) |
@@ -286,12 +304,15 @@ terminal check's P/Invoke without a terminal).
   width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark
   theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and
   golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
-  cut between reads, pastes); the editor over grapheme clusters; frames on a `VtScreen` and the frame
+  cut between reads, pastes, mouse reports in both encodings, cut too); the editor over grapheme clusters; frames on a `VtScreen` and the frame
   difference; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session
   machine itself) at 80×24, 40×20 and 24×14 (starting, a finished turn, a running turn with steering
   and a queued prompt, the agent's question after a draft, the loop guard's question, permissions, a
-  decision, wide characters and a failure, a compacted turn, verbose); questions shown once and
-  drafts; keys and cards through `update`; streaming; snapshots; resizes; the loop on a `FakeTty`.
+  decision, wide characters and a failure, a compacted turn, verbose, scrolled up while the reply
+  streams in); questions shown once and drafts; keys and cards through `update`; scrolling (a page,
+  the wheel, the top and the end, the view kept on its rows while output grows or shrinks and
+  following it at the end); streaming; snapshots; resizes; the loop on a `FakeTty` (the wheel
+  through the decoder, a report cut between reads, new output while scrolled up).
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
   session started, a prompt to its result card, a permission given on the card, `/new` and `/sessions` back to it, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn

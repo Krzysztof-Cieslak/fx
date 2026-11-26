@@ -318,11 +318,13 @@ type Model =
         /// While going through earlier prompts: which one (from the newest) and the text being typed.
         History: (int * string) option
         Verbosity: Verbosity
-        /// Rows the transcript is scrolled up from its end.
+        /// Rows the transcript is scrolled up from its end (0: at the end, following new output).
         Scroll: int
         /// The transcript's rows when the model was last settled (`View.settle`): a scrolled view
         /// stays on its rows as the transcript grows.
         TranscriptRows: int
+        /// The rows the transcript had on the screen when the model was last settled: a page.
+        TranscriptRoom: int
         Notice: Notice option
         /// When Ctrl+C was pressed with nothing to clear or interrupt: a second press soon exits.
         ExitArmed: int64 option
@@ -366,6 +368,7 @@ module App =
             Verbosity = Verbosity.Normal
             Scroll = 0
             TranscriptRows = 0
+            TranscriptRoom = 0
             Notice = None
             ExitArmed = None
             Count = 0
@@ -625,6 +628,7 @@ module App =
             Streaming = None
             Phase = Phase.Starting what
             Scroll = 0
+            TranscriptRows = 0
             History = None
             Editor = Editor.empty
             Answering = model.Answering |> Set.filter (fun id -> id.StartsWith "grant/")
@@ -809,10 +813,26 @@ module App =
                 model
         | _ -> model
 
-    let private transcriptPage (model: Model) = max 1 (model.Height / 2)
+    /// Rows `PgUp` and `PgDn` scroll: the transcript's rows on the screen, but two kept for context
+    /// (half the screen before a frame was drawn).
+    let private transcriptPage (model: Model) =
+        if model.TranscriptRoom > 0 then
+            max 1 (model.TranscriptRoom - 2)
+        else
+            max 1 (model.Height / 2)
 
     /// Rows one notch of the mouse wheel scrolls.
     let private wheelRows = 3
+
+    /// Scrolls the transcript up (`rows` > 0) or down, never past its end; the view keeps it within
+    /// its first row (`View.settle`).
+    let private scroll (rows: int) (model: Model) : (Model * Cmd list) option =
+        Some(
+            { model with
+                Scroll = max 0 (model.Scroll + rows)
+            },
+            []
+        )
 
     let private edit (key: Key) (model: Model) : Model * Cmd list =
         let editor = model.Editor
@@ -890,36 +910,21 @@ module App =
                 Some(interrupt model)
             else
                 Some({ model with Notice = None; Scroll = 0 }, [])
-        | KeyCode.PageUp, _, _ ->
+        | KeyCode.PageUp, _, _ -> scroll (transcriptPage model) model
+        | KeyCode.PageDown, _, _ -> scroll (-(transcriptPage model)) model
+        | KeyCode.WheelUp, _, _ -> scroll wheelRows model
+        | KeyCode.WheelDown, _, _ -> scroll (-wheelRows) model
+        // The transcript's top (no further than all its rows; the view stops at its first) and end.
+        | KeyCode.Home, true, false ->
             Some(
                 { model with
-                    Scroll = model.Scroll + transcriptPage model
+                    Scroll = max model.Scroll model.TranscriptRows
                 },
                 []
             )
-        | KeyCode.PageDown, _, _ ->
-            Some(
-                { model with
-                    Scroll = max 0 (model.Scroll - transcriptPage model)
-                },
-                []
-            )
-        | KeyCode.WheelUp, _, _ ->
-            Some(
-                { model with
-                    Scroll = model.Scroll + wheelRows
-                },
-                []
-            )
-        | KeyCode.WheelDown, _, _ ->
-            Some(
-                { model with
-                    Scroll = max 0 (model.Scroll - wheelRows)
-                },
-                []
-            )
+        | KeyCode.End, true, false -> Some({ model with Scroll = 0 }, [])
         | KeyCode.Char "o", true, false -> Some(cycleDetail model, [])
-        | KeyCode.Char "l", true, false
+        | KeyCode.Char "l", true, false -> Some(model, [ Cmd.Redraw ])
         | _ -> None
 
     let private onKey (key: Key) (model: Model) : Model * Cmd list =

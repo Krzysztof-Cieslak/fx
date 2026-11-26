@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ ! runs unsandboxed: commands can read …
+
+┃ replace deprecated Http.retry with
+┃ RetryPolicy in billing
+
+  I'll look at the call sites first.
+  ◇ Read     src/Billing/Client.… ✓ 0.2s
+  ◆ Edit     src/Billing/Client.… ✓ 0.3s
+  ◇ Run      dotnet test tests/Bi… ✗ 48s
+      exit 1
+  ◇ Cell     rerun the tests       ✓ 46s
+  ▸ 1 cell (3 lines)     [Ctrl+O expand]
+
+  ✓ Done  Migrated 37 call sites to
+          RetryPolicy.
+    Evidence  dotnet test tests/Billing
+  ⠴ turn 2 · writing 0.0s
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/… ↑ scrolled · PgDn  ● turn 2
+────────────────────────────────────────
+cursor 17,4
