@@ -591,20 +591,28 @@ let private buildTools =
                         |> Array.map _.Trim()
                         |> List.ofArray
 
-                    [
-                        $"driver {driver.Id}"
-                        $"exit {output.ExitCode}"
-                        if output.ExitCode <> 0 then
-                            "stdout " + escape (Output.stdoutText output)
-                            "stderr " + escape (Output.stderrText output)
-                        for line in lines do
-                            if line.StartsWith(layout.Cache, StringComparison.Ordinal) then
-                                "nuget config in the environment's cache"
-                            elif line = userConfig then
-                                "nuget config of the user"
-                            elif not (line.StartsWith '/') then
-                                line
-                    ]
+                    let shown =
+                        [
+                            $"driver {driver.Id}"
+                            $"exit {output.ExitCode}"
+                            for line in lines do
+                                if line.StartsWith(layout.Cache, StringComparison.Ordinal) then
+                                    "nuget config in the environment's cache"
+                                elif line = userConfig then
+                                    "nuget config of the user"
+                                elif not (line.StartsWith '/') then
+                                    line
+                        ]
+
+                    // A failed build fails the scenario (and so the diff), not only its output.
+                    if
+                        output.ExitCode <> 0
+                        || not (List.contains "nuget config in the environment's cache" shown)
+                        || List.contains "user config read" shown
+                    then
+                        failwith (String.Join(" | ", shown) + " | stderr " + escape (Output.stderrText output))
+
+                    shown
         finally
             try
                 Directory.Delete(root, true)
