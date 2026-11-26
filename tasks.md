@@ -29,14 +29,14 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
-- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
+- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
 - **Wave 10:** T129a Host composition + headless run, T212 Run kernel, T217 Eval harness, T608 Agent teams
 - **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
 - **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
-- **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
+- **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
 - **Wave 14:** T133c TUI: Markdown, T307 Runs panel (graph), T609 Desktop
 - **Wave 15:** T133b TUI: transcript layout
-- **Wave 16:** T133e TUI: usage and sidebar, T133f TUI: commands
+- **Wave 16:** T133e TUI: usage and sidebar, T133f TUI: commands, T133h TUI: scrolling, T133i TUI: full width, T133j TUI: expand one item
 - **Wave 17:** T133g TUI: start screen
 
 **Critical path to dogfooding (T132):** T001 → T003 → T004 → T107 → T108 → T110 → T114 → T117 → T127 → T128 → T129a → T129b → T130 → T132
@@ -105,6 +105,11 @@ flowchart LR
     T133e["T133e TUI: usage and sidebar"]
     T133f["T133f TUI: commands"]
     T133g["T133g TUI: start screen"]
+    T133h["T133h TUI: scrolling"]
+    T133i["T133i TUI: full width"]
+    T133j["T133j TUI: expand one item"]
+    T134["T134 Approval modes"]
+    T135["T135 CodeAct: a kernel that stays"]
   end
   subgraph P2["Phase 2 — Agent quality, UX, models, agents, goals, evals"]
     T201["T201 Values & references"]
@@ -273,6 +278,12 @@ flowchart LR
   T133b --> T133f
   T133b --> T133g
   T133e --> T133g
+  T133b --> T133h
+  T133b --> T133i
+  T133b --> T133j
+  T127b --> T134
+  T132a --> T134
+  T127 --> T135
   T117 --> T201
   T126 --> T201
   T008 --> T202
@@ -383,6 +394,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -445,7 +457,7 @@ flowchart LR
 | T130 | Minimal TUI | T129b | §19.2 | done | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
 | T131 | Record + replay | T105, T106, T127 | §15 | done | Journal by blob hash, `ReplayEnv`, exact replay of recorded sessions; replay test harness. |
 | T132a | Headless approvals | T127b, T129b | §13, §19 | done | A grant request nobody could answer (no terminal) never becomes a final answer for a later run that asks again (installs and the CodeAct guard alike); `fx grants list\|allow\|revoke` lets the local OS user grant beforehand, and the headless message names the exact command; `fx run` checks the model's credentials before installing components; install prompts show human sizes; host.md documents running unattended. Host tests with a scripted model in both orders; e2e with the native binary. |
-| T132 | Milestone: fx builds fx | T113, T121, T127b, T128, T130, T131, T132a | §21 | todo | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
+| T132 | Milestone: fx builds fx | T113, T121, T127b, T128, T130, T131, T132a | §21 | in-progress | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
 | T133a | TUI: ask once | T130 | §19.2, §19.4 | done | A question shows once: the agent's own reply is not repeated by the request line, the result card and the question card; replies a text-only nudge superseded are hidden at normal detail (verbose shows them); the agent's questions show as their text, never the generic request title. Golden renders. |
 | T133d | TUI: colours and themes | T130 | §19.6 | done | 256-colour and true-colour styles lowered to what the terminal supports (detected from the process's variables, `NO_COLOR` honoured); a pure `Theme` of colour roles; `tui.theme` (`auto`, `dark`, `light`, `ansi16`) read through `IVariants`; golden renders per depth. |
 | T133c | TUI: Markdown | T133d | §19.2 | done | A pure Markdown renderer for the TUI (headings, emphasis, lists, quotes, inline code, fenced blocks with keyword highlighting for F#, TS/JS, JSON and shell, links, tables as text) over `Text` widths, themed; replies rendered with it; golden renders at narrow widths. |
@@ -453,6 +465,11 @@ flowchart LR
 | T133e | TUI: usage and sidebar | T133b | §5, §17, §19.2 | done | Replies record their usage and model (optional fields, old events still read); the host gives clients the model's context window and prices and the workspace's branch; session titles (`--title`, else the first prompt); a sidebar on wide terminals (title, context used, cost) and the same in the footer on narrow ones; tokens per second on each reply's footer. |
 | T133f | TUI: commands | T133b | §19.5 | done | Commands as values (name, keys, `Cmd`); a Ctrl+P palette with fuzzy search; `/` commands in the prompt (`/new`, `/sessions`, `/model`, `/detail`, `/theme`, `/exit`). |
 | T133g | TUI: start screen | T133b, T133e | §19.2 | done | A session with no turns shows the product's wordmark (drawn from the naming constant), a centred prompt box with its info line, the workspace and branch and the keys; the first prompt turns it into the transcript. |
+| T133h | TUI: scrolling | T133b | §19.2 | todo | Dogfooding (T132): the transcript cannot be scrolled. `PgUp`/`PgDn` (and the mouse wheel where the terminal reports it) scroll the transcript as tui.md documents; new output keeps the view pinned to the bottom only while it is at the bottom; an indicator shows when it is scrolled up. Golden renders and update tests. |
+| T133i | TUI: full width | T133b | §19.2 | todo | Dogfooding (T132): characters go missing at the right edge, which looks like an off-by-one in sizing. Lines, panels, boxes and the sidebar use exactly the terminal's columns (wide and combining characters counted by their display width, nothing clipped, nothing wrapped by the terminal); golden renders at several widths that assert every line's display width. |
+| T133j | TUI: expand one item | T133b | §19.2 | todo | Dogfooding (T132): `Ctrl+O` only cycles the detail for everything. Single items (a cell, an activity line, a result card) can be selected and expanded or collapsed on their own, with the keys in the footer and tui.md; the global detail stays. Update tests and golden renders. |
+| T134 | Approval modes | T127b, T132a | §13, §19.4 | todo | Dogfooding (T132): asking for every shell command is tiring. A mode (a variant slot, e.g. `grants.mode`: `ask`, `auto`) where commands that stay in the sandbox and the workspace run without asking, closer to opencode; writes outside the workspace, network and installs still ask; policy can forbid the mode; the TUI shows the mode and can switch it. spec §13 updated; host tests with a scripted model. |
+| T135 | CodeAct: a kernel that stays | T127 | §6.9 | todo | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
