@@ -382,8 +382,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T206 done
-  class T133f inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T206 done
 ```
 
 <!-- /tasks:generated -->
@@ -452,7 +451,7 @@ flowchart LR
 | T133c | TUI: Markdown | T133d | §19.2 | done | A pure Markdown renderer for the TUI (headings, emphasis, lists, quotes, inline code, fenced blocks with keyword highlighting for F#, TS/JS, JSON and shell, links, tables as text) over `Text` widths, themed; replies rendered with it; golden renders at narrow widths. |
 | T133b | TUI: transcript layout | T133a, T133c | §19.2 | done | Prompts as panels with an accent bar, indented replies with a footer line (model · time), the transcript from the top, the prompt in a box with its info line (model · surface · variant), a footer (workspace, environment, sandbox, hints) instead of the header bar, restyled cards; the unsandboxed warning stays on every screen. |
 | T133e | TUI: usage and sidebar | T133b | §5, §17, §19.2 | done | Replies record their usage and model (optional fields, old events still read); the host gives clients the model's context window and prices and the workspace's branch; session titles (`--title`, else the first prompt); a sidebar on wide terminals (title, context used, cost) and the same in the footer on narrow ones; tokens per second on each reply's footer. |
-| T133f | TUI: commands | T133b | §19.5 | in-progress | Commands as values (name, keys, `Cmd`); a Ctrl+P palette with fuzzy search; `/` commands in the prompt (`/new`, `/sessions`, `/model`, `/detail`, `/theme`, `/exit`). |
+| T133f | TUI: commands | T133b | §19.5 | done | Commands as values (name, keys, `Cmd`); a Ctrl+P palette with fuzzy search; `/` commands in the prompt (`/new`, `/sessions`, `/model`, `/detail`, `/theme`, `/exit`). |
 | T133g | TUI: start screen | T133b, T133e | §19.2 | todo | A session with no turns shows the product's wordmark (drawn from the naming constant), a centred prompt box with its info line, the workspace and branch and the keys; the first prompt turns it into the transcript. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
