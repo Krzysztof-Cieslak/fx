@@ -162,8 +162,9 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   modifiers); clicks, releases and the horizontal wheel are dropped. xterm's first encoding
   (`ESC [ M` and three characters) is read too, for terminals without SGR's (GNU screen 4, mosh
   before 1.4), so their reports never land in the prompt as text; a report cut between reads waits
-  for its rest. Selecting text takes `Shift` while the TUI runs (`Option` in iTerm2, `Fn` in
-  Terminal.app). `Vt.leave` turns the reports off with everything else on every way out (quit, the
+  for its rest. On Windows the reports come as text in virtual terminal input mode (`LocalTty`'s),
+  through ConPTY too (the PTY test sends one through it). Selecting text takes `Shift` while the TUI
+  runs (`Option` in iTerm2, `Fn` in Terminal.app). `Vt.leave` turns the reports off with everything else on every way out (quit, the
   process's exit, an unhandled exception); a killed process leaves them on, as it leaves the
   alternate screen.
 
