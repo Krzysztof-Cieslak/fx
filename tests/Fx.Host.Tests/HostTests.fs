@@ -242,6 +242,35 @@ let tests =
                 finally
                     stop host
 
+            testCase "fx run checks the model and its credentials before the session's environment installs anything"
+            <| fun () ->
+                let p = place "no-credentials"
+
+                let opts =
+                    { options p (Model()) [ "model.role.main", Json.String modelId ] with
+                        Fetch = noDownloads
+                        HostVariables = Fx.Effects.Fakes.InMemoryVariables.create []
+                    }
+
+                let nobody = Terminal None
+                let e = failedRun opts nobody
+                Expect.stringContains e "the model call would fail: unavailable: anthropic: no credentials" e
+                Expect.stringContains e "ANTHROPIC_API_KEY" "how to provide them"
+                Expect.isEmpty nobody.Asked "nothing to install was asked for"
+                Expect.isEmpty nobody.Lines "no session was made"
+
+                let host = start opts
+
+                try
+                    Expect.isEmpty (HostSessions.entries host) "no session"
+                    Expect.isEmpty (Fx.Grants.Host.GrantsService.pending host.Grants).Requests "no request"
+                finally
+                    stop host
+
+                let unset = { opts with Explicit = [] }
+                let e = failedRun unset (Terminal None)
+                Expect.equal e "no model is configured for the main role (model.role.main)" "no model"
+
             testCase "a host starts, signs in its OS user, and holds its data directory against a second host"
             <| fun () ->
                 let p = place "lock"

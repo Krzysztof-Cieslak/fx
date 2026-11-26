@@ -253,6 +253,32 @@ module Headless =
             return result
         }
 
+    /// Whether a new session's turns could call their model: one is configured for the main role, and
+    /// its provider's credentials resolve (spec §11.3). Checked before the session's environment
+    /// installs anything, so a run that cannot call its model fails at once, saying what the turn
+    /// would have said, rather than after a download.
+    let modelReady (host: Host) : Eff<HostEnv, Result<unit, string>> =
+        eff {
+            let variants = Fx.Variants.Variants.ofResolution host.Resolution
+
+            match
+                Setup.value (Fx.Variants.Slots.modelRole "main") variants
+                |> Option.map Fx.Models.ModelRef.tryParse
+            with
+            | None -> return Error "no model is configured for the main role (model.role.main)"
+            | Some(Error reason) -> return Error $"model.role.main is not a model: {reason}"
+            | Some(Ok model) ->
+                match Setup.providers host.Extensions |> List.tryFind (fun p -> p.Id = model.Provider) with
+                // Model access says so at the call.
+                | None -> return Ok()
+                | Some provider ->
+                    match! Fx.Auth.AuthService.resolve host.Auth provider with
+                    | Ok _ -> return Ok()
+                    | Error e ->
+                        let failure = Fx.Models.ChatError.Unavailable(provider.Id + ": " + string e)
+                        return Error $"the model call would fail: {failure}"
+        }
+
     /// Runs one prompt to the end of its turn.
     let run
         (host: Host)
@@ -279,9 +305,13 @@ module Headless =
                             | None -> Task.FromResult(Error $"no session {id} on this host")
                         | None ->
                             task {
-                                let id = string (host.Options.Ids.NewId())
-                                io.Show $"session {id}"
-                                return! HostSessions.create host by id request.Title cancellation
+                                // Before the session's environment installs components (a download).
+                                match! Eff.run (Host.within host cancellation) (modelReady host) with
+                                | Error e -> return Error e
+                                | Ok() ->
+                                    let id = string (host.Options.Ids.NewId())
+                                    io.Show $"session {id}"
+                                    return! HostSessions.create host by id request.Title cancellation
                             }
 
                     match session with

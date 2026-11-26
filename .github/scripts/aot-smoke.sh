@@ -55,23 +55,51 @@ case "$check" in
     [[ "$rid" == win-* ]] && home="$(cygpath -w "$home")"
     # The product's home variable (FX_HOME for the product name fx).
     variable="$(tr '[:lower:]' '[:upper:]' <<< "$name")_HOME"
+    # No model credentials, then a key that is never sent (the run stops before any model call).
     if [[ -n "$IN" ]]; then
       run=(docker exec -i -w "$work/project" -e "$variable=$home" alpine)
+      keyed=(docker exec -i -w "$work/project" -e "$variable=$home" -e ANTHROPIC_API_KEY=smoke-not-a-key alpine)
     else
-      run=(env "$variable=$home")
+      run=(env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY "$variable=$home")
+      keyed=(env "$variable=$home" ANTHROPIC_API_KEY=smoke-not-a-key)
     fi
+    model=(--model anthropic/claude-sonnet-5-5)
     cd "$work/project"
     "${run[@]}" "$bin" variants list > "$work/list.txt"
     grep -q '^agent.interpreter = "bun-ts"' "$work/list.txt"
-    # A headless run starts the whole host (stores, grants, identity, an embedded environment);
-    # without a terminal the first install of Bun is denied, so the run stops there.
+    # A headless run starts the whole host (stores, grants, identity). Without credentials for its
+    # model it stops before its environment installs anything.
     set +e
-    "${run[@]}" "$bin" run -p hello < /dev/null > "$work/run.txt" 2>&1
+    "${run[@]}" "$bin" run -p hello "${model[@]}" < /dev/null > "$work/run.txt" 2>&1
+    code=$?
+    set -e
+    cat "$work/run.txt"
+    [[ "$code" == 1 ]]
+    grep -q "no credentials" "$work/run.txt"
+    if grep -q "needs a person's approval" "$work/run.txt"; then
+      echo "::error::the run asked to install components before it checked the model's credentials"
+      exit 1
+    fi
+    # With a key, the embedded environment's first install of Bun needs a person: without a terminal
+    # the request is withdrawn (nobody answered it), and the run names the command that allows it.
+    set +e
+    "${keyed[@]}" "$bin" run -p hello "${model[@]}" < /dev/null > "$work/run.txt" 2>&1
     code=$?
     set -e
     cat "$work/run.txt"
     [[ "$code" == 1 ]]
     grep -q "needs a person's approval" "$work/run.txt"
+    grep -q "grants allow component.install bun@" "$work/run.txt"
+    # `fx grants`: nobody answered, so no grant was made; one made beforehand is listed, then revoked.
+    "${run[@]}" "$bin" grants list | tr -d '\r' > "$work/grants.txt"
+    cat "$work/grants.txt"
+    grep -qx "no grants" "$work/grants.txt"
+    "${run[@]}" "$bin" grants allow component.install 'bun@*' --reason smoke | tr -d '\r' > "$work/grants.txt"
+    cat "$work/grants.txt"
+    grep -q "allow component.install 'bun@\*'  (host) by user:" "$work/grants.txt"
+    id=$(cut -d' ' -f1 < "$work/grants.txt")
+    "${run[@]}" "$bin" grants revoke "$id" | tr -d '\r' > "$work/grants.txt"
+    grep -qx "revoked $id" "$work/grants.txt"
     ;;
 
   sqlite)
