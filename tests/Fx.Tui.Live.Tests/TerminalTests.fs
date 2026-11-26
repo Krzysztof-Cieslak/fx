@@ -1,7 +1,7 @@
 /// The real terminal backend: the `fx` binary started on a pseudo-terminal (a PTY on Linux and macOS,
 /// ConPTY on Windows) with no arguments, so it runs the TUI on an embedded host. Keys are typed, the
-/// output is read on a `VtScreen`, the terminal is resized, and Ctrl+C twice ends it with the terminal
-/// given back.
+/// output is read on a `VtScreen`, the terminal is resized, the mouse wheel scrolls the transcript,
+/// and Ctrl+C twice ends it with the terminal given back.
 module Fx.Tui.Live.Tests.TerminalTests
 
 open System
@@ -69,6 +69,16 @@ type private Output(pty: Pty, columns: int, rows: int) =
 
             Thread.Sleep 50
 
+    /// Waits until the screen's rows satisfy a condition.
+    member _.WaitUntil(what: string, condition: string list -> bool) =
+        let deadline = DateTime.UtcNow.AddSeconds 120.0
+
+        while not (lock gate (fun () -> condition screen.Lines)) do
+            if DateTime.UtcNow > deadline || lock gate (fun () -> ended) then
+                failtest $"the terminal never showed {what}; screen:\n{lock gate (fun () -> screen.Text)}"
+
+            Thread.Sleep 50
+
 let private write (pty: Pty) (text: string) =
     sync (pty.Write (Encoding.UTF8.GetBytes text) CancellationToken.None)
 
@@ -123,6 +133,23 @@ let tests =
                     out.Resize(72, 20)
                     // The status line's hints are written again at the new width.
                     out.WaitFor "Enter send"
+
+                    if not windows then
+                        Expect.isTrue out.Screen.Mouse "mouse reports asked for (the wheel)"
+
+                    // The wheel, as the terminal reports it, scrolls the transcript: a short screen, so
+                    // it is longer than its room; a notch up, then back down to its end.
+                    sync (pty.Resize { Cols = 72; Rows = 8 })
+                    out.Resize(72, 8)
+                    let footer (lines: string list) = List.last lines
+                    out.WaitUntil("the short screen", fun lines -> lines.Length = 8 && (footer lines).Contains "● ")
+                    write pty "\u001b[<64;10;3M"
+                    out.WaitUntil("the transcript scrolled up", fun lines -> (footer lines).Contains "↑")
+                    write pty (String.replicate 3 "\u001b[<65;10;3M")
+                    out.WaitUntil("the transcript's end again", fun lines -> not ((footer lines).Contains "↑"))
+                    sync (pty.Resize { Cols = 72; Rows = 20 })
+                    out.Resize(72, 20)
+                    out.WaitFor "Enter send"
                     write pty "\u0003"
                     out.WaitFor "again to exit"
                     write pty "\u0003"
@@ -133,6 +160,7 @@ let tests =
                     if not windows then
                         Expect.isFalse out.Screen.OnAlternate "the shell's screen is back"
                         Expect.isTrue out.Screen.CursorVisible "the cursor is shown again"
+                        Expect.isFalse out.Screen.Mouse "no mouse reports"
                 finally
                     sync (pty.Close())
 
