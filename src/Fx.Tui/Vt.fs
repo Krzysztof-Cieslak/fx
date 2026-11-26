@@ -12,8 +12,8 @@ module Vt =
 
     /// Takes over the terminal: the alternate screen (the shell's scrollback stays as it was),
     /// no automatic wrap at the last column, bracketed paste, mouse reports in the SGR encoding (for
-    /// the wheel: the alternate screen has no scrollback; selecting text takes Shift), the cursor
-    /// hidden until a frame shows it.
+    /// the wheel: the alternate screen has no scrollback, and terminals would send the wheel as `↑`
+    /// `↓`; selecting text takes Shift), the cursor hidden until a frame shows it.
     let enter: string =
         esc
         + "?1049h"
@@ -21,10 +21,11 @@ module Vt =
         + "?7l"
         + esc
         + "?2004h"
-        + esc
-        + "?1000h"
+        // The encoding first, so no report comes in the old one.
         + esc
         + "?1006h"
+        + esc
+        + "?1000h"
         + esc
         + "?25l"
         + esc
@@ -35,7 +36,20 @@ module Vt =
     /// Gives the terminal back as it was: styles reset, mouse reports, wrap and paste modes off, the
     /// cursor shown, the main screen again.
     let leave: string =
-        esc + "0m" + esc + "?1006l" + esc + "?1000l" + esc + "?2004l" + esc + "?7h" + esc + "?25h" + esc + "?1049l"
+        esc
+        + "0m"
+        + esc
+        + "?1000l"
+        + esc
+        + "?1006l"
+        + esc
+        + "?2004l"
+        + esc
+        + "?7h"
+        + esc
+        + "?25h"
+        + esc
+        + "?1049l"
 
     let private colorCodes (background: bool) (color: Color) : int list =
         let basic (code: int) =

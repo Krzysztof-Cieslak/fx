@@ -41,6 +41,7 @@ let private view () : string list =
                 "\u001b[3~\u001b[5~\u001b[13;2u\u001b\r"
                 "\u001b[200~pasted\rtext\u001b[201~"
                 "\u0003\u0004\u007f\t"
+                "\u001b[<64;10;5M\u001b[<81;1;1M\u001b[<0;2;2m\u001b[M`!!\u001b[<65;1"
             ] do
             let keys, rest = Keys.decode "" input
             let shown = keys |> List.map string |> String.concat " "

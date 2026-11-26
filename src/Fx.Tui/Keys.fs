@@ -92,6 +92,19 @@ module Keys =
     let private pasteStart = "\u001b[200~"
     let private pasteEnd = "\u001b[201~"
 
+    /// The length of a mouse report in xterm's first encoding (`ESC [ M` and three characters).
+    let private x10Length = 6
+
+    /// Whether what is pending is a mouse report the input cut short: the terminal wrote it whole,
+    /// so the rest is on its way (typed as text, it would land in the prompt).
+    let private mouseCut (pending: string) : bool =
+        if pending.StartsWith("\u001b[<", StringComparison.Ordinal) then
+            pending.Length <= 32
+            && pending |> Seq.skip 3 |> Seq.forall (fun c -> Char.IsAsciiDigit c || c = ';')
+        else
+            pending.StartsWith("\u001b[M", StringComparison.Ordinal)
+            && pending.Length < x10Length
+
     /// The modifiers of an xterm parameter (`1 + bits`: shift 1, alt 2, ctrl 4).
     let private withModifiers (parameter: int) (k: Key) : Key =
         let bits = max 0 (parameter - 1)
@@ -107,15 +120,30 @@ module Keys =
         | true, n -> Some n
         | _ -> None
 
-    /// An SGR mouse report (`ESC [ < button ; column ; row M|m`): the wheel's notches (buttons 64
-    /// and 65, with any modifiers), anything else as received.
-    let private mouse (parameters: string) (final: char) (raw: string) : KeyCode =
-        let button = parameters.Substring(1).Split(';') |> Array.tryHead |> Option.bind parseInt
+    /// A mouse report's button code (xterm's: the button in bits 0-1 and 6-7, Shift 4, Alt 8, Ctrl 16,
+    /// motion 32): the wheel's vertical notches (buttons 64 and 65) with their modifiers, anything
+    /// else (clicks, releases, the horizontal wheel, motion) as received.
+    let private mouse (button: int) (pressed: bool) (raw: string) : Key =
+        let wheel =
+            match button &&& ~~~(4 ||| 8 ||| 16) with
+            | 64 when pressed -> Some KeyCode.WheelUp
+            | 65 when pressed -> Some KeyCode.WheelDown
+            | _ -> None
 
-        match button, final with
-        | Some b, 'M' when (b &&& 64) <> 0 && (b &&& 128) = 0 && (b &&& 3) = 0 -> KeyCode.WheelUp
-        | Some b, 'M' when (b &&& 64) <> 0 && (b &&& 128) = 0 && (b &&& 3) = 1 -> KeyCode.WheelDown
-        | _ -> KeyCode.Unknown raw
+        match wheel with
+        | Some code ->
+            { key code with
+                Shift = button &&& 4 <> 0
+                Alt = button &&& 8 <> 0
+                Ctrl = button &&& 16 <> 0
+            }
+        | None -> key (KeyCode.Unknown raw)
+
+    /// An SGR mouse report (`ESC [ < button ; column ; row M`, `m` for a release).
+    let private sgrMouse (parameters: string) (final: char) (raw: string) : Key =
+        match parameters.Substring(1).Split(';') |> Array.tryHead |> Option.bind parseInt with
+        | Some button when final = 'M' || final = 'm' -> mouse button (final = 'M') raw
+        | _ -> key (KeyCode.Unknown raw)
 
     /// A CSI sequence's key (`ESC [ params final`).
     let private csi (parameters: string) (final: char) (raw: string) : Key =
@@ -252,6 +280,15 @@ module Keys =
                     i <- n
                 else
                     match text[i + 1] with
+                    | '[' when i + 2 < n && text[i + 2] = 'M' ->
+                        // A mouse report in xterm's first encoding (`ESC [ M` and three characters:
+                        // 32 plus the button, the column and the row), from a terminal without SGR's.
+                        if n - i < x10Length then
+                            rest <- text.Substring i
+                            i <- n
+                        else
+                            keys.Add(mouse (int text[i + 3] - 32) true (text.Substring(i, x10Length)))
+                            i <- i + x10Length
                     | '[' ->
                         match csiEnd text (i + 2) with
                         | None ->
@@ -263,7 +300,7 @@ module Keys =
                             // A leading private marker (`<`, `?`) is a report (mouse, modes), not a key;
                             // of the mouse, only the wheel is acted on.
                             if parameters.StartsWith "<" then
-                                keys.Add(key (mouse parameters text[j] raw))
+                                keys.Add(sgrMouse parameters text[j] raw)
                             elif parameters.StartsWith "?" then
                                 keys.Add(key (KeyCode.Unknown raw))
                             else
@@ -312,13 +349,13 @@ module Keys =
 
     /// What is still pending once no more input came: a lone `ESC` is Escape; the start of a
     /// sequence that never finished is passed on as unknown.
-    /// A paste still arriving stays pending.
+    /// A paste still arriving, or a mouse report cut short, stays pending.
     let flush (pending: string) : Key list * string =
         if pending = "" then
             [], ""
         elif pending = "\u001b" then
             [ key KeyCode.Escape ], ""
-        elif pending.StartsWith(pasteStart, StringComparison.Ordinal) then
+        elif pending.StartsWith(pasteStart, StringComparison.Ordinal) || mouseCut pending then
             [], pending
         else
             [ key (KeyCode.Unknown pending) ], ""

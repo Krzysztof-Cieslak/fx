@@ -20,6 +20,7 @@ type VtScreen(width: int, height: int) =
     let mutable row = 0
     let mutable column = 0
     let mutable cursorVisible = true
+    let mutable mouse = false
     let mutable pending = ""
 
     let grid () = if onAlternate then alternate else main
@@ -148,6 +149,7 @@ type VtScreen(width: int, height: int) =
             for mode in ps do
                 match mode with
                 | 25 -> cursorVisible <- on
+                | 1000 -> mouse <- on
                 | 1049 ->
                     if on && not onAlternate then
                         alternate <- blank ()
@@ -231,6 +233,10 @@ type VtScreen(width: int, height: int) =
     member _.OnAlternate = onAlternate
 
     member _.CursorVisible = cursorVisible
+
+    /// Whether the program asked for mouse reports (and the terminal would send the wheel as them).
+    member _.Mouse = mouse
+
     member _.Cursor = row, column
 
     /// The rows shown, trailing spaces removed.

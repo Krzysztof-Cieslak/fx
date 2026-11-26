@@ -98,12 +98,61 @@ let tests =
                         Expect.equal (keys "\u001b[13;2u\u001b[13;5u") ([ "Shift+Enter"; "Ctrl+Enter" ], "") "CSI u"
                         Expect.equal (keys "\u001b[27;2;13~") ([ "Shift+Enter" ], "") "modifyOtherKeys"
                         Expect.equal (keys "\u001b\r\u001bb") ([ "Alt+Enter"; "Alt+b" ], "") "Alt"
+                        Expect.equal (keys "\u001b\u0003") ([ "Esc"; "Ctrl+c" ], "") "Escape, then Ctrl+C"
+                    }
+
+                    test
+                        "the mouse wheel: SGR reports with their modifiers, several in a read; other reports are not keys" {
+                        Expect.equal
+                            (keys "\u001b[<64;10;5M\u001b[<65;10;5M\u001b[<64;1;1M")
+                            ([ "WheelUp"; "WheelDown"; "WheelUp" ], "")
+                            "notches up and down, several in one read"
 
                         Expect.equal
-                            (keys "\u001b[<64;10;5M\u001b[<65;10;5M\u001b[<68;1;1M\u001b[<0;3;4M\u001b[<0;3;4m")
-                            ([ "WheelUp"; "WheelDown"; "WheelUp"; "Unknown(\\e[<0;3;4M)"; "Unknown(\\e[<0;3;4m)" ], "")
-                            "the mouse: the wheel (with Shift too), other reports as received"
-                        Expect.equal (keys "\u001b\u0003") ([ "Esc"; "Ctrl+c" ], "") "Escape, then Ctrl+C"
+                            (keys "\u001b[<68;1;1M\u001b[<73;1;1M\u001b[<80;1;1M")
+                            ([ "Shift+WheelUp"; "Alt+WheelDown"; "Ctrl+WheelUp" ], "")
+                            "modifiers"
+
+                        Expect.equal
+                            (keys
+                                "\u001b[<0;3;4M\u001b[<0;3;4m\u001b[<66;3;4M\u001b[<67;3;4M\u001b[<96;3;4M\u001b[<64;3;4m")
+                            ([
+                                "Unknown(\\e[<0;3;4M)"
+                                "Unknown(\\e[<0;3;4m)"
+                                "Unknown(\\e[<66;3;4M)"
+                                "Unknown(\\e[<67;3;4M)"
+                                "Unknown(\\e[<96;3;4M)"
+                                "Unknown(\\e[<64;3;4m)"
+                             ],
+                             "")
+                            "a click and its release, the horizontal wheel, motion, a release are not the wheel"
+
+                        Expect.equal
+                            (keys "\u001b[M`!!\u001b[Ma!!x")
+                            ([ "WheelUp"; "WheelDown"; "x" ], "")
+                            "xterm's first encoding (terminals without SGR's)"
+
+                        Expect.equal (keys "\u001b[M !!") ([ "Unknown(\\e[M !!)" ], "") "a click in it"
+                    }
+
+                    test "a mouse report cut between reads waits for its rest, also past the Escape wait" {
+                        let first, rest = Keys.decode "" "a\u001b[<64;1"
+                        Expect.equal (first |> List.map string) [ "a" ] "before the cut"
+                        Expect.equal rest "\u001b[<64;1" "pending"
+                        Expect.equal (Keys.flush rest) ([], rest) "not typed as text when the wait ends"
+                        let second, rest = Keys.decode rest "0;5M"
+                        Expect.equal (second |> List.map string) [ "WheelUp" ] "completed"
+                        Expect.equal rest "" "nothing left"
+                        let first, rest = Keys.decode "" "\u001b[Ma"
+                        Expect.isEmpty first "the first encoding, cut"
+                        Expect.equal (Keys.flush rest) ([], rest) "waits too"
+                        let second, _ = Keys.decode rest "!!"
+                        Expect.equal (second |> List.map string) [ "WheelDown" ] "completed"
+
+                        Expect.equal
+                            (Keys.flush "\u001b[1;" |> fst |> List.map string)
+                            [ "Unknown(\\e[1;)" ]
+                            "a key's sequence is not held"
                     }
 
                     test "a lone Escape waits, then is Escape; a cut sequence waits for the rest" {
@@ -305,8 +354,16 @@ let tests =
                         Expect.equal screen.Cursor (2, 4) "the cursor"
                         Expect.isTrue screen.CursorVisible "shown"
                         Expect.isTrue screen.OnAlternate "the alternate screen"
+                        Expect.isTrue screen.Mouse "mouse reports (the wheel)"
+                        Expect.stringContains Vt.enter "\u001b[?1006h\u001b[?1000h" "SGR's encoding before the reports"
                         screen.Write Vt.leave
                         Expect.isFalse screen.OnAlternate "back"
+                        Expect.isFalse screen.Mouse "no mouse reports"
+
+                        Expect.stringContains
+                            Vt.leave
+                            "\u001b[?1000l\u001b[?1006l"
+                            "the reports off before the encoding"
                     }
 
                     test "the difference from the last frame redraws only the rows that changed" {
