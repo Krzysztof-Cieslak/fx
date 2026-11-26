@@ -280,7 +280,10 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    bun@1.4.5`, the resource quoted for the shell and escaped as an exact pattern). The requester gets no
    answer (an install fails `not approved: withdrawn: …`; a cell's call fails `its grant request was
    not answered`), and since requests are keyed by what asks (a turn's call; an install attempt), the
-   next run asks again: a headless run never leaves an answer behind for a later one. A decision about a call in doubt (a
+   next run asks again: a headless run never leaves an answer behind for a later one. Requests
+   already pending when the run starts (left by a host that stopped while it asked; a recovered
+   install or turn asks again with the same key and waits for them) are put to the person first, so
+   a run never waits for a prompt nobody sees. A decision about a call in doubt (a
    turn the host stopped during a call, recovered at its start) is put to the person too: the card's
    question, the call, what it printed, and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
    answer) the run ends with an error saying what waits, and the decision stays open.
@@ -378,7 +381,8 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   once and allow once, each asked again, then headless again; a grant made with `fx grants` that a
   headless run installs by without asking, listed and revoked; `fx grants`' refusals (a bad or unknown
   action, an unknown session or grant, a running host); `fx run` failing on a missing model or missing
-  credentials before anything is asked or installed.
+  credentials before anything is asked or installed; a request left pending by a host that stopped
+  while it asked, put to the next run's person.
 - `ProtocolTests`: in process, create, prompt, subscribe, reconnect after a sequence number, a restart;
   least roles with a viewer's identity provider, grants answered over the protocol; over a Unix socket
   or named pipe and over loopback: the token file, a wrong token, a session token as the bearer, an

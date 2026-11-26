@@ -206,6 +206,73 @@ let tests =
                 | [ line ] -> Expect.stringContains line "[revoked" "kept, revoked"
                 | other -> failtest $"{other}"
 
+            testCase "a request left pending by a host that stopped while it asked is put to the next run's person"
+            <| fun () ->
+                let p = place "left-pending"
+                hostConfig p withoutKernel
+                let opts = options p (Model()) [ "model.role.main", Json.String modelId ]
+                let host = start opts
+
+                let left =
+                    try
+                        let ask: GrantAsk =
+                            {
+                                Key = "test/left-by-a-crash"
+                                Action = ActionName.create "component.install"
+                                Resource = "tool@1.0.0"
+                                Context = GrantContext.none
+                                Requester =
+                                    {
+                                        Principal = "system"
+                                        Agent = None
+                                        Extension = None
+                                    }
+                                Summary = "Install tool 1.0.0"
+                                Evidence = []
+                                Suggestions = []
+                                Scopes = []
+                                Expires = None
+                            }
+
+                        match
+                            wait ((Fx.Grants.Host.GrantsService.grants host.Grants).Request ask CancellationToken.None)
+                        with
+                        | Ok(AskOutcome.Pending id) -> id
+                        | other -> failtest $"{other}"
+                    finally
+                        stop host
+
+                let nobody = Terminal None
+                let host = start opts
+
+                try
+                    match
+                        waitFor
+                            120.0
+                            (Headless.run
+                                host
+                                {
+                                    Prompt = "Look around"
+                                    Session = None
+                                    Title = None
+                                }
+                                nobody.Io
+                                CancellationToken.None)
+                    with
+                    | Ok _ -> ()
+                    | Error e -> failtest e
+
+                    Expect.equal (nobody.Asked |> List.map _.Id) [ left ] "put to the person"
+
+                    Expect.isTrue
+                        (nobody.Lines
+                         |> List.exists (fun l -> l.Contains "Install tool 1.0.0" && l.Contains "nobody can answer"))
+                        $"{nobody.Lines}"
+
+                    Expect.isEmpty (Fx.Grants.Host.GrantsService.pending host.Grants).Requests "withdrawn"
+                finally
+                    stop host
+
             testCase "fx grants refuses what the grants log does not take, and waits for a running host"
             <| fun () ->
                 let p = place "grants-command"
