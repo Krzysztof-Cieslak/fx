@@ -10,6 +10,7 @@ open Fx.Contracts
 open Fx.Effects
 open Fx.Models
 open Fx.Kernel
+open Fx.Rpc
 open Fx.Sessions
 open Fx.Prompt
 open Fx.CodeAct
@@ -34,6 +35,56 @@ let private started (f: Fixture) : Task =
                 failtest "the cell did not start"
 
             do! Task.Delay 10
+    }
+
+/// The kernel's connection as the host sees it: the kernel's answer to `cell/cancel` arrives `delay`
+/// after the cancelled cell's answer (whichever the kernel wrote first), and `sent` keeps every message
+/// the host sent.
+let private cancelAnsweredLate
+    (delay: TimeSpan)
+    (sent: Collections.Concurrent.ConcurrentQueue<string>)
+    (transport: Transport)
+    : Transport =
+    let held = ref None
+    let answered = ref false
+
+    let isCancelAnswer (text: string) = text.Contains "\"wasRunning\""
+    let isCellAnswer (text: string) = text.Contains "\"outcome\""
+
+    { transport with
+        Send =
+            fun frame cancellation ->
+                match frame with
+                | Frame.Text text -> sent.Enqueue text
+                | Frame.Binary _ -> ()
+
+                transport.Send frame cancellation
+        Receive =
+            fun cancellation ->
+                task {
+                    match held.Value with
+                    | Some later when answered.Value ->
+                        held.Value <- None
+                        do! Task.Delay(delay, cancellation)
+                        return later
+                    | _ ->
+                        let mutable next = None
+
+                        while next.IsNone do
+                            match! transport.Receive cancellation with
+                            | Received.Frame(Frame.Text text) as received when isCancelAnswer text ->
+                                if answered.Value then
+                                    do! Task.Delay(delay, cancellation)
+                                    next <- Some received
+                                else
+                                    held.Value <- Some received
+                            | Received.Frame(Frame.Text text) as received when isCellAnswer text ->
+                                answered.Value <- true
+                                next <- Some received
+                            | received -> next <- Some received
+
+                        return next.Value
+                }
     }
 
 let private toolNames (request: ChatRequest) =
@@ -368,6 +419,50 @@ let tests =
                                 Expect.isFalse ((text after).Contains "A new kernel") "the same kernel"
                             })
                         ()
+            }
+
+            testTask "an interrupt runs to its end when the cell answers before the kernel answers cell/cancel" {
+                // Cut short when the cell's answer came first, the interrupt's `cell/cancel` would be
+                // cancelled at the kernel (`$/cancelRequest`) or not depending on whether the kernel's
+                // answer to it was handled yet: timing, which replay cannot take again.
+                let sent = Collections.Concurrent.ConcurrentQueue<string>()
+
+                let options =
+                    { kernelOptions with
+                        ExitGrace = TimeSpan.FromSeconds 30.0
+                    }
+
+                do!
+                    (task {
+                        use f =
+                            createWith "interrupt-late" [] (fun _ ->
+                                scriptKernelOver (cancelAnsweredLate (TimeSpan.FromMilliseconds 300.0) sent) options)
+
+                        f.Model.AddAll
+                            [
+                                Say.cell "// intent: wait\nlet x = 1\ncall w = fs.write [\"started.txt\", \"\"]\nsleep"
+                            ]
+
+                        do! kickoff f "Wait"
+                        do! started f
+                        let! _ = send f "s1" "stop" Command.Interrupt
+                        let! ending = ended f "s1" 1
+                        Expect.equal ending TurnEnd.Interrupted "interrupted"
+
+                        f.Model.AddAll [ Say.cell "// intent: check\nx"; Say.finish "x is still there" ]
+                        do! prompt f "s1" "p2" "Go on"
+                        let! ending = ended f "s1" 2
+                        Expect.equal (completed ending) (TurnResult.Done("x is still there", [], None)) "done"
+                    })
+                        .WaitAsync(TimeSpan.FromSeconds 120.0)
+
+                let messages = List.ofSeq sent
+
+                let count (method: string) =
+                    messages |> List.filter (fun m -> m.Contains method) |> List.length
+
+                Expect.equal (count "\"cell/cancel\"") 1 "the interrupt asked the kernel once"
+                Expect.equal (count Protocol.CancelRequest) 0 "and never cancelled what it asked"
             }
 
             testTask "a cell that cannot be interrupted is killed; the next cell starts a new kernel and says so" {

@@ -150,7 +150,9 @@ One kernel per session (`SessionKernel`), started when the first cell needs it a
   validates with the session's `Codecs.turnResult` and the turn's checks, and only from the running cell.
 - **Interrupts** cancel the turn's scope. The cell runs shielded from it and is stopped in stages
   (`Kernel.interrupt`: `cell/cancel`, then a kill after `ExitGrace`), so a busy cell does not leave the
-  kernel busy; the next turn waits until it stopped (one turn at a time uses a kernel).
+  kernel busy; the next turn waits until it stopped (one turn at a time uses a kernel). An interrupt that
+  began runs to its end, also when the cell answers first: cut short, its `cell/cancel` would be cancelled
+  or not depending on timing, which exact replay cannot follow (replay.md).
 - **Restarts** (Jupyter semantics): a kernel that exited or was killed is dropped; the next cell starts a
   new one (fresh owned directories per launch, numbered on from the journal's `KernelLaunched`, also
   after the host restarted) and its receipt says that names from earlier cells are gone and which

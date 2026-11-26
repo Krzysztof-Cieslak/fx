@@ -234,8 +234,9 @@ let scratch (name: string) : string =
     Directory.CreateDirectory dir |> ignore
     dir
 
-/// The script kernel in this process, over the in-process transport: a fresh one for each launch.
-let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
+/// The script kernel in this process, over the in-process transport as `wrap` makes the host see it: a
+/// fresh one for each launch.
+let scriptKernelOver (wrap: Transport -> Transport) (options: KernelOptions) : Interpreter<HandsEnv> =
     {
         Language = "script"
         Prompt =
@@ -263,7 +264,9 @@ let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
                             kernel.Kill()
                             Task.FromResult()
 
-                        match! Eff.run env (Kernel.connect options start.Host start.Setup terminate clientEnd) with
+                        match!
+                            Eff.run env (Kernel.connect options start.Host start.Setup terminate (wrap clientEnd))
+                        with
                         | Ok k -> return Ok k
                         | Error e ->
                             let! _ = terminate ()
@@ -271,6 +274,9 @@ let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> =
                     }
         Launches = None
     }
+
+/// The script kernel in this process, over the in-process transport: a fresh one for each launch.
+let scriptKernel (options: KernelOptions) : Interpreter<HandsEnv> = scriptKernelOver id options
 
 /// What a host process holds: the session host, the strategy's kernels, and how to close them.
 type Process =

@@ -195,6 +195,14 @@ capabilities answered, not on timing:
 - **Decide from data, not from which task finished first.** CodeAct's interrupt (T128's code) used to
   decide whether a killed kernel was closed from whether its connection had already ended; it now decides
   from what the interrupt did (`SessionKernel.Run`).
+- **Never cut a request to a process short because another branch finished first.** Cancelling an RPC
+  request in flight writes `$/cancelRequest` to the process, unless its answer, already read, was handled
+  first: which happens is timing, so replay can miss a write the recording has, or make one it does not.
+  An interrupt that began runs to its end, also when the cell answers first (`SessionKernel.Run` runs the
+  cell and the interrupt with `Eff.both`; as a race, its cancelled `cell/cancel` stalled replay on a slow
+  runner), and `Kernel.kill` ends the connection before it kills the process, so the connection never
+  ends because it saw the killed process's output end first. Timeouts may cut requests short: the delay
+  that elapsed is in the journal, in its order.
 - **Calls that act on the world are numbered when they start** (`SessionJournal.StartActing`,
   `RunActing`): a process can answer a write before the write is seen to complete.
 - **Every capability call goes through a recorder.** A new capability is recordable before a session
@@ -212,6 +220,10 @@ capabilities answered, not on timing:
 - Concurrency is told apart by structured children (flows): two concurrent calls of one lane with the
   same input and different outcomes made in **one** flow outside `Eff.all`/`both`/`race` (tasks started
   by hand) may still swap. Code starts concurrent work only through those combinators (AGENTS.md).
+- A cancellation (an interrupt, the host stopping) is ordered against journaled calls, not against the
+  code between them: one that lands at the very moment a call's answer does (a cell's last output) may
+  find the code a step further on in replay. Independent events rarely meet that closely; never derive
+  a cancellation from the answer it races with (above).
 - Replay needs the binary's own interpreters and kernel options: a kernel's launch (its program,
   directories, variables' names and the `initialize` it sends, with the binary's version) is part of the
   spawn's and writes' inputs, so a session replays with the binary that recorded it, or one that starts
