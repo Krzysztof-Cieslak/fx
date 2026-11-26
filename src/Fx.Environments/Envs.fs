@@ -737,6 +737,23 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
             let policy = EnvSandbox.policy layout machine home writable denied network
             let site = EnvSandbox.site layout machine client.Platform.Shell home policy
 
+            // NuGet's fallback folder must exist: NuGet fails on one that does not.
+            let hostVariables = if machine.SameHost then settings.HostEnvironment else []
+
+            let! userPackages =
+                match EnvSandbox.nugetPackages home hostVariables with
+                | None -> Eff.ret None
+                | Some folder ->
+                    fun (env: 'R) ->
+                        task {
+                            let! entries = client.FsOps.StatMany [ folder ] env.Scope.Cancellation
+
+                            return
+                                match entries with
+                                | [ Ok entry ] when entry.Kind = EntryKind.Directory -> Some folder
+                                | _ -> None
+                        }
+
             let contributedAs (driver: SandboxDriver) =
                 settings.Sandboxes |> List.find (fun c -> c.Value.Id = driver.Id)
 
@@ -753,7 +770,7 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                         }
                     Defaults =
                         if contributed.Value.Confines then
-                            EnvSandbox.caches layout
+                            EnvSandbox.defaults layout policy userPackages
                         else
                             []
                     Unsandboxed = client

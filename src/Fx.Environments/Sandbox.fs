@@ -98,8 +98,9 @@ type EnvSandbox =
         Ready: SandboxReady
         Policy: SandboxPolicy
         Info: EnvSandboxInfo
-        /// Variables every sandboxed process gets unless it sets them itself: the tools' caches in the
-        /// environment's cache directory (`EnvSandbox.caches`). Empty when the driver confines nothing.
+        /// Variables every sandboxed process gets unless it sets them itself: the tools' caches and
+        /// homes in the environment's cache directory and the runtime directory
+        /// (`EnvSandbox.defaults`). Empty when the driver confines nothing.
         Defaults: (string * string) list
         /// envd's client, unsandboxed.
         Unsandboxed: EnvClient
@@ -178,14 +179,16 @@ module EnvSandbox =
         else
             Some(SandboxPath.trim path)
 
+    let private cacheDir (layout: EnvLayout) (parts: string list) : string =
+        parts |> List.fold (EnvLayout.join layout.Os) layout.Cache
+
     /// Where common tools keep their caches, in the environment's cache directory: the user's own
-    /// caches (`~/.cache`, `~/.bun`, `~/.npm`, …) are read-only in the sandbox, and an agent writing
-    /// into them would reach what runs outside it later. XDG-following tools (pip on Linux, Go's
-    /// build cache, many CLIs) follow `XDG_CACHE_HOME`; Bun, npm, Yarn, pip on macOS and Go's modules
-    /// get their own variables. Tools without such a variable (NuGet's packages, Cargo) need their
-    /// cache in the host's `sandbox.writable`.
+    /// caches (`~/.cache`, `~/.bun`, `~/.npm`, `~/.nuget/packages`, …) are read-only in the sandbox,
+    /// and an agent writing into them would reach what runs outside it later. XDG-following tools
+    /// (pip on Linux, Go's build cache, many CLIs) follow `XDG_CACHE_HOME`; Bun, npm, Yarn, pip on
+    /// macOS, Go's modules and NuGet (its packages, HTTP and plugins caches) get their own variables.
     let caches (layout: EnvLayout) : (string * string) list =
-        let under = EnvLayout.join layout.Os layout.Cache
+        let under name = cacheDir layout [ name ]
 
         [
             "XDG_CACHE_HOME", layout.Cache
@@ -194,6 +197,61 @@ module EnvSandbox =
             "YARN_CACHE_FOLDER", under "yarn"
             "PIP_CACHE_DIR", under "pip"
             "GOMODCACHE", under "go-mod"
+            "NUGET_PACKAGES", cacheDir layout [ "nuget"; "packages" ]
+            "NUGET_HTTP_CACHE_PATH", cacheDir layout [ "nuget"; "http-cache" ]
+            "NUGET_PLUGINS_CACHE_PATH", cacheDir layout [ "nuget"; "plugins-cache" ]
+        ]
+
+    /// Tools whose home (in the user's home) holds a credential file the sandbox denies and what they
+    /// must write: their home moves to the environment's cache directory, so they start without the
+    /// user's credentials and fail on none. `DOTNET_CLI_HOME`: the .NET CLI's first-run files and
+    /// tools, and NuGet's user configuration (`~/.nuget/NuGet/NuGet.Config` may hold feed credentials,
+    /// and NuGet fails when it cannot read it), which NuGet then writes afresh with nuget.org only;
+    /// `CARGO_HOME`: Cargo's registry cache and credentials (toolchains stay where `PATH` finds them,
+    /// rustup's proxies included).
+    let homes (layout: EnvLayout) : (string * string) list =
+        [
+            "DOTNET_CLI_HOME", cacheDir layout [ "dotnet" ]
+            "CARGO_HOME", cacheDir layout [ "cargo" ]
+        ]
+
+    /// The user's runtime directory (`/run/user/<uid>`) is denied (it serves the session bus and
+    /// agents' sockets): `XDG_RUNTIME_DIR` is the environment's temporary directory instead, where
+    /// .NET keeps its named mutexes (the MSBuild server's) and other tools their sockets.
+    let runtimeDir (layout: EnvLayout) : string * string = "XDG_RUNTIME_DIR", layout.Temp
+
+    /// The user's NuGet global packages folder: the host's `NUGET_PACKAGES`, else
+    /// `~/.nuget/packages` (a `globalPackagesFolder` in the user's NuGet config is not read: the
+    /// config is a credential location).
+    let nugetPackages (home: string option) (hostVariables: (string * string) list) : string option =
+        match
+            hostVariables
+            |> List.tryFind (fun (name, value) -> name = "NUGET_PACKAGES" && SandboxPath.isAbsolute value)
+        with
+        | Some(_, folder) -> Some(SandboxPath.trim folder)
+        | None -> home |> Option.map (fun home -> SandboxPath.under home ".nuget/packages")
+
+    /// Variables every sandboxed process of an environment gets unless it sets them itself: the
+    /// tools' caches and homes in the environment's cache directory and the runtime directory. NuGet
+    /// reads packages from the user's own packages folder, if it exists (`userPackages`): the folder
+    /// itself when the host made it writable (`sandbox.writable`), else as a read-only fallback folder
+    /// (`NUGET_FALLBACK_PACKAGES`) beside the environment's, so what the user restored before is not
+    /// downloaded again and an agent cannot change it.
+    let defaults (layout: EnvLayout) (policy: SandboxPolicy) (userPackages: string option) : (string * string) list =
+        let packages =
+            userPackages
+            |> Option.map (fun folder -> folder, SandboxPolicy.access policy folder)
+
+        [
+            for name, value in caches layout do
+                match name, packages with
+                | "NUGET_PACKAGES", Some(folder, PathAccess.ReadWrite) -> name, folder
+                | _ -> name, value
+            match packages with
+            | Some(folder, PathAccess.ReadOnly) -> "NUGET_FALLBACK_PACKAGES", folder
+            | _ -> ()
+            yield! homes layout
+            runtimeDir layout
         ]
 
     /// An environment's policy: the workspace, the launches' owned directories and the tools' cache

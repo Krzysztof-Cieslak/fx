@@ -215,6 +215,101 @@ let choosing =
                     PathAccess.ReadWrite
                     "a reviewer's kernel still writes its own directories"
             }
+
+            test "tools get their caches and homes in the environment, and the user's NuGet packages to read" {
+                let machine: EnvMachine =
+                    {
+                        Target = TargetTriple.ofRid "linux-x64" |> Option.get
+                        DataDir = "/home/u/.fx"
+                        SameHost = true
+                    }
+
+                let policyWith (writable: string list) (denied: string list) =
+                    EnvSandbox.policy layout machine (Some "/home/u") writable denied NetworkAccess.Allowed
+
+                let policy = policyWith [] []
+                let packages = "/home/u/.nuget/packages"
+                let defaults = EnvSandbox.defaults layout policy (Some packages)
+
+                let value name =
+                    defaults |> List.find (fun (n, _) -> n = name) |> snd
+
+                let cache = "/home/u/.fx/environments/e1/cache"
+
+                Expect.equal (value "DOTNET_CLI_HOME") $"{cache}/dotnet" "the .NET CLI's home"
+                Expect.equal (value "NUGET_PACKAGES") $"{cache}/nuget/packages" "NuGet's packages"
+                Expect.equal (value "NUGET_HTTP_CACHE_PATH") $"{cache}/nuget/http-cache" "NuGet's HTTP cache"
+                Expect.equal (value "NUGET_PLUGINS_CACHE_PATH") $"{cache}/nuget/plugins-cache" "NuGet's plugins cache"
+                Expect.equal (value "NUGET_FALLBACK_PACKAGES") packages "the user's packages, to read"
+                Expect.equal (value "CARGO_HOME") $"{cache}/cargo" "Cargo's home"
+                Expect.equal (value "XDG_RUNTIME_DIR") "/home/u/.fx/environments/e1/tmp" "the runtime directory"
+                Expect.equal (value "XDG_CACHE_HOME") cache "XDG's caches"
+
+                for name, path in defaults do
+                    let expected =
+                        if name = "NUGET_FALLBACK_PACKAGES" then
+                            PathAccess.ReadOnly
+                        else
+                            PathAccess.ReadWrite
+
+                    Expect.equal (SandboxPolicy.access policy path) expected $"{name} ({path})"
+
+                Expect.equal
+                    (SandboxPolicy.access policy "/home/u/.nuget/NuGet/NuGet.Config")
+                    PathAccess.NoAccess
+                    "the user's NuGet config stays denied"
+
+                Expect.equal
+                    (SandboxPolicy.access policy $"{cache}/dotnet/.nuget/NuGet/NuGet.Config")
+                    PathAccess.ReadWrite
+                    "NuGet writes the environment's own"
+
+                Expect.equal
+                    (SandboxPolicy.access policy "/home/u/.cargo/credentials.toml")
+                    PathAccess.NoAccess
+                    "Cargo's credentials stay denied"
+
+                let names (defaults: (string * string) list) = defaults |> List.map fst
+
+                Expect.isFalse
+                    (EnvSandbox.defaults layout policy None
+                     |> names
+                     |> List.contains "NUGET_FALLBACK_PACKAGES")
+                    "no fallback without the user's folder"
+
+                let shared = policyWith [ "~/.nuget/packages" ] []
+                let sharedDefaults = EnvSandbox.defaults layout shared (Some packages)
+
+                Expect.equal
+                    (sharedDefaults |> List.find (fun (n, _) -> n = "NUGET_PACKAGES") |> snd)
+                    packages
+                    "the user's folder itself, where the host made it writable"
+
+                Expect.isFalse (sharedDefaults |> names |> List.contains "NUGET_FALLBACK_PACKAGES") "and no fallback"
+
+                Expect.isFalse
+                    (EnvSandbox.defaults layout (policyWith [] [ "~/.nuget/packages" ]) (Some packages)
+                     |> names
+                     |> List.contains "NUGET_FALLBACK_PACKAGES")
+                    "no fallback the sandbox would not let NuGet read"
+
+                Expect.equal
+                    (EnvSandbox.nugetPackages (Some "/home/u") [])
+                    (Some packages)
+                    "the default packages folder"
+
+                Expect.equal
+                    (EnvSandbox.nugetPackages (Some "/home/u") [ "NUGET_PACKAGES", "/ci/packages/" ])
+                    (Some "/ci/packages")
+                    "the host's NUGET_PACKAGES"
+
+                Expect.equal
+                    (EnvSandbox.nugetPackages (Some "/home/u") [ "NUGET_PACKAGES", "packages" ])
+                    (Some packages)
+                    "a relative one is not the host's"
+
+                Expect.equal (EnvSandbox.nugetPackages None []) None "no home"
+            }
         ]
 
 let private newLog () =
@@ -259,6 +354,49 @@ let private shellRun (handle: EnvHandle) (script: string) : Output =
     with
     | Ok output -> output
     | Error e -> failtest $"{e}"
+
+/// The repository these tests were built from: the directory above them with the solution.
+let private repositoryRoot () : string option =
+    let rec up (dir: string) =
+        if File.Exists(Path.Combine(dir, "Fx.slnx")) then
+            Some dir
+        else
+            match Path.GetDirectoryName dir with
+            | null -> None
+            | parent -> up parent
+
+    up (Path.TrimEndingDirectorySeparator AppContext.BaseDirectory)
+
+/// A project of the repository (its own files, not its subdirectories) and the repository's build
+/// settings, copied into a workspace.
+let private copyProject (root: string) (project: string) (workspace: string) =
+    let copy (relative: string) =
+        let target = Path.Combine(workspace, relative)
+
+        Directory.CreateDirectory(Path.Combine(workspace, Path.GetDirectoryName relative |> string))
+        |> ignore
+
+        File.Copy(Path.Combine(root, relative), target, true)
+
+    for file in
+        [
+            "global.json"
+            "nuget.config"
+            "Directory.Build.props"
+            "Directory.Build.targets"
+            "Directory.Packages.props"
+        ] do
+        copy file
+
+    for dir in [ "native"; project ] do
+        let options =
+            if dir = project then
+                SearchOption.TopDirectoryOnly
+            else
+                SearchOption.AllDirectories
+
+        for file in Directory.EnumerateFiles(Path.Combine(root, dir), "*", options) do
+            copy (Path.GetRelativePath(root, file))
 
 [<Tests>]
 let environments =
@@ -360,6 +498,105 @@ let environments =
                             ((Output.stdoutText output).Trim())
                             "ok"
                             "the environment's own sandbox is unchanged")
+            }
+
+            test "dotnet restores and builds this repository's smallest project in the sandbox, offline" {
+                let root = repositoryRoot ()
+
+                let userPackages =
+                    EnvSandbox.nugetPackages
+                        (Some(Environment.GetFolderPath Environment.SpecialFolder.UserProfile))
+                        (hostEnvironment ())
+                    |> Option.filter Directory.Exists
+
+                match root, userPackages with
+                | None, _ -> skiptest "not run from the repository's artifacts"
+                | _, None -> skiptest "no NuGet packages folder to read FSharp.Core from offline"
+                | _, Some packages when not (Directory.Exists(Path.Combine(packages, "fsharp.core"))) ->
+                    skiptest "the NuGet packages folder has no FSharp.Core: the restore would download it"
+                | Some root, Some packages ->
+                    withEnvironment [] id (fun created envs ->
+                        match created with
+                        | Error e -> failtest (string e)
+                        | Ok record when not (record.Sandbox |> Option.exists _.Confines) ->
+                            skiptest "nothing confines processes here"
+                        | Ok record ->
+                            let handle =
+                                wait (envs.Open record.Id CancellationToken.None)
+                                |> Result.toOption
+                                |> Option.get
+
+                            copyProject root "src/Fx.Prelude" handle.Layout.Workspace
+
+                            let userConfig =
+                                Path.Combine(
+                                    Environment.GetFolderPath Environment.SpecialFolder.UserProfile,
+                                    ".nuget",
+                                    "NuGet",
+                                    "NuGet.Config"
+                                )
+
+                            let script =
+                                String.Join(
+                                    " && ",
+                                    [
+                                        "dotnet restore src/Fx.Prelude --locked-mode -p:NuGetAudit=false"
+                                        "dotnet build src/Fx.Prelude --no-restore -c Release -nologo"
+                                        "dotnet nuget config paths"
+                                        "echo \"fallback=$NUGET_FALLBACK_PACKAGES\""
+                                        $"(cat '{userConfig}' > /dev/null 2>&1 && echo user-config-read || echo user-config-hidden)"
+                                    ]
+                                )
+
+                            let output =
+                                match
+                                    (handle.Client.Shell.Run
+                                        (Command.script script |> Command.inDir handle.Layout.Workspace)
+                                        CancellationToken.None)
+                                        .WaitAsync(TimeSpan.FromMinutes 5.0)
+                                        .GetAwaiter()
+                                        .GetResult()
+                                with
+                                | Ok output -> output
+                                | Error e -> failtest $"{e}"
+
+                            let stdout = Output.stdoutText output
+
+                            Expect.equal
+                                output.ExitCode
+                                0
+                                $"restored and built in the sandbox:\n{stdout}\n{Output.stderrText output}"
+
+                            Expect.isTrue
+                                (File.Exists(
+                                    Path.Combine(
+                                        handle.Layout.Workspace,
+                                        "artifacts",
+                                        "bin",
+                                        "Fx.Prelude",
+                                        "release",
+                                        "Fx.Prelude.dll"
+                                    )
+                                ))
+                                "the assembly"
+
+                            let lines = stdout.Split('\n') |> Array.map _.Trim() |> List.ofArray
+
+                            Expect.isTrue
+                                (lines |> List.exists (fun line -> line.StartsWith handle.Layout.Cache))
+                                $"NuGet's user config is the environment's: {stdout}"
+
+                            Expect.isFalse (List.contains userConfig lines) "not the user's"
+                            Expect.contains lines $"fallback={packages}" "the user's packages, read in place"
+
+                            if File.Exists userConfig then
+                                Expect.contains lines "user-config-hidden" "the user's NuGet config stays denied"
+
+                            Expect.isFalse
+                                (Directory.Exists(
+                                    Path.Combine(handle.Layout.Cache, "nuget", "packages", "fsharp.core")
+                                ))
+                                "nothing downloaded")
             }
 
             test "a spec cannot turn off the sandbox the host gives" {
