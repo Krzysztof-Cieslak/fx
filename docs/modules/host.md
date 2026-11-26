@@ -398,7 +398,10 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   then another command with nobody at a terminal (withdrawn, the model reads that it was not answered,
   the run names `fx grants allow shell.exec …`), the same command in a later run from a terminal
   (asked again, allowed once, run) and in a run after that without one (asked again); `fx run -p` in two host
-  processes recorded and `fx replay` matching it, and nothing journaled with `session.record` off.
+  processes recorded and `fx replay` matching it, and nothing journaled with `session.record` off; a
+  long turn compacting (spec §5) beside a cell when the provider's count reached the threshold of the
+  catalog's window and when a cell asks (`fx.history.compact`): two `◇ compacted` lines, each summary
+  request the call before it on the Messages API's wire plus the instruction, and `fx replay` matching.
 - `GrantPromptTests`: what the terminal shows of a grant request, replies as answers, what a run shows
   when nobody can answer (the `fx grants allow` command for requests that offer host scope, quoted for
   the shell, the resource escaped as an exact pattern).

@@ -72,12 +72,29 @@ let private sse (events: (string * string) list) : string =
     |> List.map (fun (name, data) -> $"event: {name}\ndata: {data}\n\n")
     |> String.concat ""
 
-/// A Claude Messages stream with one tool call (the documented format).
-let anthropicCall (n: int) (name: string) (arguments: string) : string =
+let private messageStart (n: int) (input: int) =
+    $"{{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_{n}\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{{\"input_tokens\":{input},\"output_tokens\":1}}}}}}"
+
+/// A Claude Messages stream with one text block (the documented format).
+let anthropicText (n: int) (text: string) : string =
     sse
         [
-            "message_start",
-            $"{{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_{n}\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-5-5\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{{\"input_tokens\":400,\"output_tokens\":1}}}}}}"
+            "message_start", messageStart n 400
+            "content_block_start",
+            "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
+            "content_block_delta",
+            $"{{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{{\"type\":\"text_delta\",\"text\":{Json.quote text}}}}}"
+            "content_block_stop", "{\"type\":\"content_block_stop\",\"index\":0}"
+            "message_delta",
+            "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":30}}"
+            "message_stop", "{\"type\":\"message_stop\"}"
+        ]
+
+/// A Claude Messages stream with one tool call (the documented format), for a request of `input` tokens.
+let anthropicCallOf (input: int) (n: int) (name: string) (arguments: string) : string =
+    sse
+        [
+            "message_start", messageStart n input
             "content_block_start",
             $"{{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{{\"type\":\"tool_use\",\"id\":\"toolu_{n}\",\"name\":\"{name}\",\"input\":{{}}}}}}"
             "content_block_delta",
@@ -88,12 +105,22 @@ let anthropicCall (n: int) (name: string) (arguments: string) : string =
             "message_stop", "{\"type\":\"message_stop\"}"
         ]
 
-/// The model, as HTTP: each request to the Messages API gets the next cell, as a tool call. A request
-/// can be held until the test lets it go. Records every request.
+/// A Claude Messages stream with one tool call (the documented format).
+let anthropicCall (n: int) (name: string) (arguments: string) : string = anthropicCallOf 400 n name arguments
+
+/// What the scripted model answers a request with.
+[<RequireQualifiedAccess>]
+type Scripted =
+    /// A cell, as a tool call, for a request the provider counted `input` tokens of.
+    | Cell of code: string * input: int
+    | Text of string
+
+/// The model, as HTTP: each request to the Messages API gets the next reply (a cell, as a tool call, or
+/// text). A request can be held until the test lets it go. Records every request.
 [<Sealed>]
 type Model() =
     let gate = obj ()
-    let cells = Queue<string>()
+    let cells = Queue<Scripted>()
     let requests = ResizeArray<HttpRequest>()
     let holds = Dictionary<int, TaskCompletionSource>()
     let asked = Dictionary<int, TaskCompletionSource>()
@@ -106,15 +133,20 @@ type Model() =
             asked[n] <- s
             s
 
-    let inner (n: int) (cell: string option) =
+    let inner (n: int) (cell: Scripted option) =
         InMemoryHttp(
             SystemClock.clock,
             fun _ ->
                 match cell with
-                | Some code ->
+                | Some(Scripted.Cell(code, input)) ->
                     let arguments = Json.serialize (Json.Object [ "code", Json.String code ])
 
-                    HttpReply.text 200 (anthropicCall n "cell" arguments)
+                    HttpReply.text 200 (anthropicCallOf input n "cell" arguments)
+                    |> HttpReply.withHeader "content-type" "text/event-stream"
+                    |> Ok
+                    |> Some
+                | Some(Scripted.Text text) ->
+                    HttpReply.text 200 (anthropicText n text)
                     |> HttpReply.withHeader "content-type" "text/event-stream"
                     |> Ok
                     |> Some
@@ -152,7 +184,15 @@ type Model() =
     member _.Http: Http = { Send = send }
 
     member _.Add(cell: string) =
-        lock gate (fun () -> cells.Enqueue cell)
+        lock gate (fun () -> cells.Enqueue(Scripted.Cell(cell, 400)))
+
+    /// A cell for a request the provider counted `input` tokens of.
+    member _.AddSized(input: int, cell: string) =
+        lock gate (fun () -> cells.Enqueue(Scripted.Cell(cell, input)))
+
+    /// A reply in text (no tool call).
+    member _.AddText(text: string) =
+        lock gate (fun () -> cells.Enqueue(Scripted.Text text))
 
     member this.AddAll(items: string list) =
         for cell in items do
