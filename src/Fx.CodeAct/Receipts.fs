@@ -28,19 +28,79 @@ module Reads =
         else
             { Files = reads.Files @ [ source ] }
 
+/// How kernels ended, in words for the model and for people (T135).
+[<RequireQualifiedAccess>]
+module KernelEnds =
+    /// Signals whose numbers are the same on Linux and macOS.
+    let private signals =
+        [
+            1, "SIGHUP"
+            2, "SIGINT"
+            3, "SIGQUIT"
+            6, "SIGABRT"
+            9, "SIGKILL"
+            11, "SIGSEGV"
+            13, "SIGPIPE"
+            14, "SIGALRM"
+            15, "SIGTERM"
+        ]
+
+    /// The most characters of a kernel's standard error a description quotes (its end).
+    [<Literal>]
+    let StderrChars = 300
+
+    /// The end of a kernel's standard error worth quoting: at most `StderrChars`, trimmed.
+    let stderrTail (stderr: string) : string =
+        let text = stderr.Trim()
+
+        if text.Length <= StderrChars then
+            text
+        else
+            let start = text.Length - StderrChars + 1
+
+            let start = if Char.IsLowSurrogate text[start] then start + 1 else start
+
+            "…" + text.Substring start
+
+    /// What happened to a kernel, after "the kernel": `was killed by signal 9 (SIGKILL)`. Exit codes
+    /// above 128 are the signals that ended a process, except on Windows.
+    let describe (os: Fx.Sdk.Os) (how: KernelEnd) : string =
+        let quoting (stderr: string) =
+            match stderrTail stderr with
+            | "" -> ""
+            | tail -> $"; its standard error ended with: {tail}"
+
+        match how with
+        | KernelEnd.Exited(Some code, stderr) when os <> Fx.Sdk.Os.Windows && code > 128 && code < 160 ->
+            let signal = code - 128
+
+            let name =
+                signals
+                |> List.tryFind (fun (n, _) -> n = signal)
+                |> Option.map (fun (_, name) -> $" ({name})")
+                |> Option.defaultValue ""
+
+            $"was killed by signal {signal}{name}" + quoting stderr
+        | KernelEnd.Exited(Some code, stderr) -> $"exited with code {code}" + quoting stderr
+        | KernelEnd.Exited(None, stderr) -> "exited" + quoting stderr
+        | KernelEnd.NotStarted reason -> $"did not start ({reason})"
+        | KernelEnd.Killed -> "was killed by the host: an interrupted cell did not stop"
+        | KernelEnd.HostStopped -> "stopped when the host restarted"
+
 /// What happened to a kernel around a cell, for its receipt.
 [<RequireQualifiedAccess>]
 type KernelNote =
     /// Nothing worth saying.
     | Same
-    /// A new kernel started for this cell: what earlier cells declared is gone; the values of these
-    /// cells were restored from the journal (`Out[cell]`).
-    | Restarted of why: string * restored: string list
+    /// A new kernel (this launch) started for this cell: what earlier cells declared is gone, because
+    /// the kernel before it ended (`why`, after "the previous kernel"); the values of these cells were
+    /// restored from the journal (`Out[cell]`).
+    | Restarted of launch: int * why: string * restored: string list
 
     override this.ToString() =
         match this with
         | Same -> "same kernel"
-        | Restarted(why, restored) -> $"restarted: {why} ({restored.Length} values restored)"
+        | Restarted(launch, why, restored) -> $"restarted (launch {launch}): {why} ({restored.Length} values restored)"
 
 /// Receipts (spec §5: stable, bounded when made, never re-rendered): what the model sees of an action's
 /// result. Pure.
@@ -60,17 +120,18 @@ module Receipts =
                 }
         | piece -> piece
 
+    /// The note a receipt starts with when its cell ran in a new kernel (always its first piece).
     let private restarted (note: KernelNote) : Piece list =
         let g = Fx.Product.kernelGlobal
 
         match note with
         | KernelNote.Same -> []
-        | KernelNote.Restarted(why, []) ->
+        | KernelNote.Restarted(_, why, []) ->
             [
                 Piece.Text
-                    $"[A new kernel started for this cell ({why}): names and values from earlier cells are gone; `{g}.recall(id)` gives back a value an earlier cell returned, if it was kept.]"
+                    $"[A new kernel started for this cell (the previous kernel {why}): names and values from earlier cells are gone; `{g}.recall(id)` gives back a value an earlier cell returned, if it was kept.]"
             ]
-        | KernelNote.Restarted(why, restored) ->
+        | KernelNote.Restarted(_, why, restored) ->
             let outs =
                 restored
                 |> List.map (fun cell -> "Out[" + Json.quote cell + "]")
@@ -78,8 +139,19 @@ module Receipts =
 
             [
                 Piece.Text
-                    $"[A new kernel started for this cell ({why}): names from earlier cells are gone. The values earlier cells returned are back as {outs}; `{g}.recall(id)` gives back others that were kept.]"
+                    $"[A new kernel started for this cell (the previous kernel {why}): names from earlier cells are gone. The values earlier cells returned are back as {outs}; `{g}.recall(id)` gives back others that were kept.]"
             ]
+
+    /// The new kernel a receipt reports, for people (`Receipt.Restarted`).
+    let restart (note: KernelNote) : KernelRestart option =
+        match note with
+        | KernelNote.Same -> None
+        | KernelNote.Restarted(launch, why, _) ->
+            Some
+                {
+                    Launch = launch
+                    Reason = "the previous kernel " + why
+                }
 
     let private outcomeText (cellId: string) (outcome: CellOutcome) : string =
         match outcome with
@@ -159,15 +231,15 @@ module Receipts =
         restarted note
         @ [ quoted maxChars reads (if text = "" then "(no output)" else text) ]
 
-    /// A cell the kernel did not answer.
-    let kernelFailed (note: KernelNote) (failure: KernelFailure) (restarting: bool) : Piece list =
-        let next =
-            if restarting then
-                " The next cell starts a new kernel: names and values from earlier cells will be gone."
-            else
-                ""
+    /// A cell the kernel did not answer; `ended`: how the kernel ended (after "the kernel"), if it did.
+    let kernelFailed (note: KernelNote) (failure: KernelFailure) (ended: string option) : Piece list =
+        let text =
+            match ended with
+            | Some how ->
+                $"The cell did not complete: the kernel {how}. The next cell starts a new kernel: names and values from earlier cells will be gone."
+            | None -> $"The cell did not complete: {failure}."
 
-        restarted note @ [ Piece.Text $"The cell did not complete: {failure}.{next}" ]
+        restarted note @ [ Piece.Text text ]
 
     /// An action that could not run (invalid arguments, an unknown tool, a refused call).
     let failed (message: string) : Piece list = [ Piece.Text message ]

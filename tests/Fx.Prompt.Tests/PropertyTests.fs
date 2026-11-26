@@ -114,6 +114,7 @@ let private apply (sim: Sim) (op: Op) : Sim =
                     Name = "cell"
                     Pieces = pieces
                     IsError = modulo kind 5 = 3
+                    Restarted = None
                 })
             sim
     | Boundary when sim.State.Running.IsSome -> sim |> boundary

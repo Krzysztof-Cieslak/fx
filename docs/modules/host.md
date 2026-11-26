@@ -146,6 +146,10 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   (`RecordingSlots.all`). Every process of a session (commands, the kernel) runs
   in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on Linux, Seatbelt on macOS,
   none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`).
+- Hands are per turn, the **kernel is per session**: it lives in the hands' environment with the
+  host's scope, across turns, until it dies, is killed or the host stops (codeact.md, T135). How each
+  kernel ended is journaled (`kernelEnded`); the cell in the new kernel says why, and `fx run` shows it
+  (`  ↻ new kernel  <why>; names from earlier cells are gone`) as the TUI does.
 - The workspace's **environment**: the spec named `default` in host config (or trusted project
   config), on the project's directory unless it names another; otherwise `fx.env.local` on the
   project, envd in the host's process. One per workspace, created with the first session; one that

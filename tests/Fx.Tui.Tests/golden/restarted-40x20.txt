@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ ! runs unsandboxed: commands can read …
+
+┃ rerun the check
+
+  ◇ Cell     rerun the check      ✗ 0.4s
+      ↻ new kernel: the previous kernel…
+      ReferenceError: check is not defi…
+  The kernel restarted, so I will define
+  check again.
+  ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
+
+
+
+
+
+  ⠼ turn 1 · thinking 0.0s
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing:main · sess… ● turn 1
+────────────────────────────────────────
+cursor 17,4

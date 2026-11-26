@@ -152,6 +152,7 @@ let private returns (cfg: RenderConfig) (id: string) (pieces: Piece list) (log: 
                 Name = "cell"
                 Pieces = pieces
                 IsError = false
+                Restarted = None
             })
         log
 

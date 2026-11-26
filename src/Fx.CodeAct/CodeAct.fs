@@ -231,8 +231,9 @@ type CodeAct<'R, 'K
 
                 let journal: KernelJournal<'K> =
                     {
-                        LastLaunch = journalOf id |> Eff.map StepJournal.lastLaunch
+                        LastLaunch = journalOf id |> Eff.map StepJournal.lastKernel
                         Launching = fun launch -> writer.Append($"kernel/{launch}", StepEvent.KernelLaunched launch)
+                        Ended = fun ended -> writer.Append($"kernel/{ended.Launch}/ended", StepEvent.KernelEnded ended)
                         Restore =
                             fun limit kernel ->
                                 eff {
@@ -597,6 +598,7 @@ type CodeAct<'R, 'K
                         {
                             Pieces = Receipts.failed $"The kernel did not start: {reason}"
                             IsError = true
+                            Restarted = None
                         },
                         None
                 | Ok(running, note) ->
@@ -614,7 +616,7 @@ type CodeAct<'R, 'K
                     match record.Result with
                     | Ok result ->
                         match result.Outcome with
-                        | CellOutcome.Completed(Some info) when not (Kernel.exited running).IsCompleted ->
+                        | CellOutcome.Completed(Some info) when record.Ended.IsNone ->
                             let! kept =
                                 Eff.provide
                                     env
@@ -634,13 +636,17 @@ type CodeAct<'R, 'K
                             {
                                 Pieces = Receipts.cell settings.ReceiptChars note intent record.Reads result
                                 IsError = Receipts.isError result.Outcome
+                                Restarted = Receipts.restart note
                             },
                             record.Finished
                     | Error failure ->
+                        let ended = record.Ended |> Option.map (KernelEnds.describe hands.Os)
+
                         return
                             {
-                                Pieces = Receipts.kernelFailed note failure kernel.Kernel.IsNone
+                                Pieces = Receipts.kernelFailed note failure ended
                                 IsError = true
+                                Restarted = Receipts.restart note
                             },
                             None
         }
@@ -791,6 +797,7 @@ type CodeAct<'R, 'K
                                     {
                                         Pieces = Recovery.rerun resumed.Decided :: Receipts.failed message
                                         IsError = true
+                                        Restarted = None
                                     },
                                     None
                                 )
@@ -802,15 +809,25 @@ type CodeAct<'R, 'K
                                     let! executed, finished =
                                         runAction prefix hands kernel settings limits again halted.Call action snapshot
 
-                                    return
-                                        { executed with
-                                            Pieces = Recovery.rerun resumed.Decided :: executed.Pieces
-                                        },
-                                        finished
+                                    // A new kernel's note stays the receipt's first piece (`Receipt.Restarted`).
+                                    let pieces =
+                                        match executed.Restarted, executed.Pieces with
+                                        | Some _, note :: rest -> note :: Recovery.rerun resumed.Decided :: rest
+                                        | _, pieces -> Recovery.rerun resumed.Decided :: pieces
+
+                                    return { executed with Pieces = pieces }, finished
                                 }
                         | decided ->
                             let pieces, isError = Recovery.receipt settings.ReceiptChars resumed.Card decided
-                            Eff.ret ({ Pieces = pieces; IsError = isError }, None)
+
+                            Eff.ret (
+                                {
+                                    Pieces = pieces
+                                    IsError = isError
+                                    Restarted = None
+                                },
+                                None
+                            )
 
                     do!
                         record
@@ -823,6 +840,7 @@ type CodeAct<'R, 'K
                                     Name = halted.Call.Name
                                     Pieces = executed.Pieces
                                     IsError = executed.IsError
+                                    Restarted = executed.Restarted
                                 })
 
                     match finished with
@@ -845,6 +863,7 @@ type CodeAct<'R, 'K
                                             else
                                                 Recovery.notRun
                                         IsError = true
+                                        Restarted = None
                                     })
 
                     state.Step <- halted.Step
@@ -1035,6 +1054,7 @@ type CodeAct<'R, 'K
                                                         {
                                                             Pieces = Receipts.skipped
                                                             IsError = true
+                                                            Restarted = None
                                                         },
                                                         None
                                                     )
@@ -1043,6 +1063,7 @@ type CodeAct<'R, 'K
                                                         {
                                                             Pieces = Receipts.failed message
                                                             IsError = true
+                                                            Restarted = None
                                                         },
                                                         None
                                                     )
@@ -1078,6 +1099,7 @@ type CodeAct<'R, 'K
                                                             Name = toolCall.Name
                                                             Pieces = executed.Pieces
                                                             IsError = executed.IsError
+                                                            Restarted = executed.Restarted
                                                         })
 
                                             match finished with

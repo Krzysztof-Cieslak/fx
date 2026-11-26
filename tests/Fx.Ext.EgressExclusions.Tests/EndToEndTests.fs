@@ -281,6 +281,7 @@ let tests =
                                                 view "deploy/keys/prod.key" "SECRET-KEY-0419"
                                             ]
                                         IsError = false
+                                        Restarted = None
                                     }
                             )
                             Fx.Prompt.LogItem.Context(
@@ -293,6 +294,7 @@ let tests =
                                         Name = "cell"
                                         Pieces = [ view "README.md" "hello" ]
                                         IsError = false
+                                        Restarted = None
                                     }
                             )
                         ]

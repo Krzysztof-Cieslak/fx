@@ -277,6 +277,7 @@ let returns (callId: string) (pieces: Piece list) (sim: Sim) : Sim =
                 Name = "cell"
                 Pieces = pieces
                 IsError = false
+                Restarted = None
             })
         sim
 

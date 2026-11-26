@@ -495,6 +495,57 @@ let tests =
                         ()
             }
 
+            testTask "one kernel for the session: names declared in earlier cells and turns stay" {
+                do!
+                    within
+                        "stays"
+                        []
+                        (fun f ->
+                            task {
+                                f.Model.AddAll
+                                    [
+                                        Say.cell "// intent: declare a\nlet a = 1"
+                                        Say.cell "// intent: declare b, read a\nlet b = 2\na"
+                                        Say.finish "declared"
+                                    ]
+
+                                do! kickoff f "Declare"
+                                let! _ = ended f "s1" 1
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cell "// intent: read both\nb"
+                                        Say.cell "// intent: and a\na"
+                                        Say.finish "read"
+                                    ]
+
+                                do! prompt f "s1" "p2" "Read them"
+                                let! ending = ended f "s1" 2
+                                Expect.equal (completed ending) (TurnResult.Done("read", [], None)) "done"
+
+                                let rs = receipts f "s1"
+                                Expect.stringContains (text rs[1]) "(number): 1" "a, in the next cell"
+                                let turn2 = rs |> List.filter (fun r -> r.Turn = 2)
+                                Expect.stringContains (text turn2[0]) "(number): 2" "b, in the next turn"
+                                Expect.stringContains (text turn2[1]) "(number): 1" "a, too"
+
+                                for r in rs do
+                                    Expect.isNone r.Restarted $"no new kernel: {text r}"
+                                    Expect.isFalse ((text r).Contains "A new kernel") "nor a note of one"
+
+                                let kernels =
+                                    journal f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | StepEvent.KernelLaunched _
+                                        | StepEvent.KernelEnded _ -> Some r.Event
+                                        | _ -> None)
+
+                                Expect.equal kernels [ StepEvent.KernelLaunched 1 ] "one launch, never ended"
+                            })
+                        ()
+            }
+
             testTask "an interrupt runs to its end when the cell answers before the kernel answers cell/cancel" {
                 // Cut short when the cell's answer came first, the interrupt's `cell/cancel` would be
                 // cancelled at the kernel (`$/cancelRequest`) or not depending on whether the kernel's
@@ -564,8 +615,99 @@ let tests =
 
                                 let after = receipts f "s1" |> List.filter (fun r -> r.Turn = 2) |> List.head
                                 Expect.stringContains (text after) "A new kernel started" "the restart is noted"
+
+                                Expect.stringContains
+                                    (text after)
+                                    "the previous kernel was killed by the host: an interrupted cell did not stop"
+                                    "and why"
+
                                 Expect.stringContains (text after) "ReferenceError" "y is gone"
                                 Expect.isTrue after.IsError "an error"
+
+                                Expect.equal
+                                    (after.Restarted |> Option.map _.Launch)
+                                    (Some 2)
+                                    "people see the new kernel"
+
+                                Expect.contains
+                                    (journal f "s1" |> List.map _.Event)
+                                    (StepEvent.KernelEnded { Launch = 1; How = KernelEnd.Killed })
+                                    "journaled with its reason"
+                            })
+                        ()
+            }
+
+            testTask "a kernel that exits during a cell: the receipt and the journal say how, the next cell's says why" {
+                do!
+                    within
+                        "exit"
+                        []
+                        (fun f ->
+                            task {
+                                f.Model.AddAll
+                                    [
+                                        Say.cell "// intent: declare\nlet w = 4"
+                                        Say.cell "// intent: wait\ncall s = fs.write [\"started.txt\", \"\"]\nsleep"
+                                        Say.cell "// intent: check\nw"
+                                        Say.finish "w is gone"
+                                    ]
+
+                                do! kickoff f "Wait"
+                                do! started f
+
+                                // The kernel goes away while the cell runs (a crash, or a kill from outside).
+                                match f.Kernel "s1" with
+                                | Some kernel -> do! Eff.run () (Kernel.kill kernel)
+                                | None -> failtest "no kernel"
+
+                                let! _ = ended f "s1" 1
+                                let rs = receipts f "s1"
+                                let failed = rs[1]
+                                Expect.isTrue failed.IsError "the cell failed"
+
+                                Expect.stringContains
+                                    (text failed)
+                                    "The cell did not complete: the kernel exited. The next cell starts a new kernel"
+                                    "how, and what follows"
+
+                                Expect.isNone failed.Restarted "it ran in the first kernel"
+
+                                Expect.stringContains
+                                    (text rs[2])
+                                    "(the previous kernel exited)"
+                                    "the next cell's note"
+
+                                Expect.stringContains (text rs[2]) "ReferenceError" "w is gone"
+
+                                Expect.equal
+                                    rs[2].Restarted
+                                    (Some
+                                        {
+                                            Launch = 2
+                                            Reason = "the previous kernel exited"
+                                        })
+                                    "people see it"
+
+                                let kernels =
+                                    journal f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | StepEvent.KernelLaunched _
+                                        | StepEvent.KernelEnded _ -> Some r.Event
+                                        | _ -> None)
+
+                                Expect.equal
+                                    kernels
+                                    [
+                                        StepEvent.KernelLaunched 1
+                                        StepEvent.KernelEnded
+                                            {
+                                                Launch = 1
+                                                How = KernelEnd.Exited(None, "")
+                                            }
+                                        StepEvent.KernelLaunched 2
+                                    ]
+                                    "each launch's end is journaled before the next launch"
                             })
                         ()
             }
@@ -594,7 +736,17 @@ let tests =
                                 let! _ = ended f "s1" 2
                                 let after = receipts f "s1" |> List.filter (fun r -> r.Turn = 2) |> List.head
                                 Expect.stringContains (text after) "A new kernel started" "noted"
+                                Expect.stringContains (text after) "(the previous kernel exited)" "and why"
                                 Expect.stringContains (text after) "ReferenceError" "z is gone"
+
+                                Expect.contains
+                                    (journal f "s1" |> List.map _.Event)
+                                    (StepEvent.KernelEnded
+                                        {
+                                            Launch = 1
+                                            How = KernelEnd.Exited(None, "")
+                                        })
+                                    "the end is journaled before the next launch"
                             })
                         ()
             }

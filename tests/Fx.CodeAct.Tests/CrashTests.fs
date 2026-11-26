@@ -404,6 +404,24 @@ let tests =
                                     | _ -> None)
 
                             Expect.equal launches [ 1; 2 ] "launch numbers go on after the restart"
+
+                            Expect.contains
+                                (journal f "s1" |> List.map _.Event)
+                                (StepEvent.KernelEnded
+                                    {
+                                        Launch = 1
+                                        How = KernelEnd.HostStopped
+                                    })
+                                "the journal says the host stopped while the first kernel ran"
+
+                            Expect.equal
+                                turn2[0].Restarted
+                                (Some
+                                    {
+                                        Launch = 2
+                                        Reason = "the previous kernel stopped when the host restarted"
+                                    })
+                                "people see the new kernel"
                         })
             }
 
@@ -438,7 +456,27 @@ let tests =
                             do! prompt f "s1" "p2" "Check"
                             let! _ = ended f "s1" 2
                             let turn2 = receipts f "s1" |> List.filter (fun r -> r.Turn = 2)
-                            Expect.stringContains (text turn2[0]) "the previous kernel stopped" "why"
+
+                            Expect.stringContains
+                                (text turn2[0])
+                                "the previous kernel was killed by the host: an interrupted cell did not stop"
+                                "why"
+
+                            Expect.equal
+                                turn2[0].Restarted
+                                (Some
+                                    {
+                                        Launch = 2
+                                        Reason =
+                                            "the previous kernel was killed by the host: an interrupted cell did not stop"
+                                    })
+                                "people see it too"
+
+                            Expect.contains
+                                (journal f "s1" |> List.map _.Event)
+                                (StepEvent.KernelEnded { Launch = 1; How = KernelEnd.Killed })
+                                "the journal says how the kernel ended"
+
                             Expect.stringContains (text turn2[0]) "(number): 7" "the value is back"
                             Expect.stringContains (text turn2[1]) "was not kept" "a value too large"
                             Expect.stringContains (text turn2[1]) "codeact.recall.maxBytes" "and why"

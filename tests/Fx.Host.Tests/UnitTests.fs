@@ -342,6 +342,49 @@ let tests =
                             "one line"
                     }
 
+                    test "a cell in a new kernel says so on a line of its own, before its error" {
+                        let receipt (restarted: KernelRestart option) (isError: bool) =
+                            ContextEvent.Returned
+                                {
+                                    Turn = 2
+                                    Step = 1
+                                    Call = Some "call-1"
+                                    Name = "cell"
+                                    Pieces =
+                                        [
+                                            if restarted.IsSome then
+                                                Piece.Text "[A new kernel started for this cell (…)]"
+                                            Piece.Text "ReferenceError: x is not defined"
+                                        ]
+                                    IsError = isError
+                                    Restarted = restarted
+                                }
+
+                        let restart =
+                            Some
+                                {
+                                    Launch = 2
+                                    Reason = "the previous kernel was killed by signal 9 (SIGKILL)"
+                                }
+
+                        Expect.equal
+                            (Activity.ofContext (receipt restart true))
+                            [
+                                "  ↻ new kernel  the previous kernel was killed by signal 9 (SIGKILL); names from earlier cells are gone"
+                                "  ✗ ReferenceError: x is not defined"
+                            ]
+                            "the restart, then the error after the note"
+
+                        Expect.equal
+                            (Activity.ofContext (receipt restart false))
+                            [
+                                "  ↻ new kernel  the previous kernel was killed by signal 9 (SIGKILL); names from earlier cells are gone"
+                            ]
+                            "a restart without an error"
+
+                        Expect.equal (Activity.ofContext (receipt None false)) [] "nothing to say"
+                    }
+
                     test "the ending reads like a result card" {
                         Expect.equal
                             (Activity.ending

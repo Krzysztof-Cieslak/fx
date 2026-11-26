@@ -118,7 +118,9 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   (`Envs.warnings`, T113).
 - **Transcript**: each turn's prompts (panels), what the model wrote, one activity line per action
   (`◇` reads and runs, `◆` changes; `Cell` with its `// intent:` line, `Read`, `Edit`, `Run`), its
-  status (a spinner and the time while it runs, `✓`/`✗` and how long it took), the first line of an
+  status (a spinner and the time while it runs, `✓`/`✗` and how long it took), a cell that ran in a new
+  kernel (`↻ new kernel: <why>; names from earlier cells are gone`, from the receipt's `restarted`, in
+  every verbosity; in full when verbose; T135), the first line of an
   error under a failed one, steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
   conversation is summarized; the summary in verbose), requests asked and settled, and the
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`;

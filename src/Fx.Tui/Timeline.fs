@@ -61,8 +61,10 @@ type CallView =
         Started: int64
         Ended: int64 option
         IsError: bool
-        /// The receipt as the model read it.
+        /// The receipt as the model read it, without its note of a new kernel (`Restarted` says it).
         Output: string
+        /// The cell ran in a new kernel: the names earlier cells declared are gone, and why.
+        Restarted: KernelRestart option
     }
 
     override this.ToString() = $"{this.Label} {this.Detail}"
@@ -289,6 +291,7 @@ module Timeline =
             Ended = None
             IsError = false
             Output = ""
+            Restarted = None
         }
 
     let private atOf (meta: EventMeta) = meta.At.UnixMicroseconds
@@ -473,7 +476,15 @@ module Timeline =
                         | _ -> ()
                 | ContextEvent.Returned receipt ->
                     draft <- false
-                    let text = receipt.Pieces |> List.map Piece.render |> String.concat "\n"
+
+                    // A receipt of a cell in a new kernel starts with its note to the model, which
+                    // `Restarted` shows people on a line of its own.
+                    let pieces =
+                        match receipt.Restarted, receipt.Pieces with
+                        | Some _, _ :: rest -> rest
+                        | _, pieces -> pieces
+
+                    let text = pieces |> List.map Piece.render |> String.concat "\n"
 
                     let at = atOf recorded.Meta
                     let floor = lastEnd
@@ -484,6 +495,7 @@ module Timeline =
                             Ended = Some at
                             IsError = receipt.IsError
                             Output = text
+                            Restarted = receipt.Restarted
                         }
 
                     match current, receipt.Call with

@@ -346,6 +346,18 @@ module View =
 
         let line = Row.spread width left status
 
+        // A new kernel lost the names earlier cells declared: always said, in full when verbose.
+        let restart =
+            match call.Restarted with
+            | Some restart ->
+                let text = $"↻ new kernel: {restart.Reason}; names from earlier cells are gone"
+
+                if verbosity = Verbosity.Verbose then
+                    lines width 6 t.Warning text
+                else
+                    lines width 6 t.Warning (Text.truncate (max 1 (width - 6)) (Text.firstLine text))
+            | None -> []
+
         let error =
             if call.IsError && verbosity <> Verbosity.Quiet then
                 lines width 6 t.Error (Text.truncate (max 1 (width - 6)) (Text.firstLine call.Output))
@@ -369,7 +381,7 @@ module View =
             else
                 []
 
-        line :: error @ detail
+        line :: restart @ error @ detail
 
     /// The requests a turn ended needing that it did not ask in its items (their ids: nothing else is
     /// known of them).
