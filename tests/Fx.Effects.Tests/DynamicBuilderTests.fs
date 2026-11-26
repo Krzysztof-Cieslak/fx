@@ -95,4 +95,26 @@ let tests =
                 Expect.equal (runIn env program) (Error "at 3") "error"
                 Expect.equal (List.ofSeq log) [ "1"; "2" ] "stopped"
             }
+
+            test "effResult loops run every asynchronous iteration" {
+                let env = create().Env
+
+                let program: Eff<Env, Result<int, string>> =
+                    effResult {
+                        let rec id x = if false then id x else x
+                        let mutable total = 0
+
+                        for x in [ 1..4 ] do
+                            let! v = Eff.map Ok (later x)
+                            total <- total + v
+
+                        while total < 20 do
+                            let! v = Eff.map Ok (later 5)
+                            total <- total + v
+
+                        return id total
+                    }
+
+                Expect.equal (runIn env program) (Ok 20) "every iteration"
+            }
         ]
