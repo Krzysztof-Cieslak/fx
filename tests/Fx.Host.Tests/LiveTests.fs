@@ -720,6 +720,169 @@ let tests =
                 | Error errors -> failtest (String.concat "\n" errors)
             }
 
+            // T135: a session's kernel stays across turns (sandboxed where a driver confines), also while
+            // the host idles longer than its thread pool keeps idle threads (1 s in this project); a
+            // kernel that dies is logged with why, the next cell says so, and the session replays.
+            testTask
+                "fx run -p: one kernel for the session: turn 2 uses a name from turn 1; a kernel that dies is logged with why; it replays" {
+                do! network.Force()
+                let p = place "kernel-stays"
+                let model = Model()
+
+                model.AddAll
+                    [
+                        "// intent: declare kept\nconst kept = 41\nkept + 1"
+                        finish "Declared kept" "\"kept + 1\""
+                        "// intent: use kept from turn 1\nkept * 2"
+                        finish "Used kept" "\"kept * 2\""
+                        "// intent: end this kernel\nconst { default: proc } = await import(\"node:process\")\nproc.kill(proc.pid, \"SIGKILL\")\nawait new Promise(() => {})"
+                        "// intent: look for kept\ntypeof kept"
+                        finish "kept is gone" "\"typeof kept\""
+                    ]
+
+                let person = Person always
+                let host = start (options p model [ "model.role.main", Json.String modelId ])
+                let mutable session = ""
+
+                try
+                    let first =
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Declare kept"
+                                Session = None
+                                Title = None
+                            }
+
+                    session <- first.Session
+                    Expect.equal (done' first person) "Declared kept" "turn 1"
+
+                    // Idle threads of the pool end meanwhile: the kernel must not end with the one that
+                    // started it.
+                    do! Task.Delay(TimeSpan.FromSeconds 4.0)
+
+                    let next (prompt: string) =
+                        run
+                            host
+                            person
+                            {
+                                Prompt = prompt
+                                Session = Some session
+                                Title = None
+                            }
+
+                    Expect.equal (done' (next "Use kept") person) "Used kept" "turn 2"
+                    Expect.equal (done' (next "End the kernel, then look") person) "kept is gone" "turn 3"
+
+                    let receipts =
+                        wait (
+                            (ContextLog.typed host.Stores.Log).Read
+                                (ContextLog.stream session)
+                                0L
+                                1000
+                                CancellationToken.None
+                        )
+                        |> List.choose (fun recorded ->
+                            match recorded.Event with
+                            | Fx.Prompt.ContextEvent.Returned receipt -> Some receipt
+                            | _ -> None)
+
+                    let text (receipt: Fx.Prompt.Receipt) =
+                        receipt.Pieces |> List.map Fx.Prompt.Piece.render |> String.concat "\n"
+
+                    let shown = receipts |> List.map text |> String.concat "\n---\n"
+                    Expect.equal receipts.Length 7 $"seven receipts: {shown}"
+                    Expect.stringContains (text receipts[0]) "(number): 42" "turn 1's cell"
+                    Expect.stringContains (text receipts[2]) "(number): 82" $"turn 2 used kept: {shown}"
+
+                    for r in receipts |> List.truncate 5 do
+                        Expect.isNone r.Restarted $"the same kernel: {text r}"
+
+                    let died = text receipts[4]
+                    Expect.isTrue receipts[4].IsError "the cell did not complete"
+
+                    if OperatingSystem.IsWindows() then
+                        Expect.stringContains died "The cell did not complete: the kernel exited with code" "how"
+                    else
+                        Expect.stringContains
+                            died
+                            "The cell did not complete: the kernel was killed by signal 9 (SIGKILL)"
+                            "how"
+
+                    Expect.stringContains (text receipts[5]) "A new kernel started for this cell" "the next cell's note"
+                    Expect.stringContains (text receipts[5]) "undefined" "kept is gone"
+
+                    match receipts[5].Restarted with
+                    | Some restart ->
+                        Expect.equal restart.Launch 2 "the second launch"
+                        Expect.stringStarts restart.Reason "the previous kernel " "why"
+
+                        Expect.isTrue
+                            (person.Lines
+                             |> List.exists (fun line ->
+                                 line.StartsWith("  ↻ new kernel  the previous kernel ", StringComparison.Ordinal)))
+                            $"fx run shows it: {person.Lines}"
+                    | None -> failtest "people are told of the new kernel"
+
+                    let kernels =
+                        wait (
+                            (StepJournal.typed host.Stores.Log).Read
+                                (StepJournal.stream session)
+                                0L
+                                1000
+                                CancellationToken.None
+                        )
+                        |> List.choose (fun recorded ->
+                            match recorded.Event with
+                            | StepEvent.KernelLaunched launch -> Some $"launched {launch}"
+                            | StepEvent.KernelEnded ended ->
+                                match ended.How with
+                                | KernelEnd.Exited(Some code, _) -> Some $"ended {ended.Launch}: exited {code}"
+                                | other -> Some $"ended {ended.Launch}: {other}"
+                            | _ -> None)
+
+                    if OperatingSystem.IsWindows() then
+                        Expect.equal kernels.Length 3 $"one launch, its end, the next: {kernels}"
+                    else
+                        Expect.equal
+                            kernels
+                            [ "launched 1"; "ended 1: exited 137"; "launched 2" ]
+                            "one kernel for three turns until it died, and how it ended"
+
+                    // Where a driver confines, the kernel ran in the sandbox.
+                    match HostSessions.entries host with
+                    | [ entry ] ->
+                        match wait (host.Env.Envs.Get entry.Environment CancellationToken.None) with
+                        | Some record ->
+                            match record.Sandbox with
+                            | Some sandbox when
+                                Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1"
+                                && not (OperatingSystem.IsWindows())
+                                ->
+                                Expect.isTrue sandbox.Confines $"the kernel ran in the sandbox: {sandbox}"
+                            | _ -> ()
+                        | None -> failtest "no environment"
+                    | other -> failtest $"{other}"
+                finally
+                    stop host
+
+                // `fx replay`: one kernel across turns, its death and the next launch, exactly.
+                match
+                    waitFor
+                        300.0
+                        (Commands.replay
+                            (options p (Model()) [])
+                            {
+                                Session = session
+                                Json = false
+                                StallSeconds = 60
+                            })
+                with
+                | Ok output -> Expect.equal output.ExitCode 0 $"replay matched:\n{output.Stdout}{output.Stderr}"
+                | Error errors -> failtest (String.concat "\n" errors)
+            }
+
             testTask
                 "fx run -p: a long turn compacts beside a cell and when a cell asks; summaries share the conversation's prefix, and it replays" {
                 do! network.Force()
