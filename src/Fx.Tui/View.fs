@@ -153,13 +153,20 @@ module View =
 
         let hints =
             match App.cards model with
+            | _ when model.Palette.IsSome -> [ "↑↓ select"; "Enter run"; "Esc close" ]
             | Card.Question _ :: _ -> [ "Enter answer"; "Esc interrupt" ]
             | _ :: _ -> [ "keys in [ ] answer"; "←→ Enter" ]
             | [] ->
                 if tl.State.Running.IsSome then
                     [ "Enter steer"; "Tab queue"; "Esc interrupt" ]
                 else
-                    [ "Enter send"; "Alt+Enter newline"; "Ctrl+O detail"; "Ctrl+C×2 exit" ]
+                    [
+                        "Enter send"
+                        "Ctrl+P commands"
+                        "Alt+Enter newline"
+                        "Ctrl+O detail"
+                        "Ctrl+C×2 exit"
+                    ]
 
         let scrolled =
             if model.Scroll > 0 then
@@ -699,6 +706,77 @@ module View =
                         s t.Muted ("waiting for another client: " + request.Request.Title)
                     ])
 
+    /// The most items the palette and the `/` suggestions show.
+    let private maxItems = 8
+
+    /// The command palette (or a picker it opened): its title, the query, and the items it shows.
+    let palette (model: Model) : Row list =
+        let t = theme model
+        let width = model.Width
+
+        match model.Palette with
+        | None -> []
+        | Some palette ->
+            let shown = Palette.shown palette
+            let selected = min palette.Selected (max 0 (shown.Length - 1))
+            // Keep the selected item in view.
+            let first = max 0 (selected - maxItems + 1)
+
+            let labelWidth =
+                shown
+                |> List.map (fun item -> Text.width item.Label)
+                |> List.fold max 8
+                |> min 36
+
+            let items =
+                shown
+                |> List.skip (min first shown.Length)
+                |> List.truncate maxItems
+                |> List.mapi (fun i item ->
+                    let style = if first + i = selected then t.Selected else t.Text
+
+                    Row.fit
+                        (width - 2)
+                        [
+                            s style (" " + Text.pad labelWidth item.Label + "  ")
+                            s (if first + i = selected then t.Selected else t.Muted) item.Detail
+                        ])
+
+            let body =
+                if palette.Loading then [ [ s t.Muted " loading…" ] ]
+                elif items.IsEmpty then [ [ s t.Muted " nothing matches" ] ]
+                else items
+
+            [
+                Row.spread (width - 2) [ s (Style.withBold t.Text) palette.Title ] [ s t.Muted "esc  " ]
+                [ s (Style.withBold t.Accent) "› "; s t.Text palette.Query ]
+                yield! body
+            ]
+            |> panel t width t.Accent
+
+    /// What a `/` prompt being typed may name.
+    let suggestions (model: Model) : Row list =
+        let t = theme model
+
+        match model.Palette with
+        | Some _ -> []
+        | None ->
+            App.slashes model
+            |> List.truncate 6
+            |> List.mapi (fun i command ->
+                let style = if i = 0 then t.Selected else t.Text
+
+                Row.fit
+                    model.Width
+                    [
+                        indent 2
+                        s style (" " + Text.pad 10 ("/" + command.Name) + " ")
+                        s t.Muted ("  " + command.Title)
+                        match command.Argument with
+                        | Some argument -> s t.Muted ("  " + argument)
+                        | None -> ()
+                    ])
+
     /// Prompts sent but not delivered yet: steered ones wait for the next step, queued ones for the
     /// turn after.
     let pending (model: Model) : Row list =
@@ -840,8 +918,13 @@ module View =
         let width = model.Width
         let height = model.Height
         let banner = banner model
-        let asked = asked model
-        let pending = pending model
+        // The palette, while it is open, takes the place of what is asked.
+        let asked =
+            match palette model with
+            | [] -> asked model
+            | rows -> rows
+
+        let pending = pending model @ suggestions model
         let status = status model
         let footer = [ footer model sidebar ]
 
@@ -890,6 +973,7 @@ module View =
 
         let cursor =
             match App.cards model with
+            | _ when model.Palette.IsSome -> None
             | card :: _ when
                 (match card with
                  | Card.Question _ -> false

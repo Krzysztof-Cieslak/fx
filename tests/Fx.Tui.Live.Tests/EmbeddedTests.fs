@@ -71,9 +71,10 @@ let private tui (host: Host) (choice: SessionChoice) : Running =
         }
 
     let inbox = Inbox<Msg>()
+    let following = Following()
 
     let peer =
-        match waitFor 60.0 (Eff.run env (HostClient.embedded host (TuiClient.service inbox) App.answers)) with
+        match waitFor 60.0 (Eff.run env (HostClient.embedded host (TuiClient.service inbox following) App.answers)) with
         | Ok peer -> peer
         | Error e -> failtest $"no connection: {e}"
 
@@ -94,7 +95,7 @@ let private tui (host: Host) (choice: SessionChoice) : Running =
 
     {
         Tty = tty
-        Task = Eff.run env (TuiClient.run peer inbox choice model)
+        Task = Eff.run env (TuiClient.run peer inbox following choice model)
     }
 
 let private withoutKernel (place: Place) =
@@ -188,6 +189,31 @@ let tests =
                     | other -> failtest $"{other}"
 
                     t.WaitUntil("the card gone", fun text -> not (text.Contains "Permission"))
+
+                    // `/new` leaves the session for a new one; `/sessions` picks the first again.
+                    t.Type "/new\r"
+
+                    let deadline = DateTime.UtcNow.AddSeconds 60.0
+
+                    while (HostSessions.entries host).Length < 2 do
+                        if DateTime.UtcNow > deadline then
+                            failtest $"no new session:\n{t.Tty.Text}"
+
+                        Thread.Sleep 20
+
+                    let fresh =
+                        HostSessions.entries host
+                        |> List.find (fun entry -> entry.Session <> session)
+                        |> _.Session
+
+                    t.WaitFor("session …" + fresh.Substring(fresh.Length - 8))
+                    t.WaitUntil("the old transcript gone", fun text -> not (text.Contains "Hello there"))
+                    t.Type "/sessions\r"
+                    t.WaitFor "first"
+                    t.Type "first\r"
+                    t.WaitFor("session …" + session.Substring(session.Length - 8))
+                    t.WaitFor "┃ Hello there"
+
                     let final = t.Quit()
                     Expect.isTrue final.Quitting "quit"
                     Expect.equal final.Session.Value.Id session "the session"

@@ -278,6 +278,16 @@ let usage (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// The command palette over a finished turn, with a query typed.
+let palette (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+    ready s width height (msgs @ [ ctrl 'p'; yield! typing "se" ])
+
+/// A `/` prompt being typed: the commands it may name.
+let slash (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+    ready s width height (msgs @ typing "/")
+
 /// Every screen, by name.
 let all: (string * (int -> int -> Model)) list =
     [
@@ -293,6 +303,8 @@ let all: (string * (int -> int -> Model)) list =
         "compacted", compacted
         "markdown", markdown
         "usage", usage
+        "palette", palette
+        "slash", slash
     ]
 
 /// A frame as text, with the cursor's place.

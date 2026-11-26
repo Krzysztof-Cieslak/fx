@@ -17,6 +17,7 @@
     <Compile Include="Keys.fs" />
     <Compile Include="Editor.fs" />
     <Compile Include="Timeline.fs" />
+    <Compile Include="Commands.fs" />
     <Compile Include="App.fs" />
     <Compile Include="View.fs" />
     <Compile Include="Tty.fs" />
