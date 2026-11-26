@@ -506,8 +506,10 @@ module Kernel =
     let kill (kernel: Kernel) : Eff<'R, unit> =
         fun _ ->
             task {
-                do! kernel.Terminate()
+                // The connection ends first, here: killed first, the kernel's output could end (or
+                // answers come) before, and how the connection ended would depend on timing (replay).
                 kernel.Peer.CloseAsync() |> ignore
+                do! kernel.Terminate()
             }
 
     /// Stops the running cell in stages (docs/modules/kernel-protocol.md, "Cancellation"):

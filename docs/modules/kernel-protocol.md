@@ -229,10 +229,11 @@ A cell stops in three stages (`Kernel.interrupt`), as the Bun kernel spike found
 2. `timeoutMs`: the kernel interrupts the cell itself, a synchronous busy loop included (the VM's
    watchdog), and answers `timedOut`.
 3. A cell the kernel cannot interrupt (a busy loop after an `await` blocks the event loop, so the
-   kernel never reads `cell/cancel`): after `ExitGrace` the host kills the kernel (`Interruption.Killed`).
-   Calls in flight end `KernelFailure.Exited`. The host starts a new kernel: Jupyter semantics, its
-   state is gone; the host restores what it journaled (`recall`, `value/decode`) or a snapshot
-   (`restore`) if the kernel has them (spec §6.5 "Durability").
+   kernel never reads `cell/cancel`): after `ExitGrace` the host kills the kernel (`Interruption.Killed`):
+   it ends the connection, then the process, so how the connection ended never depends on whether the
+   killed process's output ended first (replay.md). Calls in flight end `KernelFailure.Exited`. The host
+   starts a new kernel: Jupyter semantics, its state is gone; the host restores what it journaled
+   (`recall`, `value/decode`) or a snapshot (`restore`) if the kernel has them (spec §6.5 "Durability").
 
 ## Launch hygiene (spec §18)
 
