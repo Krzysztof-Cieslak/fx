@@ -92,9 +92,11 @@ module Headless =
         }
 
     /// Puts each grant request of the run to the person, until cancelled: requests of its session (a
-    /// turn's host calls, T127b) and requests of no session (the components the run installs). One the
-    /// person cannot answer (no terminal) is withdrawn by the host, saying so and how to allow it
-    /// beforehand: nobody answered it, so it is no person's answer, and the next run asks again.
+    /// turn's host calls, T127b) and requests of no session (the components the run installs), those
+    /// pending when the run starts (left by a host that stopped while it asked, and asked again now
+    /// with the same key) first. One the person cannot answer (no terminal) is withdrawn by the host,
+    /// saying so and how to allow it beforehand: nobody answered it, so it is no person's answer, and
+    /// the next run asks again.
     let private answering
         (host: Host)
         (by: Attribution)
@@ -104,39 +106,52 @@ module Headless =
         : Task =
         let env = Host.within host cancellation
 
-        let from = (GrantsService.snapshot host.Grants).Seq
+        let pending = GrantsService.pending host.Grants
 
         let ours (request: GrantRequest) =
             match request.Context.Session with
             | None -> true
             | Some asking -> session.Value = Some asking
 
+        let put (request: GrantRequest) : Eff<HostEnv, unit> =
+            eff {
+                match! Eff.ofTask (fun () -> io.Answer request) with
+                | Some answer ->
+                    match! GrantsService.answer host.Grants by request.Id answer with
+                    | Ok _ -> ()
+                    | Error(GrantError.NotPending _) -> ()
+                    | Error e -> io.Show $"  ✗ the answer to {request.Summary} was refused: {e}"
+                | None ->
+                    io.Show(GrantPrompts.unasked request)
+
+                    match! GrantsService.withdraw host.Grants request.Id GrantPrompts.Unanswered with
+                    | Ok _ -> ()
+                    | Error(GrantError.NotPending _) -> ()
+                    | Error e -> io.Show $"  ✗ {request.Summary} could not be withdrawn: {e}"
+            }
+
         let handle (notice: GrantNotice) : Eff<HostEnv, bool> =
             eff {
                 match notice.Event with
-                | GrantEvent.Requested request when ours request ->
-                    match! Eff.ofTask (fun () -> io.Answer request) with
-                    | Some answer ->
-                        match! GrantsService.answer host.Grants by request.Id answer with
-                        | Ok _ -> ()
-                        | Error(GrantError.NotPending _) -> ()
-                        | Error e -> io.Show $"  ✗ the answer to {request.Summary} was refused: {e}"
-                    | None ->
-                        io.Show(GrantPrompts.unasked request)
+                | GrantEvent.Requested request when ours request -> do! put request
+                | _ -> ()
 
-                        match! GrantsService.withdraw host.Grants request.Id GrantPrompts.Unanswered with
-                        | Ok _ -> ()
-                        | Error(GrantError.NotPending _) -> ()
-                        | Error e -> io.Show $"  ✗ {request.Summary} could not be withdrawn: {e}"
-
-                    return true
-                | _ -> return true
+                return true
             }
 
         task {
             try
-                let! _ = Eff.run env (GrantsService.subscribe host.Grants from handle)
-                ()
+                do!
+                    Eff.run
+                        env
+                        (eff {
+                            for request in pending.Requests do
+                                if ours request then
+                                    do! put request
+
+                            let! _ = GrantsService.subscribe host.Grants pending.Seq handle
+                            ()
+                        })
             with _ ->
                 // Cancelled, or the host stopped (its stores closed): nothing more to answer.
                 ()
