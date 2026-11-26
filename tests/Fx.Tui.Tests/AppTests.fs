@@ -205,6 +205,43 @@ let tests =
                         Expect.equal model.Editor.Text "new" "back to what was typed"
                     }
 
+                    test "the wheel scrolls three rows a notch, never below the end" {
+                        let _, model = ready ()
+                        let model, _ = play model [ key KeyCode.WheelUp; key KeyCode.WheelUp ]
+                        Expect.equal model.Scroll 6 "three rows a notch"
+                        let model, _ = play model [ key KeyCode.WheelDown; key KeyCode.WheelDown; key KeyCode.WheelDown ]
+                        Expect.equal model.Scroll 0 "never below the end"
+                    }
+
+                    test "settling keeps the scroll within the transcript, and on its rows as it grows" {
+                        let _, model = ready ()
+
+                        let small =
+                            { model with
+                                Width = 24
+                                Height = 14
+                            }
+
+                        let top = View.settle { small with Scroll = 10_000 }
+                        Expect.isGreaterThan top.Scroll 0 "the transcript is longer than the screen"
+                        Expect.isLessThan top.Scroll 10_000 "no further than its first row"
+                        Expect.equal (screen { top with Scroll = top.Scroll + 1 }) (screen top) "the first row at the top"
+                        let down, _ = play top [ key KeyCode.PageDown ]
+                        Expect.notEqual (screen (View.settle down)) (screen top) "scrolling down starts at once"
+                        let at = min 2 top.Scroll
+
+                        let grown =
+                            View.settle
+                                { top with
+                                    Scroll = at
+                                    TranscriptRows = top.TranscriptRows - 2
+                                }
+
+                        Expect.equal grown.Scroll (min (at + 2) top.Scroll) "kept on the same rows"
+                        let pinned = View.settle { top with Scroll = 0; TranscriptRows = top.TranscriptRows - 2 }
+                        Expect.equal pinned.Scroll 0 "at the end, it follows the end"
+                    }
+
                     test "PageUp scrolls the transcript, PageDown back; Ctrl+O changes the detail" {
                         let _, model = ready ()
                         let model, _ = play model [ key KeyCode.PageUp ]

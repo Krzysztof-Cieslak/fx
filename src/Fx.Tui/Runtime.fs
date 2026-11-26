@@ -107,6 +107,7 @@ module Runtime =
 
             let draw: Eff<'R, unit> =
                 eff {
+                    model.Value <- View.settle model.Value
                     let next = View.view model.Value
                     let text = Vt.diff frame.Value next
                     do! Tty.write text

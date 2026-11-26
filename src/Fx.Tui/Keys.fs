@@ -22,6 +22,10 @@ type KeyCode =
     | End
     | PageUp
     | PageDown
+    /// The mouse wheel (or a trackpad) moved up one notch (an SGR mouse report).
+    | WheelUp
+    /// The mouse wheel (or a trackpad) moved down one notch.
+    | WheelDown
     | F of int
     /// Text pasted at once (bracketed paste): never acted on as keys.
     | Paste of string
@@ -45,6 +49,8 @@ type KeyCode =
         | End -> "End"
         | PageUp -> "PageUp"
         | PageDown -> "PageDown"
+        | WheelUp -> "WheelUp"
+        | WheelDown -> "WheelDown"
         | F n -> "F" + string n
         | Paste text -> $"Paste({text.Length})"
         | Unknown text -> "Unknown(" + text.Replace("\u001b", "\\e") + ")"
@@ -100,6 +106,16 @@ module Keys =
         match Int32.TryParse(text, Globalization.NumberStyles.None, Globalization.CultureInfo.InvariantCulture) with
         | true, n -> Some n
         | _ -> None
+
+    /// An SGR mouse report (`ESC [ < button ; column ; row M|m`): the wheel's notches (buttons 64
+    /// and 65, with any modifiers), anything else as received.
+    let private mouse (parameters: string) (final: char) (raw: string) : KeyCode =
+        let button = parameters.Substring(1).Split(';') |> Array.tryHead |> Option.bind parseInt
+
+        match button, final with
+        | Some b, 'M' when (b &&& 64) <> 0 && (b &&& 128) = 0 && (b &&& 3) = 0 -> KeyCode.WheelUp
+        | Some b, 'M' when (b &&& 64) <> 0 && (b &&& 128) = 0 && (b &&& 3) = 1 -> KeyCode.WheelDown
+        | _ -> KeyCode.Unknown raw
 
     /// A CSI sequence's key (`ESC [ params final`).
     let private csi (parameters: string) (final: char) (raw: string) : Key =
@@ -244,8 +260,11 @@ module Keys =
                         | Some j ->
                             let raw = text.Substring(i, j - i + 1)
                             let parameters = text.Substring(i + 2, j - i - 2)
-                            // A leading private marker (`<`, `?`) is a report (mouse, modes), not a key.
-                            if parameters.StartsWith "<" || parameters.StartsWith "?" then
+                            // A leading private marker (`<`, `?`) is a report (mouse, modes), not a key;
+                            // of the mouse, only the wheel is acted on.
+                            if parameters.StartsWith "<" then
+                                keys.Add(key (mouse parameters text[j] raw))
+                            elif parameters.StartsWith "?" then
                                 keys.Add(key (KeyCode.Unknown raw))
                             else
                                 keys.Add(csi parameters text[j] raw)

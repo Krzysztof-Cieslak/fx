@@ -98,6 +98,11 @@ let tests =
                         Expect.equal (keys "\u001b[13;2u\u001b[13;5u") ([ "Shift+Enter"; "Ctrl+Enter" ], "") "CSI u"
                         Expect.equal (keys "\u001b[27;2;13~") ([ "Shift+Enter" ], "") "modifyOtherKeys"
                         Expect.equal (keys "\u001b\r\u001bb") ([ "Alt+Enter"; "Alt+b" ], "") "Alt"
+
+                        Expect.equal
+                            (keys "\u001b[<64;10;5M\u001b[<65;10;5M\u001b[<68;1;1M\u001b[<0;3;4M\u001b[<0;3;4m")
+                            ([ "WheelUp"; "WheelDown"; "WheelUp"; "Unknown(\\e[<0;3;4M)"; "Unknown(\\e[<0;3;4m)" ], "")
+                            "the mouse: the wheel (with Shift too), other reports as received"
                         Expect.equal (keys "\u001b\u0003") ([ "Esc"; "Ctrl+c" ], "") "Escape, then Ctrl+C"
                     }
 

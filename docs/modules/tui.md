@@ -188,7 +188,7 @@ core slot the host registers) picks it:
 | `↑` `↓` | moves between the prompt's lines; past the first or last, goes through the prompts sent |
 | `←` `→` `Home` `End`, `Ctrl+A/E/B/F`, `Ctrl/Alt+←/→`, `Alt+B/F` | moves the cursor |
 | `Backspace` `Delete`, `Ctrl+W`, `Alt+Backspace`, `Ctrl+U`, `Ctrl+K` | deletes |
-| `PgUp` `PgDn` | scrolls the transcript |
+| `PgUp` `PgDn`, the mouse wheel (or a trackpad) | scrolls the transcript (half a screen a page, three rows a notch); while scrolled up, new output does not move it, and `Esc` goes back to the end. The TUI asks for mouse reports (SGR), so selecting text takes `Shift` (`Option` in some macOS terminals) |
 | `Ctrl+O` | cycles the detail (quiet, normal, verbose) |
 | `Ctrl+L` | draws everything again |
 | `Ctrl+P` | opens the command palette (`Esc` or `Ctrl+P` closes it) |
@@ -306,4 +306,4 @@ terminal check's P/Invoke without a terminal).
 | More `/` commands (`/context`, `/compact`, `/env`, `/goal`), a model picker from the catalog, the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
-| Mouse; asking the terminal for its background (OSC 11) | later |
+| Mouse clicks; asking the terminal for its background (OSC 11) | later |
