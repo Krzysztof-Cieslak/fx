@@ -22,7 +22,9 @@ with a seccomp filter. A native extension built on the public SDK only; the modu
   directory (`<home>/tmp`), which persists between commands.
 - **Pipes** get a new session (no controlling terminal to type into); **terminals** keep theirs.
 - **Lifetime**: bwrap and everything it started die with envd (`--die-with-parent`, and the pid
-  namespace ends with its first process).
+  namespace ends with its first process). `--die-with-parent` is `PR_SET_PDEATHSIG`, which fires when
+  the *thread* that started bwrap ends: envd starts processes on a thread that lives as long as it does
+  (docs/modules/envd.md, T135).
 
 Paths that do not exist when a process starts are left out. A denied or protected path that is a
 symbolic link the probe did not resolve refuses the start (a mount over it would follow it); the

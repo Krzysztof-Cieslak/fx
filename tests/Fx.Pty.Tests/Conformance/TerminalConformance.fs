@@ -78,6 +78,13 @@ let private readToEnd (transcript: Transcript) =
 /// Enter, as a keyboard sends it (the terminal turns it into a line feed for the program).
 let private enter = "\r"
 
+/// `setpriv` (util-linux) on Linux: it starts a program that dies with its parent (`--pdeathsig`).
+let private pdeathsig () : string option =
+    if OperatingSystem.IsLinux() then
+        [ "/usr/bin/setpriv"; "/bin/setpriv" ] |> List.tryFind File.Exists
+    else
+        None
+
 /// Tests that the terminals made by `create` conform. `create` gets an existing directory with one file,
 /// `marker.txt`, which must be the default working directory; `release` cleans up after a terminal.
 let tests (name: string) (create: string -> Terminal) (release: Terminal -> unit) : Test =
@@ -229,6 +236,59 @@ let tests (name: string) (create: string -> Terminal) (release: Terminal -> unit
                     with
                     | Error(InvalidSize s) -> Expect.equal s size "size"
                     | other -> failtest $"{other}")
+            }
+
+            // T135: on Linux a child that asks to die with its parent (PR_SET_PDEATHSIG, as bubblewrap's
+            // --die-with-parent does) dies when the *thread* that started it ends.
+            test "a program outlives the thread that asked for it" {
+                match pdeathsig () with
+                | None -> skiptest "needs Linux and setpriv (util-linux)"
+                | Some setpriv ->
+                    withTerminal (fun _ terminal ->
+                        let program =
+                            Exec(
+                                setpriv,
+                                [
+                                    "--pdeathsig"
+                                    "KILL"
+                                    "--"
+                                    "/bin/sh"
+                                    "-c"
+                                    "echo @@ready; read line; echo \"@@got=$line\""
+                                ]
+                            )
+
+                        // The thread that asks waits until the program runs (and so has asked to die
+                        // with it), then ends.
+                        let mutable spawned = None
+
+                        let asker =
+                            Thread(fun () ->
+                                match
+                                    sync (terminal.Spawn (spec program PtySize.standard) CancellationToken.None)
+                                with
+                                | Ok pty ->
+                                    let transcript = Transcript pty
+                                    waitFor transcript "@@ready"
+                                    spawned <- Some(Ok(pty, transcript))
+                                | Error e -> spawned <- Some(Error e))
+
+                        asker.Start()
+                        asker.Join()
+                        // A program that dies with the thread that started it is gone by now.
+                        Thread.Sleep 500
+
+                        match spawned with
+                        | Some(Ok(pty, transcript)) ->
+                            try
+                                sync (pty.Write (utf8 ("x" + enter)) CancellationToken.None)
+                                readToEnd transcript
+                                Expect.stringContains transcript.Plain "@@got=x" "the program lived on"
+                                Expect.equal (sync (pty.Wait CancellationToken.None)) 0 "exit code"
+                            finally
+                                sync (pty.Close())
+                        | Some(Error e) -> failtest (string e)
+                        | None -> failtest "nothing was spawned")
             }
 
             test "withPty closes the terminal when the body ends" {

@@ -15,6 +15,7 @@
     <Compile Include="StartInfo.fs" />
     <Compile Include="UnixPty.fs" />
     <Compile Include="WindowsPty.fs" />
+    <Compile Include="ProcessStarter.fs" />
     <Compile Include="LocalTerminal.fs" />
   </ItemGroup>
 

@@ -193,7 +193,10 @@ container, allow user namespaces or set `sandbox.driver = "none"`.
 
 **Containment** (envd.md): with bubblewrap, a killed bwrap or envd takes every process of the sandbox
 with it (`--die-with-parent`, a pid namespace per process). Seatbelt has no such tie: processes a
-sandboxed process left behind outlive envd, as unsandboxed ones do.
+sandboxed process left behind outlive envd, as unsandboxed ones do. `--die-with-parent` is
+`PR_SET_PDEATHSIG`, whose parent is the thread that started bwrap: envd starts every process on a thread
+that lives as long as it does (envd.md, T135), and the suite checks that a sandboxed process outlives
+the thread that asked for it.
 
 ## Conformance suite v1
 
@@ -215,6 +218,8 @@ real processes through its wrap on this machine's shell and terminals:
 - a read-only workspace (overrides) blocks writes, not reads; overrides deny and protect more;
 - a denied network refuses a connection to a listener on the loopback, an allowed one makes it;
 - a process on a terminal keeps it;
+- a sandboxed process outlives the thread that asked for it (T135: `--die-with-parent` fires when the
+  thread that started bwrap ends);
 - git works in the workspace;
 - a driver that confines nothing leaves processes as they are (and says so: `Confines = false`).
 
@@ -228,7 +233,8 @@ Scenarios: `sandbox-policy` (rules, access, guarded directories, overrides and t
 `sandbox-choose` (the host's choice for every combination, an environment's policy),
 `sandbox-bubblewrap` (command lines, the seccomp program's digest and verdicts per architecture, the
 probe's diagnosis), `sandbox-seatbelt` (a profile and its parameters), and with `SANDBOX_TESTS=1` on
-Linux and macOS `sandbox-live` (a process confined by this OS's driver). CI's sandbox steps diff them
+Linux and macOS `sandbox-live` (a process confined by this OS's driver, and one that outlives the
+thread that started it). CI's sandbox steps diff them
 natively (`--only sandbox-`).
 
 ## Left for later

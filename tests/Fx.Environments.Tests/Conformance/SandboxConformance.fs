@@ -323,6 +323,72 @@ let tests (subject: Subject) : Test =
                 run subject ready f.Policy script |> ignore
                 Expect.isTrue (File.Exists target) "unconfined: a write outside the workspace lands")
 
+            // T135: bubblewrap's --die-with-parent (PR_SET_PDEATHSIG) kills a process when the *thread*
+            // that started it ends; started from a thread-pool thread, a session's kernel died when the
+            // pool retired that thread. A sandboxed process lives until it ends, whoever asked for it.
+            live "a sandboxed process outlives the thread that asked for it" (fun ready f ->
+                let script =
+                    if windows then
+                        "Write-Output ready; $line = [Console]::In.ReadLine(); Write-Output \"got $line\""
+                    else
+                        "echo ready; read line; echo \"got $line\""
+
+                let proc =
+                    {
+                        Program = Program.Script script
+                        Cwd = Some f.Workspace
+                        Env = Inherit []
+                        Terminal = false
+                    }
+
+                match subject.Driver.Wrap(request ready f.Policy proc) with
+                | Error e -> failtest $"the driver refused the process: {e}"
+                | Ok spec ->
+                    let shell = LocalShell.create shellSpec f.Workspace
+                    let output = StringBuilder()
+
+                    // Reads until `stop` says so or the output ends.
+                    let readUntil (proc: Proc) (stop: string -> bool) =
+                        let mutable reading = true
+
+                        while reading do
+                            match wait (proc.Read CancellationToken.None) with
+                            | Some(Stdout bytes) ->
+                                output.Append(Encoding.UTF8.GetString bytes) |> ignore
+                                reading <- not (stop (output.ToString()))
+                            | Some(Stderr _) -> ()
+                            | None -> reading <- false
+
+                    // The thread that asks waits until the process runs (and so has asked to die with
+                    // it: bubblewrap does that first), then ends.
+                    let mutable spawned = None
+
+                    let asker =
+                        Thread(fun () ->
+                            let started = wait (shell.Spawn spec CancellationToken.None)
+
+                            match started with
+                            | Ok proc -> readUntil proc (fun text -> text.Contains "ready")
+                            | Error _ -> ()
+
+                            spawned <- Some started)
+
+                    asker.Start()
+                    asker.Join()
+                    // A process that dies with the thread that started it is gone by now.
+                    Thread.Sleep 500
+
+                    match spawned with
+                    | Some(Ok proc) ->
+                        wait (proc.Write (Encoding.UTF8.GetBytes "x\n") CancellationToken.None)
+                        wait (proc.CloseStdin())
+                        readUntil proc (fun _ -> false)
+                        let code = wait (proc.Wait CancellationToken.None)
+                        let text = output.ToString().Replace("\r\n", "\n")
+                        Expect.equal (text, code) ("ready\ngot x\n", 0) "the process lived on"
+                    | Some(Error e) -> failtest $"the sandboxed process did not start: {e}"
+                    | None -> failtest "nothing was spawned")
+
             confining "writes land in the workspace, the owned directories and the temporary directory" (fun ready f ->
                 let owned = Path.Combine(f.Owned, "o.txt")
 

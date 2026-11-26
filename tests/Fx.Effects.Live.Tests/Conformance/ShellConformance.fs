@@ -55,6 +55,13 @@ let private removeDirectory (dir: string) =
     with _ ->
         ()
 
+/// `setpriv` (util-linux) on Linux: it starts a program that dies with its parent (`--pdeathsig`).
+let private pdeathsig () : string option =
+    if OperatingSystem.IsLinux() then
+        [ "/usr/bin/setpriv"; "/bin/setpriv" ] |> List.tryFind File.Exists
+    else
+        None
+
 /// Tests that the shells made by `create` conform. `create` gets an existing directory with one file,
 /// `marker.txt`, which must be the shell's default working directory; it is called once per test.
 /// `release` cleans up after a shell.
@@ -229,5 +236,84 @@ let tests (name: string) (create: string -> Shell) (release: Shell -> unit) : Te
                         Expect.equal output "ready\ngot x\n" "output"
                         Expect.equal code 0 "exit code"
                     | Error e -> failtest (string e))
+            }
+
+            // T135: on Linux a child that asks to die with its parent (PR_SET_PDEATHSIG, as bubblewrap's
+            // --die-with-parent does) dies when the *thread* that started it ends, and thread-pool
+            // threads end after 20 s idle. A process must live until it ends, whoever asked for it.
+            test "a process outlives the thread that asked for it" {
+                match pdeathsig () with
+                | None -> skiptest "needs Linux and setpriv (util-linux)"
+                | Some setpriv ->
+                    withEnv (fun env ->
+                        let spec =
+                            {
+                                Program =
+                                    Exec(
+                                        setpriv,
+                                        [
+                                            "--pdeathsig"
+                                            "KILL"
+                                            "--"
+                                            "/bin/sh"
+                                            "-c"
+                                            "echo ready; read line; echo \"got $line\""
+                                        ]
+                                    )
+                                Cwd = None
+                                Env = Inherit []
+                            }
+
+                        // The thread that asks waits until the process runs (and so has asked to die
+                        // with it), then ends.
+                        let spawnReady: Eff<Env, Result<Proc * string, ShellError>> =
+                            eff {
+                                match! Shell.spawn spec with
+                                | Error e -> return Error e
+                                | Ok proc ->
+                                    let output = StringBuilder()
+                                    let mutable reading = true
+
+                                    while reading do
+                                        match! Shell.read proc with
+                                        | Some(Stdout bytes) ->
+                                            output.Append(Encoding.UTF8.GetString bytes) |> ignore
+                                            reading <- not (output.ToString().Contains "ready")
+                                        | Some(Stderr _) -> ()
+                                        | None -> reading <- false
+
+                                    return Ok(proc, output.ToString())
+                            }
+
+                        let mutable spawned = None
+                        let asker = Threading.Thread(fun () -> spawned <- Some(runIn env spawnReady))
+                        asker.Start()
+                        asker.Join()
+                        // A child that dies with the thread that started it is gone by now.
+                        Threading.Thread.Sleep 500
+
+                        match spawned with
+                        | Some(Ok(proc, ready)) ->
+                            let talk =
+                                eff {
+                                    do! Shell.write proc (Encoding.UTF8.GetBytes "x\n")
+                                    do! Shell.closeStdin proc
+                                    let output = StringBuilder(ready)
+                                    let mutable reading = true
+
+                                    while reading do
+                                        match! Shell.read proc with
+                                        | Some(Stdout bytes) -> output.Append(Encoding.UTF8.GetString bytes) |> ignore
+                                        | Some(Stderr _) -> ()
+                                        | None -> reading <- false
+
+                                    let! code = Shell.wait proc
+                                    return lines (output.ToString()), code
+                                }
+
+                            let output, code = runIn env talk
+                            Expect.equal (output, code) ("ready\ngot x\n", 0) "the process lived on"
+                        | Some(Error e) -> failtest (string e)
+                        | None -> failtest "nothing was spawned")
             }
         ]
