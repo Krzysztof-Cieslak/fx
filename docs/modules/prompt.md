@@ -73,7 +73,7 @@ The history is the fold of two kinds of facts, in log order, each at its positio
 |---|---|
 | `Framed sections` | the prefix the conversation runs with, recorded before the first call; a later one starts a new frame |
 | `Updated {changed, removed}` | sections of the frame that changed since, stated in the history where they changed |
-| `Replied {turn, step, shown, parts}` | a model's reply, as the provider returned it (provider state included), with the suffix (`shown`) its prompt ended with |
+| `Replied {turn, step, shown, parts, used?}` | a model's reply, as the provider returned it (provider state included), with the suffix (`shown`) its prompt ended with, and what the call used (`used`: the model, its tokens, its context window, its cost in US dollars at the catalog's prices then; for people, the render never reads it; absent in replies recorded before it was kept) |
 | `Returned {turn, step, call?, name, pieces, isError}` | a **stable receipt**: a tool call's or cell's result as the model will see it from now on |
 | `Pinned {name, pin}`, `Unpinned name` | `fx.context.pin` (a value as it was) and `pinFile` (a live view of a file's lines) |
 | `Collapsed {from, to, summary}` | compaction (T206): the entries from `from` to `to` show as the summary; the originals stay in the log |

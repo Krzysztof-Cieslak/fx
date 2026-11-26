@@ -18,6 +18,6 @@
   ⠹ turn 2 · Cell add the entry
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/billing · session …… ● turn 2
+fx · …/src/billing:main · sess… ● turn 2
 ────────────────────────────────────────
 cursor 17,4

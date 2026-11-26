@@ -22,6 +22,19 @@ let private absolute (segments: string list) =
     let root = Path.GetPathRoot(Path.GetTempPath()) |> nonNull
     Path.Combine(Array.ofList (root :: segments))
 
+type private ScopeOnly =
+    {
+        Scope: Scope
+    }
+
+    interface IScope with
+        member env.Scope = env.Scope
+
+let private branchIn (fs: Fx.Effects.Fakes.InMemoryFs) (workspace: string) =
+    (Eff.run { Scope = Scope.root } (GitHead.read fs.FsRead (fun a b -> Path.Combine(a, b)) workspace))
+        .GetAwaiter()
+        .GetResult()
+
 let private variable (pairs: (string * string) list) (name: string) =
     pairs |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd
 
@@ -30,6 +43,42 @@ let tests =
     testList
         "Host units"
         [
+            testList
+                "workspace branch"
+                [
+                    test "HEAD names the branch, or a detached commit's short id" {
+                        Expect.equal (GitHead.parse "ref: refs/heads/main\n") (Some "main") "a branch"
+                        Expect.equal (GitHead.parse "ref: refs/heads/feature/x") (Some "feature/x") "with a slash"
+
+                        Expect.equal
+                            (GitHead.parse "0123456789abcdef0123456789abcdef01234567")
+                            (Some "0123456")
+                            "detached"
+
+                        Expect.equal (GitHead.parse "garbage") None "not a HEAD"
+                    }
+
+                    test "read from the workspace's files: a checkout, a worktree, no git" {
+                        let fs =
+                            Fx.Effects.Fakes.InMemoryFs(Fx.Effects.Fakes.FakeClock.Create().Clock, false)
+
+                        let root = Path.Combine(Path.GetTempPath(), "githeads")
+                        let repo = Path.Combine(root, "repo")
+                        fs.AddText(Path.Combine(repo, ".git", "HEAD"), "ref: refs/heads/main\n")
+                        Expect.equal (branchIn fs repo) (Some "main") "a checkout"
+
+                        let tree = Path.Combine(root, "tree")
+                        let gitdir = Path.Combine(repo, ".git", "worktrees", "tree")
+                        fs.AddText(Path.Combine(tree, ".git"), "gitdir: " + gitdir + "\n")
+                        fs.AddText(Path.Combine(gitdir, "HEAD"), "ref: refs/heads/t133e-usage\n")
+                        Expect.equal (branchIn fs tree) (Some "t133e-usage") "a worktree"
+
+                        let plain = Path.Combine(root, "plain")
+                        fs.AddDirectory plain
+                        Expect.equal (branchIn fs plain) None "not a checkout"
+                    }
+                ]
+
             testList
                 "data directory"
                 [

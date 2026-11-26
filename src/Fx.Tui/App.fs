@@ -56,6 +56,8 @@ type EnvInfo =
         Warnings: string list
         /// The sandbox driver that confines its processes, once it is ready.
         Sandbox: string option
+        /// The branch its workspace has checked out.
+        Branch: string option
     }
 
     override this.ToString() = $"{this.Name} ({this.Provider})"

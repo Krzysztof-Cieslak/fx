@@ -103,10 +103,35 @@ type TurnView =
         Started: int64
         Items: TurnItem list
         Ended: (TurnEnd * int64) option
+        /// What each model call of the turn used (newest first), with how long it took to reply
+        /// (microseconds from the turn's last progress before it).
+        Calls: (ReplyUsage * int64) list
     }
 
     override this.ToString() =
         $"turn {this.Turn} ({this.Items.Length} items)"
+
+/// What a session's model calls used, for people: the model of the last call, how many tokens its
+/// context held then and of how many it could hold, and what every call cost.
+type SessionUsage =
+    {
+        Model: string option
+        Tokens: int option
+        Window: int option
+        Cost: decimal option
+    }
+
+    override this.ToString() = $"usage {this.Tokens} of {this.Window}"
+
+[<RequireQualifiedAccess>]
+module SessionUsage =
+    let none: SessionUsage =
+        {
+            Model = None
+            Tokens = None
+            Window = None
+            Cost = None
+        }
 
 /// What the transcript shows, in order.
 [<RequireQualifiedAccess>]
@@ -355,6 +380,8 @@ module Timeline =
                 | Event.TurnStarted(turn, ids, _, at) ->
                     flush ()
 
+                    lastEnd <- at
+
                     current <-
                         Some
                             {
@@ -363,6 +390,7 @@ module Timeline =
                                 Started = at
                                 Items = []
                                 Ended = None
+                                Calls = []
                             }
                 | Event.InputsDelivered(_, _, ids) ->
                     match inputs ids with
@@ -384,6 +412,7 @@ module Timeline =
                                     Started = at
                                     Items = []
                                     Ended = Some(ended, at)
+                                    Calls = []
                                 }
                         )
                 | Event.Interrupted(Some _, by) -> add (TurnItem.Interrupted by.Principal)
@@ -396,6 +425,17 @@ module Timeline =
             | Entry.Context recorded ->
                 match recorded.Event with
                 | ContextEvent.Replied reply ->
+                    match current, reply.Used with
+                    | Some turn, Some used ->
+                        let took = max 0L (atOf recorded.Meta - lastEnd)
+
+                        current <-
+                            Some
+                                { turn with
+                                    Calls = (used, took) :: turn.Calls
+                                }
+                    | _ -> ()
+
                     lastEnd <- atOf recorded.Meta
 
                     // What the replies without an action said since the turn's last action (newest
@@ -476,6 +516,31 @@ module Timeline =
 
         flush ()
         List.ofSeq blocks
+
+    /// What the session's model calls used: how full the context was at the last call and what they
+    /// all cost.
+    let usage (timeline: Timeline) : SessionUsage =
+        let used =
+            timeline.Entries
+            |> List.choose (fun entry ->
+                match entry with
+                | Entry.Context recorded ->
+                    match recorded.Event with
+                    | ContextEvent.Replied reply -> reply.Used
+                    | _ -> None
+                | Entry.Session _ -> None)
+
+        match used with
+        | [] -> SessionUsage.none
+        | last :: _ ->
+            let costs = used |> List.choose _.Cost
+
+            {
+                Model = Some(string last.Model)
+                Tokens = Some(last.Tokens.Input + last.Tokens.Output)
+                Window = last.Context
+                Cost = if costs.IsEmpty then None else Some(List.sum costs)
+            }
 
     /// Whether the transcript shows this request where it was asked.
     let shows (id: string) (timeline: Timeline) : bool =

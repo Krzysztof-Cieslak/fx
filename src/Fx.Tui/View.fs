@@ -1,6 +1,7 @@
 namespace Fx.Tui
 
 open System
+open System.Globalization
 open Fx.Contracts
 open Fx.Sessions
 open Fx.Grants
@@ -35,6 +36,44 @@ module View =
             let m = (seconds / 60L) % 60L
             let pad = if m < 10L then "0" else ""
             $"{seconds / 3600L}h{pad}{m}m"
+
+    /// Tokens for people: `73,416`.
+    let tokens (count: int) : string =
+        count.ToString("N0", CultureInfo.InvariantCulture)
+
+    /// Tokens in a few characters: `950`, `73.4K`, `1.2M`.
+    let shortTokens (count: int) : string =
+        if count < 1000 then
+            string count
+        elif count < 1_000_000 then
+            (float count / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "K"
+        else
+            (float count / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M"
+
+    /// US dollars: `$2.11`.
+    let dollars (amount: decimal) : string =
+        "$" + amount.ToString("0.00", CultureInfo.InvariantCulture)
+
+    /// How much of the context window the last call used, in whole percent.
+    let percent (usage: SessionUsage) : int option =
+        match usage.Tokens, usage.Window with
+        | Some used, Some window when window > 0 -> Some(int (int64 used * 100L / int64 window))
+        | _ -> None
+
+    /// The session's title: the one it was given, else its first prompt's first line.
+    let title (model: Model) : string option =
+        match model.Session |> Option.bind _.Title with
+        | Some title when not (String.IsNullOrWhiteSpace title) -> Some title
+        | _ ->
+            Timeline.prompts model.Timeline
+            |> List.tryHead
+            |> Option.map Text.firstLine
+            |> Option.filter (fun line -> line <> "")
+
+    /// The terminal is wide enough for the sidebar.
+    let sidebarWidth = 34
+
+    let hasSidebar (model: Model) = model.Width >= 120
 
     let private s (style: Style) (text: string) = Span.create style text
     let private p (text: string) = Span.plain text
@@ -74,7 +113,7 @@ module View =
 
     /// The bottom row: the product, the workspace and the session on the left; the session's state,
     /// whether the transcript is scrolled, and the keys that apply on the right (cut first).
-    let footer (model: Model) : Row =
+    let footer (model: Model) (sidebar: bool) : Row =
         let t = theme model
         let width = model.Width
 
@@ -90,6 +129,11 @@ module View =
                 [ s t.Muted (" · session " + id) ]
             | None -> []
 
+        let branch =
+            match model.Env |> Option.bind _.Branch with
+            | Some branch -> ":" + branch
+            | None -> ""
+
         let left =
             [
                 s (Style.withBold t.Text) model.Setup.Product
@@ -100,7 +144,8 @@ module View =
                          model.Session
                          |> Option.map _.Workspace
                          |> Option.defaultValue model.Setup.Workspace
-                     ))
+                     )
+                     + branch)
             ]
             @ session
 
@@ -122,7 +167,29 @@ module View =
             else
                 []
 
-        let state = state model
+        // What the session used, unless the sidebar shows it.
+        let used =
+            let usage = Timeline.usage tl
+
+            let parts =
+                [
+                    match usage.Tokens with
+                    | Some count ->
+                        match percent usage with
+                        | Some p -> shortTokens count + " (" + string p + "%)"
+                        | None -> shortTokens count
+                    | None -> ()
+                    match usage.Cost with
+                    | Some cost -> dollars cost
+                    | None -> ()
+                ]
+
+            if parts.IsEmpty || sidebar then
+                []
+            else
+                [ s t.Muted (String.concat " · " parts + "  ") ]
+
+        let state = used @ state model
         // As many hints as fit beside the state and the left side.
         let room = width - Row.width state - Row.width scrolled - Row.width left - 2
 
@@ -438,11 +505,27 @@ module View =
             | Some(ended, at) ->
                 yield Row.empty
                 yield! ending t width turn ended
-                // Who answered and how long the turn took.
+                // Who answered, how long the turn took and how fast the model wrote.
+                let modelName =
+                    match turn.Calls with
+                    | (used, _) :: _ -> Some(string used.Model)
+                    | [] -> model.Setup.Model
+
+                let speed =
+                    let output = turn.Calls |> List.sumBy (fun (used, _) -> used.Tokens.Output)
+                    let micros = turn.Calls |> List.sumBy snd
+
+                    if output > 0 && micros > 0L then
+                        let perSecond = float output * 1_000_000.0 / float micros
+                        [ perSecond.ToString("0.0", CultureInfo.InvariantCulture) + " tok/s" ]
+                    else
+                        []
+
                 let who =
                     [ model.Setup.Product ]
-                    @ (model.Setup.Model |> Option.toList)
+                    @ (modelName |> Option.toList)
                     @ [ duration (at - turn.Started) ]
+                    @ speed
 
                 yield Row.fit width [ indent 2; s t.Accent "▣ "; s t.Muted (String.concat " · " who) ]
             | None -> ()
@@ -750,9 +833,9 @@ module View =
         else
             Row.fill width { t.Text with Bg = t.Background } row |> Row.normalize
 
-    /// The whole screen: the warnings, the transcript from the top, what is asked, the prompts
-    /// waiting, what happens, the prompt's box and the footer.
-    let view (model: Model) : Frame =
+    /// The main column: the warnings, the transcript from the top, what is asked, the prompts
+    /// waiting, what happens, the prompt's box and the footer (painted, not lowered yet).
+    let private main (model: Model) (sidebar: bool) : Frame =
         let t = theme model
         let width = model.Width
         let height = model.Height
@@ -760,7 +843,7 @@ module View =
         let asked = asked model
         let pending = pending model
         let status = status model
-        let footer = [ footer model ]
+        let footer = [ footer model sidebar ]
 
         let editorRows =
             let lines, _ = Editor.layout (max 1 (width - 4)) model.Editor
@@ -822,4 +905,84 @@ module View =
             Rows = rows
             Cursor = cursor
         }
-        |> Frame.lower model.Setup.Terminal.Depth
+
+    /// The sidebar of a wide terminal: the session's title, how full the context is and what the
+    /// session cost; the workspace and its branch at the bottom.
+    let sidebar (model: Model) (width: int) (height: int) : Row list =
+        let t = theme model
+        let usage = Timeline.usage model.Timeline
+        let inner = width - 4
+        let line (style: Style) (text: string) = Row.fit inner [ s style text ]
+
+        let top =
+            [
+                Row.empty
+                match title model with
+                | Some title ->
+                    yield!
+                        Text.wrap inner title
+                        |> List.truncate 3
+                        |> List.map (line (Style.withBold t.Text))
+                | None -> line (Style.withBold t.Text) model.Setup.Product
+                Row.empty
+                line (Style.withBold t.Text) "Context"
+                match usage.Tokens with
+                | Some count ->
+                    line t.Muted (tokens count + " tokens")
+
+                    match percent usage with
+                    | Some p -> line t.Muted (string p + "% used")
+                    | None -> ()
+                | None -> line t.Muted "nothing yet"
+                match usage.Cost with
+                | Some cost -> line t.Muted (dollars cost + " spent")
+                | None -> ()
+                match usage.Model with
+                | Some m -> line t.Muted m
+                | None -> ()
+            ]
+
+        let workspace =
+            let path =
+                model.Session
+                |> Option.map _.Workspace
+                |> Option.defaultValue model.Setup.Workspace
+
+            match model.Env |> Option.bind _.Branch with
+            | Some branch -> shortPath path + ":" + branch
+            | None -> shortPath path
+
+        let bottom = [ line t.Muted workspace; Row.empty ]
+        let top = List.truncate (max 0 (height - bottom.Length)) top
+        let filler = List.replicate (max 0 (height - top.Length - bottom.Length)) Row.empty
+
+        top @ filler @ bottom
+        |> List.truncate height
+        // A painted panel sets the sidebar apart; on the terminal's own colours a rule does.
+        |> List.map (fun row -> (if t.Panel = Color.Default then s t.Muted "│ " else indent 2) :: row)
+        |> raise t width
+
+    /// The whole screen: the main column, with the sidebar at its right on a wide terminal.
+    let view (model: Model) : Frame =
+        let t = theme model
+
+        let frame =
+            if hasSidebar model then
+                let mainWidth = model.Width - sidebarWidth
+                let left = main { model with Width = mainWidth } true
+                let right = sidebar model sidebarWidth model.Height
+
+                { left with
+                    Width = model.Width
+                    Rows =
+                        List.zip left.Rows right
+                        |> List.map (fun (row, side) ->
+                            let row =
+                                Row.fill mainWidth { t.Text with Bg = t.Background } (Row.fit mainWidth row)
+
+                            Row.normalize (row @ side))
+                }
+            else
+                main model false
+
+        frame |> Frame.lower model.Setup.Terminal.Depth

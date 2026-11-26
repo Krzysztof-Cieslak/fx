@@ -18,6 +18,6 @@
   held: the last turn did not finish; a…
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/billing · session …00… ● held
+fx · …/src/billing:main · sessio… ● held
 ────────────────────────────────────────
 cursor 17,4

@@ -93,10 +93,17 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
 - **Prompt box**: the prompt being typed, and under it its info line: the main model, the
   environment (name and provider) and the sandbox driver that confines it (`env/get`'s `sandbox`:
   `bubblewrap`, `seatbelt`, `none`).
-- **Footer**: the product, the workspace and the session on the left; the keys that apply (as many
-  as fit beside the left side), whether the transcript is scrolled, and the session's state (idle,
-  the running turn, held, needs input, closed) on the right.
-- **Turn footer**: under each ended turn, `▣` with the product, the model and how long the turn took.
+- **Footer**: the product, the workspace with its branch (`env/get`'s `branch`) and the session on
+  the left; the keys that apply (as many as fit beside the left side), whether the transcript is
+  scrolled, what the session used (the context the last call held, its share of the window, and the
+  cost: `73.4K (7%) · $2.11`, unless the sidebar shows it) and the session's state (idle, the
+  running turn, held, needs input, closed) on the right.
+- **Turn footer**: under each ended turn, `▣` with the product, the model its last call used, how
+  long the turn took and how fast the model wrote (output tokens over the time its calls took).
+- **Sidebar** (terminals 120 columns wide or more, 34 of them): the session's title (the one it was
+  given, else its first prompt's first line), the context (tokens the last call held, the share of
+  the window used), what the session cost, the model; the workspace and its branch at the bottom.
+  What it shows comes from the replies' `used` (context events), so `fx attach` shows it too.
 - **Banner**: the environment's warnings (`env/get`), every one on every screen while it exists:
   "runs unsandboxed" on Windows (no sandbox in v1) and wherever no sandbox driver confines it
   (`Envs.warnings`, T113).
@@ -242,7 +249,7 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
+- `Fx.Tui.Tests`: usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
   width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark
   theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and
   golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences

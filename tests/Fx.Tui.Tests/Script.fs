@@ -113,7 +113,7 @@ type Session(id: string) =
     member this.Boundary(step: int) =
         this.Send(Command.TakeInputs(this.Running, step), host)
 
-    member this.Reply(step: int, parts: Part list) =
+    member this.Reply(step: int, parts: Part list, ?used: ReplyUsage) =
         this.Context(
             ContextEvent.Replied
                 {
@@ -121,7 +121,7 @@ type Session(id: string) =
                     Step = step
                     Shown = []
                     Parts = parts
-                    Used = None
+                    Used = used
                 }
         )
 
@@ -298,6 +298,7 @@ let env: EnvInfo =
         Phase = "ready"
         Warnings = [ "runs unsandboxed: commands can read and change everything the user can" ]
         Sandbox = Some "none"
+        Branch = Some "main"
     }
 
 /// An environment bubblewrap confines: no banner.
@@ -389,3 +390,20 @@ let finishedTurn () : Session * Msg list =
         ]
 
     s, msgs
+
+/// What a model call used, as CodeAct records it.
+let used (input: int) (output: int) (cost: decimal) : ReplyUsage =
+    {
+        Model =
+            {
+                Provider = "anthropic"
+                Model = "claude-opus-5-5"
+            }
+        Tokens =
+            { Usage.zero with
+                Input = input
+                Output = output
+            }
+        Context = Some 1_000_000
+        Cost = Some cost
+    }

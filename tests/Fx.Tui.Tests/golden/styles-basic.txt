@@ -13,4 +13,4 @@
 12 
 13 {fg=cyan bg=default}┃ {fg=cyan bg=default bold}› 
 14 {fg=cyan bg=default}┃ {fg=default bg=default dim}anthropic/claude-sonnet-5-5 · env: default (local) · sand…
-15 {fg=default bg=default bold}fx{fg=default bg=default dim} · …/src/billing · session …00000000{fg=default bg=default}    {fg=default bg=default dim}Enter send  ● idle
+15 {fg=default bg=default bold}fx{fg=default bg=default dim} · …/src/billing:main · session …00000000{fg=default bg=default}           {fg=default bg=default dim}● idle

@@ -13,4 +13,4 @@
 12 {fg=#7aa2f7 bg=#222430}┃ {fg=#7dcfff bg=#222430 bold}› {fg=#dcdfe4 bg=#222430}                                                        
 13 {fg=#7aa2f7 bg=#222430}┃ {fg=#808496 bg=#222430}anthropic/claude-sonnet-5-5 · env: default (local) · sand…
 14 {fg=#7aa2f7 bg=#222430}┃{fg=#dcdfe4 bg=#222430}                                                           
-15 {fg=#dcdfe4 bg=#181921 bold}fx{fg=#808496 bg=#181921} · …/src/billing · session …00000000{fg=#dcdfe4 bg=#181921}    {fg=#808496 bg=#181921}Enter send  ● idle
+15 {fg=#dcdfe4 bg=#181921 bold}fx{fg=#808496 bg=#181921} · …/src/billing:main · session …00000000{fg=#dcdfe4 bg=#181921}           {fg=#808496 bg=#181921}● idle

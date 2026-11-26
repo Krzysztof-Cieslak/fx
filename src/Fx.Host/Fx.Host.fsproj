@@ -26,6 +26,7 @@
     <Compile Include="HostSessions.fs" />
     <Compile Include="Headless.fs" />
     <Compile Include="Commands.fs" />
+    <Compile Include="GitHead.fs" />
     <Compile Include="ClientProtocol.fs" />
     <Compile Include="ClientServer.fs" />
     <Compile Include="Clients.fs" />

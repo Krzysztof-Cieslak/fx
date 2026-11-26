@@ -149,6 +149,9 @@ type EnvSummary =
         /// The sandbox driver that confines its processes (`bubblewrap`, `seatbelt`, `none`), once it
         /// is ready.
         Sandbox: string option
+        /// The branch its workspace has checked out (`env/get`, once it is ready and a git
+        /// checkout).
+        Branch: string option
     }
 
     override this.ToString() =
@@ -461,6 +464,9 @@ module ClientProtocol =
             and! sandbox =
                 Codec.optionalField "sandbox" (fun (e: EnvSummary) -> e.Sandbox) Codec.string
 
+            and! branch =
+                Codec.optionalField "branch" (fun (e: EnvSummary) -> e.Branch) Codec.string
+
             return
                 {
                     Id = id
@@ -472,6 +478,7 @@ module ClientProtocol =
                     Reason = reason
                     Warnings = warnings
                     Sandbox = sandbox
+                    Branch = branch
                 }
         }
         |> Codec.describe "An environment: where sessions' hands are."

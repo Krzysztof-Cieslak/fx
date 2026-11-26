@@ -18,6 +18,6 @@
   ● turn 1 · waiting for an answer
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/billing · session …… ● turn 1
+fx · …/src/billing:main · sess… ● turn 1
 ────────────────────────────────────────
 cursor hidden

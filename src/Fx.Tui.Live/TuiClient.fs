@@ -81,6 +81,7 @@ module TuiClient =
             Phase = environment.Phase
             Warnings = environment.Warnings
             Sandbox = environment.Sandbox
+            Branch = environment.Branch
         }
 
     let private infoOf (entry: SessionEntry) : SessionInfo =

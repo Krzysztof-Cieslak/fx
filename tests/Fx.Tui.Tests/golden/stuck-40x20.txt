@@ -18,6 +18,6 @@
 ┃ Type the answer below; Enter sends it.
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/billing · sess… ● needs input
+fx · …/src/billing:main ·… ● needs input
 ────────────────────────────────────────
 cursor 17,4
