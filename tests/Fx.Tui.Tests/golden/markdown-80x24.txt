@@ -1,13 +1,8 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (local) · sandbox: none · anthropic/… ● idle
  ! runs unsandboxed: commands can read and change everything the user can
 
+┃ how do I use opus by default?
 
-
-
-
-
-› how do I use opus by default?
   Set model.role.main in ~/.fx/config.json:
 
     { "variants": { "model.role.main": "anthropic/claude-opus-5-5" } }
@@ -19,9 +14,14 @@
 
   ✓ Done  Created ~/.fx/config.json: fx uses Opus 5.5 by default
     Verify    fx variants explain model.role.main
-    3.0s
+  ▣ fx · anthropic/claude-sonnet-5-5 · 3.0s
 
-Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 exit
-›
+
+
+
+
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000007    Enter send · Alt+Enter newline  ● idle
 ────────────────────────────────────────────────────────────────────────────────
-cursor 23,2
+cursor 21,4

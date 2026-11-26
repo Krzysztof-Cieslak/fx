@@ -1,8 +1,6 @@
 ────────────────────────────────────────
- fx · …/src/billing · env: de… ● turn 1
  ! runs unsandboxed: commands can read …
 
-› migrate the database
   ? The host stopped during a cell
 
 ┃ Decision
@@ -17,7 +15,9 @@
 ┃ [r] Run it again  [i] Inspect first
 ┃ Go on as if the call ran to the end;
 ┃ what it did stays.
-● turn 1 · waiting for an answer
-›
+  ● turn 1 · waiting for an answer
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing · session …… ● turn 1
 ────────────────────────────────────────
 cursor hidden

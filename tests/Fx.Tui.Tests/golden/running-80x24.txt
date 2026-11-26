@@ -1,8 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (local) · sandbox: none · anthropi… ● turn 2
  ! runs unsandboxed: commands can read and change everything the user can
-  I'll look at the call sites first.
-  ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
   ◆ Edit     src/Billing/Client.fs                                        ✓ 0.3s
   ◇ Run      dotnet test tests/Billing                                     ✗ 48s
       exit 1
@@ -12,16 +9,19 @@
   ✓ Done  Migrated 37 call sites to RetryPolicy.
     Evidence  dotnet test tests/Billing → 214 passed
     Verify    dotnet test tests/Billing
-    1m39s
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s
 
-› now update the changelog
+┃ now update the changelog
+
   Updating CHANGELOG.md.
   ◇ Cell     add the entry                                                ⠹ 4.2s
   ▸ 1 cell (2 lines)                                             [Ctrl+O expand]
 
   ↳ steering (next step): mention the issue number
   ⋯ queued: then bump the version
-⠹ turn 2 · Cell add the entry            Enter steer · Tab queue · Esc interrupt
-›
+  ⠹ turn 2 · Cell add the entry
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000000         Enter steer · Tab queue  ● turn 2
 ────────────────────────────────────────────────────────────────────────────────
-cursor 23,2
+cursor 21,4

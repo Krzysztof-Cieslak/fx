@@ -89,7 +89,9 @@ let tests =
                 waitFor tty "the pasted lines" (fun text -> text.Contains "  lines")
                 tty.Type "\u001b"
                 tty.Resize(40, 12)
-                waitFor tty "the narrower screen" (fun _ -> tty.Lines.Head.Contains "fx" && tty.Lines.Length = 12)
+
+                waitFor tty "the narrower screen" (fun _ ->
+                    tty.Lines.Length = 12 && (List.last tty.Lines).StartsWith "fx")
 
                 tty.Type "\u0003"
                 waitFor tty "the cleared prompt" (fun text -> text.Contains "Ctrl+C again to exit")

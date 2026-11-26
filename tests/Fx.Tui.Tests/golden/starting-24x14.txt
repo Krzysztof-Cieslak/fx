@@ -1,5 +1,4 @@
 ────────────────────────
- fx · …/src… ● starting
 
 
 
@@ -10,8 +9,9 @@
 
 
 
-
-⠋ starting: creating th…
-›
+  ⠋ starting: creating …
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/b… ● starting
 ────────────────────────
-cursor 13,2
+cursor 11,4

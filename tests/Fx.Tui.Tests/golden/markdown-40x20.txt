@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- fx · …/src/billing · env: defa… ● idle
  ! runs unsandboxed: commands can read …
 
     { "variants": { "model.role.main": "
@@ -15,9 +14,10 @@
           uses Opus 5.5 by default
     Verify    fx variants explain
               model.role.main
-    3.0s
+  ▣ fx · anthropic/claude-sonnet-5-5 · …
 
-Enter send · Alt+Enter newline · Ctrl+O…
-›
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing · session …00… ● idle
 ────────────────────────────────────────
-cursor 19,2
+cursor 17,4

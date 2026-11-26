@@ -1,5 +1,4 @@
 ────────────────────────
- fx · …/src/b… ● turn 1
  ! runs unsandboxed: co…
 
 ┃ Decision
@@ -10,8 +9,9 @@
 ┃   await fx.shell.run(…
 ┃ It printed:
 ┃   applying 0001
-┃   applying 0002
-● turn 1 · waiting for …
-›
+  ● turn 1 · waiting fo…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/bil… ● turn 1
 ────────────────────────
 cursor hidden

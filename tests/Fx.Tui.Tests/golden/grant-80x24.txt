@@ -1,19 +1,17 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (local) · sandbox: none · anthropi… ● turn 1
  ! runs unsandboxed: commands can read and change everything the user can
 
+┃ ship it
 
-
-
-
-
-
-
-
-
-
-› ship it
   ◇ Run      make deploy                                                  ⠋ 0.0s
+
+
+
+
+
+
+
+
 
 ┃ Permission  (1 of 2)
 ┃ Run make deploy
@@ -21,7 +19,9 @@
 ┃ asked by: turn 1, call toolu_1 (bash)
 ┃ command: make deploy
 ┃ [y] once  [s] this session  [a] always on this host  [n] deny
-● turn 1 · waiting for an answer                   keys in [ ] answer · ←→ Enter
-›
+  ● turn 1 · waiting for an answer
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000002   keys in [ ] answer · ←→ Enter  ● turn 1
 ────────────────────────────────────────────────────────────────────────────────
 cursor hidden

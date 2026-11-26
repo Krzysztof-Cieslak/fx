@@ -1,8 +1,5 @@
 ────────────────────────
- fx · …/src/bil… ● held
  ! runs unsandboxed: co…
-  traductions
-  日本語のファイルを読み
   ます。
   ◇ Read     doc… ✗ 0.4s
       no such file: doc…
@@ -10,8 +7,11 @@
   ✗ Failed  the model
             call failed:
             overloaded
+  ▣ fx · anthropic/clau…
 
-held: the last turn did…
-›
+  held: the last turn d…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/billi… ● held
 ────────────────────────
-cursor 13,2
+cursor 11,4

@@ -1,23 +1,23 @@
 ────────────────────────────────────────
- fx · …/src/billing · env: defa… ● held
  ! runs unsandboxed: commands can read …
 
+┃ 翻訳を確認して 👍🏽 — vérifie les
+┃ traductions
 
-
-
-
-
-
-› 翻訳を確認して 👍🏽 — vérifie les
-  traductions
   日本語のファイルを読みます。
   ◇ Read     docs/日本語.md       ✗ 0.4s
       no such file: docs/日本語.md
 
   ✗ Failed  the model call failed:
             overloaded
+  ▣ fx · anthropic/claude-sonnet-5-5 · …
 
-held: the last turn did not finish; a p…
-›
+
+
+
+  held: the last turn did not finish; a…
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing · session …00… ● held
 ────────────────────────────────────────
-cursor 19,2
+cursor 17,4

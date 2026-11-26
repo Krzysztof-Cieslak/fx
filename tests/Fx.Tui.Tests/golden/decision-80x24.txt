@@ -1,16 +1,14 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (local) · sandbox: none · anthropi… ● turn 1
  ! runs unsandboxed: commands can read and change everything the user can
 
+┃ migrate the database
 
-
-
-
-
-
-
-› migrate the database
   ? The host stopped during a cell
+
+
+
+
+
 
 ┃ Decision
 ┃ The host stopped while this cell ran. What happened?
@@ -21,7 +19,9 @@
 ┃   applying 0002
 ┃ [c] It completed  [f] It failed  [r] Run it again  [i] Inspect first
 ┃ Go on as if the call ran to the end; what it did stays.
-● turn 1 · waiting for an answer                   keys in [ ] answer · ←→ Enter
-›
+  ● turn 1 · waiting for an answer
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000003   keys in [ ] answer · ←→ Enter  ● turn 1
 ────────────────────────────────────────────────────────────────────────────────
 cursor hidden

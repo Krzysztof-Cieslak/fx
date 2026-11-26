@@ -62,32 +62,45 @@ to send, and a pure `view` that draws the model as a frame.
 ## A turn on the screen (spec §19.2)
 
 ```
- fx · …/src/billing · env: default (local) · sandbox: none · anthropic/claude-sonnet-5-5 · session …  ● idle
  ! runs unsandboxed: commands can read and change everything the user can
-› replace deprecated Http.retry with RetryPolicy in billing
+
+┃ replace deprecated Http.retry with RetryPolicy in billing
+
   I'll look at the call sites first.
-  ◇ Read     src/Billing/Client.fs                                                         ✓ 0.2s
-  ◆ Edit     src/Billing/Client.fs                                                         ✓ 0.3s
-  ◇ Run      dotnet test tests/Billing                                                     ✗ 48s
+  ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
+  ◆ Edit     src/Billing/Client.fs                                        ✓ 0.3s
+  ◇ Run      dotnet test tests/Billing                                     ✗ 48s
       exit 1
-  ◇ Cell     rerun the tests                                                               ✓ 46s
-  ▸ 1 cell (3 lines)                                                             [Ctrl+O expand]
+  ◇ Cell     rerun the tests                                               ✓ 46s
+  ▸ 1 cell (3 lines)                                             [Ctrl+O expand]
 
   ✓ Done  Migrated 37 call sites to RetryPolicy.
     Evidence  dotnet test tests/Billing → 214 passed
     Verify    dotnet test tests/Billing
-    1m40s
-                                                  Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 exit
-› _
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s
+
+┃ › _
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline  ● idle
 ```
 
-- **Header**: the product, the workspace, the environment (name and provider), the sandbox driver
-  that confines it (`env/get`'s `sandbox`: `bubblewrap`, `seatbelt`, `none`), the main model, the
-  session, and its state (idle, the running turn, held, needs input, closed).
+- **Layout**: the warnings at the top, the transcript under them from the top of the screen (its end
+  when it is longer than the room), then what is asked, the prompts waiting, what happens, the
+  prompt's box and the footer at the bottom.
+- **Panels**: prompts sent, the prompt being typed and the cards are raised blocks: a bar at their
+  left in the theme's colour (the card's for a card) and, where the theme paints panels (`dark`,
+  `light`), the panel's background to the screen's edge with a row of padding above and below.
+- **Prompt box**: the prompt being typed, and under it its info line: the main model, the
+  environment (name and provider) and the sandbox driver that confines it (`env/get`'s `sandbox`:
+  `bubblewrap`, `seatbelt`, `none`).
+- **Footer**: the product, the workspace and the session on the left; the keys that apply (as many
+  as fit beside the left side), whether the transcript is scrolled, and the session's state (idle,
+  the running turn, held, needs input, closed) on the right.
+- **Turn footer**: under each ended turn, `▣` with the product, the model and how long the turn took.
 - **Banner**: the environment's warnings (`env/get`), every one on every screen while it exists:
   "runs unsandboxed" on Windows (no sandbox in v1) and wherever no sandbox driver confines it
   (`Envs.warnings`, T113).
-- **Transcript**: each turn's prompts (`›`), what the model wrote, one activity line per action
+- **Transcript**: each turn's prompts (panels), what the model wrote, one activity line per action
   (`◇` reads and runs, `◆` changes; `Cell` with its `// intent:` line, `Read`, `Edit`, `Run`), its
   status (a spinner and the time while it runs, `✓`/`✗` and how long it took), the first line of an
   error under a failed one, steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
@@ -119,8 +132,8 @@ to send, and a pure `view` that draws the model as a frame.
   returned, a compaction's summary and drafts).
 - **Pending inputs**: steered prompts waiting for the next step and queued prompts, under the
   transcript, until a turn takes them.
-- **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice), and
-  the keys that apply.
+- **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice);
+  no row when nothing does.
 
 ## Colours and themes (spec §19.6)
 

@@ -1,5 +1,4 @@
 ────────────────────────
- fx · …/src/b… ● turn 1
  ! runs unsandboxed: co…
 
 ┃ Permission  (1 of 2)
@@ -10,8 +9,9 @@
 ┃ [y] once
 ┃ [s] this session
 ┃ [a] always on this ho…
-┃ [n] deny
-● turn 1 · waiting for …
-›
+  ● turn 1 · waiting fo…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/bil… ● turn 1
 ────────────────────────
 cursor hidden
