@@ -363,8 +363,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131 done
-  class T132a inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a done
 ```
 
 <!-- /tasks:generated -->
@@ -426,7 +425,7 @@ flowchart LR
 | T129b | Client protocol + `fx serve` | T129a | §3, §17, §18, §19.5 | done | `session/*` (create, list, get, prompt steer/queue, interrupt, answer with capability checks, subscribe(afterSeq) replay-then-live, fork, overrides, close), `grants/*`, `identity/*`, `env/*`, `ext/<id>/*` with least roles per group over Fx.Rpc on WebSocket (local listener: Unix socket/named pipe, loopback with the token file) and in process for embedded mode; connections end on token revocation; generated TypeScript declarations (golden); `fx serve`; e2e over the protocol (reconnect with afterSeq, a grant answered, host restart); JIT-vs-native scenarios. |
 | T130 | Minimal TUI | T129b | §19.2 | done | Elm-style F# TUI: chat, streaming activity lines, result card, steer/queue/interrupt keys, grant prompts, Windows unsandboxed banner. |
 | T131 | Record + replay | T105, T106, T127 | §15 | done | Journal by blob hash, `ReplayEnv`, exact replay of recorded sessions; replay test harness. |
-| T132a | Headless approvals | T127b, T129b | §13, §19 | in-progress | A grant request nobody could answer (no terminal) never becomes a final answer for a later run that asks again (installs and the CodeAct guard alike); `fx grants list\|allow\|revoke` lets the local OS user grant beforehand, and the headless message names the exact command; `fx run` checks the model's credentials before installing components; install prompts show human sizes; host.md documents running unattended. Host tests with a scripted model in both orders; e2e with the native binary. |
+| T132a | Headless approvals | T127b, T129b | §13, §19 | done | A grant request nobody could answer (no terminal) never becomes a final answer for a later run that asks again (installs and the CodeAct guard alike); `fx grants list\|allow\|revoke` lets the local OS user grant beforehand, and the headless message names the exact command; `fx run` checks the model's credentials before installing components; install prompts show human sizes; host.md documents running unattended. Host tests with a scripted model in both orders; e2e with the native binary. |
 | T132 | Milestone: fx builds fx | T113, T121, T127b, T128, T130, T131, T132a | §21 | todo | fx is used to develop fx (Anthropic + OpenAI APIs); dogfooding notes captured as follow-up tasks. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
