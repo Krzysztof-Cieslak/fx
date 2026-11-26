@@ -12,14 +12,14 @@
 
 
 
+
+
 › deploy it
-  ? The agent asks
+  I can deploy now. Deploy to staging or production?
 
   ? Needs input  3.0s
-    Deploy to staging or production?
 
 ┃ Question
-┃ Deploy to staging or production?
 ┃ Type the answer below; Enter sends it.
 Enter answer · Esc interrupt
 ›
