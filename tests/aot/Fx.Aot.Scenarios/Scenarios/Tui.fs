@@ -51,6 +51,34 @@ let private view () : string list =
         let a = View.view (Screens.finished 40 10)
         let b = View.view (Screens.running 40 10)
         Vt.visible (Vt.diff (Some a) b)
+
+        "== themes"
+
+        for depth in
+            [
+                ColorDepth.TrueColor
+                ColorDepth.Indexed
+                ColorDepth.Basic
+                ColorDepth.NoColor
+            ] do
+            for choice in [ ThemeChoice.Auto; ThemeChoice.Light; ThemeChoice.Ansi16 ] do
+                let model = Screens.finished 40 10
+
+                let model =
+                    { model with
+                        Setup =
+                            { model.Setup with
+                                Terminal =
+                                    {
+                                        Depth = depth
+                                        LightBackground = None
+                                    }
+                                Theme = choice
+                            }
+                    }
+
+                $"-- {depth} {choice}"
+                Vt.visible (Vt.diff None (View.view model))
     ]
 
 type private Env =

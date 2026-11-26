@@ -284,6 +284,8 @@ let setup: Setup =
         Trusted = true
         Warnings = []
         Keys = "tui/run1"
+        Terminal = Terminal.basic
+        Theme = ThemeChoice.Auto
     }
 
 /// An environment no sandbox confines (Windows, or no bubblewrap): its warning is the banner.

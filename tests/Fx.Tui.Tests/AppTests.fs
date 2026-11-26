@@ -56,6 +56,42 @@ let tests =
                         Golden.expect "compacted-verbose-80x30.txt" (Screens.render model)
                     }
 
+                    for name, terminal, choice in
+                        [
+                            "truecolor-dark", ColorDepth.TrueColor, ThemeChoice.Dark
+                            "truecolor-light", ColorDepth.TrueColor, ThemeChoice.Light
+                            "indexed-dark", ColorDepth.Indexed, ThemeChoice.Auto
+                            "basic", ColorDepth.Basic, ThemeChoice.Auto
+                            "nocolor", ColorDepth.NoColor, ThemeChoice.Dark
+                        ] do
+                        test $"styles at {name}" {
+                            let model = Screens.finished 60 16
+
+                            let model =
+                                { model with
+                                    Setup =
+                                        { model.Setup with
+                                            Terminal =
+                                                {
+                                                    Depth = terminal
+                                                    LightBackground = None
+                                                }
+                                            Theme = choice
+                                        }
+                                }
+
+                            let drawn =
+                                (View.view model).Rows
+                                |> List.mapi (fun i row ->
+                                    $"{i, 2} "
+                                    + (row
+                                       |> List.map (fun span -> "{" + string span.Style + "}" + span.Text)
+                                       |> String.concat ""))
+                                |> String.concat "\n"
+
+                            Golden.expect $"styles-{name}.txt" (drawn + "\n")
+                        }
+
                     test "verbose shows a reply the text-only nudge superseded" {
                         let model =
                             { Screens.question 80 24 with

@@ -25,6 +25,10 @@ type Setup =
         Warnings: string list
         /// The prefix of this run's idempotency keys: unique per run, so a key is one intent.
         Keys: string
+        /// What the terminal draws (its colour depth, its background).
+        Terminal: Terminal
+        /// The theme asked for (`tui.theme`).
+        Theme: ThemeChoice
     }
 
     override this.ToString() = $"setup {this.Workspace}"

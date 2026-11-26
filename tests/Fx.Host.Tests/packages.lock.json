@@ -334,7 +334,8 @@
           "Fx.Keyring": "[0.0.0, )",
           "Fx.Replay": "[0.0.0, )",
           "Fx.Store.Live": "[0.0.0, )",
-          "Fx.Transport.Http": "[0.0.0, )"
+          "Fx.Transport.Http": "[0.0.0, )",
+          "Fx.Tui": "[0.0.0, )"
         }
       },
       "fx.identity": {
@@ -519,6 +520,23 @@
         "dependencies": {
           "FSharp.Core": "[11.0.101, )",
           "Fx.Prelude": "[0.0.0, )"
+        }
+      },
+      "fx.tui": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Contracts": "[0.0.0, )",
+          "Fx.Effects": "[0.0.0, )",
+          "Fx.Grants": "[0.0.0, )",
+          "Fx.Machines": "[0.0.0, )",
+          "Fx.Machines.Host": "[0.0.0, )",
+          "Fx.Models": "[0.0.0, )",
+          "Fx.Prelude": "[0.0.0, )",
+          "Fx.Prompt": "[0.0.0, )",
+          "Fx.Sessions": "[0.0.0, )",
+          "Fx.Store": "[0.0.0, )",
+          "Fx.Variants": "[0.0.0, )"
         }
       },
       "fx.variants": {

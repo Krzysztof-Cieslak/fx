@@ -151,6 +151,8 @@ module TuiMain =
                         Trusted = host.Config.ProjectTrusted
                         Warnings = host.Warnings
                         Keys = "tui/" + string (options.Ids.NewId())
+                        Terminal = Terminal.detect options.Variables (OperatingSystem.IsWindows())
+                        Theme = Setup.value TuiSlots.theme variants
                     }
 
                 let connect (inbox: Inbox<Msg>) (env: TuiEnv) =
@@ -165,7 +167,13 @@ module TuiMain =
                 (Host.stop host).Wait(TimeSpan.FromSeconds 60.0) |> ignore
 
     /// `fx attach`: the TUI of the host `fx serve` runs on this data directory.
-    let attach (paths: HostPaths) (workspace: string) (args: TuiArgs) (say: string -> unit) : int =
+    let attach
+        (paths: HostPaths)
+        (variables: (string * string) list)
+        (workspace: string)
+        (args: TuiArgs)
+        (say: string -> unit)
+        : int =
         let locateEnv =
             {
                 FsRead = LocalFs.read
@@ -186,6 +194,9 @@ module TuiMain =
                     Trusted = true
                     Warnings = []
                     Keys = "tui/" + string ((SystemIds.create SystemClock.clock).NewId())
+                    Terminal = Terminal.detect variables (OperatingSystem.IsWindows())
+                    // The serving host's resolution is not this process's: the default.
+                    Theme = TuiSlots.theme.Default
                 }
 
             let connect (inbox: Inbox<Msg>) (env: TuiEnv) =

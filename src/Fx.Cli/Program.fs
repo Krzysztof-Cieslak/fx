@@ -380,7 +380,7 @@ let private attach (args: TuiArgs) : int =
 
         match hostOptions facts [] with
         | Error e -> fail [ e ]
-        | Ok options -> TuiMain.attach options.Paths facts.CurrentDirectory args show
+        | Ok options -> TuiMain.attach options.Paths options.Variables facts.CurrentDirectory args show
 
 [<EntryPoint>]
 let main argv =

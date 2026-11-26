@@ -1102,7 +1102,7 @@ and RunStatus =
 
 ### 19.6 Experience choices that are variants
 
-Action surface (`cells-only` / `hybrid`), TUI style, edit mode, plan mode, edit guard, interpreter, goal context policy (default FreshHandoff), reviewer model diversity, Windows shell.
+Action surface (`cells-only` / `hybrid`), TUI style (`tui.theme`: `auto` / `dark` / `light` / `ansi16`), edit mode, plan mode, edit guard, interpreter, goal context policy (default FreshHandoff), reviewer model diversity, Windows shell.
 
 ---
 
