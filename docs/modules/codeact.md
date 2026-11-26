@@ -156,10 +156,18 @@ Keys derive from the turn's start event and the step: `<session>#<seq>/step/<n>/
 
 ## Kernels (spec §6.5)
 
-One kernel per session (`SessionKernel`), started when the first cell needs it and kept across turns:
+One kernel per session (`SessionKernel`), started when the first cell needs it and kept across turns
+and cells: it lives for the session unless it is killed (an interrupt's escalation), it dies, or the
+host stops (T135).
 
 - It is started in the hands' environment (`Hands.Env`, the host's scope), not the turn's: an RPC peer
   lives in the scope that connected it, and an interrupt cancels the turn's.
+- Its process must not die with the thread that started it. bubblewrap's `--die-with-parent`
+  (`PR_SET_PDEATHSIG`) ties a process to the *thread* that forked it, and thread-pool threads end after
+  20 seconds idle: in a dogfooding session (T132) the kernel was killed (SIGKILL, exit code 137) between
+  turns and while a cell waited for a person's grant, so every turn started a new kernel. The shell and
+  terminal interpreters start every process on one thread that lives as long as the host or envd
+  (`ProcessStarter` in `Fx.Effects.Live` and `Fx.Pty`; [envd.md](envd.md)).
 - The bridge is `CoreBindings.all` with the turn's settings (`CoreSettings.Exclusions` from the session's
   variants, `codeact.output.maxChars`), behind the running turn's `Hands.Guard` (`SessionKernel.Guard`,
   set before each action: hands are per turn, a kernel outlives the turn that started it); `finish`
@@ -171,8 +179,21 @@ One kernel per session (`SessionKernel`), started when the first cell needs it a
   or not depending on timing, which exact replay cannot follow (replay.md).
 - **Restarts** (Jupyter semantics): a kernel that exited or was killed is dropped; the next cell starts a
   new one (fresh owned directories per launch, numbered on from the journal's `KernelLaunched`, also
-  after the host restarted) and its receipt says that names from earlier cells are gone and which
+  after the host restarted) and its receipt says that names from earlier cells are gone, why, and which
   values came back (below, "Kept values and `recall`").
+- **Every restart is logged with its reason.** How a kernel ended (`KernelEnd`) is journaled as
+  `kernelEnded` before the launch that replaces it: when a cell finds it gone (during the cell or after
+  it: its exit code and the end of its standard error), when the host kills it (`killed`), when its launch
+  failed (`notStarted`), or, at the first launch after the host restarted, `hostStopped` unless the
+  journal already says how it ended. `KernelEnds.describe` puts it in words (an exit code above 128 is
+  the signal that ended it, except on Windows: `was killed by signal 9 (SIGKILL)`):
+  - the cell whose kernel ended: `The cell did not complete: the kernel was killed by signal 9 (SIGKILL).
+    The next cell starts a new kernel: …`;
+  - the next cell's receipt starts with `[A new kernel started for this cell (the previous kernel …):
+    names from earlier cells are gone …]`, and carries `Receipt.Restarted` (`{launch, reason}`) for
+    people: the TUI shows `↻ new kernel: <reason>; names from earlier cells are gone` under the call, and
+    `fx run` an activity line (`  ↻ new kernel  …`). A receipt with `Restarted` always starts with that
+    note (a rerun's line comes after it), so clients drop its first piece from what they show.
 - Each cell is `t<turn>-s<step>-<k>` (`-<attempt>` when people chose to run it again after a crash), with
   its `// intent:` line, `codeact.cell.timeoutMs`, and `check` when `codeact.cell.typeCheck` is on and the
   kernel handles `cell/check`. Its receipt names its value `Out["<cell>"]`.
@@ -294,6 +315,7 @@ never regenerated), one entry at a time per session (`JournalWriter`), every ent
 |---|---|---|
 | `callStarted {call, tool, cell?, intent?, fingerprint, snapshot?}` | before the call does anything | `/started` |
 | `kernelLaunched {launch}` | before a kernel starts (key `kernel/<launch>`) | |
+| `kernelEnded {launch, how}` | when the host learns how a kernel ended, before the next launch (key `kernel/<launch>/ended`); `how` is `exited {code?, stderr}`, `notStarted {reason}`, `killed` or `hostStopped` (T135; `golden/step-events-kernel-ended-v1.jsonl` is what it wrote first) | |
 | `hostCallStarted {call, index, binding, args}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`) | `/host/<i>` |
 | `hostCallEnded {call, index, failed, summary}` | after it | `/host/<i>/ended` |
 | `printed {call, text}` | as the running cell streams output (at most 64 entries and 16000 characters per call) | `/output/<j>` |
@@ -478,8 +500,10 @@ Defaults are provisional until evals decide (spec §1, principle 7).
 - **Turns** on the real session host (in-memory store of payloads: every event through its JSON), with the
   script kernel in process and a scripted model that can hold a request: both surfaces doing a small
   coding task (read, edit, run a command, finish with evidence; each request a prefix of the next),
-  finishing refused and accepted, a steer delivered at the next boundary, an interrupt that leaves the
-  kernel's names, a busy cell killed and the kernel restarted, a kernel that died between turns, the loop
+  finishing refused and accepted, a steer delivered at the next boundary, one kernel for the session
+  (names declared in earlier cells and turns stay, one launch, never ended), an interrupt that leaves the
+  kernel's names, a busy cell killed and the kernel restarted, a kernel that exits during a cell and one
+  that died between turns (each end journaled before the next launch, the receipts saying why), the loop
   guard, each text-only policy and a question answered into the next turn, length cuts, empty replies,
   retries, overflow, fatal errors, the step budget, content exclusions for cells and direct tools, an
   unknown tool, calls after `finish`.
@@ -498,7 +522,8 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   `history.compact` with a focus, also in the turn's last cell; the window filled during a reply; a failed
   summary; modes `off` and `overflow`; each replays into the requests sent.
 - **Steering**: a steer after every result of a step's reply, a queued prompt in a turn of its own.
-- **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back; finding the
+- **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back (and
+  `kernelEnded` as first written); how kernels ended in words; finding the
   call in doubt; the card and its answers; each decision's receipt; kept values. End to end, the host
   process is stopped mid-cell as a crash would stop it and started again on the same stores (with a
   command that hangs the first time): the decision and its evidence (output, host calls, workspace

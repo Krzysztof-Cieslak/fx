@@ -88,6 +88,7 @@ export type ContextEvent =
       pieces: Piece[];
       /** @default false */
       isError?: boolean;
+      restarted?: KernelRestart;
     }
   | {
       kind: "pinned";
@@ -287,6 +288,13 @@ export type InputContent =
 export interface Issue {
   path: (string | number)[];
   message: string;
+}
+
+/** A new kernel a cell ran in: its launch, and why the kernel before it is gone. */
+export interface KernelRestart {
+  /** Integer, at least 1. */
+  launch: number;
+  reason: string;
 }
 
 export interface KeyedSession {

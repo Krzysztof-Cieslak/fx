@@ -164,6 +164,7 @@ let private protocol () : string list =
                                 Name = "bash"
                                 Pieces = [ Fx.Prompt.Piece.Text "exit 0" ]
                                 IsError = false
+                                Restarted = None
                             }
                     Meta =
                         {

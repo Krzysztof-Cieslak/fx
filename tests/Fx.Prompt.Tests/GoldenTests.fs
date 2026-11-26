@@ -48,6 +48,7 @@ let coding: Sim =
                 Name = "cell"
                 Pieces = [ Piece.output 60 (String.replicate 30 "ok " + "FAILED: 1 test") ]
                 IsError = true
+                Restarted = None
             }
     )
     |> steer "Keep the old API too."
@@ -160,6 +161,7 @@ let private everyKind: Sim =
                             }
                     ]
                 IsError = false
+                Restarted = None
             }
     )
 

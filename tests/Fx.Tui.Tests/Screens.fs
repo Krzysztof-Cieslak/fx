@@ -216,6 +216,38 @@ let compacted (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// A turn whose kernel had died since the last cell: the cell ran in a new one, which lost the names
+/// it used (T135), and says why on a line of its own.
+let restarted (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q000000000000000A"
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "rerun the check"
+            yield! s.Boundary 1
+            s.Advance 1.0
+            yield s.Reply(1, [ cell "toolu_1" "// intent: rerun the check\nawait check(rules)" ])
+            s.Advance 0.4
+            yield
+                s.Receipt(
+                    1,
+                    "toolu_1",
+                    "cell",
+                    "ReferenceError: check is not defined",
+                    true,
+                    {
+                        Launch = 2
+                        Reason = "the previous kernel was killed by signal 9 (SIGKILL)"
+                    }
+                )
+            yield! s.Boundary 2
+            s.Advance 1.0
+            yield s.Reply(2, [ text "The kernel restarted, so I will define `check` again." ])
+        ]
+
+    ready s width height msgs
+
 /// A reply in Markdown, and a result card whose summary and check are Markdown too.
 let markdown (width: int) (height: int) : Model =
     let s = Session "01JD2W7Z9Q0000000000000007"
@@ -338,6 +370,7 @@ let all: (string * (int -> int -> Model)) list =
         "decision", decision
         "wide", wide
         "compacted", compacted
+        "restarted", restarted
         "markdown", markdown
         "usage", usage
         "palette", palette

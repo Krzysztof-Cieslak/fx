@@ -37,6 +37,20 @@ type ModelReply =
     override this.ToString() =
         $"reply turn {this.Turn} step {this.Step} ({this.Shown.Length} shown, {this.Parts.Length} parts)"
 
+/// A new kernel a cell ran in (spec §6.5): the kernel before it is gone, and with it the names earlier
+/// cells declared. For people (clients show it as a line of its own); the model reads the same in the
+/// receipt's first piece, and the render never reads this.
+type KernelRestart =
+    {
+        /// The new kernel's launch in the session, from 1.
+        Launch: int
+        /// Why the kernel before it is gone, in words: `it was killed by signal 9 (SIGKILL)`.
+        Reason: string
+    }
+
+    override this.ToString() =
+        $"kernel launch {this.Launch}: {this.Reason}"
+
 /// A stable receipt: the result of a tool call or cell, as the model will see it from now on (NOOA).
 /// It is recorded once, bounded, with large values by reference, so later events never change it.
 type Receipt =
@@ -50,6 +64,8 @@ type Receipt =
         Name: string
         Pieces: Piece list
         IsError: bool
+        /// The cell ran in a new kernel (absent in receipts recorded before it was kept).
+        Restarted: KernelRestart option
     }
 
     override this.ToString() =
@@ -226,6 +242,17 @@ module ContextCodecs =
         }
         |> Codec.named "ModelReply"
 
+    let kernelRestart: Codec<KernelRestart> =
+        Codec.record {
+            let! launch =
+                Codec.field "launch" (fun (r: KernelRestart) -> r.Launch) (Codec.int |> Codec.atLeast 1)
+
+            and! reason = Codec.field "reason" (fun r -> r.Reason) Codec.string
+            return { Launch = launch; Reason = reason }
+        }
+        |> Codec.describe "A new kernel a cell ran in: its launch, and why the kernel before it is gone."
+        |> Codec.named "KernelRestart"
+
     let receipt: Codec<Receipt> =
         Codec.record {
             let! turn = Codec.field "turn" (fun (r: Receipt) -> r.Turn) count
@@ -234,6 +261,7 @@ module ContextCodecs =
             and! name = Codec.field "name" (fun r -> r.Name) Codec.string
             and! pieces = Codec.field "pieces" (fun r -> r.Pieces) (Codec.list Piece.codec)
             and! isError = Codec.defaultField "isError" (fun r -> r.IsError) false Codec.bool
+            and! restarted = Codec.optionalField "restarted" (fun r -> r.Restarted) kernelRestart
 
             return
                 {
@@ -243,6 +271,7 @@ module ContextCodecs =
                     Name = name
                     Pieces = pieces
                     IsError = isError
+                    Restarted = restarted
                 }
         }
         |> Codec.named "Receipt"

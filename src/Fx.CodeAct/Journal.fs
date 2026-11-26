@@ -125,6 +125,40 @@ type LostValue =
     override this.ToString() =
         $"lost {this.Cell} ({this.Type}): {this.Reason}"
 
+/// How a kernel of the session ended (spec §6.5: a kernel lives for the session unless it is killed or
+/// the host restarts). The host learns it when a cell finds the kernel gone, when it kills the kernel,
+/// or when it starts a kernel after the host restarted.
+[<RequireQualifiedAccess>]
+type KernelEnd =
+    /// Its process ended without the host asking (it crashed, or something outside killed it): its
+    /// exit code if it gave one, and the end of its standard error.
+    | Exited of code: int option * stderr: string
+    /// It never ran: its launch failed (why, for people).
+    | NotStarted of reason: string
+    /// The host killed it: an interrupted cell did not stop within the grace period.
+    | Killed
+    /// The host stopped while it ran (a host does not take over the kernels of the one before it).
+    | HostStopped
+
+    override this.ToString() =
+        match this with
+        | Exited(Some code, _) -> $"exited ({code})"
+        | Exited(None, _) -> "exited"
+        | NotStarted _ -> "not started"
+        | Killed -> "killed"
+        | HostStopped -> "host stopped"
+
+/// A kernel of the session ended.
+type KernelEnded =
+    {
+        /// The launch that ended.
+        Launch: int
+        How: KernelEnd
+    }
+
+    override this.ToString() =
+        $"kernel launch {this.Launch} {this.How}"
+
 /// What the step journal records (spec §5: step results journaled): facts kept forever, in the
 /// stream `steps/<session>`. A call's start is journaled before it runs; its end is its receipt in the
 /// context log (`Returned`), so a call with a start and no receipt was in flight when the host stopped.
@@ -139,6 +173,8 @@ type StepEvent =
     | Printed of Printed
     | ValueKept of KeptValue
     | ValueLost of LostValue
+    /// A kernel ended, and how: journaled before the launch that replaces it (T135).
+    | KernelEnded of KernelEnded
 
     override this.ToString() =
         match this with
@@ -149,6 +185,7 @@ type StepEvent =
         | Printed printed -> string printed
         | ValueKept kept -> string kept
         | ValueLost lost -> string lost
+        | KernelEnded ended -> string ended
 
 /// The JSON of the step journal: version 1 of what `steps/<session>` keeps (never change an old
 /// event's JSON without a new version and an upcaster; `tests/Fx.CodeAct.Tests/golden/step-events-v1.jsonl`
@@ -291,6 +328,39 @@ module StepCodecs =
         }
         |> Codec.named "LostValue"
 
+    let kernelEnd: Codec<KernelEnd> =
+        Codec.union "kind" {
+            let! exited =
+                Codec.case2
+                    "exited"
+                    (fun code stderr -> KernelEnd.Exited(code, stderr))
+                    (Field.optional "code" Codec.int)
+                    (Field.withDefault "stderr" "" Codec.string)
+
+            and! notStarted =
+                Codec.case1 "notStarted" KernelEnd.NotStarted (Field.required "reason" Codec.string)
+
+            and! killed = Codec.case0 "killed" KernelEnd.Killed
+            and! stopped = Codec.case0 "hostStopped" KernelEnd.HostStopped
+
+            return
+                fun e ->
+                    match e with
+                    | KernelEnd.Exited(code, stderr) -> exited code stderr
+                    | KernelEnd.NotStarted reason -> notStarted reason
+                    | KernelEnd.Killed -> killed
+                    | KernelEnd.HostStopped -> stopped
+        }
+        |> Codec.named "KernelEnd"
+
+    let kernelEnded: Codec<KernelEnded> =
+        Codec.record {
+            let! launch = Codec.field "launch" (fun (e: KernelEnded) -> e.Launch) (count 1)
+            and! how = Codec.field "how" (fun e -> e.How) kernelEnd
+            return { Launch = launch; How = how }
+        }
+        |> Codec.named "KernelEnded"
+
     let event: Codec<StepEvent> =
         Codec.union "kind" {
             let! launched =
@@ -305,6 +375,7 @@ module StepCodecs =
             and! printed' = Codec.caseOf "printed" StepEvent.Printed printed
             and! kept = Codec.caseOf "valueKept" StepEvent.ValueKept keptValue
             and! lost = Codec.caseOf "valueLost" StepEvent.ValueLost lostValue
+            and! ended = Codec.caseOf "kernelEnded" StepEvent.KernelEnded kernelEnded
 
             return
                 fun e ->
@@ -316,9 +387,10 @@ module StepCodecs =
                     | StepEvent.Printed p -> printed' p
                     | StepEvent.ValueKept k -> kept k
                     | StepEvent.ValueLost l -> lost l
+                    | StepEvent.KernelEnded e -> ended e
         }
         |> Codec.describe
-            "What a session's step journal records: kernel launches, calls before they run, their host calls and output, and cells' values for recall."
+            "What a session's step journal records: kernel launches and how kernels ended, calls before they run, their host calls and output, and cells' values for recall."
         |> Codec.named "StepEvent"
 
 /// Where the strategy journals the steps of a session's turns (spec §5, crash recovery;
@@ -382,15 +454,19 @@ module StepJournal =
     /// The bindings whose calls only read: not journaled (their calls change nothing to be in doubt about).
     let readOnly: string list = [ "fs.read"; "fs.list"; "fs.stat"; "recall" ]
 
-    /// The last kernel launch a journal records (0: none).
-    let lastLaunch (events: Recorded<StepEvent> list) : int =
+    /// The last kernel launch a journal records (0: none), and how it ended if the journal says.
+    let lastKernel (events: Recorded<StepEvent> list) : int * KernelEnd option =
         events
         |> List.fold
-            (fun last recorded ->
+            (fun (last, ended) recorded ->
                 match recorded.Event with
-                | StepEvent.KernelLaunched launch -> max last launch
-                | _ -> last)
-            0
+                | StepEvent.KernelLaunched launch when launch > last -> launch, None
+                | StepEvent.KernelEnded e when e.Launch = last -> last, Some e.How
+                | _ -> last, ended)
+            (0, None)
+
+    /// The last kernel launch a journal records (0: none).
+    let lastLaunch (events: Recorded<StepEvent> list) : int = fst (lastKernel events)
 
 /// The action that runs now in a session, which its host calls and output are attributed to.
 [<Sealed>]

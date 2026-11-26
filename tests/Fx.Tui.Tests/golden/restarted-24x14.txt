@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: co…
+
+  ◇ Cell     rer… ✗ 0.4s
+      ↻ new kernel: the…
+      ReferenceError: c…
+  The kernel restarted,
+  so I will define check
+  again.
+  ▸ 1 c… [Ctrl+O expand]
+
+  ⠼ turn 1 · thinking 0…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/bil… ● turn 1
+────────────────────────
+cursor 11,4

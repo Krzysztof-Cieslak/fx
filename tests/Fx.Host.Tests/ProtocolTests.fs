@@ -414,6 +414,7 @@ let tests =
                                 Name = "bash"
                                 Pieces = [ Fx.Prompt.Piece.Text $"exit {n}" ]
                                 IsError = false
+                                Restarted = None
                             }
 
                     let append (n: int) =

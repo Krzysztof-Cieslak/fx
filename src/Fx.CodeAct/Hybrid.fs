@@ -13,6 +13,8 @@ type Executed =
     {
         Pieces: Piece list
         IsError: bool
+        /// The cell ran in a new kernel (`Receipt.Restarted`).
+        Restarted: KernelRestart option
     }
 
     override this.ToString() =
@@ -29,6 +31,7 @@ module Hybrid =
         {
             Pieces = Receipts.failed message
             IsError = true
+            Restarted = None
         }
 
     /// A refused or failed host call, as the model reads it.
@@ -66,6 +69,7 @@ module Hybrid =
                     {
                         Pieces = Receipts.read file input.Offset input.Limit maxLines
                         IsError = false
+                        Restarted = None
                     }
         }
 
@@ -168,6 +172,7 @@ module Hybrid =
                                         change.Lines
                                         (before, following)
                                 IsError = false
+                                Restarted = None
                             }
         }
 
@@ -192,5 +197,6 @@ module Hybrid =
                         {
                             Pieces = Receipts.ran maxChars result
                             IsError = result.TimedOut
+                            Restarted = None
                         }
         }

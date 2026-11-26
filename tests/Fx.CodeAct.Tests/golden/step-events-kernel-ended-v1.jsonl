@@ -1,0 +1,5 @@
+{"how":{"code":137,"kind":"exited","stderr":""},"kind":"kernelEnded","launch":1}
+{"how":{"kind":"exited","stderr":"panic: out of memory\n"},"kind":"kernelEnded","launch":2}
+{"how":{"kind":"notStarted","reason":"the component bun is not installed"},"kind":"kernelEnded","launch":3}
+{"how":{"kind":"killed"},"kind":"kernelEnded","launch":4}
+{"how":{"kind":"hostStopped"},"kind":"kernelEnded","launch":5}

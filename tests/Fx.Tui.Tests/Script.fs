@@ -125,7 +125,7 @@ type Session(id: string) =
                 }
         )
 
-    member this.Receipt(step: int, call: string, name: string, text: string, ?error: bool) =
+    member this.Receipt(step: int, call: string, name: string, text: string, ?error: bool, ?restarted: KernelRestart) =
         this.Context(
             ContextEvent.Returned
                 {
@@ -133,8 +133,16 @@ type Session(id: string) =
                     Step = step
                     Call = Some call
                     Name = name
-                    Pieces = [ Piece.Text text ]
+                    Pieces =
+                        [
+                            // A cell in a new kernel: its receipt starts with the note for the model.
+                            match restarted with
+                            | Some restart -> Piece.Text $"[A new kernel started for this cell ({restart.Reason}).]"
+                            | None -> ()
+                            Piece.Text text
+                        ]
                     IsError = defaultArg error false
+                    Restarted = restarted
                 }
         )
 

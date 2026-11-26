@@ -61,13 +61,22 @@ module Activity =
             | Part.Text text when not (String.IsNullOrWhiteSpace text.Text) -> Some("  " + firstLine 120 text.Text)
             | _ -> None)
 
-    /// A failed action's first line.
+    /// A new kernel, and a failed action's first line (after the note of a new kernel, which the
+    /// receipt starts with: `Receipt.Restarted`).
     let ofReceipt (receipt: Receipt) : string list =
-        if receipt.IsError then
-            let text = receipt.Pieces |> List.map Piece.render |> String.concat "\n"
-            [ "  ✗ " + firstLine 120 text ]
-        else
-            []
+        let pieces =
+            match receipt.Restarted, receipt.Pieces with
+            | Some _, _ :: rest -> rest
+            | _, pieces -> pieces
+
+        [
+            match receipt.Restarted with
+            | Some restart -> $"  ↻ new kernel  {firstLine 160 restart.Reason}; names from earlier cells are gone"
+            | None -> ()
+            if receipt.IsError then
+                let text = pieces |> List.map Piece.render |> String.concat "\n"
+                "  ✗ " + firstLine 120 text
+        ]
 
     /// A compaction: the summary that now stands for the conversation's oldest part.
     let ofCollapse (collapse: Collapse) : string list =

@@ -66,6 +66,7 @@ let private receipt (turn: int) (step: int) (call: string) =
             Name = "cell"
             Pieces = [ Piece.Text "ok" ]
             IsError = false
+            Restarted = None
         }
 
 let private ref' (turn: int) (step: int) (index: int) (id: string) (attempt: int) : CallRef =
@@ -203,6 +204,65 @@ let tests =
 
                 Expect.equal read everyKind "every kind reads back"
                 Expect.equal written kept "and writes the same"
+            }
+
+            test "the step journal's kernelEnded events read back as they were first written" {
+                let ends =
+                    [
+                        KernelEnd.Exited(Some 137, "")
+                        KernelEnd.Exited(None, "panic: out of memory\n")
+                        KernelEnd.NotStarted "the component bun is not installed"
+                        KernelEnd.Killed
+                        KernelEnd.HostStopped
+                    ]
+                    |> List.mapi (fun i how -> StepEvent.KernelEnded { Launch = i + 1; How = how })
+
+                let written =
+                    ends
+                    |> List.map (fun e -> Json.serializeCanonical (StepCodecs.event.Encode e) + "\n")
+                    |> String.concat ""
+
+                let kept = Golden.kept "step-events-kernel-ended-v1.jsonl" written
+
+                let read =
+                    kept.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.map (fun line ->
+                        match Codec.decodeText StepCodecs.event line with
+                        | Ok event -> event
+                        | Error issues -> failtest (Issue.render issues))
+                    |> List.ofArray
+
+                Expect.equal read ends "every way a kernel ends reads back"
+                Expect.equal written kept "and writes the same"
+            }
+
+            test "a kernel's end in words: signals, exit codes, its standard error" {
+                Expect.equal
+                    (KernelEnds.describe Fx.Sdk.Os.Linux (KernelEnd.Exited(Some 137, "")))
+                    "was killed by signal 9 (SIGKILL)"
+                    "a signal"
+
+                Expect.equal
+                    (KernelEnds.describe Fx.Sdk.Os.Windows (KernelEnd.Exited(Some 137, "")))
+                    "exited with code 137"
+                    "no signals on Windows"
+
+                Expect.equal
+                    (KernelEnds.describe Fx.Sdk.Os.MacOs (KernelEnd.Exited(Some 1, "error: boom\n")))
+                    "exited with code 1; its standard error ended with: error: boom"
+                    "a code and the end of standard error"
+
+                let long = String.replicate 400 "x"
+                let quoted = KernelEnds.describe Fx.Sdk.Os.Linux (KernelEnd.Exited(None, long))
+
+                Expect.isTrue
+                    (quoted.EndsWith("…" + String.replicate (KernelEnds.StderrChars - 1) "x"))
+                    "the end, bounded"
+
+                Expect.equal
+                    (KernelEnds.describe Fx.Sdk.Os.Linux KernelEnd.HostStopped)
+                    "stopped when the host restarted"
+                    "a restart"
             }
 
             test "a call that started and has no receipt is in doubt; the calls after it did not run" {
