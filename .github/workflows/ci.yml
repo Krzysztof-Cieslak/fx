@@ -134,6 +134,14 @@ jobs:
       - name: Build (Debug)
         if: env.CODE == 'true'
         run: dotnet build Fx.slnx --no-restore --configuration Debug
+      # Debug must also behave as Release. Without optimization the compiler calls `inline` helpers
+      # instead of inlining them and leaves out tail calls, which once broke the builders' loops in
+      # Debug only (docs/modules/eff.md). The builders' tests and the language scenarios, in Debug.
+      - name: Test the builders and the scenarios (Debug)
+        if: env.CODE == 'true'
+        run: |
+          dotnet test --project tests/Fx.Effects.Tests --no-build --configuration Debug
+          dotnet test --project tests/Fx.Aot.Tests --no-build --configuration Debug
       # The spike is superseded by packages/kernel-bun-ts: only when it changes, and in the full tier.
       # It runs the tests only; the kernel itself runs on the pinned Bun the tests download and verify.
       - name: Bun kernel spike
