@@ -9,6 +9,8 @@
     <!-- Same Native AOT setup as src/Fx.Cli: AOT for RID-specific builds only. -->
     <FxNativeAot>true</FxNativeAot>
     <PublishAot Condition="'$(RuntimeIdentifier)' != ''">true</PublishAot>
+    <!-- The tail-calls scenario tests `.tail` prefixes, which Debug builds leave out by default. -->
+    <Tailcalls>true</Tailcalls>
   </PropertyGroup>
 
   <ItemGroup>
