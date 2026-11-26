@@ -665,7 +665,7 @@ prompt's placement) on all eight targets.
 | Recorded Anthropic cassettes (the live test records them; needs a key) | T132 |
 | Anthropic options the canonical model cannot express yet: `xhigh` effort, `between_tools`, per-message effort and mid-conversation system messages, automatic caching, server tools, server-side fallback, `speed`; transforming schemas to the structured-output subset | when a strategy needs them |
 | Other Claude platforms as families or providers (Bedrock, Vertex, Foundry) | later, as provider definitions or wires |
-| Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | T206 |
+| Compaction on `contextOverflow` (the render's cache mapping: [prompt.md](prompt.md)) | done: T206, [codeact.md](codeact.md#compaction-spec-5) |
 | Journaling streams for exact replay | done: T131, [replay.md](replay.md) (`Record.llm`: each pull) |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |
 | Decision and embedding wires (`DecisionWire`, `EmbedWire`) | T401 and later |

@@ -195,7 +195,7 @@ type TurnResult =
 ```
 
 - A turn ends **only** with a valid `TurnResult`; inside goals, `Done` is a *proposal* verified by the harness (§8).
-- Explicit policies for text-only, length-cut and empty replies; loop guard fingerprints repeated actions. When the strategy itself stops a turn (a reply in plain text taken as a question, the loop guard, a budget), it ends `NeedInput` on a question request it opened, whose answer is the next turn's input; failures that no retry fixes (a context overflow before compaction exists, a refused request) fail the turn (`docs/modules/codeact.md`).
+- Explicit policies for text-only, length-cut and empty replies; loop guard fingerprints repeated actions. When the strategy itself stops a turn (a reply in plain text taken as a question, the loop guard, a budget), it ends `NeedInput` on a question request it opened, whose answer is the next turn's input; failures that no retry fixes (a context overflow that compaction cannot relieve, a refused request) fail the turn (`docs/modules/codeact.md`).
 
 ---
 
@@ -221,7 +221,7 @@ let render cfg (s: SessionState) =
   Stable receipts keep the prefix cacheable (mapped to provider cache breakpoints). **Content exclusions** filter render inputs. `SeenRanges` records which file ranges/versions entered context.
   - **Append-only:** providers check that what came before a reasoning block is unchanged, and caches hit only on an unchanged prefix. So the prefix is recorded once per conversation (`Framed`) and later changes are stated as updates at the end of the history; the suffix a call showed is recorded with the model's reply and stays before it, so every request is a prefix of the next. Views show only what changed since they last showed it.
   - Collapses, a new frame and content excluded after it was recorded are the documented rewrite boundaries: replies after one lose their reasoning. Details: `docs/modules/prompt.md`.
-- **Compaction:** `Collapsed(range, summary)` with originals addressable; cache-sharing summary request; background preparation; model-driven via `fx.context.*` / `fx.history.*`.
+- **Compaction:** `Collapsed(range, summary)` with originals addressable; cache-sharing summary request; background preparation; model-driven via `fx.context.*` / `fx.history.*`. The CodeAct strategy compacts (when the prompt nears the model's window, on overflow, when the model asks), with the render's pure cuts and summary requests; it moves to the bundled `fx.compaction` (§16.4) once strategies are extension contributions. Details: `docs/modules/codeact.md`, `docs/modules/prompt.md`.
 - **Snapshots:** `SnapshotRef` per step; two-phase undo reverting only agent-attributed changes.
 
 ---
