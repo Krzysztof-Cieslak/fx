@@ -6,6 +6,7 @@ open Fx.Contracts
 open Fx.Models
 open Fx.Sessions
 open Fx.Tui
+open Fx.CodeAct
 open Fx.Tui.Tests.Script
 
 let private readyIn (environment: EnvInfo) (s: Session) (width: int) (height: int) (msgs: Msg list) : Model =
@@ -63,8 +64,9 @@ let running (width: int) (height: int) : Model =
 
     ready s width height msgs
 
-/// The agent's question: the turn ended needing input.
-let question (width: int) (height: int) : Model =
+/// The agent's question: a reply without a tool call (a draft the text-only nudge superseded), a
+/// second one that became the question, and the turn ended needing input.
+let private questionTurn () : Session * Msg list =
     let s = Session "01JD2W7Z9Q0000000000000001"
 
     let msgs =
@@ -72,8 +74,49 @@ let question (width: int) (height: int) : Model =
             yield! s.Start None
             yield! s.Prompt "deploy it"
             yield! s.Boundary 1
-            s.Advance 3.0
-            yield! s.Open(Script.question s.Running 1 "Deploy to staging or production?")
+            s.Advance 1.5
+            yield s.Reply(1, [ text "Sure, which environment should I deploy to?" ])
+            yield! s.Boundary 2
+            s.Advance 1.5
+            yield s.Reply(2, [ text "I can deploy now. Deploy to staging or production?" ])
+            yield! s.Open(Script.question s.Running 2 "I can deploy now. Deploy to staging or production?")
+            yield! s.End(TurnResult.NeedInput [ "q-1-2" ])
+        ]
+
+    s, msgs
+
+let question (width: int) (height: int) : Model =
+    let s, msgs = questionTurn ()
+    ready s width height msgs
+
+/// A question the loop guard asked (not a reply): its text where it was asked, once.
+let stuck (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000006"
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "fix the flaky test"
+            yield! s.Boundary 1
+            s.Advance 2.0
+            yield s.Reply(1, [ cell "toolu_1" "// intent: run the test\nawait fx.shell.run(\"make test\")" ])
+            s.Advance 1.0
+            yield s.Receipt(1, "toolu_1", "cell", "1 failed")
+            yield!
+                s.Open(
+                    RequestKind.request
+                        Questions.kind
+                        "q-1-1"
+                        "The agent repeats itself"
+                        (RequestOrigin.Turn s.Running)
+                        Reply.AsInput
+                        Lifetime.Session
+                        {
+                            Question =
+                                "The agent did the same thing (cell) 3 times with the same result and stopped. How should it go on?"
+                            Reason = "loop"
+                        }
+                )
             yield! s.End(TurnResult.NeedInput [ "q-1-1" ])
         ]
 
@@ -181,6 +224,7 @@ let all: (string * (int -> int -> Model)) list =
         "sandboxed", sandboxed
         "running", running
         "question", question
+        "stuck", stuck
         "grant", grant
         "decision", decision
         "wide", wide

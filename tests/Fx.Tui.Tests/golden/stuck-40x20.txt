@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · en… ● needs input
+ ! runs unsandboxed: commands can read …
+
+
+
+
+
+› fix the flaky test
+  ◇ Cell     run the test         ✓ 1.0s
+  ? The agent did the same thing (cell)
+    3 times with the same result and
+    stopped. How should it go on?
+  ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
+  ? Needs input  3.0s
+
+┃ Question
+┃ Type the answer below; Enter sends it.
+Enter answer · Esc interrupt
+›
+────────────────────────────────────────
+cursor 19,2

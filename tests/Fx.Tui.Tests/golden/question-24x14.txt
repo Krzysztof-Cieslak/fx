@@ -1,15 +1,15 @@
 ────────────────────────
  fx · …/… ● needs input
  ! runs unsandboxed: co…
-  ? The agent asks
+
+› deploy it
+  I can deploy now.
+  Deploy to staging or
+  production?
 
   ? Needs input  3.0s
-    Deploy to staging or
-    production?
 
 ┃ Question
-┃ Deploy to staging or
-┃ production?
 ┃ Type the answer below…
 Enter answer · Esc inte…
 ›

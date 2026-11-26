@@ -72,6 +72,9 @@ type CallView =
 type TurnItem =
     /// What the model wrote besides its tool calls.
     | Said of string
+    /// What the model wrote in a reply without a tool call that another reply of the turn followed:
+    /// the turn went on after it (CodeAct's text-only nudge), so it is a draft of what came next.
+    | Superseded of string
     | Call of CallView
     /// Prompts delivered at a step boundary (steering).
     | Steered of Input list
@@ -85,6 +88,7 @@ type TurnItem =
     override this.ToString() =
         match this with
         | Said text -> "said " + string text.Length
+        | Superseded text -> "superseded " + string text.Length
         | Call call -> string call
         | Steered inputs -> $"steered {inputs.Length}"
         | Asked request -> "asked " + request.Request.Id
@@ -264,6 +268,43 @@ module Timeline =
 
     let private atOf (meta: EventMeta) = meta.At.UnixMicroseconds
 
+    /// The text of the agent's question (`agent.question`): the request's payload.
+    let question (request: PendingRequest) : string option =
+        if request.Request.Kind = "agent.question" then
+            match Json.tryField "question" request.Request.Payload with
+            | Some(Json.String text) when not (String.IsNullOrWhiteSpace text) -> Some text
+            | _ -> None
+        else
+            None
+
+    /// What a request asks, as a person reads it: the agent's question itself, else its title.
+    let asks (request: PendingRequest) : string =
+        question request |> Option.defaultValue request.Request.Title
+
+    let private normalize (text: string) =
+        (Text.clean text).Trim().TrimEnd('…').TrimEnd()
+
+    /// The agent's questions of a turn that repeat what the turn's last reply said just before them
+    /// (CodeAct asks with a reply's text): the transcript shows that text once.
+    let echoes (items: TurnItem list) : Set<string> =
+        let folder (said: string list, found: Set<string>) (item: TurnItem) =
+            match item with
+            | TurnItem.Said text -> said @ [ text ], found
+            | TurnItem.Asked request ->
+                match question request with
+                | Some q when not said.IsEmpty ->
+                    let reply = normalize (String.concat "\n\n" said)
+                    let q = normalize q
+
+                    if q <> "" && reply.StartsWith(q, StringComparison.Ordinal) then
+                        [], Set.add request.Request.Id found
+                    else
+                        [], found
+                | _ -> [], found
+            | _ -> [], found
+
+        items |> List.fold folder ([], Set.empty) |> snd
+
     /// The transcript's blocks: the session's turns with what each did, and what happened between
     /// them.
     let blocks (timeline: Timeline) : Block list =
@@ -271,8 +312,13 @@ module Timeline =
         let mutable current: TurnView option = None
         // Calls run one after another: each starts when the one before it ended.
         let mutable lastEnd = 0L
+        // The turn's last reply had no action (no tool call, no receipt since): if another reply
+        // follows, what it said was a draft.
+        let mutable draft = false
 
         let flush () =
+            draft <- false
+
             match current with
             | Some turn ->
                 blocks.Add(
@@ -290,7 +336,7 @@ module Timeline =
             | Some turn -> current <- Some { turn with Items = item :: turn.Items }
             | None ->
                 match item with
-                | TurnItem.Asked request -> blocks.Add(Block.Note("? " + request.Request.Title))
+                | TurnItem.Asked request -> blocks.Add(Block.Note("? " + asks request))
                 | TurnItem.Settled resolved ->
                     blocks.Add(Block.Note("· " + resolved.Request + " " + string resolved.Resolution))
                 | _ -> ()
@@ -352,6 +398,32 @@ module Timeline =
                 | ContextEvent.Replied reply ->
                     lastEnd <- atOf recorded.Meta
 
+                    // What the replies without an action said since the turn's last action (newest
+                    // first, up to the first call) was superseded by this reply.
+                    match current with
+                    | Some turn when draft ->
+                        let rec supersede (items: TurnItem list) =
+                            match items with
+                            | TurnItem.Said text :: rest -> TurnItem.Superseded text :: supersede rest
+                            | (TurnItem.Call _ as call) :: rest -> call :: rest
+                            | other :: rest -> other :: supersede rest
+                            | [] -> []
+
+                        current <-
+                            Some
+                                { turn with
+                                    Items = supersede turn.Items
+                                }
+                    | _ -> ()
+
+                    draft <-
+                        current.IsSome
+                        && reply.Parts
+                           |> List.forall (fun part ->
+                               match part with
+                               | Part.ToolCall _ -> false
+                               | _ -> true)
+
                     for part in reply.Parts do
                         match part with
                         | Part.Text text when not (String.IsNullOrWhiteSpace text.Text) ->
@@ -360,6 +432,7 @@ module Timeline =
                         | Part.ToolCall toolCall -> add (TurnItem.Call(call (atOf recorded.Meta) toolCall))
                         | _ -> ()
                 | ContextEvent.Returned receipt ->
+                    draft <- false
                     let text = receipt.Pieces |> List.map Piece.render |> String.concat "\n"
 
                     let at = atOf recorded.Meta
@@ -403,6 +476,17 @@ module Timeline =
 
         flush ()
         List.ofSeq blocks
+
+    /// Whether the transcript shows this request where it was asked.
+    let shows (id: string) (timeline: Timeline) : bool =
+        timeline.Entries
+        |> List.exists (fun entry ->
+            match entry with
+            | Entry.Session recorded ->
+                match recorded.Event with
+                | Event.RequestOpened request -> request.Request.Id = id
+                | _ -> false
+            | Entry.Context _ -> false)
 
     /// The calls of the running turn that have no receipt yet: the first is running.
     let running (timeline: Timeline) : CallView option =

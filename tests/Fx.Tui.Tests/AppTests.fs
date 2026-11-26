@@ -55,6 +55,15 @@ let tests =
 
                         Golden.expect "compacted-verbose-80x30.txt" (Screens.render model)
                     }
+
+                    test "verbose shows a reply the text-only nudge superseded" {
+                        let model =
+                            { Screens.question 80 24 with
+                                Verbosity = Verbosity.Verbose
+                            }
+
+                        Golden.expect "question-verbose-80x24.txt" (Screens.render model)
+                    }
                 ]
 
             testList
@@ -295,7 +304,7 @@ let tests =
 
                         Expect.equal
                             cmds
-                            [ Cmd.Answer(session, "tui/run1/answer/q-1-1", "q-1-1", Json.String "staging") ]
+                            [ Cmd.Answer(session, "tui/run1/answer/q-1-2", "q-1-2", Json.String "staging") ]
                             "answered"
 
                         Expect.isTrue (Editor.isEmpty model.Editor) "cleared"
@@ -376,6 +385,82 @@ let tests =
                         Expect.isTrue
                             (frame.Rows |> List.forall (fun row -> Row.width row <= 50))
                             "no row wider than the screen"
+                    }
+                ]
+
+            testList
+                "questions"
+                [
+                    let items (model: Model) =
+                        Timeline.blocks model.Timeline
+                        |> List.rev
+                        |> List.pick (fun block ->
+                            match block with
+                            | Block.Turn turn -> Some turn.Items
+                            | _ -> None)
+
+                    let count (needle: string) (haystack: string) = haystack.Split(needle).Length - 1
+
+                    test "a question that repeats the reply shows once" {
+                        let model = Screens.question 120 30
+                        let screen = Frame.text (View.view model)
+                        Expect.equal (count "Deploy to staging or production?" screen) 1 "once"
+                        Expect.isFalse (screen.Contains "The agent asks") "no generic title"
+                    }
+
+                    test "a reply without an action that another reply followed is superseded" {
+                        let model = Screens.question 80 24
+
+                        Expect.equal
+                            (items model
+                             |> List.choose (fun item ->
+                                 match item with
+                                 | TurnItem.Said text -> Some("said " + text)
+                                 | TurnItem.Superseded text -> Some("superseded " + text)
+                                 | _ -> None))
+                            [
+                                "superseded Sure, which environment should I deploy to?"
+                                "said I can deploy now. Deploy to staging or production?"
+                            ]
+                            "the draft, then the reply"
+                    }
+
+                    test "a reply whose action returned is never superseded" {
+                        let s, model = ready ()
+                        let model, _ = play model (s.Prompt "check it")
+                        let model, _ = play model (s.Boundary 1)
+
+                        let model, _ =
+                            play
+                                model
+                                [
+                                    s.Reply(1, [ text "Looking."; cell "toolu_1" "await check()" ])
+                                    s.Receipt(1, "toolu_1", "cell", "ok")
+                                    s.Reply(2, [ text "It works." ])
+                                ]
+
+                        let model, _ = play model (s.Boundary 3)
+                        let model, _ = play model [ s.Reply(3, [ text "Anything else?" ]) ]
+
+                        Expect.equal
+                            (items model
+                             |> List.choose (fun item ->
+                                 match item with
+                                 | TurnItem.Said text -> Some("said " + text)
+                                 | TurnItem.Superseded text -> Some("superseded " + text)
+                                 | _ -> None))
+                            [ "said Looking."; "superseded It works."; "said Anything else?" ]
+                            "only the reply without an action"
+                    }
+
+                    test "quiet still shows the question where it was asked" {
+                        let model =
+                            { Screens.question 120 30 with
+                                Verbosity = Verbosity.Quiet
+                            }
+
+                        let screen = Frame.text (View.view model)
+                        Expect.equal (count "Deploy to staging or production?" screen) 1 "once"
                     }
                 ]
         ]

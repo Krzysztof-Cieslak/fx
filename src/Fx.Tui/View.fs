@@ -221,18 +221,17 @@ module View =
 
         line :: error @ detail
 
-    let private questionsOf (turn: TurnView) (ids: string list) : string list =
+    /// The requests a turn ended needing that it did not ask in its items (their ids: nothing else is
+    /// known of them).
+    let private unasked (turn: TurnView) (ids: string list) : string list =
         ids
-        |> List.map (fun id ->
+        |> List.filter (fun id ->
             turn.Items
-            |> List.tryPick (fun item ->
+            |> List.exists (fun item ->
                 match item with
-                | TurnItem.Asked request when request.Request.Id = id ->
-                    match Json.tryField "question" request.Request.Payload with
-                    | Some(Json.String q) -> Some q
-                    | _ -> Some request.Request.Title
-                | _ -> None)
-            |> Option.defaultValue id)
+                | TurnItem.Asked request -> request.Request.Id = id
+                | _ -> false)
+            |> not)
 
     /// The result card of spec §19.2: how the turn ended, its evidence and how to verify it.
     let ending (width: int) (turn: TurnView) (ended: TurnEnd) (at: int64) : Row list =
@@ -251,9 +250,10 @@ module View =
                 yield Row.fit width [ indent 4; tookAlone ]
             ]
         | TurnEnd.Completed(TurnResult.NeedInput ids) ->
+            // The questions were shown where the turn asked them; only those it did not are here.
             [
                 Row.fit width [ indent 2; s (Style.withBold yellow) "? Needs input"; took ]
-                for question in questionsOf turn ids do
+                for question in unasked turn ids do
                     yield! paragraph width [ indent 4 ] Style.plain question
             ]
         | TurnEnd.Completed(TurnResult.Waiting(jobs, note)) ->
@@ -289,6 +289,8 @@ module View =
                 | TurnItem.Call call -> call.Code
                 | _ -> None)
 
+        let echoes = Timeline.echoes turn.Items
+
         [
             for i in turn.Inputs do
                 yield! input width i
@@ -298,6 +300,9 @@ module View =
                 | TurnItem.Said text when verbosity <> Verbosity.Quiet ->
                     yield! paragraph width [ indent 2 ] Style.plain text
                 | TurnItem.Said _ -> ()
+                | TurnItem.Superseded text when verbosity = Verbosity.Verbose ->
+                    yield! paragraph width [ indent 2 ] dim text
+                | TurnItem.Superseded _ -> ()
                 | TurnItem.Call call -> yield! callRows width verbosity model.Now live (Some call.Id = firstOpen) call
                 | TurnItem.Steered inputs ->
                     for i in inputs do
@@ -305,7 +310,9 @@ module View =
                         | InputContent.Text text -> yield! paragraph width [ indent 2; s cyan "↳ " ] cyan text
                         | _ -> yield! input width i
                 | TurnItem.Asked request ->
-                    yield! paragraph width [ indent 2; s yellow "? " ] Style.plain request.Request.Title
+                    // The agent's question is often the reply just shown: it is not shown again.
+                    if not (verbosity <> Verbosity.Quiet && Set.contains request.Request.Id echoes) then
+                        yield! paragraph width [ indent 2; s yellow "? " ] Style.plain (Timeline.asks request)
                 | TurnItem.Settled resolved ->
                     let text =
                         match resolved.Resolution with
@@ -504,12 +511,14 @@ module View =
                 yield! text c bold question
                 yield! options c
             ]
-        | Card.Question(_, question) ->
+        | Card.Question(request, question) ->
             let c = cyan
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Question"; of' ]
-                yield! text c bold question
+                // The transcript shows the question where the agent asked it: not again here.
+                if not (Timeline.shows request.Request.Id model.Timeline) then
+                    yield! text c bold question
                 Row.fit width [ bar c; s dim "Type the answer below; Enter sends it." ]
             ]
 

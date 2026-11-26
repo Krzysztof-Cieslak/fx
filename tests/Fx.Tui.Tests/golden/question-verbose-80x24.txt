@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────
+ fx · …/src/billing · env: default (local) · sandbox: none · ant… ● needs input
+ ! runs unsandboxed: commands can read and change everything the user can
+
+
+
+
+
+
+
+
+
+
+
+
+› deploy it
+  Sure, which environment should I deploy to?
+  I can deploy now. Deploy to staging or production?
+
+  ? Needs input  3.0s
+
+┃ Question
+┃ Type the answer below; Enter sends it.
+Enter answer · Esc interrupt
+›
+────────────────────────────────────────────────────────────────────────────────
+cursor 23,2
