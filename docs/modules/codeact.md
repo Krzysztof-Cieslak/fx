@@ -68,7 +68,9 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
 - The composition root (`src/Fx.Host`) attaches the grants guard to each turn's hands
   (`GrantGuard.attach` with `GrantSetup.create grants sessions turn (GrantSettings.ofVariants
   variants)`, the variants of the turn's profile): without it, nothing asks the grants log. `fx run`
-  puts the run's grant requests to the person at the terminal ([host.md](host.md)).
+  puts the run's grant requests to the person at the terminal ([host.md](host.md)); without one it
+  withdraws them, and the call fails "not answered". Requests are keyed by the turn and the call, so a
+  later turn (a later run) asks again: no answer, or a person's "once", is final only for its call.
 - `codeact.Close()` closes every session's kernel when the host stops.
 
 ## A turn

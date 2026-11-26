@@ -1,7 +1,7 @@
 # Module spec: the grants log (`Fx.Grants`, `Fx.Grants.Host`, `Fx.Sdk/Grants.fs`)
 
 Spec: §13 (with §1 principle 6, §4.2 `IGrants`, §4.4, §5 durable pending requests, §6.1, §8.2, §10.4,
-§10.6, §11, §16.2–16.5, §17, §18, §19.4). Task: T123.
+§10.6, §11, §16.2–16.5, §17, §18, §19.4). Tasks: T123, T132a (requests nobody can answer, `fx grants`).
 Code: [`src/Fx.Grants`](../../src/Fx.Grants) (the pure core, shared with clients),
 [`src/Fx.Sdk/Grants.fs`](../../src/Fx.Sdk/Grants.fs) (the `IGrants` capability and the contribution
 types, public), [`src/Fx.Grants.Host`](../../src/Fx.Grants.Host) (the actor, the host-local store, the
@@ -207,13 +207,19 @@ writer of the store's stream, rebuilds the state and restarts the timers.
   - `Await id`: waits for the resolution. While it waits, it folds the log, and closes the request as
     `Covered` when a grant made since allows it, or `Refused` when the rules now deny it: answering one
     prompt with a broader pattern settles the others it covers (batched prompts, spec §19.4).
-  - `Withdraw id reason`.
+  - `Withdraw id reason`. Also what the host does with a request **nobody can answer** (a headless run
+    without a terminal, [host.md](host.md)): it withdraws it (`Closed Withdrawn`, by the host), and
+    never answers "deny" on a person's behalf. Nobody decided, so the log records no person's
+    decision, and the next request for the same thing (a new key: another call, another install
+    attempt) asks a person again.
   - `Grants.authorize ask` (Fx.Sdk) is request-then-await; cancelling the wait withdraws the request
     (shielded) and rethrows the cancellation.
   - `Grants.gate grants toQuery` is a `Gate<'I>` backed by the capability, for any hook point: an intent
     that maps to a query is decided by the rules, other gates only tighten it.
 - **People** (through the protocol): `answer`, `grant` (session, repository or host; the id, person, time
-  and client are the host's), `revoke`. `endSession` is the host's. Command keys are derived from what
+  and client are the host's), `revoke`. On the command line, `fx grants allow|deny|revoke|list`
+  ([host.md](host.md#fx-grants)) does the same for the OS user who runs it, signed in through
+  `local-os-user` as embedded mode signs them in, and only if they own the host. `endSession` is the host's. Command keys are derived from what
   they act on, so a retry deduplicates and a different command is never swallowed by an earlier refusal:
   `request/<ask key>`, `answer/<request>/<answer JSON>`, `grant/<grant id>`, `revoke/<grant>/<person>`,
   `close/<request>/<seq>`, `withdraw/<request>`, `end-session/<session>`.
@@ -247,7 +253,7 @@ this connection" (`Attribution`, or `NotAPerson`). The TypeScript types are gene
 | **T128 recovery** | A pending request whose turn was lost stays pending (durable); recovery withdraws it or re-awaits it with the same key. A clean stop of the host cancels the turn, which withdraws its requests |
 | **T129 host server** | Composition: `GrantsService.start` on `GrantStoreLog.hostLocal` over the host's event store, with `Actions.withContributed` (`grant-action`), `GrantPolicy.rules` and `GrantPolicy.gates` from the extension host (`GrantPolicy.contributionTypes` into the catalog), and the contributed `grant-store` if host config selects one. Serves `GrantsProtocol.handlers` with the connection's principal; passes `Approvals.viaGrants` to the installer |
 | **T130 TUI** | The grants view: `grants/pending` + `grants/subscribe` for prompts (once / session / repo / host, with the request's suggestions as broader patterns), `grants/list` with revoke |
-| **T110 installs** | `Approvals.viaGrants` (`component.install`) |
+| **T110 installs** | `Approvals.viaGrants` (`component.install`), keyed by what asks: the install, the holder whose `Ensure` started the attempt and the attempt (`component.install/<install>/<holder>/<attempt>`, [components.md](components.md)). An answer is final for that attempt only: "once" (or a request withdrawn because nobody could answer) never stands for a later run's environment; a host-wide grant (`fx grants allow component.install bun@*`) approves every later install at once |
 | **T118/T124 egress, T208/T210 models** | A model-egress gate or model routing asks `provider.expose`, `model.enable` or `model.paidFallback` through `Grants.gate` / `Grants.authorize` |
 | **T214 goals, T306 gates, T405 safe outputs** | `budget.raise`, `workflow.approval`, `safeOutput.apply` |
 | **T109b** | `IGrants` in `IExtensionEnv` (attenuated by the manifest) so extension code can ask |

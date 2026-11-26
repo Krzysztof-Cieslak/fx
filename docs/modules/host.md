@@ -1,11 +1,11 @@
-# Module spec: the host (`src/Fx.Host`, `fx run`, `fx serve`, `fx trust`, `fx variants`, `fx auth`, `fx replay`)
+# Module spec: the host (`src/Fx.Host`, `fx run`, `fx serve`, `fx trust`, `fx variants`, `fx auth`, `fx replay`, `fx grants`)
 
 Spec: §3 (the host, embedded mode), §5 (sessions persist; reconnect; crash recovery), §11 (identity;
 service credentials, §11.3–11.5), §13 (grants), §15 (variants), §16.1 (bootstrap order), §16.4–16.5
 (built-ins, trust), §17 (the client protocol), §18 (trust before execution; credentials on the host),
 §19.5 (`fx run -p … --json`), §15 (recorded sessions, `fx replay`). Tasks: T129a (the composition,
 embedded mode, `fx run`, `fx auth`), T129b (the client protocol, `fx serve`), T131 (recording,
-`fx replay`).
+`fx replay`), T132a (headless approvals, `fx grants`, running unattended).
 Code: [`src/Fx.Host`](../../src/Fx.Host) (the composition root: pure apart from the capabilities it is
 handed; `Live.fs` builds the live interpreters), [`src/Fx.Cli`](../../src/Fx.Cli) (`Cli.parse` is pure,
 `Program` is the entry point).
@@ -30,7 +30,8 @@ else references the live interpreters and the built-in extensions together.
 | Activity lines and the result card (`Activity`) | `Activity.fs` |
 | Signing in, creating and prompting sessions (`HostSessions`) | `HostSessions.fs` |
 | `fx run -p` (`Headless`) | `Headless.fs` |
-| `fx trust`, `fx variants`, `fx auth`, `fx replay` (`Commands`) | `Commands.fs` |
+| `fx grants`' commands, the command that allows a request, its lines (`GrantsCommand`) | `GrantsCommand.fs` |
+| `fx trust`, `fx variants`, `fx auth`, `fx replay`, `fx grants` (`Commands`) | `Commands.fs` |
 | The client protocol's messages (`ClientProtocol`) | `ClientProtocol.fs` |
 | Its handlers and serving a connection (`ClientServer`) | `ClientServer.fs` |
 | The local listener (`Listening`, `Serve`) and clients (`HostClient`) | `Clients.fs` |
@@ -258,14 +259,28 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
 1. The person signs in in process through `local-os-user` (client `cli`): their principal is on every
    input.
 2. A new session (index, environment, profile) or `--session <id>` (sessions persist across runs).
+   Before a new session is made, its model is checked (`Headless.modelReady`): one is configured for
+   the main role and its provider's credentials resolve (`AuthService.resolve`). Otherwise the run
+   fails at once with what the turn would have said (`no model is configured for the main role`,
+   `the model call would fail: unavailable: anthropic: no credentials: …`), before the session's
+   environment installs anything (Bun is a 50 MiB download).
    The environment's warnings are shown once (`warning: …` on standard error): an environment no
    sandbox driver confines runs unsandboxed, and says why (Windows; `sandbox.driver = none`; bubblewrap
    that cannot run here, with what to do).
 3. Grant requests of the run (its session's, e.g. a command a cell runs, and those of no session, e.g.
    installing Bun the first time) are put to the person at the terminal (`GrantPrompts`): the summary,
-   the action and resource, and the evidence (which turn and call asked, the command line), then `y`
-   once, `s` for this session and `a` always on this host where the request offers them, anything else
-   denies once. Without a terminal they are denied once, saying so. A decision about a call in doubt (a
+   the action and resource, and the evidence (which turn and call asked, the command line, an install's
+   sizes), then `y` once, `s` for this session and `a` always on this host where the request offers
+   them, anything else denies once. **Without a terminal nobody can answer**: the host withdraws the
+   request (`GrantsService.withdraw`, reason `nobody could answer: not run from a terminal`), never
+   answers it on the person's behalf, and the run says so and names the command that allows it
+   beforehand when the request offers host scope (`GrantPrompts.unasked`: `! … needs a person's
+   approval, and nobody can answer here (input is not a terminal): not done. Allow it beforehand with
+   <command>, or run from a terminal.`, the command being e.g. `fx grants allow component.install
+   bun@1.4.5`, the resource quoted for the shell and escaped as an exact pattern). The requester gets no
+   answer (an install fails `not approved: withdrawn: …`; a cell's call fails `its grant request was
+   not answered`), and since requests are keyed by what asks (a turn's call; an install attempt), the
+   next run asks again: a headless run never leaves an answer behind for a later one. A decision about a call in doubt (a
    turn the host stopped during a call, recovered at its start) is put to the person too: the card's
    question, the call, what it printed, and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
    answer) the run ends with an error saying what waits, and the decision stays open.
@@ -281,19 +296,76 @@ or abandoned, 2 bad arguments.
 `fx` without arguments runs the TUI on a host in this process ([tui.md](tui.md)); without a terminal
 it prints the usage.
 
+## `fx grants`
+
+```
+fx grants list [--all]
+fx grants allow <action> <pattern> [--scope host|session:<id>] [--reason <text>]
+fx grants deny <action> <pattern> [--scope host|session:<id>] [--reason <text>]
+fx grants revoke <id> [--reason <text>]
+```
+
+`Commands.grants` lets the person who runs it grant beforehand what a run would ask them, or forbid
+it, on this data directory's grants log ([grants.md](grants.md)):
+
+- **Who grants**: the OS user, signed in in process through `local-os-user` as embedded mode signs them
+  in (client `cli`): a `user:` principal, and only the host's owner (`Role.Owner`, the least role of
+  `grants/grant` and `grants/revoke`). Grants record that principal as `By` and `Direct "cli/…"` as
+  their origin. No agent or extension reaches this: it is a command a person types, and the grants
+  machine refuses anything but a person.
+- **Under the data directory's lock**, as `fx auth`: it reads config, loads the built-ins (for the
+  actions extensions contribute), opens the stores and the grants log, and stops. Beside a running
+  host it fails (`a host is running on …: stop it first`); grants over the client protocol to a
+  serving host are left for later.
+- **Scopes**: `host` (the default) or `session:<id>` (an indexed session). Requests on this host name
+  no repository yet (CodeAct's `GrantSetup.Repo` is `None`), so a repository grant would never apply;
+  the command does not offer one. The action must be known and its definition must allow the scope
+  (`GrantsCommand.draft`: `component.install` takes host, not session).
+- **Patterns** are the grants log's globs over canonical resources: `bun@1.4.5` exactly, `'bun@*'`
+  every version, `'git **'` every `git` command; quote them for the shell.
+- `list` prints the grants in force, one a line (`<id>  allow component.install bun@*  (host) by
+  user:… — reason`); `--all` adds spent, revoked and expired ones with their status. `allow`/`deny`
+  print the grant made; `revoke` prints `revoked <id>`. Errors (an unknown action, a pattern of the
+  wrong kind, an unknown grant or session) exit 1 with the grants log's message; bad arguments exit 2.
+
+## Running unattended
+
+A person who wants `fx run -p` to run without a terminal (CI, a script) decides beforehand what it may
+do; nothing is ever approved for them:
+
+1. **Credentials**: `fx auth login <provider>` once, or the provider's variable (`ANTHROPIC_API_KEY`,
+   `OPENAI_API_KEY`). A run without them fails before anything is installed.
+2. **Installs**: the first install of a component is always a person's grant; no variant skips it.
+   Allow it once per data directory: `fx grants allow component.install bun@1.4.5` (the command a
+   headless run prints), or `fx grants allow component.install 'bun@*'` for every version.
+3. **What turns do**: the CodeAct guard asks for commands outside `codeact.grants.allowCommands`,
+   writes outside the workspace or to protected paths, reads outside it and network bindings
+   ([codeact.md](codeact.md#grants-spec-13-18-t127b)). Without a terminal those requests are withdrawn
+   and the call fails "not answered" (the model reads it). Allow what the run needs beforehand
+   (`fx grants allow shell.exec 'git **'`, `fx grants allow fs.write '/tmp/out/**'`), or choose the
+   guard's mode: `codeact.grants.mode` is **privileged**, so it is set on the command line
+   (`fx run --variant codeact.grants.mode=deny …`) or in host config (`<data directory>/config.json`:
+   `{"variants": {"codeact.grants.mode": "deny"}}`), never by a project's config or a session
+   override, and policy may pin or forbid it. `deny` refuses what no grant allows without asking
+   anyone (the unattended choice); `off` checks nothing and is only for sandboxed or throwaway
+   environments. The sandbox applies either way.
+
 ## Native AOT
 
 `fx` carries the whole host, Kestrel included (`Fx.Transport.Http`). Scenarios: `host-composition`
 (paths, config, trust, the static list, parsing `auth`, the index's JSON, the host's slots),
 `host-embedded` (on the JIT and natively: `fx auth` login, list and status on the file store, a host
 started with its lock, built-ins, SQLite stores and service credentials, the stored key resolving,
-`fx auth` refused beside it, sign-in, a headless run in an embedded environment, a restart that
-continues the session, `fx replay` of it), `host-protocol-codecs` (the protocol's JSON, least roles) and `host-protocol`
+`fx auth` refused beside it, `fx grants` allow, list and revoke and refused beside a running host,
+sign-in, a headless run in an embedded environment, a restart that continues the session, `fx replay`
+of it), `host-protocol-codecs` (the protocol's JSON, least roles) and `host-protocol`
 (a client in process and over loopback with the token file: sign-in, a session created, prompted and
 followed, the typed errors, environments, a wrong token). The diff also runs `fx variants list`,
-`fx variants schema` and `fx replay`'s usage error. CI smoke-tests the
-published binary: `fx variants list` and `fx run -p` in an empty project, which stops at the first
-install's approval (no terminal).
+`fx variants schema`, `fx replay`'s usage error, `fx grants --help` and a scope it does not offer. CI
+smoke-tests the published binary (`.github/scripts/aot-smoke.sh host`): `fx variants list`; `fx run -p`
+in an empty project without credentials, which stops before installing anything; with a key that is
+never sent, which stops at the first install's approval (no terminal), withdraws it and names
+`fx grants allow component.install bun@…`; and `fx grants` list, allow and revoke.
 
 ## Testing
 
@@ -301,7 +373,12 @@ install's approval (no terminal).
 - `HostTests` (no network): start, lock and machine id; config errors; trust and project config;
   `fx variants`; `fx auth` (a pasted key stored in the file store, listed, resolved by the host's
   model access, refused beside a running host, logged out); a session in an embedded environment whose turn fails at its hands (no interpreter),
-  continued after a restart.
+  continued after a restart; installs with downloads that fail (no network): headless first (the
+  request withdrawn, no person's denial, the `fx grants allow` command shown), then a terminal's deny
+  once and allow once, each asked again, then headless again; a grant made with `fx grants` that a
+  headless run installs by without asking, listed and revoked; `fx grants`' refusals (a bad or unknown
+  action, an unknown session or grant, a running host); `fx run` failing on a missing model or missing
+  credentials before anything is asked or installed.
 - `ProtocolTests`: in process, create, prompt, subscribe, reconnect after a sequence number, a restart;
   least roles with a viewer's identity provider, grants answered over the protocol; over a Unix socket
   or named pipe and over loopback: the token file, a wrong token, a session token as the bearer, an
@@ -313,10 +390,14 @@ install's approval (no terminal).
   after the person approves; a restart that continues the session without asking again; a turn the
   host stopped during a model call, abandoned at the next start; a cell the host stopped during, a
   decision at the next start that `fx run` cannot make without a terminal, then a person's `failed`
-  and the turn going on; a cell's command that asks the grants log and runs once a person allows it,
-  and one denied once with nobody at a terminal (the model reads the denial); `fx run -p` in two host
+  and the turn going on; a cell's command that asks the grants log and runs once a person allows it;
+  then another command with nobody at a terminal (withdrawn, the model reads that it was not answered,
+  the run names `fx grants allow shell.exec …`), the same command in a later run from a terminal
+  (asked again, allowed once, run) and in a run after that without one (asked again); `fx run -p` in two host
   processes recorded and `fx replay` matching it, and nothing journaled with `session.record` off.
-- `GrantPromptTests`: what the terminal shows of a grant request, and replies as answers.
+- `GrantPromptTests`: what the terminal shows of a grant request, replies as answers, what a run shows
+  when nobody can answer (the `fx grants allow` command for requests that offer host scope, quoted for
+  the shell, the resource escaped as an exact pattern).
 
 ## Left to later tasks
 
@@ -330,3 +411,4 @@ install's approval (no terminal).
 | An interactive trust prompt (trusting from the TUI, then reading the project's config without a restart); the TUI only says `fx trust` | later |
 | Epoch-fenced takeover and sharing with other people | T507 |
 | The HTTP/SSE offset-read mirror of the protocol (spec §17 fallbacks), binary channels for bulk data (`blobs/*`, `pty/*`) | with their method groups |
+| `fx grants` over the client protocol to a host `fx serve` runs (today it needs the data directory's lock); repository-scoped grants once requests name the workspace's repository | later |

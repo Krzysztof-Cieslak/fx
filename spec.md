@@ -897,7 +897,7 @@ type GrantEvent = Requested of GrantRequest | Granted of Grant   // a grant from
 - **Answers** choose a scope (*once / session / repo (+path) / host*, §19.4), filled in from the request's context, and may broaden the resource to a pattern that matches it.
 - Effective rules are a projection: deny wins, then most-specific grant, else ask. Policy only tightens: policy rules and gates can only ask or deny.
 - **`GrantStore` is an extension point**; default host-local (a stream of the host's event store); a repo-policy store can use the same API.
-- Agents can only **request** grants (`IGrants`: check, request, await, withdraw); people answer, grant and revoke through the client protocol (`grants/*`). Module spec: `docs/modules/grants.md`.
+- Agents can only **request** grants (`IGrants`: check, request, await, withdraw); people answer, grant and revoke through the client protocol (`grants/*`), or beforehand on the host's machine with `fx grants` as the OS user who owns the host. A request nobody can answer (a headless run without a terminal) is withdrawn by the host, never answered on a person's behalf, and requests are keyed by what asks (a call, an install attempt), so it is asked again next time. Module spec: `docs/modules/grants.md`.
 
 ---
 
@@ -1094,7 +1094,7 @@ and RunStatus =
 - Sessions: persist across disconnects (`fx attach`), pairing, attention inbox (sessions + runs), subagents as child sessions, jobs/ports, notifications, serialized multi-client inputs.
 - Environments: picker, `/env`, setup logs, cost/TTL, export, Windows "unsandboxed" banner.
 - Models and auth: `fx connect`, `fx auth …`, `/model`, Copilot device-code login, plan usage, fallback chains.
-- Extensions and components: `fx ext …`, `fx runtime …`, install prompts (grants).
+- Extensions and components: `fx ext …`, `fx runtime …`, install prompts (grants), `fx grants allow|deny|revoke|list` to decide beforehand (unattended runs).
 - Authoring: `fx agents …`, `fx workflow …`, `fx runs …`, `fx trigger …`, `fx test`, `fx ledger init|status`.
 - Evals: `fx eval`, `fx replay`, dashboard publishing.
 - Onboarding: single binary for Linux/macOS/Windows, trust prompt, imports of AGENTS.md / CLAUDE.md, skills, MCP config, Claude Code / OpenCode agents.
