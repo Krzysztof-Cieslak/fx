@@ -1,7 +1,8 @@
 /// Properties of the render over random sessions (spec §5): appending to the log never changes the
 /// prefix or the history rendered before it; every call's request is a prefix of every later one;
 /// rendering is deterministic, also from the log's JSON; the cache key ignores the suffix; breakpoints
-/// stay within the model's limit; excluded content never shows; collapses rewrite only from their start.
+/// stay within the model's limit; excluded content never shows; collapses rewrite only from their start;
+/// every compaction cut applies, and its summary request is what a call sent.
 module Fx.Prompt.Tests.PropertyTests
 
 open Expecto
@@ -355,4 +356,50 @@ let tests =
                                 valid (requestOf collapsed collapsed.Transcript)
                         else
                             Expect.isNonEmpty collapsed.Transcript.Issues "a refused collapse says why")
+
+            testPropertyWithConfig
+                fsConfig
+                "every compaction cut applies; its summary request is what a call sent, then the instruction"
+                (fun (ops: Op list) ->
+                    let sim = run (config exclusions breakpointCaching) ops
+                    let rendered = render sim
+                    let now = request sim
+                    let calls = sim.Calls |> List.rev |> List.map snd |> Array.ofList
+
+                    // The calls whose replies are in the history, by the replies' entries.
+                    let callOf =
+                        Transcript.entries sim.Transcript
+                        |> List.filter (fun e -> e.Content.IsReply)
+                        |> List.mapi (fun i e -> e.Index, calls[i])
+                        |> Map.ofList
+
+                    for cut in Compaction.cuts sim.Transcript rendered template.Tools do
+                        let summary = Compaction.request sim.Config template rendered cut "Summarize."
+                        let sent = flat summary
+
+                        let expected =
+                            match cut.Mark with
+                            | Some _ -> callOf[cut.Last + 1]
+                            | None -> now
+
+                        Expect.equal (List.truncate (sent.Length - 1) sent) (flat expected) "what was sent"
+                        Expect.equal summary.System expected.System "the same prefix and breakpoint"
+                        Expect.isLessThanOrEqual (breakpoints summary) 4 "within the limit"
+                        Expect.isFalse ((requestJson summary).Contains "content of secret/") "nothing excluded"
+
+                        let collapsed =
+                            sim
+                            |> record (
+                                ContextEvent.Collapsed(Compaction.collapse cut "summary" (Compaction.sources summary))
+                            )
+
+                        Expect.equal
+                            collapsed.Transcript.Collapses.Length
+                            (sim.Transcript.Collapses.Length + 1)
+                            "applies"
+
+                        let after = request collapsed
+                        Expect.equal after.System now.System "the prefix is never rewritten"
+                        valid after
+                        Expect.isFalse ((requestJson after).Contains "content of secret/") "nothing excluded")
         ]

@@ -5,6 +5,7 @@
     <Compile Include="ContentTests.fs" />
     <Compile Include="TranscriptTests.fs" />
     <Compile Include="RenderTests.fs" />
+    <Compile Include="CompactionTests.fs" />
     <Compile Include="SettingsTests.fs" />
     <Compile Include="PropertyTests.fs" />
     <Compile Include="GoldenTests.fs" />

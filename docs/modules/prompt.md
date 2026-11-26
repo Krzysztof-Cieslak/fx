@@ -3,7 +3,7 @@
 Spec: §5 (prompt = pure render; stable receipts; cache breakpoints; content exclusions; `SeenRanges`;
 compaction), with §2 (cache-friendly transcript), §6.6–6.8 (references, pins, previews, the repo map, the edit
 guard), §7.3 (agents in the prefix), §10.3 (cache mapping), §15 (variants) and §18 (content exclusions).
-Task: T126. Builds on [models.md](models.md) (the canonical request), [sessions.md](sessions.md) (the session's
+Tasks: T126, T206 (compaction). Builds on [models.md](models.md) (the canonical request), [sessions.md](sessions.md) (the session's
 events), [variants.md](variants.md) and [contracts.md](contracts.md).
 Code: [`src/Fx.Prompt`](../../src/Fx.Prompt) (pure: no I/O; the EFF analyzers apply to every file).
 Tests: `tests/Fx.Prompt.Tests` and the `prompt-*` scenarios of the JIT-vs-native diff.
@@ -27,7 +27,8 @@ let request  = Render.request cfg template rendered       // the canonical ChatR
 | Context events and their JSON (`ContextEvent`, `ContextCodecs`) | `Events.fs` |
 | The fold (`LogItem`, `Transcript`, `Entry`, `Visible`, `reconcile`) | `Transcript.fs` |
 | Views and live data (`View`, `Live`, `Views.*`) | `Views.fs` |
-| The render (`RenderConfig`, `Render.render`, `Render.request`, `Render.cacheKey`) | `Render.fs` |
+| The render (`RenderConfig`, `Render.render`, `Render.request`, `Render.requestUpTo`, `Render.cacheKey`) | `Render.fs` |
+| Compaction: token estimates, cuts, the summary request, the collapse (`Tokens`, `Cut`, `Compaction`) | `Compaction.fs` |
 | The prefix's sections (`Sections.*`) | `Sections.fs` |
 | Variant slots and settings (`PromptSlots`, `PromptSettings`) | `Settings.fs` |
 
@@ -122,8 +123,9 @@ render always takes the prefix from the recorded frame.
 ## The render (`Render.render`)
 
 `Render.render cfg transcript live : Rendered` gives the `Prompt` and what it shows: `Seen` (`SeenRanges`),
-`Withheld` (paths, sorted), `Stale` (replies that lost their reasoning) and `Ends` (where earlier calls' prompts
-ended, before each visible reply). Pure and deterministic: the same configuration, transcript and live data give
+`Withheld` (paths, sorted), `Stale` (replies that lost their reasoning), `Ends` (where earlier calls' prompts
+ended, before each visible reply) and `Replies` (each visible reply's entry with its end: where compaction can
+cut). Pure and deterministic: the same configuration, transcript and live data give
 the same prompt, byte for byte, also from the log read back from its JSON.
 
 - **Prefix**: the frame's sections (the configuration's until one is recorded), content exclusions applied.
@@ -178,6 +180,40 @@ history's last one if it is the user's).
 - **Cache key**: where the model takes one (OpenAI `prompt_cache_key`) and breakpoints are not `off`,
   `Render.cacheKey`: the first 32 hex digits of the SHA-256 of the canonical JSON of the system parts and the
   tools. It changes only with the prefix: never with the history or the suffix.
+
+## Compaction (`Compaction`, T206)
+
+Spec §5: `Collapsed(range, summary)` with originals addressable; a cache-sharing summary request. The
+strategy decides when (CodeAct: [codeact.md](codeact.md#compaction-spec-5)); this module is the pure part.
+
+- **Token estimates** (`Tokens`): 3.5 characters a token, a few tokens a part, a fixed 1600 an image or
+  document, tools by their JSON. No tokenizer: deterministic, a little high for English text, about right for
+  code. A provider's own counts (`Usage.Input`) are better where there are any.
+- **Cuts** (`Compaction.cuts transcript rendered tools`): a summary replaces the history from its first entry to
+  a cut, which lies just before a visible reply (all but the first, so it replaces at least one reply) or at the
+  end of the history. Every cut is checked against the transcript (`Transcript.applyContext`): it keeps every
+  tool call with its result and contains every earlier collapse, so the new summary also stands for the old
+  one. None while a call is open. Each cut knows its `Head` (the estimated tokens of the prompt up to it:
+  system parts, tools, history) and `Tail` (what stays as it is, the suffix included).
+- **Which cut** (`Compaction.choose keep fits`): the latest that keeps at least `keep` tokens as they are,
+  among those whose summary request fits in `fits` tokens; failing that, the earliest that fits (it keeps the
+  most).
+- **The summary request** (`Compaction.request cfg template rendered cut instruction`) shares the
+  conversation's cache: a cut before reply *n* is exactly the request call *n* sent (`Render.requestUpTo`:
+  the system parts, the tools and the history up to where that call's prompt ended, with the breakpoints that
+  call had, so it reads what that call wrote to the cache), a cut at the end is the request a call would send
+  now; then the instruction, in the last user message after its breakpoint. Everything that shapes a
+  provider's cache (system, tools, tool choice, reasoning) is the conversation's template; only the output
+  limit differs. Excluded content was withheld by the render, so it never reaches the summarizer.
+- **The collapse** (`Compaction.collapse cut summary sources`): `Collapsed {from, to, summary}` with the summary
+  as a `Quote` of every file the summary request quoted (`Compaction.sources`: each path once, whole): the render
+  withholds it, and the egress hooks redact it, if one of them is excluded later. `Compaction.applies` says
+  whether a collapse prepared earlier still applies.
+
+After a collapse the prefix is unchanged (the frame is not touched; the cache key stays), the summary shows where
+the range began, pins hidden by it show again (the pins view), what the range showed no longer counts in
+`SeenRanges`, and replies after the range's start lose their reasoning (the documented boundary above). The
+originals stay in the log.
 
 ## SeenRanges
 
@@ -275,7 +311,9 @@ machine and records context events as a strategy would; FsCheck properties over 
 never changes the prefix or the history before it; every call's request is a prefix of every later one and
 within the breakpoint limit; requests with no call open are valid for a provider; rendering is deterministic,
 also from the log's JSON; the cache key depends on the prefix only; excluded content never shows and is never
-seen; a collapse rewrites only from its start); golden renders of a coding session, an interrupted and a
+seen; a collapse rewrites only from its start; every compaction cut applies, its summary request is what a
+call sent plus the instruction, and the prefix survives the collapse); compaction's rules one by one
+(`CompactionTests`); golden renders of a coding session, an interrupted and a
 failed turn, and a collapsed conversation with changed instructions (`UPDATE_GOLDEN=1` rewrites them); and the
 kept JSON of version 1's context events.
 
@@ -286,7 +324,6 @@ kept JSON of version 1's context events.
 | `Value` references and handles in receipts (`Piece.Ref`), `fx.context.pin`/`pinFile`, `fx.recall` | T201 |
 | Type-aware previews and outlines in receipts | T203 |
 | The edit guard over `SeenRanges` | T204 |
-| Choosing and summarizing ranges to collapse, cache-sharing summary requests, `fx.history.*` | T206 |
 | The repo map's content | T202 |
 | The agent list from the agents registry | T213 |
 | Copilot organization exclusions (a provider's own egress hooks) | T210 |
