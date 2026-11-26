@@ -12,6 +12,7 @@
     <Compile Include="Ui.fs" />
     <Compile Include="Vt.fs" />
     <Compile Include="Theme.fs" />
+    <Compile Include="Markdown.fs" />
     <Compile Include="VtScreen.fs" />
     <Compile Include="Keys.fs" />
     <Compile Include="Editor.fs" />

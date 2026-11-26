@@ -22,6 +22,7 @@ to send, and a pure `view` that draws the model as a frame.
 | Columns of text: grapheme clusters, wide and zero-width characters, cutting, wrapping (`Text`) | `Fx.Tui/Text.fs` |
 | Colours (16, the 256 of the xterm palette, 24-bit) and their lowering, styles, spans, rows, frames (`Ui`) | `Fx.Tui/Ui.fs` |
 | What the terminal draws (`Terminal`), themes (`Theme`), the TUI's slots (`TuiSlots`) | `Fx.Tui/Theme.fs` |
+| Markdown parsed and drawn as rows (`Markdown`), code highlighting (`Highlight`) | `Fx.Tui/Markdown.fs` |
 | VT output: entering and leaving, SGR, the difference between two frames (`Vt`) | `Fx.Tui/Vt.fs` |
 | A small terminal emulator for tests and the fake (`VtScreen`) | `Fx.Tui/VtScreen.fs` |
 | Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste (`Keys`) | `Fx.Tui/Keys.fs` |
@@ -94,6 +95,14 @@ to send, and a pure `view` that draws the model as a frame.
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`;
   `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The cells' code is folded into one line
   (`▸ N cells (M lines)`).
+- **Markdown**: what the model wrote, questions, and a result card's summary, evidence and check
+  are Markdown (`Markdown.render`): headings, paragraphs, **strong**, *emphasis*, ~~strike~~
+  (muted), `code`, links (their address after the text when it differs), lists (nested, ordered),
+  quotes, fenced code with keyword highlighting for F#, TypeScript and JavaScript, JSON and shells
+  (line by line), rules and GitHub's tables (columns narrowed to fit, cells cut with `…`). What it
+  does not follow shows as the text it is; an unclosed fence (a reply still streaming) runs to the
+  end. Words wrap at spaces, across styles; a word longer than a row is cut; code is cut, never
+  wrapped at spaces.
 - **A question shows once**, where the agent asked it. The agent's question (`agent.question`)
   shows as its text, never its request's title; when it repeats what the reply just before it said
   (CodeAct asks with a reply's text), the reply is all that shows. `? Needs input` and the question
@@ -220,7 +229,9 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: colour depths from variables, lowering, SGR codes, the theme a choice gives, and
+- `Fx.Tui.Tests`: Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
+  width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark
+  theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and
   golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
   cut between reads, pastes); the editor over grapheme clusters; frames on a `VtScreen` and the frame
   difference; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session

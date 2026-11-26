@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ fx · …/src/billing · env: defa… ● idle
+ ! runs unsandboxed: commands can read …
+
+    { "variants": { "model.role.main": "
+    anthropic/claude-opus-5-5" } }
+
+  • --model overrides it for one run
+  • a trusted project's config for one
+    project
+  ◇ Cell     check the config     ✓ 1.0s
+  ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
+  ✓ Done  Created ~/.fx/config.json: fx
+          uses Opus 5.5 by default
+    Verify    fx variants explain
+              model.role.main
+    3.0s
+
+Enter send · Alt+Enter newline · Ctrl+O…
+›
+────────────────────────────────────────
+cursor 19,2

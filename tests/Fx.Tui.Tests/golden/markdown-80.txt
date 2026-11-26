@@ -1,0 +1,26 @@
+Adding fast mode
+
+I checked it with fx variants explain, which picked it up as model.role.main.
+Other ways:
+
+• One run only: fx --model anthropic/claude-opus-5-5
+• One project only: the same JSON in <project>/.fx/config.json
+  ◦ read after fx trust
+• See the docs (https://example.com/docs) or https://example.com.
+
+1. Add a speed option to the request format (src/Fx.Models).
+2. Send speed: "fast" when it is set.
+
+│ Don't use model.role.fast for this: it picks a separate model.
+
+  let config = { Model = "anthropic/claude-opus-5-5" } // the main model
+  printfn "%d" 42
+
+Slot            │ Value
+────────────────┼──────────────────────────
+model.role.main │ anthropic/claude-opus-5-5
+tui.theme       │ dark
+
+────────────────────────────────────────
+
+Before the first prompt you still need a key: run fx auth login anthropic.

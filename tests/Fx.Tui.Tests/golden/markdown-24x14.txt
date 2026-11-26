@@ -1,0 +1,17 @@
+────────────────────────
+ fx · …/src/bil… ● idle
+ ! runs unsandboxed: co…
+          config.json:
+          fx uses Opus
+          5.5 by default
+    Verify    fx
+              variants
+              explain mo
+              del.role.m
+              ain
+    3.0s
+
+Enter send · Alt+Enter …
+›
+────────────────────────
+cursor 13,2

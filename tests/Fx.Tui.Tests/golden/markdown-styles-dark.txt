@@ -1,0 +1,31 @@
+{fg=#7aa2f7 bg=default bold}Adding fast mode
+
+{fg=#dcdfe4 bg=default}I checked it with {fg=#9ece6a bg=default}fx variants explain{fg=#dcdfe4 bg=default}, which picked it up as
+{fg=#ff9e64 bg=default bold}model.role.main{fg=#dcdfe4 bg=default}. Other ways:
+
+{fg=#7dcfff bg=default}•{fg=#dcdfe4 bg=default} {fg=#ff9e64 bg=default bold}One run only:{fg=#dcdfe4 bg=default} {fg=#9ece6a bg=default}fx --model anthropic/claude-opus-5-5
+{fg=#7dcfff bg=default}•{fg=#dcdfe4 bg=default} {fg=#ff9e64 bg=default bold}One project only:{fg=#dcdfe4 bg=default} the same JSON in
+{fg=#dcdfe4 bg=default}  {fg=#9ece6a bg=default}<project>/.fx/config.json
+{fg=#dcdfe4 bg=default}  {fg=#7dcfff bg=default}◦{fg=#dcdfe4 bg=default} {fg=#dcdfe4 bg=default}read after {fg=#9ece6a bg=default}fx trust
+{fg=#7dcfff bg=default}•{fg=#dcdfe4 bg=default} {fg=#dcdfe4 bg=default}See {fg=#7dcfff bg=default underline}the docs{fg=#808496 bg=default} (https://example.com/docs){fg=#dcdfe4 bg=default} or
+{fg=#dcdfe4 bg=default}  {fg=#7dcfff bg=default underline}https://example.com{fg=#dcdfe4 bg=default}.
+
+{fg=#7dcfff bg=default}1.{fg=#dcdfe4 bg=default} {fg=#dcdfe4 bg=default}Add a speed option to the request format ({fg=#dcdfe4 bg=default italic}src/Fx.Models{fg=#dcdfe4 bg=default}).
+{fg=#7dcfff bg=default}2.{fg=#dcdfe4 bg=default} {fg=#dcdfe4 bg=default}Send {fg=#9ece6a bg=default}speed: "fast"{fg=#dcdfe4 bg=default} when it is set.
+
+{fg=#808496 bg=default}│ {fg=#808496 bg=default italic}Don't use {fg=#808496 bg=default italic}model.role.fast{fg=#808496 bg=default italic} for this: it picks a separate
+{fg=#808496 bg=default}│ {fg=#808496 bg=default italic}model.
+
+{fg=#dcdfe4 bg=default}  {fg=#bb9af7 bg=default}let{fg=#dcdfe4 bg=default} config = { Model = {fg=#9ece6a bg=default}"anthropic/claude-opus-5-5"{fg=#dcdfe4 bg=default} } {fg=#808496 bg=default italic}// th
+{fg=#dcdfe4 bg=default}  {fg=#808496 bg=default italic}e main model
+{fg=#dcdfe4 bg=default}  {fg=#dcdfe4 bg=default}printfn {fg=#9ece6a bg=default}"%d"{fg=#dcdfe4 bg=default} {fg=#ff9e64 bg=default}42
+
+{fg=#dcdfe4 bg=default bold}Slot{fg=#dcdfe4 bg=default}           {fg=#808496 bg=default} │ {fg=#dcdfe4 bg=default bold}Value
+{fg=#808496 bg=default}────────────────┼──────────────────────────
+{fg=#9ece6a bg=default}model.role.main{fg=#808496 bg=default} │ {fg=#dcdfe4 bg=default}anthropic/claude-opus-5-5
+{fg=#9ece6a bg=default}tui.theme{fg=#dcdfe4 bg=default}      {fg=#808496 bg=default} │ {fg=#dcdfe4 bg=default}dark
+
+{fg=#808496 bg=default}────────────────────────────────────────
+
+{fg=#dcdfe4 bg=default}Before the first prompt you still need a key: run {fg=#9ece6a bg=default}fx auth
+{fg=#9ece6a bg=default}login anthropic{fg=#dcdfe4 bg=default}.

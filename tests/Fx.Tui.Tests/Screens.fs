@@ -216,6 +216,39 @@ let compacted (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// A reply in Markdown, and a result card whose summary and check are Markdown too.
+let markdown (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q0000000000000007"
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "how do I use opus by default?"
+            yield! s.Boundary 1
+            s.Advance 2.0
+            yield
+                s.Reply(
+                    1,
+                    [
+                        text
+                            "Set **model.role.main** in `~/.fx/config.json`:\n\n```json\n{ \"variants\": { \"model.role.main\": \"anthropic/claude-opus-5-5\" } }\n```\n\n- `--model` overrides it for **one run**\n- a trusted project's config for *one project*"
+                        cell "toolu_1" "// intent: check the config\nawait fx.shell.run(\"fx variants explain\")"
+                    ]
+                )
+            s.Advance 1.0
+            yield s.Receipt(1, "toolu_1", "cell", "model.role.main = anthropic/claude-opus-5-5")
+            yield!
+                s.End(
+                    TurnResult.Done(
+                        "Created `~/.fx/config.json`: fx uses **Opus 5.5** by default",
+                        [],
+                        Some "`fx variants explain model.role.main`"
+                    )
+                )
+        ]
+
+    ready s width height msgs
+
 /// Every screen, by name.
 let all: (string * (int -> int -> Model)) list =
     [
@@ -229,6 +262,7 @@ let all: (string * (int -> int -> Model)) list =
         "decision", decision
         "wide", wide
         "compacted", compacted
+        "markdown", markdown
     ]
 
 /// A frame as text, with the cursor's place.
