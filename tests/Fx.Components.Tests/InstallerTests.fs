@@ -65,7 +65,19 @@ let tests =
                     run [ InstallerCommand.Ensure("h", spec); InstallerCommand.Ensure("h", other) ]
 
                 let missing = step state (InstallerCommand.Inspected(key, None))
-                Expect.equal missing.Intents [ InstallerIntent.Ask spec ] "ask"
+
+                Expect.equal
+                    missing.Intents
+                    [
+                        InstallerIntent.Ask
+                            {
+                                Spec = spec
+                                Holder = "h"
+                                Attempt = 1
+                            }
+                    ]
+                    "ask, saying who asks and which attempt"
+
                 let state = (step missing.State (InstallerCommand.Inspected(other.Key, None))).State
                 let approved = step state (InstallerCommand.Answered(key, Approved "alice"))
                 Expect.equal (approved.Events |> List.map string) [ "approved tool by alice" ] "approved"

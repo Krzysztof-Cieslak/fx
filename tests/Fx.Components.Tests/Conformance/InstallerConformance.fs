@@ -45,9 +45,9 @@ type private Installer
     let mutable next = 0
 
     let settings: InstallerSettings<InstallerEnv> =
-        { InstallerSettings.create fixture.Root name (fun spec _ ->
-              lock approvals (fun () -> approvals.Add spec.Key.Name)
-              Task.FromResult(approve spec)) with
+        { InstallerSettings.create fixture.Root name (fun request _ ->
+              lock approvals (fun () -> approvals.Add request.Spec.Key.Name)
+              Task.FromResult(approve request.Spec)) with
             RetryDelay = TimeSpan.FromSeconds 1.0
             LockTimeout = TimeSpan.FromMinutes 5.0
         }
