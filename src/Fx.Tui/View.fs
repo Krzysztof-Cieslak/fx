@@ -1046,12 +1046,140 @@ module View =
         |> List.map (fun row -> (if t.Panel = Color.Default then s t.Muted "│ " else indent 2) :: row)
         |> raise t width
 
+    /// Whether the session shows the start screen: it has no turns yet, nothing waits for the
+    /// person and nothing failed.
+    let isStart (model: Model) : bool =
+        let st = model.Timeline.State
+
+        (match model.Phase with
+         | Phase.Stopped _ -> false
+         | _ -> true)
+        && st.Running.IsNone
+        && st.Queue.IsEmpty
+        && st.Inbox.IsEmpty
+        && (App.cards model).IsEmpty
+        && (App.others model).IsEmpty
+        && model.Timeline.ResetAt.IsNone
+        && Timeline.blocks model.Timeline
+           |> List.forall (fun block ->
+               match block with
+               | Block.Turn _
+               | Block.Earlier _ -> false
+               | Block.Note _ -> true)
+
+    /// The start screen: the product's name in blocks over a prompt box in the middle, the workspace
+    /// and its branch and the keys under it; the warnings at the top and the footer at the bottom.
+    let private start (model: Model) : Frame =
+        let t = theme model
+        let width = model.Width
+        let height = model.Height
+        let box = min 76 (max 20 (width - 4))
+        let left = max 0 ((width - box) / 2)
+        let at (row: Row) = indent left :: row
+        let inner = { model with Width = box }
+        let banner = banner model
+        let footer = [ footer model false ]
+
+        let editorRows =
+            let lines, _ = Editor.layout (max 1 (box - 4)) model.Editor
+            min lines.Length (max 1 (min 6 (height / 4)))
+
+        let editor, (cursorRow, cursorColumn) = editor inner editorRows
+
+        let workspace =
+            let path =
+                model.Session
+                |> Option.map _.Workspace
+                |> Option.defaultValue model.Setup.Workspace
+
+            match model.Env |> Option.bind _.Branch with
+            | Some branch -> shortPath path + ":" + branch
+            | None -> shortPath path
+
+        let keys =
+            Row.spread box [ s t.Muted workspace ] [ s (Style.withBold t.Text) "Ctrl+P "; s t.Muted "commands" ]
+
+        // What the person should know before they start (an untrusted project, the host's warnings).
+        let notes =
+            [
+                if not model.Setup.Trusted then
+                    yield!
+                        paragraph
+                            box
+                            [ s t.Warning "! " ]
+                            t.Muted
+                            $"This project is not trusted: its config is not read. Run `{model.Setup.Binary} trust` here and start again to use it."
+                for warning in model.Setup.Warnings do
+                    yield! paragraph box [ s t.Warning "! " ] t.Muted warning
+            ]
+
+        let status = status inner
+        let room = height - banner.Length - footer.Length
+        let below = [ Row.empty; keys ] @ (if notes.IsEmpty then [] else Row.empty :: notes)
+
+        // The palette, while it is open, takes the place of the name.
+        let top =
+            match palette inner with
+            | [] ->
+                let name = model.Setup.Product
+
+                let drawn =
+                    if
+                        Wordmark.width name <= box
+                        && room >= Wordmark.Height + editor.Length + below.Length + 4
+                    then
+                        Wordmark.draw t.Muted (Style.withBold t.Text) name
+                        |> List.map (fun row ->
+                            let pad = max 0 ((box - Row.width row) / 2)
+                            indent pad :: row)
+                    else
+                        let pad = max 0 ((box - Text.width name) / 2)
+                        [ [ indent pad; s (Style.withBold t.Text) name ] ]
+
+                drawn @ [ Row.empty ]
+            | rows -> rows
+
+        let block = top @ status @ editor @ below
+        let block = List.truncate (max 0 room) block
+        let above = max 0 ((room - block.Length) / 2)
+        let afterBlock = max 0 (room - above - block.Length)
+
+        let rows =
+            banner
+            @ List.replicate above Row.empty
+            @ (block |> List.map (Row.fit box >> at))
+            @ List.replicate afterBlock Row.empty
+            @ footer
+            |> List.truncate height
+            |> List.map (Row.fit width >> Row.normalize)
+
+        let rows =
+            rows @ List.replicate (height - rows.Length) Row.empty
+            |> List.map (paint t width)
+
+        let editorTop = banner.Length + above + top.Length + status.Length
+
+        let cursor =
+            if model.Palette.IsSome || editorTop + cursorRow >= height - footer.Length then
+                None
+            else
+                Some(editorTop + cursorRow, min (width - 1) (left + cursorColumn))
+
+        {
+            Width = width
+            Height = height
+            Rows = rows
+            Cursor = cursor
+        }
+
     /// The whole screen: the main column, with the sidebar at its right on a wide terminal.
     let view (model: Model) : Frame =
         let t = theme model
 
         let frame =
-            if hasSidebar model then
+            if isStart model then
+                start model
+            elif hasSidebar model then
                 let mainWidth = model.Width - sidebarWidth
                 let left = main { model with Width = mainWidth } true
                 let right = sidebar model sidebarWidth model.Height

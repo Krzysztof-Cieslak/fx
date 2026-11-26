@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ ! runs unsandboxed: commands can read …
+
+
+
+  ┃ Commands                     esc
+  ┃ ›
+  ┃  /new       Start a new session
+  ┃  /sessions  Switch to another ses…
+  ┃  /model     Use another model fro…
+  ┃  /detail    Show more or less of …
+  ┃  /theme     Change the colours
+  ┃  /exit      Leave (the session st…
+  ┃ ›
+  ┃ anthropic/claude-sonnet-5-5 · env…
+
+  …/src/billing:main   Ctrl+P commands
+
+
+
+fx · …/src/billing:main · sessio… ● idle
+────────────────────────────────────────
+cursor hidden

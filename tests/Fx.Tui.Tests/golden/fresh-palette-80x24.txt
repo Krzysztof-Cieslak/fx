@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────
+ ! runs unsandboxed: commands can read and change everything the user can
+
+
+
+
+
+  ┃ Commands                                                             esc
+  ┃ ›
+  ┃  /new       Start a new session
+  ┃  /sessions  Switch to another session
+  ┃  /model     Use another model from the next turn on
+  ┃  /detail    Show more or less of each turn
+  ┃  /theme     Change the colours
+  ┃  /exit      Leave (the session stays)
+  ┃ ›
+  ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+
+  …/src/billing:main                                           Ctrl+P commands
+
+
+
+
+
+fx · …/src/billing:main · session …00000009        ↑↓ select · Enter run  ● idle
+────────────────────────────────────────────────────────────────────────────────
+cursor hidden
