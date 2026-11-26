@@ -1,0 +1,16 @@
+ 0 {fg=#808496 bg=#222430 bold} fx{fg=#808496 bg=#222430} · …/src/billing · env: default (local) · sandbo… ● idle 
+ 1 {fg=#181921 bg=#e0af68 bold} ! runs unsandboxed: commands can read and change everythin…
+ 2 {fg=#dcdfe4 bg=#181921}  {fg=#7dcfff bg=#181921}◇{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Read    {fg=#dcdfe4 bg=#181921} src/Billing/Client.fs                    {fg=#9ece6a bg=#181921}✓ {fg=#808496 bg=#181921}0.2s
+ 3 {fg=#dcdfe4 bg=#181921}  {fg=#e0af68 bg=#181921}◆{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Edit    {fg=#dcdfe4 bg=#181921} src/Billing/Client.fs                    {fg=#9ece6a bg=#181921}✓ {fg=#808496 bg=#181921}0.3s
+ 4 {fg=#dcdfe4 bg=#181921}  {fg=#7dcfff bg=#181921}◇{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Run     {fg=#dcdfe4 bg=#181921} dotnet test tests/Billing                 {fg=#f7768e bg=#181921}✗ {fg=#808496 bg=#181921}48s
+ 5 {fg=#dcdfe4 bg=#181921}      {fg=#f7768e bg=#181921}exit 1{fg=#dcdfe4 bg=#181921}                                                
+ 6 {fg=#dcdfe4 bg=#181921}  {fg=#7dcfff bg=#181921}◇{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Cell    {fg=#dcdfe4 bg=#181921} rerun the tests                           {fg=#9ece6a bg=#181921}✓ {fg=#808496 bg=#181921}46s
+ 7 {fg=#dcdfe4 bg=#181921}  {fg=#808496 bg=#181921}▸ 1 cell (3 lines){fg=#dcdfe4 bg=#181921}                         {fg=#808496 bg=#181921}[Ctrl+O expand]
+ 8 {fg=#dcdfe4 bg=#181921}                                                            
+ 9 {fg=#dcdfe4 bg=#181921}  {fg=#9ece6a bg=#181921 bold}✓ Done  {fg=#dcdfe4 bg=#181921}Migrated 37 call sites to RetryPolicy.            
+10 {fg=#dcdfe4 bg=#181921}    {fg=#dcdfe4 bg=#181921 bold}Evidence  {fg=#dcdfe4 bg=#181921}dotnet test tests/Billing → 214 passed        
+11 {fg=#dcdfe4 bg=#181921}    {fg=#dcdfe4 bg=#181921 bold}Verify    {fg=#dcdfe4 bg=#181921}dotnet test tests/Billing                     
+12 {fg=#dcdfe4 bg=#181921}    {fg=#808496 bg=#181921}1m39s{fg=#dcdfe4 bg=#181921}                                                   
+13 {fg=#dcdfe4 bg=#181921}                                                            
+14 {fg=#808496 bg=#181921}Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 e…
+15 {fg=#7dcfff bg=#181921 bold}› {fg=#dcdfe4 bg=#181921}                                                          

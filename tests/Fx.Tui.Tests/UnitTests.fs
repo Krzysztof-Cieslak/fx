@@ -143,6 +143,94 @@ let tests =
                 ]
 
             testList
+                "colours"
+                [
+                    test "the depth comes from the process's variables" {
+                        let detect vars = ColorDepth.detect vars false
+
+                        Expect.equal
+                            (detect [ "NO_COLOR", "1"; "COLORTERM", "truecolor" ])
+                            ColorDepth.NoColor
+                            "NO_COLOR wins"
+
+                        Expect.equal (detect [ "NO_COLOR", "" ]) ColorDepth.Basic "an empty NO_COLOR is not set"
+                        Expect.equal (detect [ "COLORTERM", "24bit" ]) ColorDepth.TrueColor "COLORTERM"
+                        Expect.equal (detect [ "TERM_PROGRAM", "iTerm.app" ]) ColorDepth.TrueColor "iTerm2"
+                        Expect.equal (detect [ "WT_SESSION", "x" ]) ColorDepth.TrueColor "Windows Terminal"
+                        Expect.equal (detect [ "TERM", "xterm-256color" ]) ColorDepth.Indexed "256 colours"
+                        Expect.equal (detect [ "TERM", "xterm" ]) ColorDepth.Basic "16"
+                        Expect.equal (detect [ "TERM", "dumb" ]) ColorDepth.NoColor "dumb"
+                        Expect.equal (ColorDepth.detect [] true) ColorDepth.TrueColor "the Windows console"
+                    }
+
+                    test "COLORFGBG says whether the background is light" {
+                        Expect.equal (Terminal.detect [ "COLORFGBG", "0;15" ] false).LightBackground (Some true) "light"
+
+                        Expect.equal
+                            (Terminal.detect [ "COLORFGBG", "15;default;0" ] false).LightBackground
+                            (Some false)
+                            "dark"
+
+                        Expect.equal (Terminal.detect [ "COLORFGBG", "x" ] false).LightBackground None "unknown"
+                    }
+
+                    test "colours are lowered to what the terminal shows" {
+                        let rgb = Color.Rgb(255, 0, 0)
+                        Expect.equal (Color.lower ColorDepth.TrueColor rgb) rgb "as is"
+                        Expect.equal (Color.lower ColorDepth.Indexed rgb) (Color.Indexed 196) "the cube's red"
+                        Expect.equal (Color.lower ColorDepth.Basic rgb) Color.BrightRed "the nearest of 16"
+                        Expect.equal (Color.lower ColorDepth.NoColor rgb) Color.Default "none"
+
+                        Expect.equal
+                            (Color.lower ColorDepth.Indexed (Color.Rgb(128, 128, 128)))
+                            (Color.Indexed 244)
+                            "a gray"
+
+                        Expect.equal (Color.lower ColorDepth.Basic (Color.Indexed 1)) Color.Red "the palette's first 16"
+                        Expect.equal (Color.lower ColorDepth.NoColor Color.Cyan) Color.Default "no colour at all"
+                    }
+
+                    test "SGR for the palette and 24-bit colours" {
+                        let style =
+                            { Style.plain with
+                                Fg = Color.Rgb(1, 2, 3)
+                                Bg = Color.Indexed 236
+                                Bold = true
+                            }
+
+                        Expect.equal (Vt.visible (Vt.sgr style)) "\\e[0;1;38;2;1;2;3;48;5;236m" "codes"
+                    }
+
+                    test "a painted theme needs 256 colours" {
+                        let on depth light =
+                            {
+                                Depth = depth
+                                LightBackground = light
+                            }
+
+                        Expect.equal
+                            (Theme.choose ThemeChoice.Auto (on ColorDepth.TrueColor None)).Name
+                            "dark"
+                            "dark by default"
+
+                        Expect.equal
+                            (Theme.choose ThemeChoice.Auto (on ColorDepth.Indexed (Some true))).Name
+                            "light"
+                            "a light terminal"
+
+                        Expect.equal
+                            (Theme.choose ThemeChoice.Light (on ColorDepth.Basic None)).Name
+                            "ansi16"
+                            "16 colours"
+
+                        Expect.equal
+                            (Theme.choose ThemeChoice.Ansi16 (on ColorDepth.TrueColor None)).Name
+                            "ansi16"
+                            "asked for"
+                    }
+                ]
+
+            testList
                 "editor"
                 [
                     test "inserting, moving and deleting over grapheme clusters" {

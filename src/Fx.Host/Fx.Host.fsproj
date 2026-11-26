@@ -45,6 +45,8 @@
     <ProjectReference Include="..\Fx.Transport.Http\Fx.Transport.Http.fsproj" />
     <ProjectReference Include="..\Fx.Auth\Fx.Auth.fsproj" />
     <ProjectReference Include="..\Fx.Keyring\Fx.Keyring.fsproj" />
+    <!-- The TUI's slots (tui.theme) are core slots the host registers; nothing else of the TUI. -->
+    <ProjectReference Include="..\Fx.Tui\Fx.Tui.fsproj" />
     <!-- The built-ins: a static list (spec §16.4), never loaded from assemblies. -->
     <ProjectReference Include="..\..\extensions\Fx.Ext.EnvLocal\Fx.Ext.EnvLocal.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.SandboxBubblewrap\Fx.Ext.SandboxBubblewrap.fsproj" />

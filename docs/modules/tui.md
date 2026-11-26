@@ -20,7 +20,8 @@ to send, and a pure `view` that draws the model as a frame.
 | Piece | Where |
 |---|---|
 | Columns of text: grapheme clusters, wide and zero-width characters, cutting, wrapping (`Text`) | `Fx.Tui/Text.fs` |
-| Styles, spans, rows, frames (`Ui`) | `Fx.Tui/Ui.fs` |
+| Colours (16, the 256 of the xterm palette, 24-bit) and their lowering, styles, spans, rows, frames (`Ui`) | `Fx.Tui/Ui.fs` |
+| What the terminal draws (`Terminal`), themes (`Theme`), the TUI's slots (`TuiSlots`) | `Fx.Tui/Theme.fs` |
 | VT output: entering and leaving, SGR, the difference between two frames (`Vt`) | `Fx.Tui/Vt.fs` |
 | A small terminal emulator for tests and the fake (`VtScreen`) | `Fx.Tui/VtScreen.fs` |
 | Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste (`Keys`) | `Fx.Tui/Keys.fs` |
@@ -112,6 +113,31 @@ to send, and a pure `view` that draws the model as a frame.
 - **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice), and
   the keys that apply.
 
+## Colours and themes (spec §19.6)
+
+Every style the view draws comes from a `Theme`: colours by what they mean (text, muted, accent,
+success, warning, error, the cards', panels, Markdown and code). `tui.theme` (`TuiSlots.theme`, a
+core slot the host registers) picks it:
+
+| `tui.theme` | Draws |
+|---|---|
+| `auto` (default) | `light` when the terminal says its background is light (`COLORFGBG`), else `dark` |
+| `dark`, `light` | 24-bit colours on a background the theme paints itself (every row filled), with raised panels |
+| `ansi16` | the terminal's own 16 colours and background: nothing its theme does not map |
+
+- **Depth.** How many colours the terminal shows comes from the process's variables
+  (`ColorDepth.detect`): `NO_COLOR` (any non-empty value) turns colours off and keeps bold, dim,
+  italics, underline and reverse; `COLORTERM=truecolor|24bit` and the terminals known to draw 24-bit
+  colour (Windows Terminal, iTerm2, WezTerm, kitty, Ghostty, VS Code; the Windows console with VT
+  processing) give 24 bits; a `TERM` with `256color` the palette; anything else 16.
+- **Lowering.** The frame is lowered to the depth before it is drawn (`Frame.lower`): 24-bit colours
+  to the palette's nearest (the cube's or the grays'), or to the nearest of the 16. The painted themes
+  need 256 colours or more: below that every choice draws `ansi16`, so nothing depends on how a
+  terminal's theme maps the 16.
+- `fx` reads `tui.theme` from the host's resolution (host config, `--variant tui.theme=light`, a
+  trusted project's config); `fx attach` uses the default (the serving host's resolution is not its
+  own).
+
 ## Keys
 
 | Key | Does |
@@ -194,7 +220,8 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
+- `Fx.Tui.Tests`: colour depths from variables, lowering, SGR codes, the theme a choice gives, and
+  golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
   cut between reads, pastes); the editor over grapheme clusters; frames on a `VtScreen` and the frame
   difference; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session
   machine itself) at 80×24, 40×20 and 24×14 (starting, a finished turn, a running turn with steering
@@ -215,4 +242,4 @@ terminal check's P/Invoke without a terminal).
 | `/` commands (`/context`, `/compact`, `/env`, `/model`, `/goal`), the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
-| Mouse, themes and the TUI style variant | later |
+| Mouse; asking the terminal for its background (OSC 11) | later |

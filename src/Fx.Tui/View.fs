@@ -39,13 +39,11 @@ module View =
     let private s (style: Style) (text: string) = Span.create style text
     let private p (text: string) = Span.plain text
 
-    let private dim = Style.dim
-    let private bold = Style.bold
-    let private green = Style.fg Color.Green
-    let private red = Style.fg Color.Red
-    let private yellow = Style.fg Color.Yellow
-    let private cyan = Style.fg Color.Cyan
-    let private magenta = Style.fg Color.Magenta
+    /// The theme the model draws with.
+    let theme (model: Model) : Theme =
+        Theme.choose model.Setup.Theme model.Setup.Terminal
+
+    let private bold (t: Theme) = Style.withBold t.Text
 
     // ---- the header -----------------------------------------------------------------------------
 
@@ -60,21 +58,23 @@ module View =
         | _ -> path
 
     let private state (model: Model) : Span list =
+        let t = theme model
         let st = model.Timeline.State
 
         match model.Phase with
-        | Phase.Starting _ -> [ s yellow "● starting" ]
-        | Phase.Stopped _ -> [ s red "● stopped" ]
+        | Phase.Starting _ -> [ s t.Warning "● starting" ]
+        | Phase.Stopped _ -> [ s t.Error "● stopped" ]
         | Phase.Ready ->
             match st.Running with
-            | Some turn -> [ s green $"● turn {turn.Turn}" ]
-            | None when st.Status = Status.Closed -> [ s dim "● closed" ]
-            | None when st.Held -> [ s yellow "● held" ]
-            | None when not st.AwaitingRequests.IsEmpty -> [ s yellow "● needs input" ]
-            | None -> [ s dim "● idle" ]
+            | Some turn -> [ s t.Success $"● turn {turn.Turn}" ]
+            | None when st.Status = Status.Closed -> [ s t.Muted "● closed" ]
+            | None when st.Held -> [ s t.Warning "● held" ]
+            | None when not st.AwaitingRequests.IsEmpty -> [ s t.Warning "● needs input" ]
+            | None -> [ s t.Muted "● idle" ]
 
     let header (model: Model) : Row =
-        let bar = Style.reverse
+        let t = theme model
+        let bar = t.Header
         let sep = s bar " · "
 
         // Most important first: what is cut at the right edge matters least. The session's id is
@@ -123,7 +123,11 @@ module View =
             state model
             |> List.map (fun span ->
                 { span with
-                    Style = { span.Style with Reverse = true }
+                    Style =
+                        { span.Style with
+                            Bg = bar.Bg
+                            Reverse = bar.Reverse
+                        }
                 })
 
         Row.spread model.Width (left @ [ s bar " " ]) (right @ [ s bar " " ])
@@ -136,12 +140,8 @@ module View =
 
     /// The environment's warnings (spec §18: running unsandboxed is a persistent warning).
     let banner (model: Model) : Row list =
-        let warn =
-            { Style.plain with
-                Fg = Color.Black
-                Bg = Color.Yellow
-                Bold = true
-            }
+        let t = theme model
+        let warn = t.Banner
 
         match model.Env with
         | Some env ->
@@ -160,13 +160,16 @@ module View =
         Text.wrap (max 1 (width - lead)) text
         |> List.map (fun line -> Row.fit width [ indent lead; s style line ])
 
-    let private input (width: int) (input: Input) : Row list =
+    let private input (t: Theme) (width: int) (input: Input) : Row list =
         match input.Content with
-        | InputContent.Text text -> paragraph width [ s (Style.withBold cyan) "› " ] bold text
-        | InputContent.Resolved(request, resolution) -> paragraph width [ s dim "↩ " ] dim $"{request} {resolution}"
-        | InputContent.JobFinished(job, note) -> paragraph width [ s dim "↩ " ] dim $"job {job} finished: {note}"
+        | InputContent.Text text -> paragraph width [ s (Style.withBold t.Accent) "› " ] (bold t) text
+        | InputContent.Resolved(request, resolution) ->
+            paragraph width [ s t.Muted "↩ " ] t.Muted $"{request} {resolution}"
+        | InputContent.JobFinished(job, note) ->
+            paragraph width [ s t.Muted "↩ " ] t.Muted $"job {job} finished: {note}"
 
     let private callRows
+        (t: Theme)
         (width: int)
         (verbosity: Verbosity)
         (now: int64)
@@ -174,22 +177,22 @@ module View =
         (first: bool)
         (call: CallView)
         : Row list =
-        let marker = if call.Changes then s yellow "◆" else s cyan "◇"
+        let marker = if call.Changes then s t.Warning "◆" else s t.Accent "◇"
 
         let status =
             match call.Ended with
-            | Some ended when call.IsError -> [ s red "✗ "; s dim (duration (ended - call.Started)) ]
-            | Some ended -> [ s green "✓ "; s dim (duration (ended - call.Started)) ]
-            | None when live && first -> [ s cyan (spinner now + " "); s dim (duration (now - call.Started)) ]
-            | None when live -> [ s dim "…" ]
-            | None -> [ s yellow "not run" ]
+            | Some ended when call.IsError -> [ s t.Error "✗ "; s t.Muted (duration (ended - call.Started)) ]
+            | Some ended -> [ s t.Success "✓ "; s t.Muted (duration (ended - call.Started)) ]
+            | None when live && first -> [ s t.Accent (spinner now + " "); s t.Muted (duration (now - call.Started)) ]
+            | None when live -> [ s t.Muted "…" ]
+            | None -> [ s t.Warning "not run" ]
 
         let left =
             [
                 indent 2
                 marker
                 p " "
-                s bold (Text.pad 8 call.Label)
+                s (bold t) (Text.pad 8 call.Label)
                 p " "
                 p (Text.firstLine call.Detail)
             ]
@@ -198,7 +201,7 @@ module View =
 
         let error =
             if call.IsError && verbosity <> Verbosity.Quiet then
-                lines width 6 red (Text.truncate (max 1 (width - 6)) (Text.firstLine call.Output))
+                lines width 6 t.Error (Text.truncate (max 1 (width - 6)) (Text.firstLine call.Output))
             else
                 []
 
@@ -206,15 +209,15 @@ module View =
             if verbosity = Verbosity.Verbose then
                 [
                     match call.Code with
-                    | Some code -> yield! lines width 6 dim code
+                    | Some code -> yield! lines width 6 t.Muted code
                     | None -> ()
                     if call.Output <> "" && not call.IsError then
-                        yield! (Text.firstLines 12 call.Output |> List.collect (lines width 6 dim))
+                        yield! (Text.firstLines 12 call.Output |> List.collect (lines width 6 t.Muted))
                     elif call.IsError then
                         yield!
                             (Text.firstLines 12 call.Output
                              |> List.skip 1
-                             |> List.collect (lines width 6 dim))
+                             |> List.collect (lines width 6 t.Muted))
                 ]
             else
                 []
@@ -234,40 +237,45 @@ module View =
             |> not)
 
     /// The result card of spec §19.2: how the turn ended, its evidence and how to verify it.
-    let ending (width: int) (turn: TurnView) (ended: TurnEnd) (at: int64) : Row list =
-        let took = s dim ("  " + duration (at - turn.Started))
-        let tookAlone = s dim (duration (at - turn.Started))
+    let ending (t: Theme) (width: int) (turn: TurnView) (ended: TurnEnd) (at: int64) : Row list =
+        let took = s t.Muted ("  " + duration (at - turn.Started))
+        let tookAlone = s t.Muted (duration (at - turn.Started))
 
         match ended with
         | TurnEnd.Completed(TurnResult.Done(summary, evidence, verify)) ->
             [
-                yield! paragraph width [ indent 2; s (Style.withBold green) "✓ Done  " ] Style.plain summary
+                yield! paragraph width [ indent 2; s (Style.withBold t.Success) "✓ Done  " ] Style.plain summary
                 for e in evidence do
-                    yield! paragraph width [ indent 4; s bold "Evidence  " ] Style.plain e.Summary
+                    yield! paragraph width [ indent 4; s (bold t) "Evidence  " ] Style.plain e.Summary
                 match verify with
-                | Some verify -> yield! paragraph width [ indent 4; s bold "Verify    " ] Style.plain verify
+                | Some verify -> yield! paragraph width [ indent 4; s (bold t) "Verify    " ] Style.plain verify
                 | None -> ()
                 yield Row.fit width [ indent 4; tookAlone ]
             ]
         | TurnEnd.Completed(TurnResult.NeedInput ids) ->
             // The questions were shown where the turn asked them; only those it did not are here.
             [
-                Row.fit width [ indent 2; s (Style.withBold yellow) "? Needs input"; took ]
+                Row.fit width [ indent 2; s (Style.withBold t.Warning) "? Needs input"; took ]
                 for question in unasked turn ids do
                     yield! paragraph width [ indent 4 ] Style.plain question
             ]
         | TurnEnd.Completed(TurnResult.Waiting(jobs, note)) ->
             [
-                yield! paragraph width [ indent 2; s (Style.withBold yellow) "… Waiting  " ] Style.plain note
+                yield! paragraph width [ indent 2; s (Style.withBold t.Warning) "… Waiting  " ] Style.plain note
                 if not jobs.IsEmpty then
-                    yield Row.fit width [ indent 4; s dim ("on " + String.concat ", " jobs) ]
+                    yield Row.fit width [ indent 4; s t.Muted ("on " + String.concat ", " jobs) ]
             ]
-        | TurnEnd.Interrupted -> [ Row.fit width [ indent 2; s (Style.withBold yellow) "⏹ Interrupted"; took ] ]
-        | TurnEnd.Failed reason -> paragraph width [ indent 2; s (Style.withBold red) "✗ Failed  " ] Style.plain reason
+        | TurnEnd.Interrupted ->
+            [
+                Row.fit width [ indent 2; s (Style.withBold t.Warning) "⏹ Interrupted"; took ]
+            ]
+        | TurnEnd.Failed reason ->
+            paragraph width [ indent 2; s (Style.withBold t.Error) "✗ Failed  " ] Style.plain reason
         | TurnEnd.Abandoned reason ->
-            paragraph width [ indent 2; s (Style.withBold red) "✗ Abandoned  " ] Style.plain reason
+            paragraph width [ indent 2; s (Style.withBold t.Error) "✗ Abandoned  " ] Style.plain reason
 
     let private turnRows (model: Model) (turn: TurnView) : Row list =
+        let t = theme model
         let width = model.Width
         let verbosity = model.Verbosity
 
@@ -293,7 +301,7 @@ module View =
 
         [
             for i in turn.Inputs do
-                yield! input width i
+                yield! input t width i
 
             for item in turn.Items do
                 match item with
@@ -301,18 +309,18 @@ module View =
                     yield! paragraph width [ indent 2 ] Style.plain text
                 | TurnItem.Said _ -> ()
                 | TurnItem.Superseded text when verbosity = Verbosity.Verbose ->
-                    yield! paragraph width [ indent 2 ] dim text
+                    yield! paragraph width [ indent 2 ] t.Muted text
                 | TurnItem.Superseded _ -> ()
-                | TurnItem.Call call -> yield! callRows width verbosity model.Now live (Some call.Id = firstOpen) call
+                | TurnItem.Call call -> yield! callRows t width verbosity model.Now live (Some call.Id = firstOpen) call
                 | TurnItem.Steered inputs ->
                     for i in inputs do
                         match i.Content with
-                        | InputContent.Text text -> yield! paragraph width [ indent 2; s cyan "↳ " ] cyan text
-                        | _ -> yield! input width i
+                        | InputContent.Text text -> yield! paragraph width [ indent 2; s t.Accent "↳ " ] t.Accent text
+                        | _ -> yield! input t width i
                 | TurnItem.Asked request ->
                     // The agent's question is often the reply just shown: it is not shown again.
                     if not (verbosity <> Verbosity.Quiet && Set.contains request.Request.Id echoes) then
-                        yield! paragraph width [ indent 2; s yellow "? " ] Style.plain (Timeline.asks request)
+                        yield! paragraph width [ indent 2; s t.Warning "? " ] Style.plain (Timeline.asks request)
                 | TurnItem.Settled resolved ->
                     let text =
                         match resolved.Resolution with
@@ -323,23 +331,23 @@ module View =
                         | Fx.Sessions.Resolution.Cancelled reason -> "withdrawn: " + reason
                         | Fx.Sessions.Resolution.Expired _ -> "expired"
 
-                    yield Row.fit width [ indent 4; s dim ("· " + text) ]
-                | TurnItem.Interrupted by -> yield Row.fit width [ indent 2; s yellow ("⏹ interrupted by " + by) ]
+                    yield Row.fit width [ indent 4; s t.Muted ("· " + text) ]
+                | TurnItem.Interrupted by -> yield Row.fit width [ indent 2; s t.Warning ("⏹ interrupted by " + by) ]
                 | TurnItem.Compacted summary ->
                     yield
                         Row.fit
                             width
                             [
                                 indent 2
-                                s cyan "◇"
+                                s t.Accent "◇"
                                 p " "
-                                s bold (Text.pad 8 "Compact")
+                                s (bold t) (Text.pad 8 "Compact")
                                 p " "
                                 p "the earlier conversation is summarized"
                             ]
 
                     if verbosity = Verbosity.Verbose then
-                        yield! (Text.firstLines 12 summary |> List.collect (lines width 6 dim))
+                        yield! (Text.firstLines 12 summary |> List.collect (lines width 6 t.Muted))
 
             if not cells.IsEmpty && verbosity <> Verbosity.Verbose then
                 let count = cells |> List.sumBy (fun code -> (Text.clean code).Split('\n').Length)
@@ -348,12 +356,12 @@ module View =
                 yield
                     Row.spread
                         width
-                        [ indent 2; s dim $"▸ {cells.Length} {noun} ({count} lines)" ]
-                        [ s dim "[Ctrl+O expand]" ]
+                        [ indent 2; s t.Muted $"▸ {cells.Length} {noun} ({count} lines)" ]
+                        [ s t.Muted "[Ctrl+O expand]" ]
 
             match model.Streaming with
             | Some writing when live && writing.Turn = turn.Turn && writing.Text.Trim() <> "" ->
-                let rows = lines width 2 (Style.withDim Style.plain) (writing.Text.Trim())
+                let rows = lines width 2 t.Muted (writing.Text.Trim())
 
                 let rows =
                     if rows.Length > 8 then
@@ -367,13 +375,14 @@ module View =
             match turn.Ended with
             | Some(ended, at) ->
                 yield Row.empty
-                yield! ending width turn ended at
+                yield! ending t width turn ended at
             | None -> ()
 
             yield Row.empty
         ]
 
     let transcript (model: Model) : Row list =
+        let t = theme model
         let width = model.Width
 
         let notes =
@@ -382,13 +391,13 @@ module View =
                     yield!
                         paragraph
                             width
-                            [ s yellow "! " ]
-                            dim
+                            [ s t.Warning "! " ]
+                            t.Muted
                             $"This project is not trusted: its config is not read. Run `{model.Setup.Binary} trust` here and start again to use it."
                 for warning in model.Setup.Warnings do
-                    yield! paragraph width [ s yellow "! " ] dim warning
+                    yield! paragraph width [ s t.Warning "! " ] t.Muted warning
                 match model.Phase with
-                | Phase.Stopped reason -> yield! paragraph width [ s red "✗ " ] Style.plain reason
+                | Phase.Stopped reason -> yield! paragraph width [ s t.Error "✗ " ] Style.plain reason
                 | _ -> ()
             ]
 
@@ -398,10 +407,10 @@ module View =
                 match block with
                 | Block.Earlier seq ->
                     [
-                        Row.fit width [ s dim $"⋯ earlier events (to #{seq}) are not shown" ]
+                        Row.fit width [ s t.Muted $"⋯ earlier events (to #{seq}) are not shown" ]
                         Row.empty
                     ]
-                | Block.Note text -> paragraph width [ s dim "· " ] dim text
+                | Block.Note text -> paragraph width [ s t.Muted "· " ] t.Muted text
                 | Block.Turn turn -> turnRows model turn)
 
         let notes = if notes.IsEmpty then [] else notes @ [ Row.empty ]
@@ -413,10 +422,11 @@ module View =
     let private maxEvidence = 6
 
     let private cardRows (model: Model) (card: Card) (total: int) : Row list =
+        let t = theme model
         let width = model.Width
         let bar (color: Style) = s color "┃ "
 
-        let of' = if total > 1 then s dim $"  (1 of {total})" else p ""
+        let of' = if total > 1 then s t.Muted $"  (1 of {total})" else p ""
 
         // The options, as many on a row as fit.
         let options (color: Style) : Row list =
@@ -426,10 +436,10 @@ module View =
             let chunks =
                 (choices
                  |> List.mapi (fun i (key, label, _) ->
-                     let style = if i = selected then Style.reverse else Style.plain
+                     let style = if i = selected then t.Selected else t.Text
                      s style $"[{key}] {label}"))
                 @ (if model.Answering.Contains card.Id then
-                       [ s dim "sending…" ]
+                       [ s t.Muted "sending…" ]
                    else
                        [])
 
@@ -455,84 +465,92 @@ module View =
 
         match card with
         | Card.Grant request ->
-            let c = magenta
+            let c = t.Permission
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Permission"; of' ]
-                yield! text c bold request.Summary
+                yield! text c (bold t) request.Summary
                 Row.fit
                     width
                     [
                         bar c
-                        s dim (request.Action.Value + "  ")
+                        s t.Muted (request.Action.Value + "  ")
                         p (Text.firstLine request.Resource)
                     ]
                 // As much evidence as `fx run` shows at the terminal (`GrantPrompts`).
                 for evidence in List.truncate maxEvidence request.Evidence do
-                    Row.fit width [ bar c; s dim (evidence.Label + ": "); p (Text.firstLine evidence.Text) ]
+                    Row.fit width [ bar c; s t.Muted (evidence.Label + ": "); p (Text.firstLine evidence.Text) ]
                 if request.Evidence.Length > maxEvidence then
-                    Row.fit width [ bar c; s dim $"(and {request.Evidence.Length - maxEvidence} more)" ]
+                    Row.fit width [ bar c; s t.Muted $"(and {request.Evidence.Length - maxEvidence} more)" ]
                 yield! options c
             ]
         | Card.Decision(_, question, action, output, choices) ->
-            let c = yellow
+            let c = t.Warning
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Decision"; of' ]
-                yield! text c bold question
+                yield! text c (bold t) question
                 for line in Text.firstLines 6 action do
-                    Row.fit width [ bar c; s dim ("  " + line) ]
+                    Row.fit width [ bar c; s t.Muted ("  " + line) ]
                 if output.Trim() <> "" then
-                    Row.fit width [ bar c; s dim "It printed:" ]
+                    Row.fit width [ bar c; s t.Muted "It printed:" ]
                     let printed = (Text.clean output).TrimEnd().Split('\n')
 
                     for line in printed |> Array.skip (max 0 (printed.Length - 4)) do
-                        Row.fit width [ bar c; s dim ("  " + line) ]
+                        Row.fit width [ bar c; s t.Muted ("  " + line) ]
                 yield! options c
                 let selected = min model.Selected (max 0 (choices.Length - 1))
 
                 match List.tryItem selected choices with
-                | Some(_, _, detail) when detail <> "" -> yield! text c dim detail
+                | Some(_, _, detail) when detail <> "" -> yield! text c t.Muted detail
                 | _ -> ()
             ]
         | Card.Confirm(_, message) ->
-            let c = yellow
+            let c = t.Warning
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Confirm"; of' ]
-                yield! text c bold message
+                yield! text c (bold t) message
                 yield! options c
             ]
         | Card.Choice(_, question, _) ->
-            let c = yellow
+            let c = t.Warning
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Choose"; of' ]
-                yield! text c bold question
+                yield! text c (bold t) question
                 yield! options c
             ]
         | Card.Question(request, question) ->
-            let c = cyan
+            let c = t.Accent
 
             [
                 Row.fit width [ bar c; s (Style.withBold c) "Question"; of' ]
                 // The transcript shows the question where the agent asked it: not again here.
                 if not (Timeline.shows request.Request.Id model.Timeline) then
-                    yield! text c bold question
-                Row.fit width [ bar c; s dim "Type the answer below; Enter sends it." ]
+                    yield! text c (bold t) question
+                Row.fit width [ bar c; s t.Muted "Type the answer below; Enter sends it." ]
             ]
 
     let asked (model: Model) : Row list =
+        let t = theme model
+
         match App.cards model with
         | card :: _ as all -> cardRows model card all.Length
         | [] ->
             App.others model
             |> List.map (fun request ->
-                Row.fit model.Width [ s dim "┃ "; s dim ("waiting for another client: " + request.Request.Title) ])
+                Row.fit
+                    model.Width
+                    [
+                        s t.Muted "┃ "
+                        s t.Muted ("waiting for another client: " + request.Request.Title)
+                    ])
 
     /// Prompts sent but not delivered yet: steered ones wait for the next step, queued ones for the
     /// turn after.
     let pending (model: Model) : Row list =
+        let t = theme model
         let st = model.Timeline.State
 
         let text (input: Input) =
@@ -543,30 +561,31 @@ module View =
         [
             for i in st.Inbox do
                 match text i with
-                | Some t when st.Running.IsSome ->
-                    Row.fit model.Width [ indent 2; s cyan "↳ "; s dim ("steering (next step): " + t) ]
+                | Some text when st.Running.IsSome ->
+                    Row.fit model.Width [ indent 2; s t.Accent "↳ "; s t.Muted ("steering (next step): " + text) ]
                 | _ -> ()
             for i in st.Queue do
                 match text i with
-                | Some t -> Row.fit model.Width [ indent 2; s dim "⋯ "; s dim ("queued: " + t) ]
+                | Some queued -> Row.fit model.Width [ indent 2; s t.Muted "⋯ "; s t.Muted ("queued: " + queued) ]
                 | None -> ()
         ]
 
     let status (model: Model) : Row =
+        let t = theme model
         let width = model.Width
         let tl = model.Timeline
 
         let left =
             match model.Notice with
-            | Some n -> [ s (if n.IsError then red else yellow) n.Text ]
+            | Some n -> [ s (if n.IsError then t.Error else t.Warning) n.Text ]
             | None ->
                 match model.Phase with
-                | Phase.Starting what -> [ s cyan (spinner model.Now + " "); s dim ("starting: " + what) ]
-                | Phase.Stopped _ -> [ s red "stopped · Ctrl+C twice exits" ]
+                | Phase.Starting what -> [ s t.Accent (spinner model.Now + " "); s t.Muted ("starting: " + what) ]
+                | Phase.Stopped _ -> [ s t.Error "stopped · Ctrl+C twice exits" ]
                 | Phase.Ready ->
                     match tl.State.Running with
                     | Some turn when not (App.cards model).IsEmpty ->
-                        [ s yellow "● "; s dim $"turn {turn.Turn} · waiting for an answer" ]
+                        [ s t.Warning "● "; s t.Muted $"turn {turn.Turn} · waiting for an answer" ]
                     | Some turn ->
                         let what =
                             match Timeline.running tl with
@@ -583,8 +602,8 @@ module View =
 
                                 doing + duration (model.Now - since)
 
-                        [ s cyan (spinner model.Now + " "); s dim $"turn {turn.Turn} · {what}" ]
-                    | None when tl.State.Held -> [ s yellow "held: the last turn did not finish; a prompt goes on" ]
+                        [ s t.Accent (spinner model.Now + " "); s t.Muted $"turn {turn.Turn} · {what}" ]
+                    | None when tl.State.Held -> [ s t.Warning "held: the last turn did not finish; a prompt goes on" ]
                     | None -> []
 
         let hints =
@@ -599,11 +618,11 @@ module View =
 
         let scrolled =
             if model.Scroll > 0 then
-                [ s yellow "↑ scrolled · PgDn  " ]
+                [ s t.Warning "↑ scrolled · PgDn  " ]
             else
                 []
 
-        let right = scrolled @ [ s dim hints ]
+        let right = scrolled @ [ s t.Muted hints ]
 
         // What happens comes first; the hints take what room is left.
         if left.IsEmpty then
@@ -615,6 +634,7 @@ module View =
 
     /// The prompt's rows (at most `rows`, scrolled to the cursor) and the cursor's place in them.
     let editor (model: Model) (rows: int) : Row list * (int * int) =
+        let t = theme model
         let width = model.Width
         let prefix = 2
         let lines, (row, column) = Editor.layout (max 1 (width - prefix)) model.Editor
@@ -625,13 +645,40 @@ module View =
 
         let lead (i: int) =
             if first + i = 0 then
-                s (Style.withBold cyan) "› "
+                s (Style.withBold t.Accent) "› "
             else
                 p "  "
 
         let rendered = shown |> List.mapi (fun i line -> Row.fit width [ lead i; p line ])
 
         rendered, (row - first, min (width - 1) (column + prefix))
+
+    /// A row on the theme's background: text in the terminal's default colours takes the theme's,
+    /// and a theme that paints its background fills the row to the screen's width.
+    let paint (t: Theme) (width: int) (row: Row) : Row =
+        let row =
+            row
+            |> List.map (fun span ->
+                let style = span.Style
+
+                let style =
+                    if style.Fg = Color.Default && not style.Reverse then
+                        { style with Fg = t.Text.Fg }
+                    else
+                        style
+
+                let style =
+                    if style.Bg = Color.Default && not style.Reverse then
+                        { style with Bg = t.Background }
+                    else
+                        style
+
+                { span with Style = style })
+
+        if t.Background = Color.Default then
+            row
+        else
+            Row.fill width { t.Text with Bg = t.Background } row |> Row.normalize
 
     /// The whole screen.
     let view (model: Model) : Frame =
@@ -675,7 +722,9 @@ module View =
             |> List.truncate height
             |> List.map (Row.fit width >> Row.normalize)
 
-        let rows = rows @ List.replicate (height - rows.Length) Row.empty
+        let rows =
+            rows @ List.replicate (height - rows.Length) Row.empty
+            |> List.map (paint (theme model) width)
 
         let editorTop = height - editor.Length
 
@@ -696,3 +745,4 @@ module View =
             Rows = rows
             Cursor = cursor
         }
+        |> Frame.lower model.Setup.Terminal.Depth

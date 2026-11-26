@@ -31,30 +31,37 @@ module Vt =
     let leave: string =
         esc + "0m" + esc + "?2004l" + esc + "?7h" + esc + "?25h" + esc + "?1049l"
 
-    let private colorCode (background: bool) (color: Color) : int option =
-        let basic =
-            match color with
-            | Color.Default -> None
-            | Color.Black -> Some 30
-            | Color.Red -> Some 31
-            | Color.Green -> Some 32
-            | Color.Yellow -> Some 33
-            | Color.Blue -> Some 34
-            | Color.Magenta -> Some 35
-            | Color.Cyan -> Some 36
-            | Color.White -> Some 37
-            | Color.Gray -> Some 90
-            | Color.BrightRed -> Some 91
-            | Color.BrightGreen -> Some 92
-            | Color.BrightYellow -> Some 93
-            | Color.BrightBlue -> Some 94
-            | Color.BrightMagenta -> Some 95
-            | Color.BrightCyan -> Some 96
-            | Color.BrightWhite -> Some 97
+    let private colorCodes (background: bool) (color: Color) : int list =
+        let basic (code: int) =
+            [ (if background then code + 10 else code) ]
 
-        basic |> Option.map (fun code -> if background then code + 10 else code)
+        let extended = if background then 48 else 38
 
-    /// The SGR sequence that sets a style from scratch.
+        match color with
+        | Color.Default -> []
+        | Color.Black -> basic 30
+        | Color.Red -> basic 31
+        | Color.Green -> basic 32
+        | Color.Yellow -> basic 33
+        | Color.Blue -> basic 34
+        | Color.Magenta -> basic 35
+        | Color.Cyan -> basic 36
+        | Color.White -> basic 37
+        | Color.Gray -> basic 90
+        | Color.BrightRed -> basic 91
+        | Color.BrightGreen -> basic 92
+        | Color.BrightYellow -> basic 93
+        | Color.BrightBlue -> basic 94
+        | Color.BrightMagenta -> basic 95
+        | Color.BrightCyan -> basic 96
+        | Color.BrightWhite -> basic 97
+        | Color.Indexed index -> [ extended; 5; max 0 (min 255 index) ]
+        | Color.Rgb(r, g, b) ->
+            let clamp (v: int) = max 0 (min 255 v)
+            [ extended; 2; clamp r; clamp g; clamp b ]
+
+    /// The SGR sequence that sets a style from scratch (lower it to the terminal's depth first:
+    /// `Style.lower`).
     let sgr (style: Style) : string =
         let codes =
             [
@@ -69,12 +76,8 @@ module Vt =
                     4
                 if style.Reverse then
                     7
-                match colorCode false style.Fg with
-                | Some code -> code
-                | None -> ()
-                match colorCode true style.Bg with
-                | Some code -> code
-                | None -> ()
+                yield! colorCodes false style.Fg
+                yield! colorCodes true style.Bg
             ]
 
         esc + (codes |> List.map string |> String.concat ";") + "m"

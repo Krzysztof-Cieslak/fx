@@ -1,0 +1,16 @@
+ 0 {fg=indexed-245 bg=indexed-235 bold} fx{fg=indexed-245 bg=indexed-235} · …/src/billing · env: default (local) · sandbo… ● idle 
+ 1 {fg=indexed-234 bg=indexed-179 bold} ! runs unsandboxed: commands can read and change everythin…
+ 2 {fg=indexed-254 bg=indexed-234}  {fg=indexed-117 bg=indexed-234}◇{fg=indexed-254 bg=indexed-234} {fg=indexed-254 bg=indexed-234 bold}Read    {fg=indexed-254 bg=indexed-234} src/Billing/Client.fs                    {fg=indexed-149 bg=indexed-234}✓ {fg=indexed-245 bg=indexed-234}0.2s
+ 3 {fg=indexed-254 bg=indexed-234}  {fg=indexed-179 bg=indexed-234}◆{fg=indexed-254 bg=indexed-234} {fg=indexed-254 bg=indexed-234 bold}Edit    {fg=indexed-254 bg=indexed-234} src/Billing/Client.fs                    {fg=indexed-149 bg=indexed-234}✓ {fg=indexed-245 bg=indexed-234}0.3s
+ 4 {fg=indexed-254 bg=indexed-234}  {fg=indexed-117 bg=indexed-234}◇{fg=indexed-254 bg=indexed-234} {fg=indexed-254 bg=indexed-234 bold}Run     {fg=indexed-254 bg=indexed-234} dotnet test tests/Billing                 {fg=indexed-210 bg=indexed-234}✗ {fg=indexed-245 bg=indexed-234}48s
+ 5 {fg=indexed-254 bg=indexed-234}      {fg=indexed-210 bg=indexed-234}exit 1{fg=indexed-254 bg=indexed-234}                                                
+ 6 {fg=indexed-254 bg=indexed-234}  {fg=indexed-117 bg=indexed-234}◇{fg=indexed-254 bg=indexed-234} {fg=indexed-254 bg=indexed-234 bold}Cell    {fg=indexed-254 bg=indexed-234} rerun the tests                           {fg=indexed-149 bg=indexed-234}✓ {fg=indexed-245 bg=indexed-234}46s
+ 7 {fg=indexed-254 bg=indexed-234}  {fg=indexed-245 bg=indexed-234}▸ 1 cell (3 lines){fg=indexed-254 bg=indexed-234}                         {fg=indexed-245 bg=indexed-234}[Ctrl+O expand]
+ 8 {fg=indexed-254 bg=indexed-234}                                                            
+ 9 {fg=indexed-254 bg=indexed-234}  {fg=indexed-149 bg=indexed-234 bold}✓ Done  {fg=indexed-254 bg=indexed-234}Migrated 37 call sites to RetryPolicy.            
+10 {fg=indexed-254 bg=indexed-234}    {fg=indexed-254 bg=indexed-234 bold}Evidence  {fg=indexed-254 bg=indexed-234}dotnet test tests/Billing → 214 passed        
+11 {fg=indexed-254 bg=indexed-234}    {fg=indexed-254 bg=indexed-234 bold}Verify    {fg=indexed-254 bg=indexed-234}dotnet test tests/Billing                     
+12 {fg=indexed-254 bg=indexed-234}    {fg=indexed-245 bg=indexed-234}1m39s{fg=indexed-254 bg=indexed-234}                                                   
+13 {fg=indexed-254 bg=indexed-234}                                                            
+14 {fg=indexed-245 bg=indexed-234}Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 e…
+15 {fg=indexed-117 bg=indexed-234 bold}› {fg=indexed-254 bg=indexed-234}                                                          

@@ -86,6 +86,8 @@ let private tui (host: Host) (choice: SessionChoice) : Running =
             Trusted = host.Config.ProjectTrusted
             Warnings = host.Warnings
             Keys = "tui/" + Guid.NewGuid().ToString("N")
+            Terminal = Terminal.basic
+            Theme = ThemeChoice.Auto
         }
 
     let model = App.init setup 100 30 (SystemClock.clock.Now()).UnixMicroseconds

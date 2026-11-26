@@ -11,6 +11,7 @@
     <Compile Include="Text.fs" />
     <Compile Include="Ui.fs" />
     <Compile Include="Vt.fs" />
+    <Compile Include="Theme.fs" />
     <Compile Include="VtScreen.fs" />
     <Compile Include="Keys.fs" />
     <Compile Include="Editor.fs" />
@@ -32,5 +33,6 @@
     <ProjectReference Include="..\Fx.Prompt\Fx.Prompt.fsproj" />
     <ProjectReference Include="..\Fx.Sessions\Fx.Sessions.fsproj" />
     <ProjectReference Include="..\Fx.Grants\Fx.Grants.fsproj" />
+    <ProjectReference Include="..\Fx.Variants\Fx.Variants.fsproj" />
   </ItemGroup>
 </Project>
