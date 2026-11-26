@@ -54,6 +54,7 @@ let private reply (turn: int) (step: int) (calls: ToolCall list) =
             Step = step
             Shown = []
             Parts = calls |> List.map Part.ToolCall
+            Used = None
         }
 
 let private receipt (turn: int) (step: int) (call: string) =

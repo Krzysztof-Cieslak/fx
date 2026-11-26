@@ -990,6 +990,18 @@ type CodeAct<'R, 'K
                                                 Step = step
                                                 Shown = rendered.Prompt.Suffix
                                                 Parts = response.Parts
+                                                Used =
+                                                    Some
+                                                        {
+                                                            Model = request.Model
+                                                            Tokens = response.Usage
+                                                            Context = window
+                                                            Cost =
+                                                                config.Catalog request.Model
+                                                                |> Option.bind _.Cost
+                                                                |> Option.map (fun prices ->
+                                                                    Usage.cost prices response.Usage)
+                                                        }
                                             })
 
                                 let calls = callsOf response.Parts

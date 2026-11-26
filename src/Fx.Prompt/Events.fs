@@ -4,6 +4,20 @@ open Fx.Contracts
 open Fx.Machines
 open Fx.Models
 
+/// What one model call used, as the strategy measured it when it recorded the reply: for people
+/// (clients show the context used and the cost); the render never reads it.
+type ReplyUsage =
+    {
+        Model: ModelRef
+        Tokens: Usage
+        /// The model's context window when it replied (its catalog entry).
+        Context: int option
+        /// What the call cost in US dollars, at the catalog's prices then.
+        Cost: decimal option
+    }
+
+    override this.ToString() = $"{this.Model}: {this.Tokens}"
+
 /// A model's reply to one call, with the suffix it saw (spec §5). What the model saw before it replied
 /// stays before its reply in every later prompt: providers check that the history before a reasoning
 /// block is unchanged, and a request that is the previous one plus what happened since reads it from
@@ -16,6 +30,8 @@ type ModelReply =
         Shown: Block list
         /// The assistant's parts as the provider returned them, provider state included.
         Parts: Part list
+        /// What the call used (absent in replies recorded before it was kept).
+        Used: ReplyUsage option
     }
 
     override this.ToString() =
@@ -169,6 +185,25 @@ module ContextCodecs =
 
     let private count: Codec<int> = Codec.int |> Codec.atLeast 0
 
+    let usage: Codec<ReplyUsage> =
+        Codec.record {
+            let! model = Codec.field "model" (fun (u: ReplyUsage) -> u.Model) ModelRef.codec
+            and! tokens = Codec.field "tokens" (fun u -> u.Tokens) Usage.codec
+            and! context = Codec.optionalField "context" (fun u -> u.Context) count
+            and! cost = Codec.optionalField "cost" (fun u -> u.Cost) Codec.decimal
+
+            return
+                {
+                    Model = model
+                    Tokens = tokens
+                    Context = context
+                    Cost = cost
+                }
+        }
+        |> Codec.describe
+            "What a model call used: the model, its tokens, its context window and its cost in US dollars."
+        |> Codec.named "ReplyUsage"
+
     let reply: Codec<ModelReply> =
         Codec.record {
             let! turn = Codec.field "turn" (fun (r: ModelReply) -> r.Turn) count
@@ -178,6 +213,7 @@ module ContextCodecs =
                 Codec.defaultField "shown" (fun r -> r.Shown) [] (Codec.list Block.codec)
 
             and! parts = Codec.field "parts" (fun r -> r.Parts) (Codec.list Part.codec)
+            and! used = Codec.optionalField "used" (fun r -> r.Used) usage
 
             return
                 {
@@ -185,6 +221,7 @@ module ContextCodecs =
                     Step = step
                     Shown = shown
                     Parts = parts
+                    Used = used
                 }
         }
         |> Codec.named "ModelReply"

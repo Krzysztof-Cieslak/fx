@@ -121,6 +121,7 @@ type Session(id: string) =
                     Step = step
                     Shown = []
                     Parts = parts
+                    Used = None
                 }
         )
 

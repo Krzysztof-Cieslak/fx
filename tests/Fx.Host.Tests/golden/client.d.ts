@@ -75,6 +75,7 @@ export type ContextEvent =
       /** @default [] */
       shown?: Block[];
       parts: Part[];
+      used?: ReplyUsage;
     }
   | {
       kind: "returned";
@@ -504,6 +505,15 @@ export interface Reference {
 /** toOpener: the opener waits for it in the log; asInput: it becomes an input for the agent. */
 export type Reply = "toOpener" | "asInput";
 
+/** What a model call used: the model, its tokens, its context window and its cost in US dollars. */
+export interface ReplyUsage {
+  model: ModelRef;
+  tokens: Usage;
+  /** Integer, at least 0. */
+  context?: number;
+  cost?: number;
+}
+
 /** Who opened a request: a turn, the session, or a follower of the log (a run step). */
 export type RequestOrigin =
   | {
@@ -875,3 +885,37 @@ export type TurnResult =
       jobs: string[];
       note: string;
     };
+
+/** Tokens used: input (cached included), output (reasoning included), and their parts. */
+export interface Usage {
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  input?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  output?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  cacheRead?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  cacheWrite?: number;
+  /**
+   * Integer.
+   *
+   * @default 0
+   */
+  reasoning?: number;
+}

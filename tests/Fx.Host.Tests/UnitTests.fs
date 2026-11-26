@@ -263,6 +263,7 @@ let tests =
                                             call "edit" [ "path", Json.String "a.txt" ]
                                             call "bash" [ "command", Json.String "make test\nmore" ]
                                         ]
+                                    Used = None
                                 }
 
                         Expect.equal

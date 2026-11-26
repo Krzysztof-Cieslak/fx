@@ -138,6 +138,7 @@ let private call (cfg: RenderConfig) (live: Live) (parts: Part list) (log: Log) 
                 Step = 0
                 Shown = rendered.Prompt.Suffix
                 Parts = parts
+                Used = None
             })
 
 let private returns (cfg: RenderConfig) (id: string) (pieces: Piece list) (log: Log) =
