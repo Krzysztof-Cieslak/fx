@@ -433,4 +433,187 @@ let private live =
         && (p.Os = Fx.Aot.Scenarios.Os.Linux || p.Os = Fx.Aot.Scenarios.Os.MacOS)
         && not p.Musl)
 
-let scenarios: Scenario list = [ policies; choosing; bubblewrap; seatbelt; live ]
+/// A build tool started as the host starts an agent's processes (T136): an environment's policy and
+/// variables (`EnvSandbox.policy`, `EnvSandbox.defaults`) with the user's real home, so NuGet's user
+/// config is denied as it is for agents, this OS's driver's probe and wrap, and `dotnet build` of a
+/// small project in it, then the program it built.
+let private buildTools =
+    Scenario.lines "sandbox-build-tools" (fun () ->
+        let driver, manifest =
+            if OperatingSystem.IsMacOS() then
+                Seatbelt.driver, Seatbelt.manifest
+            else
+                Bubblewrap.driver, Bubblewrap.manifest
+
+        let root =
+            Path.Combine(Path.GetTempPath(), "sandbox-build-" + Guid.NewGuid().ToString("N").Substring(0, 8))
+
+        let home = Environment.GetFolderPath Environment.SpecialFolder.UserProfile
+
+        let target =
+            TargetTriple.ofRid Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier
+            |> Option.get
+
+        let machine: EnvMachine =
+            {
+                Target = target
+                DataDir = Path.Combine(root, "data")
+                SameHost = true
+            }
+
+        let layout =
+            EnvLayout.create
+                machine
+                {
+                    Id = "e1"
+                    Provider = "local"
+                    Workspace = Path.Combine(root, "ws")
+                    Home = Path.Combine(root, "data", "environments", "e1")
+                    Data = Map.empty
+                }
+
+        for dir in [ layout.Workspace; layout.Temp; layout.Cache; layout.Owned; layout.Sandbox ] do
+            Directory.CreateDirectory dir |> ignore
+
+        File.WriteAllText(
+            Path.Combine(layout.Workspace, "tiny.csproj"),
+            String.Join(
+                "\n",
+                [
+                    "<Project Sdk=\"Microsoft.NET.Sdk\">"
+                    "  <PropertyGroup>"
+                    "    <OutputType>Exe</OutputType>"
+                    "    <TargetFramework>net$(BundledNETCoreAppTargetFrameworkVersion)</TargetFramework>"
+                    "    <OutputPath>out/</OutputPath>"
+                    "    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>"
+                    "    <NuGetAudit>false</NuGetAudit>"
+                    "  </PropertyGroup>"
+                    "</Project>"
+                ]
+            )
+        )
+
+        File.WriteAllText(
+            Path.Combine(layout.Workspace, "Program.cs"),
+            "System.Console.WriteLine(\"built in the sandbox\");"
+        )
+
+        try
+            let shell = LocalShell.create ShellSpec.posix layout.Workspace
+
+            let env: SandboxEnv =
+                {
+                    Extension = BasicExtensionEnv.forManifest SystemClock.clock manifest
+                    FsRead = LocalFs.read
+                    Fs = LocalFs.write
+                    Shell = shell
+                }
+
+            let policy =
+                EnvSandbox.policy layout machine (Some home) [] [] NetworkAccess.Allowed
+
+            let site = EnvSandbox.site layout machine ShellSpec.posix (Some home) policy
+
+            match wait (SandboxEnv.within env (driver.Probe site) env.Extension) with
+            | Error unavailable -> failwith $"{driver.Id} is not available: {unavailable}"
+            | Ok ready ->
+                let variables =
+                    [
+                        for entry in Environment.GetEnvironmentVariables() |> Seq.cast<Collections.DictionaryEntry> do
+                            match entry.Key, entry.Value with
+                            | (:? string as name), (:? string as value) -> name, value
+                            | _ -> ()
+                    ]
+
+                let userPackages =
+                    EnvSandbox.nugetPackages (Some home) variables |> Option.filter Directory.Exists
+
+                // What envd's stat says: links as links, not followed.
+                let kind (path: string) =
+                    match FileInfo(path).LinkTarget with
+                    | null when Directory.Exists path -> PathKind.Directory
+                    | null when File.Exists path -> PathKind.File
+                    | null -> PathKind.Missing
+                    | _ -> PathKind.Symlink
+
+                let paths =
+                    Sandbox.pathsToStat ready policy
+                    |> List.map (fun p -> SandboxPath.trim p, kind p)
+                    |> Map.ofList
+
+                let userConfig = Path.Combine(home, ".nuget", "NuGet", "NuGet.Config")
+
+                let script =
+                    String.Join(
+                        " && ",
+                        [
+                            "dotnet build -nologo -v q > build.log 2>&1 || { cat build.log; exit 1; }"
+                            "dotnet out/tiny.dll"
+                            "dotnet nuget config paths"
+                            $"(cat '{userConfig}' > /dev/null 2>&1 && echo user config read || echo user config hidden)"
+                        ]
+                    )
+
+                let request: SandboxRequest =
+                    {
+                        Ready = ready
+                        Policy = policy
+                        Paths = paths
+                        Shell = ShellSpec.posix
+                        Process =
+                            {
+                                Program = Program.Script script
+                                Cwd = Some layout.Workspace
+                                Env =
+                                    EnvSandbox.defaults layout policy userPackages
+                                    |> List.fold
+                                        (fun env (name, value) -> Sandbox.withDefault name value env)
+                                        (Inherit [])
+                                Terminal = false
+                            }
+                    }
+
+                match driver.Wrap request with
+                | Error e -> failwith e
+                | Ok spec ->
+                    let output =
+                        match
+                            (shell.Run (Command.ofSpec spec) Threading.CancellationToken.None)
+                                .WaitAsync(TimeSpan.FromMinutes 5.0)
+                                .GetAwaiter()
+                                .GetResult()
+                        with
+                        | Error e -> failwith (string e)
+                        | Ok output -> output
+
+                    let lines =
+                        (Output.stdoutText output).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                        |> Array.map _.Trim()
+                        |> List.ofArray
+
+                    [
+                        $"driver {driver.Id}"
+                        $"exit {output.ExitCode}"
+                        if output.ExitCode <> 0 then
+                            "stdout " + escape (Output.stdoutText output)
+                            "stderr " + escape (Output.stderrText output)
+                        for line in lines do
+                            if line.StartsWith(layout.Cache, StringComparison.Ordinal) then
+                                "nuget config in the environment's cache"
+                            elif line = userConfig then
+                                "nuget config of the user"
+                            elif not (line.StartsWith '/') then
+                                line
+                    ]
+        finally
+            try
+                Directory.Delete(root, true)
+            with _ ->
+                ())
+    |> Scenario.where (fun p ->
+        requested
+        && (p.Os = Fx.Aot.Scenarios.Os.Linux || p.Os = Fx.Aot.Scenarios.Os.MacOS)
+        && not p.Musl)
+
+let scenarios: Scenario list =
+    [ policies; choosing; bubblewrap; seatbelt; live; buildTools ]
