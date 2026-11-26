@@ -2,6 +2,7 @@ namespace Fx.CodeAct
 
 open Fx
 open Fx.Prompt
+open Fx.Sdk
 open Fx.Variants
 
 /// What the strategy tells the model (pure, deterministic): the prefix's instructions and tools
@@ -44,8 +45,53 @@ module Instructions =
                     $"`read`, `edit` and `bash` do what `{g}.fs.read`, `{g}.fs.patch` and `{g}.shell.run` do in a cell, with the same checks."
                 ]
 
-    /// The prefix's sections: the instructions, the surface's tools, and the interpreter's prompt.
-    let sections (surface: ActionSurface) (interpreter: string) : Block list =
+    /// What the sandbox the hands' processes run in keeps from the model (spec §9.1, §18), so that a
+    /// command it refuses fails understandably: what stays read-only in the workspace (git's config
+    /// and hooks: a `git config` fails with `Device or resource busy` under bubblewrap), that
+    /// credentials are hidden, where tools keep their caches, and the network. From the policy only,
+    /// with paths relative to the workspace, so environments with the same policy share the text.
+    let sandbox (policy: SandboxPolicy) : string =
+        let workspace = SandboxPath.trim policy.Workspace
+
+        let inWorkspace (paths: string list) =
+            paths
+            |> List.map SandboxPath.trim
+            |> List.filter (fun path -> path <> workspace && SandboxPath.isUnder workspace path)
+            |> List.map (fun path ->
+                let relative = path.Substring(workspace.Length).TrimStart('/', '\\')
+                "`" + relative.Replace('\\', '/') + "`")
+            |> List.distinct
+
+        let listed (items: string list) =
+            match List.rev items with
+            | [] -> ""
+            | [ one ] -> one
+            | last :: rest -> String.concat ", " (List.rev rest) + " and " + last
+
+        let kept = inWorkspace policy.Protected
+        let hidden = inWorkspace policy.Denied
+
+        lines
+            [
+                "Your commands and cells run in a sandbox that the host set up. It is a boundary: do not try to get around it; when it keeps you from a step, say so and leave the step to the user."
+                match policy.WorkspaceAccess with
+                | WorkspaceAccess.ReadOnly -> "- The workspace is read-only: you can read it, not change it."
+                | WorkspaceAccess.ReadWrite when kept.IsEmpty -> "- You can change files in the workspace."
+                | WorkspaceAccess.ReadWrite ->
+                    $"- You can change files in the workspace, except {listed kept}: they stay read-only, because what is there runs later outside the sandbox. Commands that write them fail: `git config`, `git remote add`, setting an upstream or installing hooks fail with errors such as `could not write config file .git/config: Device or resource busy` or `Operation not permitted`."
+                if not hidden.IsEmpty then
+                    $"- {listed hidden} cannot be read."
+                "- Outside the workspace only temporary files (`$TMPDIR`) and the tools' caches can be written; the rest of the machine is read-only."
+                "- Credentials are hidden: SSH and GPG keys, cloud and package registry tokens, logins of tools such as `gh`. What needs them (pushing, signing commits, publishing, logging in) fails."
+                "- Package managers keep their caches in the environment's own directories, so they may download again. NuGet starts from a user config with nuget.org only (other feeds come from the repository's `nuget.config`), and Cargo from a home of its own."
+                match policy.Network with
+                | NetworkAccess.Allowed -> "- The network is available."
+                | NetworkAccess.Denied -> "- There is no network: downloads and other connections fail."
+            ]
+
+    /// The prefix's sections: the instructions, the surface's tools, the interpreter's prompt, and
+    /// the sandbox's description when one confines the hands' processes.
+    let sections (surface: ActionSurface) (interpreter: string) (sandboxPolicy: SandboxPolicy option) : Block list =
         Sections.ordered
             [
                 Sections.instructions text
@@ -55,6 +101,14 @@ module Instructions =
                     Pieces = [ Piece.Text(tools surface) ]
                 }
                 Sections.interpreter interpreter
+                {
+                    Id = "sandbox"
+                    Version = None
+                    Pieces =
+                        match sandboxPolicy with
+                        | Some policy -> [ Piece.Text(sandbox policy) ]
+                        | None -> []
+                }
             ]
 
     /// The surface a conversation's frame recorded, if it has one.
