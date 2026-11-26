@@ -83,8 +83,10 @@ Each step:
 2. **History**: the session's events and its context events, merged (below), folded by
    `Transcript.ofItems`.
 3. **Frame**: the prefix's sections (instructions, the surface's tools, the interpreter's prompt with the
-   bridge's declarations) through `Transcript.reconcile`: recorded once (`Framed`), later changes as
-   `Updated` at the end of the history.
+   bridge's declarations, and, when a driver confines the hands' processes, the sandbox's description:
+   `Instructions.sandbox` of `Hands.Sandbox`, [sandbox.md](sandbox.md#build-tools-t136)) through
+   `Transcript.reconcile`: recorded once (`Framed`), later changes as `Updated` at the end of the
+   history.
 4. **Budgets** (`codeact.budget.steps`, `codeact.budget.tokens`): over budget, the turn asks the user to
    go on (a question, below).
 5. **Compaction** (below): a summary prepared during the last step is recorded first; otherwise the

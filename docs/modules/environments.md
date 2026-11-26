@@ -162,9 +162,11 @@ file `tests/Fx.Environments.Tests/golden/events-v1.jsonl`).
 
 1. `provider.Platform lease` gives the machine; the layout follows (`EnvLayout`: `<home>/envd` for
    envd's state, `<home>/assets` for interpreters' assets, `<home>/owned/<launch>` for runtimes' owned
-   directories, `<home>/tmp` and `<home>/cache` for sandboxed processes' temporary files and tools'
-   caches, `<home>/sandbox` for the sandbox driver's files, `<data dir>/runtimes` for components; paths
-   in the environment's syntax).
+   directories, `<home>/tmp` and `<home>/cache` for sandboxed processes' temporary files (`TMPDIR`,
+   `XDG_RUNTIME_DIR`) and tools' caches and homes (`XDG_CACHE_HOME`, `DOTNET_CLI_HOME`, NuGet's
+   folders, `CARGO_HOME`, …: `EnvSandbox.defaults`, [sandbox.md](sandbox.md) "Build tools"),
+   `<home>/sandbox` for the sandbox driver's files, `<data dir>/runtimes` for components; paths in the
+   environment's syntax).
 2. envd starts for the transport:
    - `InProcess`: `EnvsSettings.Embed` (the composition root's `EnvdMain.embed`) in the host's process;
    - `Piped`: the host's own binary (`EnvsSettings.Binary`, `BinaryArgs` before `envd` on the JIT)

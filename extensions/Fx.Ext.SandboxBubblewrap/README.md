@@ -81,9 +81,15 @@ that requires bubblewrap fails the environment.
 
 ## Limits
 
-- The user's home is read-only: tools that write caches there (`~/.cache`, `~/.nuget/packages`,
-  `~/.bun`) fail unless the host adds them with the privileged variant `sandbox.writable`, and each
-  writable cache is a way for what an agent wrote to run outside the sandbox later.
+- The user's home is read-only: the host points common tools at their environment's caches and homes
+  (`XDG_CACHE_HOME`, `DOTNET_CLI_HOME`, NuGet's folders, `CARGO_HOME`, …; see "Build tools" in
+  docs/modules/sandbox.md); others that write there fail unless the host adds the path with the
+  privileged variant `sandbox.writable`, and each writable path is a way for what an agent wrote to
+  run outside the sandbox later.
+- A denied file is `/dev/null` mounted over it, on a `nodev` mount: reading it fails with `EACCES`, not
+  as a missing file, and tools that read it fail (NuGet did; Yarn Berry does with `~/.yarnrc.yml`).
+- Protected paths are mounted over themselves, so git's rename of its lock file onto `.git/config`
+  fails with `EBUSY` ("Device or resource busy"); a protected path that does not exist is not mounted.
 - A denied path created after a process started is visible to that process; one created after the
   environment was opened is hidden from the next process only if it is not a symbolic link.
 - The filter is a deny list: new kernel calls are allowed until they are added here.

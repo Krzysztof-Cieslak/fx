@@ -145,7 +145,8 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   each kernel launch with what it starts from (replay.md); `session.record` is in `HostSlots.core`
   (`RecordingSlots.all`). Every process of a session (commands, the kernel) runs
   in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on Linux, Seatbelt on macOS,
-  none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`).
+  none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`). When one
+  confines them, the prompt describes it (`Hands.Sandbox`, `Instructions.sandbox`).
 - Hands are per turn, the **kernel is per session**: it lives in the hands' environment with the
   host's scope, across turns, until it dies, is killed or the host stops (codeact.md, T135). How each
   kernel ended is journaled (`kernelEnded`); the cell in the new kernel says why, and `fx run` shows it
@@ -356,6 +357,12 @@ do; nothing is ever approved for them:
    override, and policy may pin or forbid it. `deny` refuses what no grant allows without asking
    anyone (the unattended choice); `off` checks nothing and is only for sandboxed or throwaway
    environments. The sandbox applies either way.
+4. **Builds in the sandbox**: commands run with the tools' homes and caches of their environment
+   ([sandbox.md](sandbox.md#build-tools-t136)): `dotnet restore` and `build` work with a NuGet user
+   config of the environment's own (nuget.org only; other feeds come from the repository's
+   `nuget.config`) and the user's packages folder read in place, Cargo with a home of its own. Feeds
+   that need credentials, pushing, signing and changing `.git/config` do not work in the sandbox: do
+   them outside the run, or have the host list a path in the privileged `sandbox.writable`.
 
 ## Native AOT
 
