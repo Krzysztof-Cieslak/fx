@@ -170,6 +170,20 @@ let private text (words: string) : ChatEvent list =
 let private cell (n: int) (code: string) =
     call n "cell" [ "code", Json.String code ]
 
+/// A reply from a request the provider counted `input` tokens of.
+let private sized (input: int) (events: ChatEvent list) : ChatEvent list =
+    events
+    |> List.map (fun event ->
+        match event with
+        | ChatEvent.UsageUpdated usage -> ChatEvent.UsageUpdated { usage with Input = input }
+        | other -> other)
+
+/// Whether a request asked for a summary (compaction) rather than the turn's next step.
+let private isSummary (request: ChatRequest) : bool =
+    match request.Messages |> List.tryLast |> Option.bind (fun m -> List.tryLast m.Parts) with
+    | Some(Part.Text text) -> text.Text.StartsWith("[Compaction:", StringComparison.Ordinal)
+    | _ -> false
+
 let private hash (request: ChatRequest) =
     let json = Json.serializeCanonical (ChatRequest.codec.Encode request)
     Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes json)).Substring(0, 16)
@@ -177,8 +191,10 @@ let private hash (request: ChatRequest) =
 let private within (task: Task<'T>) =
     task.WaitAsync(TimeSpan.FromSeconds 60.0)
 
-/// Runs one session's turn with these replies and selections; gives the output lines.
-let private session
+/// Runs one session's turn with these replies, selections and the models' catalog; gives the output
+/// lines.
+let private sessionIn
+    (catalog: ModelRef -> ModelInfo option)
     (name: string)
     (selections: (string * Json) list)
     (replies: ChatEvent list list)
@@ -258,7 +274,7 @@ let private session
                                         Snapshots = None
                                     }
                             )
-                    Catalog = fun _ -> None
+                    Catalog = catalog
                 }
 
         let settings =
@@ -302,8 +318,30 @@ let private session
         let ended = ending |> Option.map string |> Option.defaultValue "did not end"
 
         lines.Add $"{name}: turn 1 {ended}"
-        let requests = script.Requests
-        lines.Add $"requests: {requests.Length}"
+        let all = script.Requests
+        lines.Add $"requests: {all.Length}"
+
+        // Summary requests (compaction): the request before each, and the instruction.
+        for before, summary in List.pairwise all do
+            if isSummary summary then
+                let last = List.last summary.Messages
+
+                let without =
+                    { summary with
+                        MaxOutputTokens = before.MaxOutputTokens
+                        Messages =
+                            (summary.Messages |> List.truncate (summary.Messages.Length - 1))
+                            @ [
+                                { last with
+                                    Parts = last.Parts |> List.truncate (last.Parts.Length - 1)
+                                }
+                            ]
+                    }
+
+                lines.Add
+                    $"summary request: {hash summary} is the call before it and the instruction: {hash without = hash before}"
+
+        let requests = all |> List.filter (not << isSummary)
 
         lines.Add(
             "tools: "
@@ -368,6 +406,9 @@ let private session
         do! Eff.run env (SessionHost.stop host) |> within
         return List.ofSeq lines
     }
+
+/// Runs one session's turn with these replies and selections, without a catalog.
+let private session = sessionIn (fun _ -> None)
 
 let private hybrid () : Task<string list> =
     session
@@ -679,9 +720,27 @@ let private recovery () : Task<string list> =
         return List.ofSeq lines
     }
 
+/// Compaction (T206): a reply whose prompt reached the threshold of a 20000-token window is summarized
+/// beside its cell (`Eff.both`) and recorded before the next call; a cell asks to compact
+/// (`history.compact`); the summary requests are the calls before them plus the instruction.
+let private compaction () : Task<string list> =
+    sessionIn
+        (fun reference -> Some(ModelInfo.create reference { Context = 20000; Output = 4096 }))
+        "compaction"
+        []
+        [
+            cell 1 "// intent: one\nprint one"
+            sized 17000 (cell 2 "// intent: two\ncall w = fs.write [\"count.txt\", \"2\"]\nprint two")
+            text "Summary: counted to two in count.txt."
+            cell 3 "// intent: compact\ncall r = history.compact [\"the count\"]\nr"
+            text "Summary: counted to two."
+            cell 4 "// intent: finish\nfinish {\"kind\":\"done\",\"summary\":\"Counted\"}"
+        ]
+
 let scenarios: Scenario list =
     [
         Scenario.task "codeact-hybrid" hybrid
+        Scenario.task "codeact-compaction" compaction
         Scenario.task "codeact-text-only" textOnly
         Scenario.task "codeact-recovery" recovery
     ]

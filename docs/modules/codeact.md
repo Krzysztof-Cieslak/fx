@@ -513,7 +513,9 @@ Defaults are provisional until evals decide (spec §1, principle 7).
 
 Native AOT: `codeact-hybrid`, `codeact-text-only` (a session on the session host with the script
 kernel, an in-memory workspace and a scripted model; the receipts, the context log and the logs replayed
-into the requests), `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
+into the requests), `codeact-compaction` (a summary prepared beside a cell and one a cell asked for: the
+summary requests as the calls before them plus the instruction, the collapses, the logs replayed into the
+calls), `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
 card, the journal, the receipts, the session's events), and `codeact-shell-syntax`, `codeact-grant-needs`
 and `codeact-grant-guard` (the parsers, host calls as grants, the guard over the grants service on the
 fake clock), on all eight targets.

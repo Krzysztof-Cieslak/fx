@@ -719,4 +719,104 @@ let tests =
                 | Ok output -> Expect.equal output.ExitCode 1 $"not replayable:\n{output.Stdout}"
                 | Error errors -> failtest (String.concat "\n" errors)
             }
+
+            testTask
+                "fx run -p: a long turn compacts beside a cell and when a cell asks; summaries share the conversation's prefix, and it replays" {
+                do! network.Force()
+                let p = place "compaction"
+                p.Write("greeting.txt", "hello\n")
+                let model = Model()
+                model.Add $"// intent: read the greeting\nconst file = await {g}.fs.read(\"greeting.txt\")\nfile.text"
+
+                // The provider counted 900000 of the model's 1000000 tokens: past the threshold (80%).
+                model.AddSized(
+                    900000,
+                    $"// intent: change it\nawait {g}.fs.write(\"greeting.txt\", \"hello, world\\n\")"
+                )
+
+                model.AddText "Summary: read greeting.txt, then changed it to say hello, world."
+                model.Add $"// intent: compact\nawait {g}.history.compact(\"the greeting\")"
+                model.AddText "Summary: greeting.txt says hello, world."
+                model.Add(finish "The greeting says hello, world" "\"compacted twice\"")
+                let person = Person always
+                let host = start (options p model [ "model.role.main", Json.String modelId ])
+
+                let outcome =
+                    try
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Make the greeting say hello, world"
+                                Session = None
+                                Title = None
+                            }
+                    finally
+                        stop host
+
+                Expect.equal (done' outcome person) "The greeting says hello, world" "done"
+                Expect.equal (p.Read "greeting.txt") "hello, world\n" "the file changed"
+
+                let compacted =
+                    person.Lines
+                    |> List.filter (fun line -> line.StartsWith("◇ compacted", StringComparison.Ordinal))
+
+                Expect.equal compacted.Length 2 "an activity line for each compaction"
+
+                let bodies =
+                    model.Requests
+                    |> List.map (fun request ->
+                        match Json.parse (Fx.Effects.HttpRequest.bodyText request) with
+                        | Ok json -> json
+                        | Error e -> failtest (string e))
+
+                Expect.equal bodies.Length 6 "four calls and two summaries"
+
+                let field (name: string) (json: Json) =
+                    Json.tryField name json |> Option.defaultValue Json.Null
+
+                let messages (json: Json) =
+                    match field "messages" json with
+                    | Json.Array messages -> messages
+                    | other -> failtest $"messages: {other}"
+
+                // Each summary request is the call before it, as the Messages API received it, and the
+                // instruction: the same system, tools and history, so the provider's cache hits.
+                for summary, call in [ bodies[2], bodies[1]; bodies[4], bodies[3] ] do
+                    Expect.equal (field "system" summary) (field "system" call) "the same system"
+                    Expect.equal (field "tools" summary) (field "tools" call) "the same tools"
+                    let sent = messages summary
+                    let before = messages call
+                    Expect.equal sent.Length before.Length "the same messages"
+
+                    Expect.equal
+                        (List.truncate (sent.Length - 1) sent)
+                        (List.truncate (before.Length - 1) before)
+                        "as sent"
+
+                    match field "content" (List.last sent), field "content" (List.last before) with
+                    | Json.Array blocks, Json.Array earlier ->
+                        Expect.equal (List.truncate earlier.Length blocks) earlier "then the instruction"
+                        Expect.equal blocks.Length (earlier.Length + 1) "one block more"
+                    | other -> failtest $"{other}"
+
+                let last = Fx.Effects.HttpRequest.bodyText (List.last model.Requests)
+                Expect.stringContains last "greeting.txt says hello, world." "the latest summary"
+                Expect.isFalse (last.Contains "Make the greeting say hello, world") "the prompt is summarized"
+
+                // `fx replay`: the summaries are model calls like the others.
+                match
+                    waitFor
+                        300.0
+                        (Commands.replay
+                            (options p (Model()) [])
+                            {
+                                Session = outcome.Session
+                                Json = false
+                                StallSeconds = 60
+                            })
+                with
+                | Ok output -> Expect.equal output.ExitCode 0 $"replay matched:\n{output.Stdout}{output.Stderr}"
+                | Error errors -> failtest (String.concat "\n" errors)
+            }
         ]
