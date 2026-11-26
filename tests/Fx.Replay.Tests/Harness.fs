@@ -67,7 +67,7 @@ let recordsAndReplays
             let! report =
                 task {
                     try
-                        return! replay f.Recording session
+                        return! replayWith { settings with Catalog = f.Catalog } f.Recording session
                     with :? TimeoutException ->
                         return failtest "replaying the session timed out"
                 }

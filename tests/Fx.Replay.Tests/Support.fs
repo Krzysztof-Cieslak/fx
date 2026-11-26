@@ -136,6 +136,8 @@ type Reply =
     | Events of ChatEvent list
     /// Parts and a stop reason; tool calls get ids `call-<n>` in order.
     | Parts of Part list * StopReason
+    /// A reply whose provider said its request had this many input tokens.
+    | Measured of input: int * Reply
 
 /// A scripted model: answers requests in order, records them, and can hold a request until the test
 /// lets it go (to steer or interrupt while a turn runs).
@@ -156,9 +158,15 @@ type Model() =
             asked[n] <- s
             s
 
-    let events (reply: Reply) : ChatEvent list =
+    let rec events (reply: Reply) : ChatEvent list =
         match reply with
         | Reply.Events events -> events
+        | Reply.Measured(input, reply) ->
+            events reply
+            |> List.map (fun event ->
+                match event with
+                | ChatEvent.UsageUpdated used -> ChatEvent.UsageUpdated { used with Input = input }
+                | other -> other)
         | Reply.Parts(parts, stop) ->
             let parts =
                 parts
@@ -252,6 +260,9 @@ module Say =
     let finish (summary: string) : Reply =
         cell $"// intent: finish\nfinish {{\"kind\":\"done\",\"summary\":{Json.quote summary}}}"
 
+    /// The reply, from a request of this many input tokens.
+    let sized (input: int) (reply: Reply) : Reply = Reply.Measured(input, reply)
+
 /// A blob store that remembers what was put in it, so a recording can be exported whole.
 [<Sealed>]
 type TrackedBlobs() =
@@ -321,6 +332,8 @@ type Fixture =
         Fs: InMemoryFs
         Model: Model
         Variants: Variants
+        /// The models' catalog the strategy (and replay) knows.
+        Catalog: ModelRef -> ModelInfo option
         /// The host process running now (`restart` starts another on the same stores).
         mutable Process: Process
         Start: unit -> Process
@@ -359,8 +372,9 @@ let baseSelections: (string * Json) list =
     ]
 
 /// A recorded fixture with these selections, commands, the variables commands get, a model (the scripted
-/// one by default), and what each turn's hands are given (a guard).
-let createGuarded
+/// one by default), what each turn's hands are given (a guard), and the models' catalog.
+let createIn
+    (catalog: ModelRef -> ModelInfo option)
     (selections: (string * Json) list)
     (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
     (commandEnv: EnvVars)
@@ -434,7 +448,7 @@ let createGuarded
                     Blobs = Some blobs.Blobs
                     Profile = fun _ -> Eff.ret variants
                     Hands = fun turn -> guard variants sessions turn hands |> Eff.map Ok
-                    Catalog = fun _ -> None
+                    Catalog = catalog
                 }
 
         let host =
@@ -451,9 +465,21 @@ let createGuarded
         Fs = fs
         Model = model
         Variants = variants
+        Catalog = catalog
         Process = start ()
         Start = start
     }
+
+/// A recorded fixture with these selections, commands, the variables commands get, a model (the scripted
+/// one by default), and what each turn's hands are given (a guard).
+let createGuarded
+    (selections: (string * Json) list)
+    (commands: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellError>>)
+    (commandEnv: EnvVars)
+    (llm: Llm option)
+    (guard: Variants -> EventLog<Event> -> TurnStart -> Hands<HandsEnv> -> Eff<HostEnv, Hands<HandsEnv>>)
+    : Fixture =
+    createIn (fun _ -> None) selections commands commandEnv llm guard
 
 /// A recorded fixture with these selections, commands, the variables commands get, and a model (the
 /// scripted one by default).
@@ -579,9 +605,12 @@ let settings: ReplaySettings =
         StallAfter = TimeSpan.FromSeconds 10.0
     }
 
-/// Replays a recorded session exactly.
-let replay (recording: RecordedSession) (session: string) : Task<ReplayReport> =
+/// Replays a recorded session exactly, with these settings.
+let replayWith (settings: ReplaySettings) (recording: RecordedSession) (session: string) : Task<ReplayReport> =
     (Eff.run driver (SessionReplay.run settings recording session)).WaitAsync(TimeSpan.FromSeconds 120.0)
+
+/// Replays a recorded session exactly.
+let replay (recording: RecordedSession) (session: string) : Task<ReplayReport> = replayWith settings recording session
 
 /// A recording exported as JSON lines (every stream's events, then every blob), and read back: what
 /// the golden recorded session is.

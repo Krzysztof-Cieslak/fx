@@ -13,6 +13,7 @@ open Fx.Machines
 open Fx.Models
 open Fx.Sessions
 open Fx.Sessions.Host
+open Fx.Prompt
 open Fx.CodeAct
 open Fx.Replay
 open Fx.Replay.Tests.Support
@@ -259,6 +260,46 @@ let recovered (f: Fixture) (deploying: Task) : Task<string> =
         return "s1"
     }
 
+/// A model with a 20000-token window: compaction starts at 16000.
+let catalog (reference: ModelRef) : ModelInfo option =
+    Some(ModelInfo.create reference { Context = 20000; Output = 4096 })
+
+/// A session that compacts three ways (spec §5): turn 1 prepares a summary beside a cell, when the
+/// reply's prompt reached the threshold; in turn 2 a cell asks to compact (`history.compact`), then a
+/// request overflows and is compacted and sent again.
+let compacting (f: Fixture) : Task<string> =
+    task {
+        f.Model.AddAll
+            [
+                Say.cell "// intent: one\nprint one"
+                Say.sized 17000 (Say.cell "// intent: two\ncall w = fs.write [\"count.txt\", \"2\"]\nprint two")
+                Say.text "Summary: counted to two in count.txt."
+                Say.finish "Counted"
+                Say.cell "// intent: compact\ncall r = history.compact [\"the count\"]\nr"
+                Say.text "Summary: counted to two; asked to compact."
+                Say.cell "// intent: three\nprint three"
+                Say.failed (
+                    ChatError.ContextOverflow
+                        {
+                            Tokens = Some 21000
+                            Limit = Some 20000
+                            Message = "too long"
+                        }
+                )
+                Say.text "Summary: counted to three."
+                Say.finish "Counted on"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Count the sheep"
+        let! ending = ended f "s1" 1
+        completed ending
+        do! prompt f "s1" "p2" "Count on"
+        let! ending = ended f "s1" 2
+        completed ending
+        return "s1"
+    }
+
 [<Tests>]
 let tests =
     testList
@@ -284,6 +325,20 @@ let tests =
             recordsAndReplays "a question answered into the next turn" (fun () -> create []) questioned ignore2
 
             recordsAndReplays "model errors retried after a delay" (fun () -> create []) retried ignore2
+
+            recordsAndReplays
+                "compaction: in the background, asked for by a cell, and after an overflow"
+                (fun () -> createIn catalog [] ran (Inherit []) None (fun _ _ _ hands -> Eff.ret hands))
+                compacting
+                (fun f report ->
+                    let collapses =
+                        f.Store.Events(ContextLog.stream "s1")
+                        |> List.map (Fx.Store.EventLog.decode ContextLog.schema)
+                        |> List.filter (fun (r: Fx.Machines.Host.Recorded<ContextEvent>) -> r.Event.IsCollapsed)
+
+                    Expect.equal collapses.Length 3 "three collapses"
+                    Expect.equal report.Requests f.Model.Requests.Length "every request, the summaries too"
+                    Expect.equal report.Turns 2 "two turns")
 
             testTask "a host stopped mid-cell, a decision, a rerun and recall" {
                 let commands, deploying = hangsOnce ()
