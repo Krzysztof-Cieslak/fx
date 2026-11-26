@@ -236,8 +236,10 @@ capabilities answered, not on timing:
   `Harness.replays name recording session` replays a recording given. `REPLAY_DUMP=<dir>` writes a
   diverging test's journal there.
 - `SessionTests`: cells-only and hybrid turns, a steer, an interrupted cell whose kernel lives on, a
-  killed cell and a new kernel, a question answered into the next turn, model retries, and a host stopped
-  mid-command whose turn is recovered after a restart, decided (`rerun`) and followed by a recall.
+  killed cell and a new kernel, a question answered into the next turn, model retries, compaction (a
+  summary prepared beside a cell, `Eff.both` in its flows; one a cell asked for; one after an overflow), and
+  a host stopped mid-command whose turn is recovered after a restart, decided (`rerun`) and followed by a
+  recall. A fixture's catalog (`createIn`) goes to replay too: the model's window decides compaction.
 - **The golden recorded session** (`golden/session-v1.jsonl`: every stream's events and every blob of a
   two-turn hybrid session, exported by `Exported.write`) must keep replaying with today's code, on every
   OS. When it diverges, the code changed what fx does with the same world. If that is intended, record it
