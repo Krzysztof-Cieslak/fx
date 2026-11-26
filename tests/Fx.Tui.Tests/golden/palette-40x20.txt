@@ -1,0 +1,23 @@
+────────────────────────────────────────
+ ! runs unsandboxed: commands can read …
+  ▸ 1 cell (3 lines)     [Ctrl+O expand]
+
+  ✓ Done  Migrated 37 call sites to
+          RetryPolicy.
+    Evidence  dotnet test tests/Billing
+              → 214 passed
+    Verify    dotnet test tests/Billing
+  ▣ fx · anthropic/claude-sonnet-5-5 · …
+
+┃ Commands                         esc
+┃ › se
+┃  /sessions  Switch to another session
+┃  /model     Use another model from th…
+┃  /exit      Leave (the session stays)
+┃  /new       Start a new session
+┃  /detail    Show more or less of each…
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing:main · sessio… ● idle
+────────────────────────────────────────
+cursor hidden

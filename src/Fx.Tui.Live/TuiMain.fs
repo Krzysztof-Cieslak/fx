@@ -66,7 +66,7 @@ module TuiMain =
     /// Runs the TUI on the terminal over a connection the caller makes, until the person quits.
     let private onTerminal
         (setup: Setup)
-        (connect: Inbox<Msg> -> TuiEnv -> Threading.Tasks.Task<Result<Fx.Rpc.Peer, string>>)
+        (connect: Inbox<Msg> -> Following -> TuiEnv -> Threading.Tasks.Task<Result<Fx.Rpc.Peer, string>>)
         (choice: SessionChoice)
         (say: string -> unit)
         : int =
@@ -93,8 +93,9 @@ module TuiMain =
                 try
                     try
                         let inbox = Inbox<Msg>()
+                        let following = Following()
 
-                        match (connect inbox env).GetAwaiter().GetResult() with
+                        match (connect inbox following env).GetAwaiter().GetResult() with
                         | Error e -> Error e
                         | Ok peer ->
                             try
@@ -103,7 +104,9 @@ module TuiMain =
                                 let model = App.init setup size.Columns size.Rows now
 
                                 let final =
-                                    (Eff.run env (TuiClient.run peer inbox choice model)).GetAwaiter().GetResult()
+                                    (Eff.run env (TuiClient.run peer inbox following choice model))
+                                        .GetAwaiter()
+                                        .GetResult()
 
                                 Ok final
                             finally
@@ -155,9 +158,11 @@ module TuiMain =
                         Theme = Setup.value TuiSlots.theme variants
                     }
 
-                let connect (inbox: Inbox<Msg>) (env: TuiEnv) =
+                let connect (inbox: Inbox<Msg>) (following: Following) (env: TuiEnv) =
                     task {
-                        match! Eff.run env (HostClient.embedded host (TuiClient.service inbox) App.answers) with
+                        match!
+                            Eff.run env (HostClient.embedded host (TuiClient.service inbox following) App.answers)
+                        with
                         | Ok peer -> return Ok peer
                         | Error e -> return Error $"the TUI could not connect to the host: {e}"
                     }
@@ -199,9 +204,13 @@ module TuiMain =
                     Theme = TuiSlots.theme.Default
                 }
 
-            let connect (inbox: Inbox<Msg>) (env: TuiEnv) =
+            let connect (inbox: Inbox<Msg>) (following: Following) (env: TuiEnv) =
                 Eff.run
                     env
-                    (HostClient.connect listener token (TuiClient.service inbox) (HostClient.members App.answers))
+                    (HostClient.connect
+                        listener
+                        token
+                        (TuiClient.service inbox following)
+                        (HostClient.members App.answers))
 
             onTerminal setup connect (choice args workspace) say

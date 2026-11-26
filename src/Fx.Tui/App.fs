@@ -153,6 +153,8 @@ type Msg =
     /// An answer was refused or could not be sent: the card can be answered again.
     | AnswerFailed of card: string * reason: string
     | Disconnected of reason: string
+    /// The host's sessions (`session/list`), for the session picker.
+    | Sessions of SessionInfo list
 
     override this.ToString() =
         match this with
@@ -172,6 +174,7 @@ type Msg =
         | Sent(what, Error e) -> what + " failed: " + e
         | AnswerFailed(card, reason) -> card + " not answered: " + reason
         | Disconnected reason -> "disconnected: " + reason
+        | Sessions sessions -> $"sessions ({sessions.Length})"
 
 /// What the TUI asks of the host, as data: the shell sends it over the client protocol.
 [<RequireQualifiedAccess>]
@@ -180,6 +183,14 @@ type Cmd =
     | Interrupt of session: string * key: string
     | Answer of session: string * key: string * request: string * answer: Json
     | AnswerGrant of RequestId * GrantAnswer
+    /// Variant overrides of the session (`session/overrides`): slots and their values.
+    | Override of session: string * key: string * set: (string * Json) list
+    /// Leave the session shown for a new one in this workspace.
+    | NewSession
+    /// Leave the session shown for this one.
+    | OpenSession of id: string
+    /// Ask for the host's sessions (they arrive as `Msg.Sessions`).
+    | ListSessions
     /// Draw everything again (the screen may have been changed by someone else).
     | Redraw
     | Quit
@@ -187,6 +198,10 @@ type Cmd =
     override this.ToString() =
         match this with
         | Prompt(_, key, _, mode) -> $"{mode} ({key})"
+        | Override(_, key, set) -> $"override {set.Length} ({key})"
+        | NewSession -> "new session"
+        | OpenSession id -> "open " + id
+        | ListSessions -> "list sessions"
         | Interrupt(_, key) -> $"interrupt ({key})"
         | Answer(_, key, request, _) -> $"answer {request} ({key})"
         | AnswerGrant(request, answer) -> $"grant {request.Value}: {answer}"
@@ -213,6 +228,66 @@ type CardAnswer =
         | No -> "no"
         | Pick option -> "pick " + option
         | Text text -> $"text ({text.Length} chars)"
+
+/// What the palette offers.
+[<RequireQualifiedAccess>]
+type PaletteItem =
+    | Command of TuiCommand
+    | Session of SessionInfo
+    /// A value for a command that takes one (`/theme dark`).
+    | Value of command: TuiCommand * value: string
+
+    member this.Label: string =
+        match this with
+        | Command command -> "/" + command.Name
+        | Session session -> session.Title |> Option.defaultValue session.Id
+        | Value(_, value) -> value
+
+    member this.Detail: string =
+        match this with
+        | Command command -> command.Title
+        | Session session -> session.Id
+        | Value(command, _) -> "/" + command.Name
+
+    override this.ToString() = this.Label
+
+/// The command palette (`Ctrl+P`), or a picker one of its commands opened (sessions, themes).
+type Palette =
+    {
+        Title: string
+        Query: string
+        /// The item selected among those the query shows.
+        Selected: int
+        Items: PaletteItem list
+        /// Still waiting for its items (the host's sessions).
+        Loading: bool
+    }
+
+    override this.ToString() =
+        $"palette {this.Title} ({this.Items.Length})"
+
+[<RequireQualifiedAccess>]
+module Palette =
+    let create (title: string) (items: PaletteItem list) : Palette =
+        {
+            Title = title
+            Query = ""
+            Selected = 0
+            Items = items
+            Loading = false
+        }
+
+    /// The items the query shows, best first.
+    let shown (palette: Palette) : PaletteItem list =
+        palette.Items
+        |> List.choose (fun item ->
+            match Commands.score palette.Query item.Label, Commands.score palette.Query item.Detail with
+            | Some label, Some detail -> Some(item, max (label * 2) detail)
+            | Some label, None -> Some(item, label * 2)
+            | None, Some detail -> Some(item, detail)
+            | None, None -> None)
+        |> List.sortByDescending snd
+        |> List.map fst
 
 /// A reply being written: its text so far, and the last tool call it started.
 type Writing =
@@ -252,6 +327,8 @@ type Model =
         Count: int
         /// Cards whose answers are being sent.
         Answering: Set<string>
+        /// The command palette or a picker, while it is open.
+        Palette: Palette option
         /// The option selected in the first card.
         Selected: int
         Quitting: bool
@@ -291,6 +368,7 @@ module App =
             Answering = Set.empty
             Selected = 0
             Quitting = false
+            Palette = None
         }
 
     let private notice (text: string) (model: Model) =
@@ -531,6 +609,174 @@ module App =
             },
             [ Cmd.Prompt(session.Id, key, text, mode) ]
 
+    // ---- commands -------------------------------------------------------------------------------
+
+    /// The model without the session it showed: what the next one needs (grants stay; they are the
+    /// host's).
+    let private leave (what: string) (model: Model) : Model =
+        { model with
+            Session = None
+            Env = None
+            Timeline = Timeline.empty
+            Streaming = None
+            Phase = Phase.Starting what
+            Scroll = 0
+            History = None
+            Editor = Editor.empty
+            Answering = model.Answering |> Set.filter (fun id -> id.StartsWith "grant/")
+            Selected = 0
+            Palette = None
+        }
+
+    let private cycleDetail (model: Model) : Model =
+        let verbosity =
+            match model.Verbosity with
+            | Verbosity.Quiet -> Verbosity.Normal
+            | Verbosity.Normal -> Verbosity.Verbose
+            | Verbosity.Verbose -> Verbosity.Quiet
+
+        notice $"detail: {verbosity}" { model with Verbosity = verbosity }
+
+    let private themes: (ThemeChoice * string) list =
+        [
+            ThemeChoice.Auto, "auto"
+            ThemeChoice.Dark, "dark"
+            ThemeChoice.Light, "light"
+            ThemeChoice.Ansi16, "ansi16"
+        ]
+
+    /// Runs a command with what was typed after its name.
+    let private run (command: TuiCommand) (argument: string) (model: Model) : Model * Cmd list =
+        let model = { model with Palette = None }
+
+        match command.Action with
+        | CommandAction.NewSession -> leave "creating a new session" model, [ Cmd.NewSession ]
+        | CommandAction.Sessions ->
+            { model with
+                Palette =
+                    Some
+                        { Palette.create "Sessions" [] with
+                            Loading = true
+                        }
+            },
+            [ Cmd.ListSessions ]
+        | CommandAction.Model when argument = "" ->
+            notice "type the model after the command: /model provider/model" model, []
+        | CommandAction.Model ->
+            match model.Session with
+            | Some session ->
+                let key = $"{model.Setup.Keys}/model/{model.Count + 1}"
+
+                notice
+                    $"model: {argument} from the next turn"
+                    { model with
+                        Count = model.Count + 1
+                        Setup =
+                            { model.Setup with
+                                Model = Some argument
+                            }
+                    },
+                [ Cmd.Override(session.Id, key, [ "model.role.main", Json.String argument ]) ]
+            | None -> error "the session has not started yet" model, []
+        | CommandAction.Detail -> cycleDetail model, []
+        | CommandAction.Theme ->
+            match themes |> List.tryFind (fun (_, name) -> name = argument.ToLowerInvariant()) with
+            | Some(choice, name) ->
+                notice
+                    $"theme: {name}"
+                    { model with
+                        Setup = { model.Setup with Theme = choice }
+                    },
+                []
+            | None when argument = "" ->
+                { model with
+                    Palette =
+                        Some(
+                            Palette.create
+                                "Theme"
+                                (themes |> List.map (fun (_, name) -> PaletteItem.Value(command, name)))
+                        )
+                },
+                []
+            | None -> error $"no theme {argument}: auto, dark, light or ansi16" model, []
+        | CommandAction.Exit -> { model with Quitting = true }, [ Cmd.Quit ]
+
+    /// The commands a `/` prompt being typed may name, best first.
+    let slashes (model: Model) : TuiCommand list =
+        let text = model.Editor.Text
+
+        if text.StartsWith('/') && not (text.Contains '\n') && not (text.Contains ' ') then
+            Commands.search (text.Substring 1) Commands.all
+        else
+            []
+
+    /// A `/` prompt sent: its command (or the best one for what was typed), never the agent.
+    let private slash (model: Model) : (Model * Cmd list) option =
+        match Commands.parse Commands.all model.Editor.Text with
+        | None -> None
+        | Some(Ok(command, argument)) -> Some(run command argument { model with Editor = Editor.empty })
+        | Some(Error name) ->
+            match slashes model with
+            | command :: _ -> Some(run command "" { model with Editor = Editor.empty })
+            | [] -> Some(error $"no command {name}: Ctrl+P lists them" model, [])
+
+    let private paletteKey (palette: Palette) (key: Key) (model: Model) : Model * Cmd list =
+        let shown = Palette.shown palette
+
+        let set (palette: Palette) =
+            { model with Palette = Some palette }, []
+
+        match key.Code, key.Ctrl, key.Alt with
+        | KeyCode.Escape, false, false
+        | KeyCode.Char "p", true, false -> { model with Palette = None }, []
+        | KeyCode.Up, false, false ->
+            set
+                { palette with
+                    Selected = max 0 (palette.Selected - 1)
+                }
+        | KeyCode.Down, false, false
+        | KeyCode.Tab, false, false ->
+            set
+                { palette with
+                    Selected = min (max 0 (shown.Length - 1)) (palette.Selected + 1)
+                }
+        | KeyCode.Enter, false, false ->
+            match List.tryItem palette.Selected shown with
+            | Some(PaletteItem.Command command) -> run command "" model
+            | Some(PaletteItem.Value(command, value)) -> run command value model
+            | Some(PaletteItem.Session session) ->
+                match model.Session with
+                | Some current when current.Id = session.Id -> { model with Palette = None }, []
+                | _ -> leave ("opening " + session.Id) model, [ Cmd.OpenSession session.Id ]
+            | None -> model, []
+        | KeyCode.Backspace, false, false when palette.Query <> "" ->
+            let clusters = Text.clusters palette.Query
+
+            set
+                { palette with
+                    Query = clusters |> List.truncate (clusters.Length - 1) |> String.concat ""
+                    Selected = 0
+                }
+        | KeyCode.Char c, false, false ->
+            set
+                { palette with
+                    Query = palette.Query + c
+                    Selected = 0
+                }
+        | KeyCode.Paste text, _, _ ->
+            set
+                { palette with
+                    Query = palette.Query + Text.firstLine text
+                    Selected = 0
+                }
+        | _ -> model, []
+
+    /// The command palette over everything.
+    let openPalette (model: Model) : Model =
+        { model with
+            Palette = Some(Palette.create "Commands" (Commands.all |> List.map PaletteItem.Command))
+        }
+
     // ---- keys -----------------------------------------------------------------------------------
 
     let private history (delta: int) (model: Model) : Model =
@@ -651,69 +897,78 @@ module App =
                 },
                 []
             )
-        | KeyCode.Char "o", true, false ->
-            let verbosity =
-                match model.Verbosity with
-                | Verbosity.Quiet -> Verbosity.Normal
-                | Verbosity.Normal -> Verbosity.Verbose
-                | Verbosity.Verbose -> Verbosity.Quiet
-
-            Some(notice $"detail: {verbosity}" { model with Verbosity = verbosity }, [])
+        | KeyCode.Char "o", true, false -> Some(cycleDetail model, [])
         | KeyCode.Char "l", true, false -> Some(model, [ Cmd.Redraw ])
         | _ -> None
 
     let private onKey (key: Key) (model: Model) : Model * Cmd list =
-        match common key model with
-        | Some result -> result
-        | None ->
-            let model = { model with ExitArmed = None }
+        match model.Palette, key.Code, key.Ctrl with
+        | Some palette, _, _ when not (key.Code = KeyCode.Char "c" && key.Ctrl) -> paletteKey palette key model
+        | None, KeyCode.Char "p", true -> openPalette { model with ExitArmed = None }, []
+        | _ ->
 
-            match cards model with
-            | (Card.Question _ as card) :: _ ->
-                match key.Code, key.Ctrl, key.Alt, key.Shift with
-                | KeyCode.Enter, false, false, false ->
-                    let text = model.Editor.Text.Trim()
+            match common key model with
+            | Some result -> result
+            | None ->
+                let model = { model with ExitArmed = None }
 
-                    if text = "" then
-                        model, []
-                    else
-                        let model, cmds = answer card (CardAnswer.Text text) model
-                        { model with Editor = Editor.empty }, cmds
-                | _ -> edit key model
-            | card :: _ ->
-                let options = choices model card
-                let count = options.Length
+                match cards model with
+                | (Card.Question _ as card) :: _ ->
+                    match key.Code, key.Ctrl, key.Alt, key.Shift with
+                    | KeyCode.Enter, false, false, false ->
+                        let text = model.Editor.Text.Trim()
 
-                let previous () =
-                    { model with
-                        Selected = (model.Selected + count - 1) % max 1 count
-                    },
-                    []
+                        if text = "" then
+                            model, []
+                        else
+                            let model, cmds = answer card (CardAnswer.Text text) model
+                            { model with Editor = Editor.empty }, cmds
+                    | _ -> edit key model
+                | card :: _ ->
+                    let options = choices model card
+                    let count = options.Length
 
-                match key.Code, key.Ctrl, key.Alt with
-                | KeyCode.Tab, false, false when key.Shift -> previous ()
-                | KeyCode.Left, false, false
-                | KeyCode.Up, false, false -> previous ()
-                | KeyCode.Right, false, false
-                | KeyCode.Down, false, false
-                | KeyCode.Tab, false, false ->
-                    { model with
-                        Selected = (model.Selected + 1) % max 1 count
-                    },
-                    []
-                | KeyCode.Enter, false, false when count > 0 ->
-                    let _, _, choice = options[min model.Selected (count - 1)]
-                    answer card choice model
-                | KeyCode.Char c, false, false ->
-                    match options |> List.tryFind (fun (k, _, _) -> k = c.ToLowerInvariant()) with
-                    | Some(_, _, choice) -> answer card choice model
-                    | None -> model, []
-                | _ -> model, []
-            | [] ->
-                match key.Code, key.Ctrl, key.Alt, key.Shift with
-                | KeyCode.Enter, false, false, false -> send PromptMode.Steer model
-                | KeyCode.Tab, false, false, false -> send PromptMode.Queue model
-                | _ -> edit key model
+                    let previous () =
+                        { model with
+                            Selected = (model.Selected + count - 1) % max 1 count
+                        },
+                        []
+
+                    match key.Code, key.Ctrl, key.Alt with
+                    | KeyCode.Tab, false, false when key.Shift -> previous ()
+                    | KeyCode.Left, false, false
+                    | KeyCode.Up, false, false -> previous ()
+                    | KeyCode.Right, false, false
+                    | KeyCode.Down, false, false
+                    | KeyCode.Tab, false, false ->
+                        { model with
+                            Selected = (model.Selected + 1) % max 1 count
+                        },
+                        []
+                    | KeyCode.Enter, false, false when count > 0 ->
+                        let _, _, choice = options[min model.Selected (count - 1)]
+                        answer card choice model
+                    | KeyCode.Char c, false, false ->
+                        match options |> List.tryFind (fun (k, _, _) -> k = c.ToLowerInvariant()) with
+                        | Some(_, _, choice) -> answer card choice model
+                        | None -> model, []
+                    | _ -> model, []
+                | [] ->
+                    match key.Code, key.Ctrl, key.Alt, key.Shift with
+                    | KeyCode.Enter, false, false, false ->
+                        match slash model with
+                        | Some result -> result
+                        | None -> send PromptMode.Steer model
+                    | KeyCode.Tab, false, false, false ->
+                        // On a `/` prompt, Tab completes the command's name.
+                        match slashes model with
+                        | command :: _ ->
+                            { model with
+                                Editor = Editor.ofText ("/" + command.Name + " ")
+                            },
+                            []
+                        | [] -> send PromptMode.Queue model
+                    | _ -> edit key model
 
     // ---- update ---------------------------------------------------------------------------------
 
@@ -847,6 +1102,19 @@ module App =
                     Answering = model.Answering.Remove card
                 },
             []
+        | Msg.Sessions sessions ->
+            match model.Palette with
+            | Some palette when palette.Loading ->
+                { model with
+                    Palette =
+                        Some
+                            { palette with
+                                Loading = false
+                                Items = sessions |> List.rev |> List.map PaletteItem.Session
+                            }
+                },
+                []
+            | _ -> model, []
         | Msg.Disconnected reason ->
             error
                 $"disconnected: {reason}"

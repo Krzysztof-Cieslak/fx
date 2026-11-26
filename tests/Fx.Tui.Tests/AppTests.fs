@@ -429,6 +429,127 @@ let tests =
                 ]
 
             testList
+                "commands"
+                [
+                    test "a `/` prompt names a command, with what follows it" {
+                        match Commands.parse Commands.all "/model anthropic/claude-opus-5-5" with
+                        | Some(Ok(command, argument)) ->
+                            Expect.equal command.Action CommandAction.Model "the command"
+                            Expect.equal argument "anthropic/claude-opus-5-5" "its argument"
+                        | other -> failtest $"{other}"
+
+                        Expect.equal (Commands.parse Commands.all "hello") None "not a command"
+                        Expect.equal (Commands.parse Commands.all "//path") None "an escaped slash"
+                        Expect.equal (Commands.parse Commands.all "/nope") (Some(Error "/nope")) "unknown"
+                    }
+
+                    test "the palette's search: letters in order, names first" {
+                        Expect.equal
+                            (Commands.search "ses" Commands.all |> List.map _.Name |> List.head)
+                            "sessions"
+                            "sessions"
+
+                        Expect.equal (Commands.search "xyz" Commands.all) [] "nothing"
+                        Expect.equal (Commands.score "nw" "new") (Some 2) "apart"
+                    }
+
+                    test "Ctrl+P opens the palette; typing filters; Enter runs; Esc closes" {
+                        let _, model = ready ()
+                        let model, _ = play model [ ctrl 'p' ]
+                        Expect.isSome model.Palette "open"
+                        let model, _ = play model (typing "det")
+
+                        Expect.equal
+                            (Palette.shown model.Palette.Value |> List.map _.Label |> List.head)
+                            "/detail"
+                            "filtered"
+
+                        let model, cmds = play model [ key KeyCode.Enter ]
+                        Expect.isNone model.Palette "closed"
+                        Expect.equal model.Verbosity Verbosity.Verbose "ran /detail"
+                        Expect.equal cmds [] "nothing sent"
+                        let model, _ = play model [ ctrl 'p'; key KeyCode.Escape ]
+                        Expect.isNone model.Palette "Esc closes"
+                    }
+
+                    test "/model sends an override and shows the model" {
+                        let s, model = ready ()
+                        let model, cmds = play model (typing "/model openai/gpt-6" @ [ key KeyCode.Enter ])
+
+                        Expect.equal
+                            cmds
+                            [
+                                Cmd.Override(
+                                    s.Id,
+                                    "tui/run1/model/1",
+                                    [ "model.role.main", Fx.Contracts.Json.String "openai/gpt-6" ]
+                                )
+                            ]
+                            "the override"
+
+                        Expect.equal model.Setup.Model (Some "openai/gpt-6") "shown"
+                        Expect.isTrue (Editor.isEmpty model.Editor) "the prompt is cleared"
+                    }
+
+                    test "/theme with and without a name" {
+                        let _, model = ready ()
+                        let model, _ = play model (typing "/theme light" @ [ key KeyCode.Enter ])
+                        Expect.equal model.Setup.Theme ThemeChoice.Light "set"
+                        let model, _ = play model (typing "/theme" @ [ key KeyCode.Enter ])
+                        Expect.equal (model.Palette |> Option.map _.Title) (Some "Theme") "a picker"
+                        let model, _ = play model (typing "ansi" @ [ key KeyCode.Enter ])
+                        Expect.equal model.Setup.Theme ThemeChoice.Ansi16 "picked"
+                    }
+
+                    test "/new leaves the session; /sessions picks another" {
+                        let _, model = ready ()
+                        let model, cmds = play model (typing "/new" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.NewSession ] "a new session"
+                        Expect.isNone model.Session "left"
+                        Expect.equal model.Timeline Timeline.empty "nothing of the old one"
+
+                        let model, cmds = play model (typing "/sessions" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.ListSessions ] "asked for the list"
+
+                        let sessions: SessionInfo list =
+                            [
+                                {
+                                    Id = "s-old"
+                                    Title = Some "billing"
+                                    Environment = "env-1"
+                                    Workspace = setup.Workspace
+                                }
+                                {
+                                    Id = "s-new"
+                                    Title = None
+                                    Environment = "env-2"
+                                    Workspace = setup.Workspace
+                                }
+                            ]
+
+                        let model, _ = play model [ Msg.Sessions sessions ]
+
+                        Expect.equal
+                            (Palette.shown model.Palette.Value |> List.map _.Label)
+                            [ "s-new"; "billing" ]
+                            "newest first"
+
+                        let _, cmds = play model (typing "bill" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.OpenSession "s-old" ] "opened"
+                    }
+
+                    test "Tab completes a command; an unknown one says so" {
+                        let _, model = ready ()
+                        let model, _ = play model (typing "/se" @ [ key KeyCode.Tab ])
+                        Expect.equal model.Editor.Text "/sessions " "completed"
+                        let _, model = ready ()
+                        let model, cmds = play model (typing "/zzz" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [] "nothing sent to the agent"
+                        Expect.stringContains (screen model) "no command /zzz" "said so"
+                    }
+                ]
+
+            testList
                 "questions"
                 [
                     let items (model: Model) =

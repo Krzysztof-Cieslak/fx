@@ -1,6 +1,8 @@
 namespace Fx.Tui.Live
 
 open System
+open System.Threading
+open System.Threading.Tasks
 open Fx
 open Fx.Contracts
 open Fx.Effects
@@ -46,6 +48,41 @@ type SessionChoice =
         | Resume id -> "resume " + id
         | Latest workspace -> "latest in " + workspace
 
+/// Which session the TUI follows now: notices of any other (one it left may still send a few) are
+/// dropped before they reach the model.
+[<Sealed>]
+type Following() =
+    let mutable session = ""
+
+    member _.Session
+        with get () = Volatile.Read &session
+        and set (value: string) = Volatile.Write(&session, value)
+
+    member this.Shows(id: string) = id = this.Session
+
+    override this.ToString() = "following " + this.Session
+
+/// Sessions the person asked to switch to, taken by the loop that follows them.
+[<Sealed>]
+type private Switches() =
+    let gate = obj ()
+
+    let mutable waiting =
+        TaskCompletionSource<SessionChoice>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+    member _.Post(choice: SessionChoice) =
+        lock gate (fun () -> waiting.TrySetResult choice |> ignore)
+
+    /// The next switch asked for (after the last one taken).
+    member _.Next: Task<SessionChoice> = lock gate (fun () -> waiting.Task)
+
+    member _.Take() =
+        lock gate (fun () ->
+            if waiting.Task.IsCompleted then
+                waiting <- TaskCompletionSource<SessionChoice>(TaskCreationOptions.RunContinuationsAsynchronously))
+
+    override _.ToString() = "Switches"
+
 /// The TUI as a client of the client protocol (spec §17): it follows the session (`session/subscribe`
 /// and `session/context`), the grants log (`grants/pending`, `grants/subscribe`) and the session's
 /// environment (`env/get`), and sends what the person does as commands. The same in process
@@ -59,17 +96,26 @@ module TuiClient =
             Version = Product.Version
         }
 
-    /// The client's side of the connection: notifications become messages.
-    let service (inbox: Inbox<Msg>) : Service<TuiEnv> =
+    /// The client's side of the connection: notifications of the session it follows become messages.
+    let service (inbox: Inbox<Msg>) (following: Following) : Service<TuiEnv> =
         Service.create
             info
             [
                 Handler.notification ClientProtocol.event (fun _ notice ->
-                    Eff.ret (inbox.Post(Msg.Session notice.Item)))
+                    Eff.ret (
+                        if following.Shows notice.Session then
+                            inbox.Post(Msg.Session notice.Item)
+                    ))
                 Handler.notification ClientProtocol.contextNotice (fun _ notice ->
-                    Eff.ret (inbox.Post(Msg.Context notice.Item)))
+                    Eff.ret (
+                        if following.Shows notice.Session then
+                            inbox.Post(Msg.Context notice.Item)
+                    ))
                 Handler.notification ClientProtocol.streamingNotice (fun _ notice ->
-                    Eff.ret (inbox.Post(Msg.Streaming(notice.Turn, notice.Fresh, notice.Text, notice.Tool))))
+                    Eff.ret (
+                        if following.Shows notice.Session then
+                            inbox.Post(Msg.Streaming(notice.Turn, notice.Fresh, notice.Text, notice.Tool))
+                    ))
                 Handler.notification GrantsProtocol.event (fun _ notice -> Eff.ret (inbox.Post(Msg.Grant notice)))
             ]
 
@@ -131,46 +177,51 @@ module TuiClient =
                 | Ok _ -> ()
         }
 
-    /// Starts the session and follows it until cancelled.
-    let follow (peer: Peer) (inbox: Inbox<Msg>) (choice: SessionChoice) : Eff<TuiEnv, unit> =
-        let sessionPart: Eff<TuiEnv, unit> =
-            eff {
-                inbox.Post(
-                    Msg.Starting(
-                        match choice with
-                        | SessionChoice.Resume id -> "resuming " + id
-                        | _ -> "creating the session and its environment"
-                    )
+    /// Starts the session and follows it until cancelled (or its subscriptions end).
+    let private follow
+        (peer: Peer)
+        (inbox: Inbox<Msg>)
+        (following: Following)
+        (choice: SessionChoice)
+        : Eff<TuiEnv, unit> =
+        eff {
+            following.Session <- ""
+
+            inbox.Post(
+                Msg.Starting(
+                    match choice with
+                    | SessionChoice.Resume id -> "resuming " + id
+                    | _ -> "creating the session and its environment"
                 )
+            )
 
-                match! session peer choice with
-                | Error reason -> inbox.Post(Msg.StartFailed reason)
-                | Ok entry ->
-                    inbox.Post(Msg.Started(infoOf entry))
+            match! session peer choice with
+            | Error reason -> inbox.Post(Msg.StartFailed reason)
+            | Ok entry ->
+                following.Session <- entry.Session
+                inbox.Post(Msg.Started(infoOf entry))
 
-                    match! Rpc.call peer ClientProtocol.envGet { Id = entry.Environment } with
-                    | Ok summary -> inbox.Post(Msg.Env(env summary))
-                    | Error _ -> ()
+                match! Rpc.call peer ClientProtocol.envGet { Id = entry.Environment } with
+                | Ok summary -> inbox.Post(Msg.Env(env summary))
+                | Error _ -> ()
 
-                    let subscribe: Eff<TuiEnv, unit> =
-                        eff {
-                            match! Rpc.call peer ClientProtocol.subscribe { Session = entry.Session; After = 0L } with
-                            | Error e -> inbox.Post(Msg.Disconnected(string e))
-                            | Ok _ -> ()
-                        }
+                let subscribe: Eff<TuiEnv, unit> =
+                    eff {
+                        match! Rpc.call peer ClientProtocol.subscribe { Session = entry.Session; After = 0L } with
+                        | Error e -> inbox.Post(Msg.Disconnected(string e))
+                        | Ok _ -> ()
+                    }
 
-                    let context: Eff<TuiEnv, unit> =
-                        eff {
-                            match! Rpc.call peer ClientProtocol.context { Session = entry.Session; After = 0L } with
-                            | Error e -> inbox.Post(Msg.Disconnected(string e))
-                            | Ok _ -> ()
-                        }
+                let context: Eff<TuiEnv, unit> =
+                    eff {
+                        match! Rpc.call peer ClientProtocol.context { Session = entry.Session; After = 0L } with
+                        | Error e -> inbox.Post(Msg.Disconnected(string e))
+                        | Ok _ -> ()
+                    }
 
-                    let! _ = Eff.all [ subscribe; context ]
-                    ()
-            }
-
-        Eff.all [ grants peer inbox; sessionPart ] |> Eff.ignore
+                let! _ = Eff.all [ subscribe; context ]
+                ()
+        }
 
     let private sent (inbox: Inbox<Msg>) (what: string) (result: Result<'T, CallError<ClientError>>) =
         match result with
@@ -215,6 +266,26 @@ module TuiClient =
                 match! Rpc.call peer GrantsProtocol.answer { Request = request; Answer = answer } with
                 | Ok _ -> ()
                 | Error e -> inbox.Post(Msg.AnswerFailed("grant/" + request.Value, string e))
+            | Cmd.Override(session, key, set) ->
+                let! result =
+                    Rpc.call
+                        peer
+                        ClientProtocol.overrides
+                        {
+                            Session = session
+                            Key = key
+                            Set = set
+                            Unset = []
+                        }
+
+                sent inbox "override" result
+            | Cmd.ListSessions ->
+                match! Rpc.call peer ClientProtocol.list () with
+                | Ok entries -> inbox.Post(Msg.Sessions(entries |> List.map infoOf))
+                | Error e -> inbox.Post(Msg.Sent("sessions", Error(string e)))
+            // Switching sessions is the loop's (`run`).
+            | Cmd.NewSession
+            | Cmd.OpenSession _
             | Cmd.Redraw
             | Cmd.Quit -> ()
         }
@@ -235,19 +306,59 @@ module TuiClient =
 
     /// Runs the TUI on a connection until the person quits: the loop, the session's start and
     /// subscriptions, and the end of the connection. Gives the last model.
-    let run (peer: Peer) (inbox: Inbox<Msg>) (choice: SessionChoice) (start: Model) : Eff<TuiEnv, Model> =
+    let run
+        (peer: Peer)
+        (inbox: Inbox<Msg>)
+        (following: Following)
+        (choice: SessionChoice)
+        (start: Model)
+        : Eff<TuiEnv, Model> =
         eff {
             let final = ref start
+            let switches = Switches()
+
+            let handle (cmd: Cmd) : Eff<TuiEnv, unit> =
+                match cmd with
+                | Cmd.NewSession ->
+                    switches.Post(SessionChoice.New None)
+                    Eff.ret ()
+                | Cmd.OpenSession id ->
+                    switches.Post(SessionChoice.Resume id)
+                    Eff.ret ()
+                | other -> interpret peer inbox other
 
             let loop: Eff<TuiEnv, unit> =
-                Runtime.run inbox (interpret peer inbox) start
-                |> Eff.map (fun model -> final.Value <- model)
+                Runtime.run inbox handle start |> Eff.map (fun model -> final.Value <- model)
 
+            // The next switch the person asks for.
+            let switched: Eff<TuiEnv, SessionChoice option> =
+                fun env ->
+                    task {
+                        // Eff.race waits for every branch: this one ends when the scope does.
+                        let! choice = switches.Next.WaitAsync env.Scope.Cancellation
+                        switches.Take()
+                        return Some choice
+                    }
+
+            // One session at a time: a switch ends following the one shown and starts the next.
             let following: Eff<TuiEnv, unit> =
                 eff {
-                    do! follow peer inbox choice
-                    // The subscriptions ended (the host stopped): the TUI stays until the person quits.
-                    do! untilCancelled
+                    let mutable current = choice
+                    let mutable going = true
+
+                    while going do
+                        let shown: Eff<TuiEnv, SessionChoice option> =
+                            eff {
+                                do! follow peer inbox following current
+                                // The subscriptions ended (the host stopped): the TUI stays until the
+                                // person quits or switches.
+                                do! untilCancelled
+                                return None
+                            }
+
+                        match! Eff.race [ shown; switched ] with
+                        | Some next -> current <- next
+                        | None -> going <- false
                 }
 
             // The connection's end, or the scope's.
@@ -270,6 +381,6 @@ module TuiClient =
                             do! untilCancelled env
                     }
 
-            do! Eff.race [ loop; following; ended ]
+            do! Eff.race [ loop; Eff.all [ grants peer inbox; following ] |> Eff.ignore; ended ]
             return final.Value
         }

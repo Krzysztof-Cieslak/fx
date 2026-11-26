@@ -183,9 +183,32 @@ core slot the host registers) picks it:
 | `PgUp` `PgDn` | scrolls the transcript |
 | `Ctrl+O` | cycles the detail (quiet, normal, verbose) |
 | `Ctrl+L` | draws everything again |
+| `Ctrl+P` | opens the command palette (`Esc` or `Ctrl+P` closes it) |
+| `/` at the start of the prompt | the commands it may name show above the prompt; `Tab` completes the first, `Enter` runs it |
 
 Steering by default matches spec §5 (a prompt reaches the agent at its next step boundary; with no
 turn running it starts one); queueing is the deliberate second key.
+
+## Commands (spec §19.5)
+
+Commands are values (`TuiCommand`: a name, what it does, the keys that also run it, what it takes
+after its name, and its action, `Commands.all`), so later screens add their own. They run from the
+palette (`Ctrl+P`: a fuzzy search over names and titles, `↑` `↓`, `Enter`) or as a prompt that starts
+with `/` (`//` sends a prompt that starts with `/`); a `/` prompt never reaches the agent, and one
+that names no command says so.
+
+| Command | Does |
+|---|---|
+| `/new` | leaves the session shown for a new one in the workspace (`session/create`) |
+| `/sessions` | picks another session of the host (`session/list`, newest first) and shows it |
+| `/model provider/model` | sets `model.role.main` for the session from its next turn on (`session/overrides`) |
+| `/detail` | cycles the detail (as `Ctrl+O`) |
+| `/theme [auto\|dark\|light\|ansi16]` | changes the colours for this run (without a name: a picker) |
+| `/exit` | leaves; the session stays |
+
+Switching sessions ends the subscriptions of the one shown before the next starts (`TuiClient.run`),
+and notices of any session but the one shown are dropped (`Following`): the model is the next
+session's alone. Grants stay (they are the host's).
 
 ## Cards: what the person is asked (spec §19.4)
 
@@ -209,7 +232,7 @@ shows as sending and is not sent twice; one the host refuses can be given again.
 
 The TUI uses `session/create` (or `session/list` to resume), `env/get`, `session/subscribe`,
 `session/context`, `session/prompt`, `session/interrupt`, `session/answer`, `grants/pending`,
-`grants/subscribe` and `grants/answer` (host.md). T130 added:
+`grants/subscribe`, `grants/answer`, and `session/overrides` for `/model` (host.md). T130 added:
 
 | Method | Params → result | Least role |
 |---|---|---|
@@ -249,7 +272,8 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
+- `Fx.Tui.Tests`: commands (parsing, the palette's search, `Ctrl+P`, `/model`, `/theme`, `/new`
+  and `/sessions`, completion, golden renders of the palette and of `/` suggestions); usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
   width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark
   theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and
   golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
@@ -260,7 +284,7 @@ terminal check's P/Invoke without a terminal).
   decision, wide characters and a failure, a compacted turn, verbose); questions shown once and
   drafts; keys and cards through `update`; streaming; snapshots; resizes; the loop on a `FakeTty`.
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
-  session started, a prompt to its result card, a permission given on the card, Ctrl+C twice); with the
+  session started, a prompt to its result card, a permission given on the card, `/new` and `/sessions` back to it, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn
   of cells to `✓ Done`; and the `fx` binary on a PTY (ConPTY on Windows): keys, a resize, Ctrl+C twice,
   exit code 0 and the terminal given back.
@@ -270,7 +294,7 @@ terminal check's P/Invoke without a terminal).
 | What | Task |
 |---|---|
 | Changes and `[d]iff [u]ndo [r]eview` on the result card, activity lines from cells' host calls (`Refs`, `Read` inside cells) | T205 |
-| `/` commands (`/context`, `/compact`, `/env`, `/model`, `/goal`), the environment picker | T215, later |
+| More `/` commands (`/context`, `/compact`, `/env`, `/goal`), a model picker from the catalog, the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
 | Mouse; asking the terminal for its background (OSC 11) | later |
