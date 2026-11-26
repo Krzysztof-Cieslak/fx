@@ -102,6 +102,9 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 - Write effects with `eff { }`, or `effResult { }` when they have expected failures. Only `Eff` values can be bound. Lift a task with `Eff.ofTask` only inside capability modules and interpreters.
 - Loop with `while` or `for`, never with a recursive `return!`: that builds an ever longer chain of tasks.
 - Never suppress FS3511. Restructure the block (e.g. move a `let rec` out of it) so that it compiles to a state machine.
+- Inside the builders (`src/Fx.Effects/Builders.fs`), pass the state machine (`&sm`) only to a resumable code's `Invoke` and to the method builder's generic methods. Give any other helper the data it needs (`EffMachine.IsError sm.Data.Result`).
+  - A static machine is a struct the compiler generates. A method that gets it as a `ResumableStateMachine` reads its fields at the wrong offsets.
+  - Release builds inline such helpers, which hides the bug; Debug builds call them. An `effResult` loop once stopped after its first asynchronous iteration in Debug only.
 - Every environment carries a `Scope`: a cancellation token and the current trace span.
   - Capability calls pass `env.Scope.Cancellation`. Honour it: `Eff.all`, `race` and `timeout` wait for every child.
   - Run effects concurrently with `Eff.all`, `both`, `race`, `timeout` and `bracket`, never with `Task.Run` or `Task.WhenAll`.

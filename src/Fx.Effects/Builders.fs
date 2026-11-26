@@ -6,6 +6,10 @@ namespace Fx.Effects
 // every `let!` passes to the effect it binds. See docs/modules/eff.md for the semantics and the
 // benchmark that chose this design over closure composition.
 //
+// In resumable code, pass the machine (`&sm`) only to a resumable code's `Invoke` and to the method
+// builder's generic `Start`/`AwaitUnsafeOnCompleted`; give any other helper the data it needs (see
+// `EffMachine.IsError`). A static machine's layout is not `ResumableStateMachine`'s.
+//
 // Only effects can be bound: there is deliberately no overload for raw `Task`, `ValueTask` or
 // `Async`, so every effect shows up in the environment type. Lift other awaitables with `Eff.ofTask`.
 
@@ -122,9 +126,13 @@ type EffMachine =
             sm.ResumptionDynamicInfo.ResumptionFunc <- cont
             false
 
-    /// Whether an `effResult` block has short-circuited with an error.
-    static member inline IsError(sm: byref<EffStateMachine<'R, Result<'T, 'E>>>) : bool =
-        match sm.Data.Result with
+    /// Whether an `effResult` block has short-circuited with an error: pass it the machine's result
+    /// (`sm.Data.Result`), never the machine. A static machine is a struct the compiler generates,
+    /// with fields of its own; handed to a method as `&sm`, it arrives reinterpreted as a
+    /// `ResumableStateMachine`, whose layout differs. Optimized builds inline `inline` helpers, which
+    /// hides that; non-optimized ones (Debug, since F# 11) call them, and the callee reads garbage.
+    static member inline IsError(result: Result<'T, 'E>) : bool =
+        match result with
         | Error _ -> true
         | Ok _ -> false
 
@@ -253,7 +261,11 @@ type EffResultBuilder() =
         : EffResultCode<'R, 'TOverall, 'E, 'T> =
         ResumableCode.Combine(
             code1,
-            EffResultCode<'R, 'TOverall, 'E, 'T>(fun sm -> if EffMachine.IsError(&sm) then true else code2.Invoke(&sm))
+            EffResultCode<'R, 'TOverall, 'E, 'T>(fun sm ->
+                if EffMachine.IsError sm.Data.Result then
+                    true
+                else
+                    code2.Invoke(&sm))
         )
 
     member inline _.While
@@ -266,7 +278,7 @@ type EffResultBuilder() =
             ResumableCode.Combine(
                 body,
                 EffResultCode<'R, 'TOverall, 'E, unit>(fun sm ->
-                    if EffMachine.IsError(&sm) then
+                    if EffMachine.IsError sm.Data.Result then
                         keepGoing <- false
 
                     true)

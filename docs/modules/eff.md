@@ -36,6 +36,7 @@ type Eff<'R, 'T> = 'R -> Task<'T>
 - `effResult` resolves its `let!` overloads by priority. An effect that returns a `Result` is bound as one, and a plain effect is wrapped in `Ok`. If an effect's result type is still generic at that point, annotate it.
 - **Loops, not recursion.** `return!` of a recursive call is not a tail call, so it builds a chain of tasks that grows with every iteration. Write loops with `while`.
 - **FS3511.** Some constructs inside a block, such as a `let rec`, make the compiler fall back to a slower dynamic implementation and warn with FS3511. Warnings are errors, so production code never takes that path; `DynamicBuilderTests` tests it anyway.
+- **Debug builds.** A block is a static state machine in Debug too, but without optimization the compiler calls `inline` helpers instead of inlining them (F# 11). Inside the builders, a helper must never get the machine (`&sm`): a static machine is a struct the compiler generates, and a method that gets it as a `ResumableStateMachine` reads its fields at the wrong offsets. `EffMachine.IsError` takes the machine's result instead; before it did, an `effResult` loop ended after its first asynchronous iteration in Debug only (and the block returned the default `Ok`). CI's lint job runs `tests/Fx.Effects.Tests` in Debug for this.
 
 ## Scope and cancellation
 

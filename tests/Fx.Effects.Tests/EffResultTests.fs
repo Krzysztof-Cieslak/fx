@@ -98,6 +98,63 @@ let tests =
                 Expect.equal (List.ofSeq seen) [ 1 ] "for iterations"
             }
 
+            // Builds without optimization (Debug) call `inline` helpers instead of inlining them (F# 11).
+            // A helper handed the machine (`&sm`) read another field of the generated struct as the
+            // block's result: a loop ended after its first asynchronous iteration, and the block
+            // returned the default result (`Ok null`). CI runs this project in Debug too.
+            test "loops run every asynchronous iteration, then the rest of the block" {
+                let env = create().Env
+                let written = ResizeArray<string>()
+
+                let write (name: string) : Eff<Env, Result<unit, string>> =
+                    Eff.map (fun (_: string) -> Ok()) (later name)
+
+                // The shape of extracting a kernel's assets: a nested block that writes every file.
+                let extract (names: string list) : Eff<Env, Result<string, string>> =
+                    eff {
+                        let! result =
+                            effResult {
+                                do! okLater 0 |> EffResult.map ignore
+
+                                for name in names do
+                                    do! write name
+                                    written.Add name
+                            }
+
+                        match result with
+                        | Ok() -> return Ok $"wrote {written.Count}"
+                        | Error e -> return Error e
+                    }
+
+                Expect.equal (runIn env (extract [ "a"; "b"; "c"; "d" ])) (Ok "wrote 4") "for"
+                Expect.equal (List.ofSeq written) [ "a"; "b"; "c"; "d" ] "every iteration"
+
+                let program: Eff<Env, Result<string list * int, string>> =
+                    effResult {
+                        let seen = ResizeArray<string>()
+                        let mutable total = 0
+                        let mutable i = 0
+
+                        while i < 5 do
+                            let! v = okLater i
+                            total <- total + v
+                            i <- i + 1
+
+                        for x in [| "x"; "y"; "z" |] do
+                            let! v = okLater x
+                            seen.Add v
+
+                        for (key, value) in Map.ofList [ "k", 1; "l", 2 ] |> Map.toSeq do
+                            let! v = okLater value
+                            seen.Add $"{key}={v}"
+                            total <- total + v
+
+                        return List.ofSeq seen, total
+                    }
+
+                Expect.equal (runIn env program) (Ok([ "x"; "y"; "z"; "k=1"; "l=2" ], 13)) "while and for"
+            }
+
             test "try/finally runs after an error, and try/with catches exceptions only" {
                 let env = create().Env
                 let log = ResizeArray()
