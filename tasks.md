@@ -393,8 +393,8 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T206 done
-  class T132,T135 inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T135,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -469,7 +469,7 @@ flowchart LR
 | T133i | TUI: full width | T133b | §19.2 | todo | Dogfooding (T132): characters go missing at the right edge, which looks like an off-by-one in sizing. Lines, panels, boxes and the sidebar use exactly the terminal's columns (wide and combining characters counted by their display width, nothing clipped, nothing wrapped by the terminal); golden renders at several widths that assert every line's display width. |
 | T133j | TUI: expand one item | T133b | §19.2 | todo | Dogfooding (T132): `Ctrl+O` only cycles the detail for everything. Single items (a cell, an activity line, a result card) can be selected and expanded or collapsed on their own, with the keys in the footer and tui.md; the global detail stays. Update tests and golden renders. |
 | T134 | Approval modes | T127b, T132a | §13, §19.4 | todo | Dogfooding (T132): asking for every shell command is tiring. A mode (a variant slot, e.g. `grants.mode`: `ask`, `auto`) where commands that stay in the sandbox and the workspace run without asking, closer to opencode; writes outside the workspace, network and installs still ask; policy can forbid the mode; the TUI shows the mode and can switch it. spec §13 updated; host tests with a scripted model. |
-| T135 | CodeAct: a kernel that stays | T127 | §6.9 | in-progress | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
+| T135 | CodeAct: a kernel that stays | T127 | §6.9 | done | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
