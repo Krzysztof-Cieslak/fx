@@ -245,6 +245,7 @@ let callWith (live: Live) (parts: Part list) (sim: Sim) : Sim =
                 Step = sim.Step
                 Shown = rendered.Prompt.Suffix
                 Parts = parts
+                Used = None
             }
     )
 
