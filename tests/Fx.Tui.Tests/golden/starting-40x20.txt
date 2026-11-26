@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- fx · …/src/billing · anthr… ● starting
 
 
 
@@ -16,8 +15,9 @@
 
 
 
-
-⠋ starting: creating the session and it…
-›
+  ⠋ starting: creating the session and …
+┃ ›
+┃ anthropic/claude-sonnet-5-5
+fx · …/src/billing            ● starting
 ────────────────────────────────────────
-cursor 19,2
+cursor 17,4

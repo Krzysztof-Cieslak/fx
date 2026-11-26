@@ -1,13 +1,8 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · env: default (local) · sandbox: none · anthropic/… ● idle
  ! runs unsandboxed: commands can read and change everything the user can
 
+┃ replace deprecated Http.retry with RetryPolicy in billing
 
-
-
-
-
-› replace deprecated Http.retry with RetryPolicy in billing
   I'll look at the call sites first.
   ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
   ◆ Edit     src/Billing/Client.fs                                        ✓ 0.3s
@@ -19,9 +14,14 @@
   ✓ Done  Migrated 37 call sites to RetryPolicy.
     Evidence  dotnet test tests/Billing → 214 passed
     Verify    dotnet test tests/Billing
-    1m39s
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s
 
-Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 exit
-›
+
+
+
+
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline  ● idle
 ────────────────────────────────────────────────────────────────────────────────
-cursor 23,2
+cursor 21,4

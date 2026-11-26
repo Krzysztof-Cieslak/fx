@@ -121,7 +121,7 @@ let tests =
                     let t = tui host (SessionChoice.New(Some "first"))
                     t.WaitFor "session "
                     t.WaitFor "env: default"
-                    // The sandbox's driver in the header, and the environment's warnings (unsandboxed:
+                    // The sandbox's driver under the prompt, and the environment's warnings (unsandboxed:
                     // Windows, or no bubblewrap here) as the banner.
                     t.WaitFor "sandbox: "
                     let environment = (HostSessions.entries host |> List.exactlyOne).Environment
@@ -133,7 +133,7 @@ let tests =
                         t.WaitFor("! " + warning.Substring(0, min 40 warning.Length))
 
                     t.Type "Hello there\r"
-                    t.WaitFor "› Hello there"
+                    t.WaitFor "┃ Hello there"
                     t.WaitFor "✗ Failed"
 
                     // A permission the session's turn asks for (as T127b's guard does), answered on the card.

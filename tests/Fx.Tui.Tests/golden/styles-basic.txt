@@ -1,16 +1,16 @@
- 0 {fg=default bg=default bold reverse} fx{fg=default bg=default reverse} · …/src/billing · env: default (local) · sandbo… {fg=default bg=default dim reverse}● idle{fg=default bg=default reverse} 
- 1 {fg=black bg=yellow bold} ! runs unsandboxed: commands can read and change everythin…
- 2 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Read    {fg=default bg=default} src/Billing/Client.fs                    {fg=green bg=default}✓ {fg=default bg=default dim}0.2s
- 3 {fg=default bg=default}  {fg=yellow bg=default}◆{fg=default bg=default} {fg=default bg=default bold}Edit    {fg=default bg=default} src/Billing/Client.fs                    {fg=green bg=default}✓ {fg=default bg=default dim}0.3s
- 4 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Run     {fg=default bg=default} dotnet test tests/Billing                 {fg=red bg=default}✗ {fg=default bg=default dim}48s
- 5 {fg=default bg=default}      {fg=red bg=default}exit 1
- 6 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Cell    {fg=default bg=default} rerun the tests                           {fg=green bg=default}✓ {fg=default bg=default dim}46s
- 7 {fg=default bg=default}  {fg=default bg=default dim}▸ 1 cell (3 lines){fg=default bg=default}                         {fg=default bg=default dim}[Ctrl+O expand]
- 8 
- 9 {fg=default bg=default}  {fg=green bg=default bold}✓ Done  {fg=default bg=default}Migrated 37 call sites to RetryPolicy.
-10 {fg=default bg=default}    {fg=default bg=default bold}Evidence  {fg=default bg=default}dotnet test tests/Billing → 214 passed
-11 {fg=default bg=default}    {fg=default bg=default bold}Verify    {fg=default bg=default}dotnet test tests/Billing
-12 {fg=default bg=default}    {fg=default bg=default dim}1m39s
-13 
-14 {fg=default bg=default dim}Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 e…
-15 {fg=cyan bg=default bold}› 
+ 0 {fg=black bg=yellow bold} ! runs unsandboxed: commands can read and change everythin…
+ 1 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Read    {fg=default bg=default} src/Billing/Client.fs                    {fg=green bg=default}✓ {fg=default bg=default dim}0.2s
+ 2 {fg=default bg=default}  {fg=yellow bg=default}◆{fg=default bg=default} {fg=default bg=default bold}Edit    {fg=default bg=default} src/Billing/Client.fs                    {fg=green bg=default}✓ {fg=default bg=default dim}0.3s
+ 3 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Run     {fg=default bg=default} dotnet test tests/Billing                 {fg=red bg=default}✗ {fg=default bg=default dim}48s
+ 4 {fg=default bg=default}      {fg=red bg=default}exit 1
+ 5 {fg=default bg=default}  {fg=cyan bg=default}◇{fg=default bg=default} {fg=default bg=default bold}Cell    {fg=default bg=default} rerun the tests                           {fg=green bg=default}✓ {fg=default bg=default dim}46s
+ 6 {fg=default bg=default}  {fg=default bg=default dim}▸ 1 cell (3 lines){fg=default bg=default}                         {fg=default bg=default dim}[Ctrl+O expand]
+ 7 
+ 8 {fg=default bg=default}  {fg=green bg=default bold}✓ Done  {fg=default bg=default}Migrated 37 call sites to RetryPolicy.
+ 9 {fg=default bg=default}    {fg=default bg=default bold}Evidence  {fg=default bg=default}dotnet test tests/Billing → 214 passed
+10 {fg=default bg=default}    {fg=default bg=default bold}Verify    {fg=default bg=default}dotnet test tests/Billing
+11 {fg=default bg=default}  {fg=cyan bg=default}▣ {fg=default bg=default dim}fx · anthropic/claude-sonnet-5-5 · 1m39s
+12 
+13 {fg=cyan bg=default}┃ {fg=cyan bg=default bold}› 
+14 {fg=cyan bg=default}┃ {fg=default bg=default dim}anthropic/claude-sonnet-5-5 · env: default (local) · sand…
+15 {fg=default bg=default bold}fx{fg=default bg=default dim} · …/src/billing · session …00000000{fg=default bg=default}    {fg=default bg=default dim}Enter send  ● idle

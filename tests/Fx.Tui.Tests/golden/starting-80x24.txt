@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- fx · …/src/billing · anthropic/claude-sonnet-5-5                    ● starting
 
 
 
@@ -20,8 +19,9 @@
 
 
 
-
-⠋ starting: creating the session and its environment
-›
+  ⠋ starting: creating the session and its environment
+┃ ›
+┃ anthropic/claude-sonnet-5-5
+fx · …/src/billing    Enter send · Alt+Enter newline · Ctrl+O detail  ● starting
 ────────────────────────────────────────────────────────────────────────────────
-cursor 23,2
+cursor 21,4

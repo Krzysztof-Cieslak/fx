@@ -1,7 +1,6 @@
 ────────────────────────────────────────
- fx · …/src/billing · env: defa… ● idle
  ! runs unsandboxed: commands can read …
-  RetryPolicy in billing
+
   I'll look at the call sites first.
   ◇ Read     src/Billing/Client.… ✓ 0.2s
   ◆ Edit     src/Billing/Client.… ✓ 0.3s
@@ -15,9 +14,10 @@
     Evidence  dotnet test tests/Billing
               → 214 passed
     Verify    dotnet test tests/Billing
-    1m39s
+  ▣ fx · anthropic/claude-sonnet-5-5 · …
 
-Enter send · Alt+Enter newline · Ctrl+O…
-›
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing · session …00… ● idle
 ────────────────────────────────────────
-cursor 19,2
+cursor 17,4

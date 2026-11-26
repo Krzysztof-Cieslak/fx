@@ -1,14 +1,12 @@
 ────────────────────────────────────────
- fx · …/src/billing · env: de… ● turn 1
  ! runs unsandboxed: commands can read …
 
+┃ ship it
 
-
-
-
-
-› ship it
   ◇ Run      make deploy          ⠋ 0.0s
+
+
+
 
 ┃ Permission  (1 of 2)
 ┃ Run make deploy
@@ -17,7 +15,9 @@
 ┃ command: make deploy
 ┃ [y] once  [s] this session
 ┃ [a] always on this host  [n] deny
-● turn 1 · waiting for an answer
-›
+  ● turn 1 · waiting for an answer
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: de…
+fx · …/src/billing · session …… ● turn 1
 ────────────────────────────────────────
 cursor hidden

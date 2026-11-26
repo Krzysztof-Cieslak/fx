@@ -72,71 +72,81 @@ module View =
             | None when not st.AwaitingRequests.IsEmpty -> [ s t.Warning "● needs input" ]
             | None -> [ s t.Muted "● idle" ]
 
-    let header (model: Model) : Row =
+    /// The bottom row: the product, the workspace and the session on the left; the session's state,
+    /// whether the transcript is scrolled, and the keys that apply on the right (cut first).
+    let footer (model: Model) : Row =
         let t = theme model
-        let bar = t.Header
-        let sep = s bar " · "
+        let width = model.Width
 
-        // Most important first: what is cut at the right edge matters least. The session's id is
-        // shortened (its random end); the exit prints it whole.
-        let parts =
-            [
-                [ s (Style.withBold bar) (" " + model.Setup.Product) ]
-                [
-                    s
-                        bar
-                        (shortPath (
-                            model.Session
-                            |> Option.map _.Workspace
-                            |> Option.defaultValue model.Setup.Workspace
-                        ))
-                ]
-                match model.Env with
-                | Some env ->
-                    [ s bar $"env: {env.Name} ({env.Provider})" ]
+        let session =
+            match model.Session with
+            | Some session ->
+                let id =
+                    if session.Id.Length > 10 then
+                        "…" + session.Id.Substring(session.Id.Length - 8)
+                    else
+                        session.Id
 
-                    match env.Sandbox with
-                    | Some driver -> [ s bar ("sandbox: " + driver) ]
-                    | None -> ()
-                | None -> ()
-                match model.Setup.Model with
-                | Some m -> [ s bar m ]
-                | None -> ()
-                match model.Session with
-                | Some session ->
-                    let id =
-                        if session.Id.Length > 10 then
-                            "…" + session.Id.Substring(session.Id.Length - 8)
-                        else
-                            session.Id
-
-                    [ s bar ("session " + id) ]
-                | None -> ()
-            ]
+                [ s t.Muted (" · session " + id) ]
+            | None -> []
 
         let left =
-            parts
-            |> List.mapi (fun i part -> if i = 0 then part else sep :: part)
-            |> List.concat
+            [
+                s (Style.withBold t.Text) model.Setup.Product
+                s
+                    t.Muted
+                    (" · "
+                     + shortPath (
+                         model.Session
+                         |> Option.map _.Workspace
+                         |> Option.defaultValue model.Setup.Workspace
+                     ))
+            ]
+            @ session
+
+        let tl = model.Timeline
+
+        let hints =
+            match App.cards model with
+            | Card.Question _ :: _ -> [ "Enter answer"; "Esc interrupt" ]
+            | _ :: _ -> [ "keys in [ ] answer"; "←→ Enter" ]
+            | [] ->
+                if tl.State.Running.IsSome then
+                    [ "Enter steer"; "Tab queue"; "Esc interrupt" ]
+                else
+                    [ "Enter send"; "Alt+Enter newline"; "Ctrl+O detail"; "Ctrl+C×2 exit" ]
+
+        let scrolled =
+            if model.Scroll > 0 then
+                [ s t.Warning "↑ scrolled · PgDn  " ]
+            else
+                []
+
+        let state = state model
+        // As many hints as fit beside the state and the left side.
+        let room = width - Row.width state - Row.width scrolled - Row.width left - 2
+
+        let shown =
+            hints
+            |> List.fold
+                (fun (shown: string list) hint ->
+                    let next = shown @ [ hint ]
+
+                    if Text.width (String.concat " · " next) + 2 <= room then
+                        next
+                    else
+                        shown)
+                []
 
         let right =
-            state model
-            |> List.map (fun span ->
-                { span with
-                    Style =
-                        { span.Style with
-                            Bg = bar.Bg
-                            Reverse = bar.Reverse
-                        }
-                })
+            scrolled
+            @ (if shown.IsEmpty then
+                   []
+               else
+                   [ s t.Muted (String.concat " · " shown + "  ") ])
+            @ state
 
-        Row.spread model.Width (left @ [ s bar " " ]) (right @ [ s bar " " ])
-        |> Row.fill model.Width bar
-        |> List.map (fun span ->
-            if span.Style = Style.plain then
-                { span with Style = bar }
-            else
-                span)
+        Row.spread width left right
 
     /// The environment's warnings (spec §18: running unsandboxed is a persistent warning).
     let banner (model: Model) : Row list =
@@ -152,6 +162,37 @@ module View =
     // ---- the transcript -------------------------------------------------------------------------
 
     let private indent (n: int) = p (String(' ', n))
+
+    /// Rows on the theme's panel background, to the screen's edge (a theme that paints none leaves
+    /// them as they are).
+    let private raise (t: Theme) (width: int) (rows: Row list) : Row list =
+        if t.Panel = Color.Default then
+            rows |> List.map (Row.fit width)
+        else
+            rows
+            |> List.map (fun row ->
+                row
+                |> List.map (fun span ->
+                    if span.Style.Bg = Color.Default && not span.Style.Reverse then
+                        { span with
+                            Style = { span.Style with Bg = t.Panel }
+                        }
+                    else
+                        span)
+                |> Row.fill width { t.Text with Bg = t.Panel })
+
+    /// A raised block (a prompt sent, the prompt being typed): a bar at its left and, where the theme
+    /// paints panels, a row of padding above and below.
+    let private panel (t: Theme) (width: int) (bar: Style) (rows: Row list) : Row list =
+        let barred = rows |> List.map (fun row -> s bar "┃ " :: row)
+
+        let padded =
+            if t.Panel = Color.Default then
+                barred
+            else
+                [ s bar "┃" ] :: barred @ [ [ s bar "┃" ] ]
+
+        raise t width padded
 
     let private paragraph (width: int) (lead: Span list) (style: Style) (text: string) : Row list =
         Paragraph.wrap width lead style text
@@ -184,7 +225,10 @@ module View =
 
     let private input (t: Theme) (width: int) (input: Input) : Row list =
         match input.Content with
-        | InputContent.Text text -> paragraph width [ s (Style.withBold t.Accent) "› " ] (bold t) text
+        | InputContent.Text text ->
+            Text.wrap (max 1 (width - 3)) text
+            |> List.map (fun line -> [ s t.Text line ])
+            |> panel t width t.Bar
         | InputContent.Resolved(request, resolution) ->
             paragraph width [ s t.Muted "↩ " ] t.Muted $"{request} {resolution}"
         | InputContent.JobFinished(job, note) ->
@@ -259,10 +303,7 @@ module View =
             |> not)
 
     /// The result card of spec §19.2: how the turn ended, its evidence and how to verify it.
-    let ending (t: Theme) (width: int) (turn: TurnView) (ended: TurnEnd) (at: int64) : Row list =
-        let took = s t.Muted ("  " + duration (at - turn.Started))
-        let tookAlone = s t.Muted (duration (at - turn.Started))
-
+    let ending (t: Theme) (width: int) (turn: TurnView) (ended: TurnEnd) : Row list =
         match ended with
         | TurnEnd.Completed(TurnResult.Done(summary, evidence, verify)) ->
             [
@@ -272,12 +313,11 @@ module View =
                 match verify with
                 | Some verify -> yield! markdown t width [ indent 4; s (bold t) "Verify    " ] verify
                 | None -> ()
-                yield Row.fit width [ indent 4; tookAlone ]
             ]
         | TurnEnd.Completed(TurnResult.NeedInput ids) ->
             // The questions were shown where the turn asked them; only those it did not are here.
             [
-                Row.fit width [ indent 2; s (Style.withBold t.Warning) "? Needs input"; took ]
+                Row.fit width [ indent 2; s (Style.withBold t.Warning) "? Needs input" ]
                 for question in unasked turn ids do
                     yield! markdown t width [ indent 4 ] question
             ]
@@ -287,10 +327,7 @@ module View =
                 if not jobs.IsEmpty then
                     yield Row.fit width [ indent 4; s t.Muted ("on " + String.concat ", " jobs) ]
             ]
-        | TurnEnd.Interrupted ->
-            [
-                Row.fit width [ indent 2; s (Style.withBold t.Warning) "⏹ Interrupted"; took ]
-            ]
+        | TurnEnd.Interrupted -> [ Row.fit width [ indent 2; s (Style.withBold t.Warning) "⏹ Interrupted" ] ]
         | TurnEnd.Failed reason ->
             paragraph width [ indent 2; s (Style.withBold t.Error) "✗ Failed  " ] Style.plain reason
         | TurnEnd.Abandoned reason ->
@@ -324,6 +361,10 @@ module View =
         [
             for i in turn.Inputs do
                 yield! input t width i
+
+            // A painted panel has its own padding.
+            if not turn.Inputs.IsEmpty && t.Panel = Color.Default then
+                yield Row.empty
 
             for item in turn.Items do
                 match item with
@@ -396,7 +437,14 @@ module View =
             match turn.Ended with
             | Some(ended, at) ->
                 yield Row.empty
-                yield! ending t width turn ended at
+                yield! ending t width turn ended
+                // Who answered and how long the turn took.
+                let who =
+                    [ model.Setup.Product ]
+                    @ (model.Setup.Model |> Option.toList)
+                    @ [ duration (at - turn.Started) ]
+
+                yield Row.fit width [ indent 2; s t.Accent "▣ "; s t.Muted (String.concat " · " who) ]
             | None -> ()
 
             yield Row.empty
@@ -557,7 +605,7 @@ module View =
         let t = theme model
 
         match App.cards model with
-        | card :: _ as all -> cardRows model card all.Length
+        | card :: _ as all -> cardRows model card all.Length |> raise t model.Width
         | [] ->
             App.others model
             |> List.map (fun request ->
@@ -591,9 +639,9 @@ module View =
                 | None -> ()
         ]
 
-    let status (model: Model) : Row =
+    /// What happens (starting, the running action, a notice): nothing when nothing does.
+    let status (model: Model) : Row list =
         let t = theme model
-        let width = model.Width
         let tl = model.Timeline
 
         let left =
@@ -627,37 +675,36 @@ module View =
                     | None when tl.State.Held -> [ s t.Warning "held: the last turn did not finish; a prompt goes on" ]
                     | None -> []
 
-        let hints =
-            match App.cards model with
-            | Card.Question _ :: _ -> "Enter answer · Esc interrupt"
-            | _ :: _ -> "keys in [ ] answer · ←→ Enter"
-            | [] ->
-                if tl.State.Running.IsSome then
-                    "Enter steer · Tab queue · Esc interrupt"
-                else
-                    "Enter send · Alt+Enter newline · Ctrl+O detail · Ctrl+C×2 exit"
-
-        let scrolled =
-            if model.Scroll > 0 then
-                [ s t.Warning "↑ scrolled · PgDn  " ]
-            else
-                []
-
-        let right = scrolled @ [ s t.Muted hints ]
-
-        // What happens comes first; the hints take what room is left.
         if left.IsEmpty then
-            Row.fit width right
-        elif Row.width left + Row.width right + 1 <= width then
-            Row.spread width left right
+            []
         else
-            Row.fit width left
+            [ Row.fit model.Width (indent 2 :: left) ]
 
-    /// The prompt's rows (at most `rows`, scrolled to the cursor) and the cursor's place in them.
+    /// The line under the prompt: the model, the environment and what confines it.
+    let private info (model: Model) : Row =
+        let t = theme model
+
+        let parts =
+            (model.Setup.Model |> Option.toList)
+            @ (match model.Env with
+               | Some env ->
+                   [
+                       $"env: {env.Name} ({env.Provider})"
+                       match env.Sandbox with
+                       | Some driver -> "sandbox: " + driver
+                       | None -> ()
+                   ]
+               | None -> [])
+
+        [ s t.Muted (String.concat " · " parts) ]
+
+    /// The prompt being typed in its box (at most `rows` of it, scrolled to the cursor) with the info
+    /// line under it, and the cursor's place in them.
     let editor (model: Model) (rows: int) : Row list * (int * int) =
         let t = theme model
         let width = model.Width
-        let prefix = 2
+        // The bar and the marker.
+        let prefix = 4
         let lines, (row, column) = Editor.layout (max 1 (width - prefix)) model.Editor
         let rows = max 1 rows
         let first = max 0 (min (row - rows + 1) (lines.Length - rows)) |> max 0
@@ -670,9 +717,11 @@ module View =
             else
                 p "  "
 
-        let rendered = shown |> List.mapi (fun i line -> Row.fit width [ lead i; p line ])
-
-        rendered, (row - first, min (width - 1) (column + prefix))
+        let typed = shown |> List.mapi (fun i line -> [ lead i; p line ])
+        let box = panel t width t.Bar (typed @ [ info model ])
+        // The padding row a painted panel has above.
+        let top = if t.Panel = Color.Default then 0 else 1
+        box, (row - first + top, min (width - 1) (column + prefix))
 
     /// A row on the theme's background: text in the terminal's default colours takes the theme's,
     /// and a theme that paints its background fills the row to the screen's width.
@@ -701,23 +750,25 @@ module View =
         else
             Row.fill width { t.Text with Bg = t.Background } row |> Row.normalize
 
-    /// The whole screen.
+    /// The whole screen: the warnings, the transcript from the top, what is asked, the prompts
+    /// waiting, what happens, the prompt's box and the footer.
     let view (model: Model) : Frame =
+        let t = theme model
         let width = model.Width
         let height = model.Height
-        let header = [ header model ]
         let banner = banner model
         let asked = asked model
         let pending = pending model
-        let status = [ status model ]
+        let status = status model
+        let footer = [ footer model ]
 
         let editorRows =
-            let lines, _ = Editor.layout (max 1 (width - 2)) model.Editor
+            let lines, _ = Editor.layout (max 1 (width - 4)) model.Editor
             min lines.Length (max 1 (min 8 (height / 3)))
 
         let editor, (cursorRow, cursorColumn) = editor model editorRows
         // What does not fit goes, least important first: the banner stays, the transcript shrinks.
-        let fixedRows = header.Length + status.Length + editor.Length
+        let fixedRows = footer.Length + status.Length + editor.Length
         let room = max 0 (height - fixedRows)
 
         let banner =
@@ -729,7 +780,12 @@ module View =
         let room = room - asked.Length
         let pending = List.truncate (max 0 (room / 3)) pending
         let room = room - pending.Length
-        let all = transcript model
+        // A row of margin under the warnings.
+        let all =
+            match transcript model with
+            | [] -> []
+            | rows -> Row.empty :: rows
+
         let maxScroll = max 0 (all.Length - room)
         let scroll = min model.Scroll maxScroll
 
@@ -739,15 +795,15 @@ module View =
         let filler = List.replicate (room - visible.Length) Row.empty
 
         let rows =
-            header @ banner @ filler @ visible @ asked @ pending @ status @ editor
+            banner @ visible @ filler @ asked @ pending @ status @ editor @ footer
             |> List.truncate height
             |> List.map (Row.fit width >> Row.normalize)
 
         let rows =
             rows @ List.replicate (height - rows.Length) Row.empty
-            |> List.map (paint (theme model) width)
+            |> List.map (paint t width)
 
-        let editorTop = height - editor.Length
+        let editorTop = height - footer.Length - editor.Length
 
         let cursor =
             match App.cards model with
@@ -757,7 +813,7 @@ module View =
                  | _ -> true)
                 ->
                 None
-            | _ when editorTop + cursorRow < height && editorTop >= 0 -> Some(editorTop + cursorRow, cursorColumn)
+            | _ when editorTop >= 0 && editorTop + cursorRow < height -> Some(editorTop + cursorRow, cursorColumn)
             | _ -> None
 
         {

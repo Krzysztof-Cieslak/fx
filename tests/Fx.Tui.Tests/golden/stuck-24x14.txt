@@ -1,17 +1,17 @@
 ────────────────────────
- fx · …/… ● needs input
  ! runs unsandboxed: co…
-    same thing (cell) 3
     times with the same
     result and stopped.
     How should it go on?
   ▸ 1 c… [Ctrl+O expand]
 
-  ? Needs input  3.0s
+  ? Needs input
+  ▣ fx · anthropic/clau…
 
 ┃ Question
 ┃ Type the answer below…
-Enter answer · Esc inte…
-›
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/sr… ● needs input
 ────────────────────────
-cursor 13,2
+cursor 11,4

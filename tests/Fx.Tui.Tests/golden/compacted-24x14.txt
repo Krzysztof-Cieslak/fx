@@ -1,5 +1,4 @@
 ────────────────────────
- fx · …/src/bil… ● idle
  ! runs unsandboxed: co…
   ◇ Cell     rea… ✓ 0.3s
   ◇ Cell     por… ✓ 9.0s
@@ -9,9 +8,10 @@
 
   ✓ Done  Ported the
           parser
-    20s
+  ▣ fx · anthropic/clau…
 
-Enter send · Alt+Enter …
-›
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/billi… ● idle
 ────────────────────────
-cursor 13,2
+cursor 11,4
