@@ -74,6 +74,17 @@ type Mark =
 
     override this.ToString() = $"{this.Message}.{this.Parts}"
 
+/// A visible reply of the history: its entry, and where the prompt of the call it answered ended.
+type ReplyMark =
+    {
+        /// The reply's entry (its index in the transcript).
+        Entry: int
+        /// Just before the reply's parts (after the suffix it was shown).
+        End: Mark
+    }
+
+    override this.ToString() = $"reply #{this.Entry} at {this.End}"
+
 /// A render's result: the prompt and what it shows.
 type Rendered =
     {
@@ -81,6 +92,9 @@ type Rendered =
         /// Where earlier calls' prompts ended (just before each visible reply), oldest first: what a
         /// cache written then covers.
         Ends: Mark list
+        /// The visible replies with where their calls' prompts ended, oldest first: where a summary can
+        /// cut the history (compaction).
+        Replies: ReplyMark list
         /// The file ranges the prompt shows (`SeenRanges`).
         Seen: SeenRanges
         /// The paths whose content was withheld, sorted.
@@ -150,8 +164,8 @@ module Render =
         kept, dropped
 
     /// Messages from (role, part) pairs, consecutive parts of one role merged into one message, and
-    /// positions in the pairs (after the first k) as marks.
-    let private group (flat: (Role * Part) list) (positions: int list) : Message list * Mark list =
+    /// how positions in the pairs (after the first k) map to marks.
+    let private group (flat: (Role * Part) list) : Message list * (int -> Mark option) =
         let messages = ResizeArray<Role * ResizeArray<Part>>()
         // For each pair, the message it went to and its index there.
         let at = ResizeArray<int * int>()
@@ -164,15 +178,12 @@ module Render =
             parts.Add part
             at.Add(messages.Count - 1, parts.Count)
 
-        let marks =
-            positions
-            |> List.choose (fun k ->
-                if k <= 0 || k > at.Count then
-                    None
-                else
-                    let message, parts = at[k - 1]
-                    Some { Message = message; Parts = parts })
-            |> List.distinct
+        let mark (k: int) =
+            if k <= 0 || k > at.Count then
+                None
+            else
+                let message, parts = at[k - 1]
+                Some { Message = message; Parts = parts }
 
         (messages
          |> Seq.map (fun (role, parts) ->
@@ -181,7 +192,7 @@ module Render =
                  Parts = List.ofSeq parts
              })
          |> List.ofSeq),
-        marks
+        mark
 
     /// Renders the prompt (spec §5): the frame (or the sections, before one is recorded) as the prefix,
     /// the visible history as messages, and the views as the suffix. Pure and deterministic: the same
@@ -219,7 +230,8 @@ module Render =
         // The history.
         let visible = Transcript.visible transcript
         let flat = ResizeArray<Role * Part>()
-        let ends = ResizeArray<int>()
+        // Each visible reply's entry and the position just before its parts.
+        let ends = ResizeArray<int * int>()
         let mutable stale = 0
 
         let user (parts: Part list) =
@@ -254,7 +266,7 @@ module Render =
 
                         user (Piece.parts block.Pieces)
 
-                    ends.Add flat.Count
+                    ends.Add(entry.Index, flat.Count)
 
                     let parts =
                         if Transcript.isStale entry.Index transcript || entry.Index >= rewriteAt then
@@ -314,7 +326,14 @@ module Render =
                 | EntryContent.Ended(turn, ended) -> user [ Part.text (endedText turn ended) ]
                 | EntryContent.Update update -> userPieces entry.Index (updatePieces update)
 
-        let history, endMarks = group (List.ofSeq flat) (List.ofSeq ends)
+        let history, markAt = group (List.ofSeq flat)
+
+        let replies =
+            ends
+            |> Seq.choose (fun (index, k) -> markAt k |> Option.map (fun mark -> { Entry = index; End = mark }))
+            |> List.ofSeq
+
+        let endMarks = replies |> List.map _.End |> List.distinct
 
         // The suffix.
         let input =
@@ -338,6 +357,7 @@ module Render =
                     Suffix = suffix
                 }
             Ends = endMarks
+            Replies = replies
             Seen = seen
             Withheld = List.ofSeq withheld
             Stale = stale
@@ -398,27 +418,14 @@ module Render =
                     Parts = List.ofSeq parts
                 })
 
-    /// The canonical request for a rendered prompt (spec §10.3): the template's model, tools and
-    /// options; the prefix as the system parts; the history and then the suffix as messages (the suffix
-    /// in a user message: in the history's last one if that is the user's); cache breakpoints by the
-    /// policy within the model's limit (most valuable first: the end of this request, the prefix, then
-    /// the latest earlier ends), and the prefix's key as the cache key where the model takes one.
-    let request (cfg: RenderConfig) (template: ChatRequest) (rendered: Rendered) : ChatRequest =
-        let prompt = rendered.Prompt
-        let system = system prompt
-
-        let suffix = prompt.Suffix |> List.collect (fun block -> Piece.parts block.Pieces)
-
-        let messages =
-            match suffix with
-            | [] -> prompt.History
-            | parts ->
-                match List.tryLast prompt.History with
-                | Some last when last.Role = Role.User ->
-                    (prompt.History |> List.truncate (prompt.History.Length - 1))
-                    @ [ { last with Parts = last.Parts @ parts } ]
-                | _ -> prompt.History @ [ Message.user parts ]
-
+    /// A request of the system parts, the messages and the earlier ends: cache breakpoints by the policy
+    /// within the model's limit (most valuable first: the end of the messages, the prefix, then the
+    /// latest earlier ends), and the prefix's key as the cache key where the model takes one.
+    let private requestOf
+        (cfg: RenderConfig)
+        (template: ChatRequest)
+        (system: Part list, messages: Message list, ends: Mark list)
+        : ChatRequest =
         let caps = cfg.Caching
         let policy = cfg.Cache.Breakpoints
 
@@ -448,7 +455,7 @@ module Render =
             | Breakpoints.Rolling ->
                 (finalMark |> Option.map Some |> Option.toList)
                 @ [ None ]
-                @ (rendered.Ends |> List.rev |> List.map Some)
+                @ (ends |> List.rev |> List.map Some)
             |> List.filter (fun c -> c.IsSome || not system.IsEmpty)
             |> List.distinct
             |> List.truncate (max 0 budget)
@@ -473,3 +480,49 @@ module Render =
             Messages = insert marks messages
             Cache = { template.Cache with Key = key }
         }
+
+    /// The canonical request for a rendered prompt (spec §10.3): the template's model, tools and
+    /// options; the prefix as the system parts; the history and then the suffix as messages (the suffix
+    /// in a user message: in the history's last one if that is the user's); cache breakpoints by the
+    /// policy within the model's limit (most valuable first: the end of this request, the prefix, then
+    /// the latest earlier ends), and the prefix's key as the cache key where the model takes one.
+    let request (cfg: RenderConfig) (template: ChatRequest) (rendered: Rendered) : ChatRequest =
+        let prompt = rendered.Prompt
+        let suffix = prompt.Suffix |> List.collect (fun block -> Piece.parts block.Pieces)
+
+        let messages =
+            match suffix with
+            | [] -> prompt.History
+            | parts ->
+                match List.tryLast prompt.History with
+                | Some last when last.Role = Role.User ->
+                    (prompt.History |> List.truncate (prompt.History.Length - 1))
+                    @ [ { last with Parts = last.Parts @ parts } ]
+                | _ -> prompt.History @ [ Message.user parts ]
+
+        requestOf cfg template (system prompt, messages, rendered.Ends)
+
+    /// The history up to a mark: the messages before it, and the first parts of its message.
+    let upTo (mark: Mark) (history: Message list) : Message list =
+        history
+        |> List.truncate (mark.Message + 1)
+        |> List.mapi (fun i message ->
+            if i = mark.Message then
+                { message with
+                    Parts = message.Parts |> List.truncate mark.Parts
+                }
+            else
+                message)
+        |> List.filter (fun message -> not message.Parts.IsEmpty)
+
+    /// The request of a prompt cut where an earlier call's prompt ended (`mark`, one of `Ends`): the
+    /// system parts and the history up to it, with breakpoints where the requests that ended there and
+    /// before had theirs, so it reads what they wrote to the cache. Summary requests build on it.
+    let requestUpTo (cfg: RenderConfig) (template: ChatRequest) (rendered: Rendered) (mark: Mark) : ChatRequest =
+        let before (m: Mark) =
+            m.Message < mark.Message || (m.Message = mark.Message && m.Parts < mark.Parts)
+
+        requestOf
+            cfg
+            template
+            (system rendered.Prompt, upTo mark rendered.Prompt.History, rendered.Ends |> List.filter before)
