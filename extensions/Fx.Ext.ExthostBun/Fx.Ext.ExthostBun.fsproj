@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The bundled fx.exthost.bun package (spec §6.3, §16.1): the Bun extension host, a process extension
+    on the pinned Bun that contributes the extension runtime bun. Its TypeScript (ExthostFiles.fs,
+    generated from packages/exthost-bun/src and packages/sdk/src and carried in the binary) runs with
+    fx.runtime.bun's hardened launch. Like every package under extensions/, it references the public
+    SDK (src/Fx.Sdk) and nothing else; the architecture tests check the compiled assembly. See README.md.
+  -->
+  <ItemGroup>
+    <Compile Include="ExthostFiles.fs" />
+    <Compile Include="ExthostBun.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.Sdk\Fx.Sdk.fsproj" />
+  </ItemGroup>
+</Project>

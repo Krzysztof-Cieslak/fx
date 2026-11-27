@@ -1,0 +1,104 @@
+{
+  "manifest": {
+    "id": "fx.exthost.bun",
+    "version": "1.0.0",
+    "description": "The Bun extension host: the extension runtime bun, which runs TypeScript extensions on the pinned Bun.",
+    "sdk": "0.1",
+    "protocol": "1",
+    "placement": "host",
+    "runtime": "process",
+    "launch": {
+      "exe": "${bin.bun}",
+      "args": [
+        "--config=${root}/config/bunfig.toml",
+        "--no-env-file",
+        "--no-install",
+        "--no-orphans",
+        "--no-macros",
+        "${root}/packages/exthost-bun/src/main.ts"
+      ],
+      "envAllowlist": [
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "SystemRoot",
+        "windir",
+        "SystemDrive",
+        "ComSpec",
+        "PATHEXT",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "OS"
+      ],
+      "envSet": {
+        "DO_NOT_TRACK": "1",
+        "BUN_ENABLE_CRASH_REPORTING": "0",
+        "NO_COLOR": "1",
+        "HOME": "${root}/home",
+        "USERPROFILE": "${root}/home",
+        "XDG_CONFIG_HOME": "${root}/home",
+        "XDG_CACHE_HOME": "${root}/cache",
+        "BUN_RUNTIME_TRANSPILER_CACHE_PATH": "${root}/cache",
+        "BUN_INSTALL_CACHE_DIR": "${root}/cache",
+        "TMPDIR": "${root}/tmp",
+        "TEMP": "${root}/tmp",
+        "TMP": "${root}/tmp"
+      },
+      "envDeny": [
+        "BUN_OPTIONS",
+        "BUN_INSPECT*",
+        "BUN_CONFIG_*",
+        "BUN_JSC_*",
+        "BUN_FEATURE_FLAG_*",
+        "BUN_DEBUG*",
+        "NODE_OPTIONS",
+        "NODE_INSPECT*",
+        "NODE_PATH",
+        "NODE_CHANNEL_*",
+        "NODE_REPL_EXTERNAL_MODULE",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "NPM_CONFIG_*",
+        "DOTNET_STARTUP_HOOKS",
+        "DOTNET_ADDITIONAL_DEPS",
+        "DOTNET_SHARED_STORE",
+        "DOTNET_ENABLE_PROFILING*",
+        "CORECLR_PROFILER*",
+        "CORECLR_ENABLE_PROFILING",
+        "COR_PROFILER*",
+        "COR_ENABLE_PROFILING",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "LD_LIBRARY_PATH",
+        "DYLD_*",
+        "PYTHONSTARTUP",
+        "PERL5OPT",
+        "RUBYOPT",
+        "JAVA_TOOL_OPTIONS",
+        "_JAVA_OPTIONS"
+      ],
+      "cwd": "owned",
+      "untrustedOverrides": [
+        "--tsconfig-override=${root}/config/tsconfig.json"
+      ]
+    },
+    "requires": [
+      {
+        "id": "bun",
+        "version": "1.4.5"
+      }
+    ],
+    "capabilities": [],
+    "contributions": [
+      {
+        "type": "extension-runtime",
+        "id": "bun"
+      }
+    ],
+    "rpc": {
+      "methods": []
+    },
+    "replaces": []
+  }
+}

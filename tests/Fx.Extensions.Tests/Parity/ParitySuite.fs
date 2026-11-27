@@ -55,6 +55,14 @@ let private using (load: unit -> Task<Loaded>) (body: Loaded -> Task<unit>) : Ta
             (loaded.Dispose()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
     }
 
+/// Whether a registry event is about the sample (a runtime's host may be loaded with it).
+let private ofSample (event: RegistryEvent) : bool =
+    match event with
+    | RegistryEvent.Admitted admission -> admission.Id = Sample.id
+    | RegistryEvent.Activated id
+    | RegistryEvent.ActivationFailed(id, _)
+    | RegistryEvent.Disabled(id, _) -> id = Sample.id
+
 let private run (loaded: Loaded) (effect: Eff<HostEnv, 'T>) : Task<'T> = within (Eff.run loaded.Env effect)
 
 let tests (name: string) (load: unit -> Task<Loaded>) : Test =
@@ -77,12 +85,14 @@ let tests (name: string) (load: unit -> Task<Loaded>) : Test =
                             let host = loaded.Host
 
                             Expect.equal
-                                (host.Events |> List.map (fun e -> e.ToString().Split(' ')[0]))
+                                (host.Events
+                                 |> List.filter ofSample
+                                 |> List.map (fun e -> e.ToString().Split(' ')[0]))
                                 [ "admitted"; "activated" ]
                                 "events"
 
                             Expect.equal (Registry.replay host.Events) host.State "replay"
-                            Expect.equal (Registry.active host.State) [ Sample.id ] "active"
+                            Expect.contains (Registry.active host.State) Sample.id "active"
                         })
             }
 
@@ -108,7 +118,8 @@ let tests (name: string) (load: unit -> Task<Loaded>) : Test =
                                 "priorities travel"
 
                             Expect.isEmpty
-                                (ExtensionHost.contributions ExtensionRuntimes.contributionType loaded.Host)
+                                (ExtensionHost.contributions ExtensionRuntimes.contributionType loaded.Host
+                                 |> List.filter (fun r -> r.Extension = Sample.id))
                                 "no runtimes"
                         })
             }

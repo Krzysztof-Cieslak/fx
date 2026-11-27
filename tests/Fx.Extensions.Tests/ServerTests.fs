@@ -1,6 +1,6 @@
 /// The extension protocol's server side and the host's `RemotePeer` over it, beyond the server
 /// conformance suite (Parity/ServerConformance.fs): several extensions in one process, interpreter
-/// middleware, and a runtime contributed by an extension process (as `fx.exthost.bun` will).
+/// middleware, and a runtime contributed by an extension process (as `fx.exthost.bun` does).
 module Fx.Extensions.Tests.ServerTests
 
 open System
