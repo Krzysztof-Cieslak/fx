@@ -253,7 +253,10 @@ let guard =
                 let until (count: int) =
                     let deadline = DateTime.UtcNow.AddSeconds 30.0
 
-                    while (pendingNow ()).Length < count && DateTime.UtcNow < deadline do
+                    while (pendingNow ()).Length < count do
+                        if DateTime.UtcNow > deadline then
+                            failwith $"never {count} requests pending (30 s)"
+
                         Thread.Sleep 5
 
                     pendingNow ()
@@ -337,6 +340,30 @@ let guard =
                 )
 
 
+                // A cancelled wait (before the person's switch below, which would run it unasked).
+                use cancel = new CancellationTokenSource()
+
+                let cancelled =
+                    Eff.run
+                        { env with
+                            Scope =
+                                { env.Scope with
+                                    Cancellation = cancel.Token
+                                }
+                        }
+                        (guard (shell "t1-s1-5" "mkdir d"))
+
+                until 1 |> ignore
+                cancel.Cancel()
+
+                let outcome =
+                    try
+                        wait cancelled |> showResult
+                    with :? OperationCanceledException ->
+                        "cancelled"
+
+                out.Add("interrupted: " + outcome)
+
                 // A person's switch: a session grant of approvals.auto, in mode deny.
                 let grant =
                     run (
@@ -393,29 +420,6 @@ let guard =
                     "policy -> "
                     + String.Join(", ", AutoApprovals.policyRules [ policy ] |> List.map string)
                 )
-
-                use cancel = new CancellationTokenSource()
-
-                let cancelled =
-                    Eff.run
-                        { env with
-                            Scope =
-                                { env.Scope with
-                                    Cancellation = cancel.Token
-                                }
-                        }
-                        (guard (shell "t1-s1-5" "mkdir d"))
-
-                until 1 |> ignore
-                cancel.Cancel()
-
-                let outcome =
-                    try
-                        wait cancelled |> showResult
-                    with :? OperationCanceledException ->
-                        "cancelled"
-
-                out.Add("interrupted: " + outcome)
 
                 for entry in (GrantsService.snapshot service).State.Requests |> Map.toList |> List.map snd do
                     out.Add("request " + entry.Request.Resource + ": " + string entry.Status)
