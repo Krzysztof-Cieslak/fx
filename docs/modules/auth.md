@@ -245,6 +245,10 @@ variables. Resolved values are never journaled or traced: `Secret` prints only i
 Elsewhere in configuration, values are the reader's to check; a reader that takes a credential takes a
 `SecretRef`. Reading project-local `.env` files is a grant (spec §13), not a secret source.
 
+### Secrets for environments' commands (T138)
+
+An environment's `variables` (and the person's `env.variables`) may name `secret:<name>`: the host resolves it through the same sources (`AuthService.Secrets`) each time envd starts, after a person's `secret.read` grant when a project asked for it, and passes the value to the environment's commands only. It is never persisted or journaled, and it is redacted from what turns read and from model requests (environments.md, "Variables").
+
 ## The host
 
 ```fsharp

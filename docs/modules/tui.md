@@ -242,6 +242,9 @@ core slot the host registers) picks it:
   trusted project's config); `fx attach` uses the default (the serving host's resolution is not its
   own).
 
+The info line names the variables a person chose for the environment's commands (`vars: GH_TOKEN`, from `EnvSummary.variables`; never values). A project's request for a credential is a card like any grant request, offering `[y] once`, `[r] this repo` and `[n] deny` (no host-wide answer).
+
+
 ## Keys
 
 | Key | Does |

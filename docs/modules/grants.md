@@ -53,6 +53,9 @@ host builds the vocabulary with `Actions.withContributed` (a clash is an error).
 | `env.cost` | name: `<provider>/<spec>` | once, session, host | §9, §13.1 |
 | `safeOutput.apply` | name: `<type>/<target>` | once, session | §8.5 |
 | `workflow.approval` | name: `<workflow>/<gate>` | once | §8.3 `Approval` gates |
+| `env.credential` | name: a host variable | once, repo, host | §9.4, §18 (T138) |
+
+`env.credential` (T138; resource: the name of a host variable; scopes once, repo, host): a project's environment spec asks to give its commands that credential variable. The request names the project's repository (its directory) and offers once and repo only, so a yes never reaches another project; `fx grants allow env.credential <NAME> --scope repo` (in the project's directory) or `--scope host` grants it beforehand. A project's `secret:` variable asks `secret.read` on the secret's name the same way. Requests are keyed `<action>/<environment>/<attempt>/<variable>`. `fx grants --scope repo` is the project of the current directory; a request without a repository never offers `repo` (`GrantsCommand.allowing` then names a host grant, if offered).
 
 ## Resources and patterns
 
