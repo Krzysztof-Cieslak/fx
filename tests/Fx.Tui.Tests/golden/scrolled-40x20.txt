@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ replace deprecated Http.retry with
 ┃ RetryPolicy in billing
@@ -15,6 +14,7 @@
   ✓ Done  Migrated 37 call sites to
           RetryPolicy.
     Evidence  dotnet test tests/Billing
+              → 214 passed
   ⠴ turn 2 · writing 0.0s
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…

@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+  日本語のファイルを読み
   ます。
   ◇ Read     doc… ✗ 0.4s
       no such file: doc…

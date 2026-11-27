@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+┃ deploy it
 
   I can deploy now.
   Deploy to staging or

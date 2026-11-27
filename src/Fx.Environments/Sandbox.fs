@@ -10,9 +10,9 @@ open Fx.Pty
 open Fx.Sdk
 open Fx.Variants
 
-/// The host's sandbox variants (spec §9.1, §15): privileged, so only the host's config and policy
-/// set them; a project's config, an environment spec or an agent can only tighten a sandbox. Core
-/// slots outside `Fx.Variants`: the host registers `SandboxSlots.all` with `Slots.all`.
+/// The host's sandbox variants (spec §9.1, §15): privileged, so only the host's config, the command
+/// line and policy set them; a project's config, an environment spec or an agent can only tighten a
+/// sandbox. Core slots outside `Fx.Variants`: the host registers `SandboxSlots.all` with `Slots.all`.
 [<RequireQualifiedAccess>]
 module SandboxSlots =
     /// What `sandbox.driver` says to pick a driver: the first that confines and runs on the
@@ -20,12 +20,14 @@ module SandboxSlots =
     [<Literal>]
     let Auto = "auto"
 
-    /// `sandbox.driver`: `auto`, or the id of the driver every environment must use (`none` turns
-    /// sandboxing off, with a persistent warning).
+    /// `sandbox.driver`: `none` (the default: the sandbox is opt-in, T137), `auto`, or the id of the
+    /// driver every environment must use. Off by default because the sandbox keeps ordinary tools
+    /// from working (they keep state under `~` or read configs on the credential list) while
+    /// permission prompts (grants) are the control people rely on.
     let driver: Slot<string> =
         Slot.create
             "sandbox.driver"
-            "The sandbox driver of environments: auto (the first that confines processes on the environment's OS, else none with a warning), or a driver's id that every environment must use (none turns sandboxing off)."
+            "The sandbox driver of environments, off by default: none (commands run with the user's rights; permission prompts are the guard), auto (the first driver that confines processes on the environment's OS, else none with a warning), or a driver's id that every environment must use (an environment fails where it cannot run)."
             (Codec.string
              |> Codec.refine (fun value ->
                  if
@@ -35,7 +37,7 @@ module SandboxSlots =
                      Ok()
                  else
                      Error $"expected \"auto\" or a sandbox driver's id, got {Json.quote value}"))
-            Auto
+            SandboxDrivers.NoSandbox
         |> Slot.privileged
 
     let private paths (description: string) =
@@ -79,13 +81,17 @@ type SandboxChoice =
     | Required of SandboxDriver
     /// This driver if it can run here; else `none`, with why.
     | Preferred of SandboxDriver
-    /// No sandbox, for this reason.
+    /// No sandbox, as the host chose (`sandbox.driver = none`, the default): nothing to warn about.
+    | Off
+    /// No sandbox although the host asked for one (`auto`), because none can confine here: this
+    /// reason, which the environment's warning shows.
     | Unconfined of reason: string
 
     override this.ToString() =
         match this with
         | Required driver -> $"required {driver.Id}"
         | Preferred driver -> $"preferred {driver.Id}"
+        | Off -> "off"
         | Unconfined reason -> $"unconfined: {reason}"
 
 /// The sandbox of a connected environment: its driver, what the driver's probe found, the
@@ -114,8 +120,7 @@ module EnvSandbox =
 
     let private unconfinedOn (os: Os) =
         match os with
-        | Os.Windows ->
-            "Windows has no sandbox driver yet (AppContainer: T511): commands can read and change everything the user can"
+        | Os.Windows -> "Windows has no sandbox driver yet (AppContainer: T511)"
         | os -> $"no sandbox driver that confines processes runs on {os}"
 
     /// Which driver sandboxes an environment on `os`: the host's `sandbox.driver` and the spec's
@@ -123,9 +128,9 @@ module EnvSandbox =
     ///
     /// | `sandbox.driver` | spec | choice |
     /// |---|---|---|
+    /// | `none` (the default) | none given, `none` | off |
     /// | `auto` | none given | the first confining driver for the OS, falling back to `none` |
     /// | `auto` | `none` | `none` if no driver confines on the OS, else refused |
-    /// | `none` | none given, `none` | `none` |
     /// | a driver | none given, the same | that driver, required |
     /// | any | another driver | that driver, required (unless the host requires a different one) |
     let choose
@@ -142,8 +147,7 @@ module EnvSandbox =
             | None -> Error $"no sandbox driver {Json.quote id} is in effect"
             | Some driver when not (List.contains os driver.Platforms) ->
                 Error $"the sandbox driver {Json.quote id} does not run on {os}"
-            | Some driver when not driver.Confines ->
-                Ok(SandboxChoice.Unconfined "the host turned sandboxing off (sandbox.driver = none)")
+            | Some driver when not driver.Confines -> Ok SandboxChoice.Off
             | Some driver -> Ok(SandboxChoice.Required driver)
 
         match hostChoice, spec.Sandbox with
@@ -159,8 +163,7 @@ module EnvSandbox =
                     $"the spec asks for no sandbox, but this host sandboxes environments on {os} ({first.Id}): only the host's privileged variant sandbox.driver can turn sandboxing off"
         | SandboxSlots.Auto, Some id -> required id
         | SandboxDrivers.NoSandbox, None
-        | SandboxDrivers.NoSandbox, Some SandboxDrivers.NoSandbox ->
-            Ok(SandboxChoice.Unconfined "the host turned sandboxing off (sandbox.driver = none)")
+        | SandboxDrivers.NoSandbox, Some SandboxDrivers.NoSandbox -> Ok SandboxChoice.Off
         | SandboxDrivers.NoSandbox, Some id -> required id
         | host, None -> required host
         | host, Some id when id = host -> required host

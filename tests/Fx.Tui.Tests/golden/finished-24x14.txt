@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+          call sites to
           RetryPolicy.
     Evidence  dotnet
               test tests

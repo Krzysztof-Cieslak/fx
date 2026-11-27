@@ -1,5 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
+  ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
   ◆ Edit     src/Billing/Client.fs                                        ✓ 0.3s
   ◇ Run      dotnet test tests/Billing                                     ✗ 48s
       exit 1
@@ -21,7 +21,7 @@
   ⋯ queued: then bump the version
   ⠹ turn 2 · Cell add the entry
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000000    Enter steer · Tab queue  ● turn 2
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

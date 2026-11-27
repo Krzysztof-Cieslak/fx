@@ -44,6 +44,7 @@ let private chosen (result: Result<SandboxChoice, string>) : string =
     match result with
     | Ok(SandboxChoice.Required d) -> $"required {d.Id}"
     | Ok(SandboxChoice.Preferred d) -> $"preferred {d.Id}"
+    | Ok SandboxChoice.Off -> "off"
     | Ok(SandboxChoice.Unconfined _) -> "unconfined"
     | Error _ -> "refused"
 
@@ -101,12 +102,21 @@ let choosing =
                     "unconfined"
                     "none where nothing confines anyway"
 
-                Expect.equal
-                    (chosen (EnvSandbox.choose "none" (named None) Os.Linux all))
-                    "unconfined"
-                    "the host's none"
+                Expect.equal (chosen (EnvSandbox.choose "none" (named None) Os.Linux all)) "off" "the host's none"
+                Expect.equal (chosen (EnvSandbox.choose "none" (named (Some "none")) Os.Linux all)) "off" "both"
+            }
 
-                Expect.equal (chosen (EnvSandbox.choose "none" (named (Some "none")) Os.Linux all)) "unconfined" "both"
+            test "the sandbox is opt-in: sandbox.driver is none unless the host's config or command line say otherwise" {
+                Expect.equal SandboxSlots.driver.Default "none" "off by default"
+                Expect.isTrue SandboxSlots.driver.Privileged "a project cannot turn it on or off"
+
+                let all = drivers ()
+
+                for os in [ Os.Linux; Os.MacOs; Os.Windows ] do
+                    Expect.equal
+                        (chosen (EnvSandbox.choose SandboxSlots.driver.Default (named None) os all))
+                        "off"
+                        $"off on {os}, with nothing to warn about"
             }
 
             test "a spec can always ask for a confining driver, which is then required" {
@@ -245,6 +255,9 @@ let private withEnvironment
     finally
         wait (EnvsHost.stop host)
 
+/// The host opts in to the sandbox (T137: off by default).
+let private auto = [ "sandbox.driver", Json.String SandboxSlots.Auto ]
+
 let private confining () =
     drivers ()
     |> List.filter (fun d -> d.Confines && List.contains SandboxConformance.target.Os d.Platforms)
@@ -266,22 +279,28 @@ let environments =
     <| testList
         "sandboxed environments"
         [
-            test "a host that turns sandboxing off runs environments unsandboxed, with a warning" {
-                withEnvironment [ "sandbox.driver", Json.String "none" ] id (fun created _ ->
-                    match created with
-                    | Ok record ->
-                        let sandbox = record.Sandbox |> Option.get
-                        Expect.equal (sandbox.Driver, sandbox.Confines) ("none", false) "none"
-                        Expect.stringContains (List.head sandbox.Notes) "sandbox.driver = none" "why"
+            test "by default environments run unsandboxed, quietly: the sandbox is opt-in" {
+                for selections in [ []; [ "sandbox.driver", Json.String "none" ] ] do
+                    withEnvironment selections id (fun created envs ->
+                        match created with
+                        | Ok record ->
+                            let sandbox = record.Sandbox |> Option.get
+                            Expect.equal (sandbox.Driver, sandbox.Confines) ("none", false) "none"
+                            Expect.isEmpty sandbox.Notes "nothing to explain"
+                            Expect.isEmpty (Envs.warnings record) "no warning"
+                            Expect.equal (Envs.sandboxLabel sandbox) "off" "clients say off"
 
-                        match Envs.warnings record with
-                        | [ warning ] -> Expect.stringContains warning "unsandboxed" "the persistent warning"
-                        | other -> failtest $"{other}"
-                    | Error e -> failtest (string e))
+                            let handle =
+                                wait (envs.Open record.Id CancellationToken.None)
+                                |> Result.toOption
+                                |> Option.get
+
+                            Expect.isEmpty handle.Sandbox.Defaults "no cache variables: processes run as they are"
+                        | Error e -> failtest (string e))
             }
 
             test "auto confines with this OS's driver where it can, and says why where it cannot" {
-                withEnvironment [] id (fun created envs ->
+                withEnvironment auto id (fun created envs ->
                     match created with
                     | Error e -> failtest (string e)
                     | Ok record ->
@@ -291,12 +310,14 @@ let environments =
                         | [] ->
                             Expect.equal sandbox.Driver "none" "nothing confines here"
                             Expect.equal (Envs.warnings record).Length 1 "the unsandboxed warning"
+                            Expect.equal (Envs.sandboxLabel sandbox) "off" "off"
 
                             if OperatingSystem.IsWindows() then
                                 Expect.stringContains (String.Join(" ", sandbox.Notes)) "Windows" "Windows says why"
                         | driver :: _ when sandbox.Confines ->
                             Expect.equal sandbox.Driver driver.Id "the OS's driver"
                             Expect.isEmpty (Envs.warnings record) "no warning"
+                            Expect.equal (Envs.sandboxLabel sandbox) driver.Id "clients name the driver"
                         | driver :: _ ->
                             if SandboxConformance.required () then
                                 failtest $"{driver.Id} must confine here: {sandbox.Notes}"
@@ -305,6 +326,10 @@ let environments =
                                 (String.Join(" ", sandbox.Notes))
                                 driver.Id
                                 "says why the driver could not"
+
+                            match Envs.warnings record with
+                            | [ warning ] -> Expect.stringContains warning driver.Id "the warning says why"
+                            | other -> failtest $"one warning: {other}"
 
                         let handle =
                             wait (envs.Open record.Id CancellationToken.None)
@@ -315,7 +340,7 @@ let environments =
             }
 
             test "processes of a sandboxed environment run in its sandbox, an agent's in a tighter one" {
-                withEnvironment [] id (fun created envs ->
+                withEnvironment auto id (fun created envs ->
                     match created with
                     | Error e -> failtest (string e)
                     | Ok record when not (record.Sandbox |> Option.exists _.Confines) ->
@@ -363,7 +388,7 @@ let environments =
             }
 
             test "a spec cannot turn off the sandbox the host gives" {
-                withEnvironment [] (fun s -> { s with Sandbox = Some "none" }) (fun created _ ->
+                withEnvironment auto (fun s -> { s with Sandbox = Some "none" }) (fun created _ ->
                     match confining (), created with
                     | [], Ok record ->
                         Expect.equal (record.Sandbox |> Option.map _.Driver) (Some "none") "nothing confines here"
@@ -378,14 +403,28 @@ let environments =
             }
 
             test "no network needs a sandbox that confines" {
-                withEnvironment
-                    [ "sandbox.driver", Json.String "none" ]
-                    (fun s -> { s with Network = Some "none" })
-                    (fun created _ ->
-                        match created with
-                        | Error(EnvError.NotReady record) ->
-                            Expect.stringContains (record.Reason |> Option.defaultValue "") "network" "why"
-                        | other -> failtest $"{other}")
+                withEnvironment [] (fun s -> { s with Network = Some "none" }) (fun created _ ->
+                    match created with
+                    | Error(EnvError.NotReady record) ->
+                        let reason = record.Reason |> Option.defaultValue ""
+                        Expect.stringContains reason "network" "why"
+                        Expect.stringContains reason "sandbox.driver" "what turns the sandbox on"
+                    | other -> failtest $"{other}")
+            }
+
+            test "a driver the host requires fails the environment where it cannot run, never falls back" {
+                let elsewhere =
+                    if OperatingSystem.IsMacOS() then
+                        "bubblewrap"
+                    else
+                        "seatbelt"
+
+                withEnvironment [ "sandbox.driver", Json.String elsewhere ] id (fun created _ ->
+                    match created with
+                    | Error(EnvError.NotReady record) ->
+                        Expect.equal record.Phase Phase.Failed "failed"
+                        Expect.stringContains (record.Reason |> Option.defaultValue "") elsewhere "why"
+                    | other -> failtest $"{other}")
             }
 
             test "a spec's driver that is not in effect is refused before anything is created" {

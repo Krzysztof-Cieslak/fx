@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ deploy it
 
@@ -18,10 +17,11 @@
 
 
 
+
 ┃ Question
 ┃ Type the answer below; Enter sends it.
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000001          Enter answer  ● needs input
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

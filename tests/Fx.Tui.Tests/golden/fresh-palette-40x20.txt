@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 
 
@@ -15,6 +14,7 @@
   ┃ anthropic/claude-sonnet-5-5 · env…
 
   …/src/billing:main   Ctrl+P commands
+
 
 
 

@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+
   ◇ Cell     rea… ✓ 0.3s
   ◇ Cell     por… ✓ 9.0s
   ◇ Compact  the earlie…

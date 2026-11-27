@@ -1,5 +1,4 @@
 ────────────────────────
- ! runs unsandboxed: co…
   ┃ Commands     esc
   ┃ ›
   ┃  /new       Start…
@@ -12,6 +11,7 @@
   ┃ anthropic/claude-…
 
   …/s… Ctrl+P commands
+
 fx · …/src/billi… ● idle
 ────────────────────────
 cursor hidden

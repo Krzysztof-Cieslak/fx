@@ -38,6 +38,12 @@ let sandboxed (width: int) (height: int) : Model =
     let s, msgs = finishedTurn ()
     readyIn confined s width height msgs
 
+/// A finished turn in an environment whose requested sandbox cannot run: the warning's banner on
+/// every screen.
+let unconfined (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+    readyIn Script.unconfined s width height msgs
+
 /// A turn in progress: a cell running, a steer waiting for the next step, a prompt queued.
 let running (width: int) (height: int) : Model =
     let s, earlier = finishedTurn ()
@@ -415,6 +421,7 @@ let all: (string * (int -> int -> Model)) list =
         "starting", starting
         "finished", finished
         "sandboxed", sandboxed
+        "unconfined", unconfined
         "running", running
         "question", question
         "stuck", stuck

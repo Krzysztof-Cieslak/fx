@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 
 
@@ -18,6 +17,7 @@
 
 
 
+
 fx · …/src/billing:main · sessio… ● idle
 ────────────────────────────────────────
-cursor 11,6
+cursor 10,6

@@ -68,10 +68,13 @@ type EnvSandboxInfo =
     {
         /// The sandbox driver's id, e.g. `bubblewrap`, `seatbelt`, `none`.
         Driver: string
-        /// Whether the driver confines processes; `false`: the environment runs unsandboxed and
-        /// carries a persistent warning (spec §9.1).
+        /// Whether the driver confines processes; `false`: the environment runs unsandboxed (spec
+        /// §9.1), with a persistent warning only when it has notes.
         Confines: bool
-        /// Why it is so, e.g. why the host's `auto` choice fell back to `none`.
+        /// Why it is so, e.g. why the host's `auto` choice fell back to `none` (the warning shows
+        /// them). Empty when the host left the sandbox off (`sandbox.driver = none`, the default,
+        /// T137). Before T137 a host's `none` had a note too: such a record warns until the
+        /// environment's next attach records its sandbox again.
         Notes: string list
     }
 

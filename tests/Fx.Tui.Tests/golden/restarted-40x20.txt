@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ rerun the check
 
@@ -9,6 +8,7 @@
   The kernel restarted, so I will define
   check again.
   ▸ 1 cell (2 lines)     [Ctrl+O expand]
+
 
 
 
