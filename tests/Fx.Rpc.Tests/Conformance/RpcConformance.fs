@@ -847,6 +847,82 @@ let tests (name: string) (connect: unit -> Task<Link>) : Test =
                                 })
                     }
 
+                    // A channel counts against `maxChannels` at both ends until both directions have
+                    // ended: a side that never writes closes its output as soon as it has the channel.
+                    testTask "channels used one way are released at both ends as their transfers end" {
+                        do!
+                            session (fun s ->
+                                task {
+                                    let limit =
+                                        min limits.Channels.Value.MaxChannels clientLimits.Channels.Value.MaxChannels
+
+                                    let counts () =
+                                        task {
+                                            let! there = run s (Rpc.call s.Peer Methods.openChannels ())
+                                            return s.Peer.OpenChannels, expectOk there
+                                        }
+
+                                    for i in 1 .. 3 * limit do
+                                        // A download: this side only reads.
+                                        let! opened = run s (Rpc.openChannel s.Peer)
+                                        let channel = expectOk opened
+                                        let! closed = run s (Rpc.closeChannelOutput channel)
+                                        expectOk closed
+                                        let reading = readAll channel
+
+                                        let! filled =
+                                            run
+                                                s
+                                                (Rpc.call
+                                                    s.Peer
+                                                    Methods.fillChannel
+                                                    { Into = channel.Id; Size = 1000 + i })
+
+                                        Expect.equal filled (Ok(1000 + i)) "filled"
+                                        let! data = within reading
+                                        Expect.equal (expectOk data).Length (1000 + i) "downloaded"
+                                        let! after = counts ()
+                                        Expect.equal after (0, 0) $"download {i}: released at both ends"
+
+                                        // An upload: the service only reads.
+                                        let! opened = run s (Rpc.openChannel s.Peer)
+                                        let channel = expectOk opened
+
+                                        let sinking =
+                                            Eff.run
+                                                s.Env
+                                                (Rpc.call s.Peer Methods.sinkChannel { Channel = channel.Id })
+
+                                        let! written =
+                                            run s (Rpc.writeChannel channel (ReadOnlyMemory(bytesOf (2000 + i))))
+
+                                        expectOk written
+                                        let! closed = run s (Rpc.closeChannelOutput channel)
+                                        expectOk closed
+                                        let! sunk = within sinking
+                                        Expect.equal sunk (Ok(int64 (2000 + i))) "uploaded"
+                                        let! after = counts ()
+                                        Expect.equal after (0, 0) $"upload {i}: released at both ends"
+                                })
+                    }
+
+                    testTask "a channel reset before it was accepted is gone" {
+                        do!
+                            session (fun s ->
+                                task {
+                                    let! opened = run s (Rpc.openChannel s.Peer)
+                                    let channel = expectOk opened
+                                    channel.Reset(ResetCode.Cancelled, "changed my mind")
+
+                                    let! accepted =
+                                        run s (Rpc.call s.Peer Methods.acceptChannel { Channel = channel.Id })
+
+                                    Expect.equal accepted (Ok $"no channel {channel.Id} to accept") "not accepted"
+                                    let! there = run s (Rpc.call s.Peer Methods.openChannels ())
+                                    Expect.equal (s.Peer.OpenChannels, there) (0, Ok 0) "released at both ends"
+                                })
+                    }
+
                     testTask "channels opened from many threads at once keep the connection" {
                         do!
                             session (fun s ->

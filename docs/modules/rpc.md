@@ -195,8 +195,18 @@ Multiplexed, ordered, bidirectional byte streams for PTY output, blobs and port 
   Data beyond the credit resets the channel (`FlowControl`).
 - **Ending:** `CloseOutput` ends one direction after the data written (the peer reads `None`); `Reset`
   aborts both and drops buffered data (the peer gets `ResetByPeer`). A reset never overtakes data or
-  the open frame. Opening more than `maxChannels` (counted on both sides) fails with `TooMany`, or the
-  receiver refuses it with a reset (`Refused`).
+  the open frame, and once both directions have ended there is nothing left to abort: it is not sent.
+  Opening more than `maxChannels` (counted on both sides) fails with `TooMany`, or the receiver
+  refuses it with a reset (`Refused`).
+- **Releasing:** a channel counts against `maxChannels` at an end until that end has seen both
+  directions end (its own `CloseOutput` and the peer's close) or a reset; then it is released
+  (`Peer.OpenChannels` counts the rest). An end releases a channel before it wakes a reader with the
+  end, and before it sends the close that ends the channel, so whoever sees a channel end sees it
+  released at both ends. **A side that never writes must close its output as soon as it has the
+  channel** (the environment protocol's transfers do: [envd.md](envd.md)): a channel used one way and
+  left half open counts on both sides until the connection ends, and a long session runs out of
+  channels (a TUI session did after about 250 transfers). A channel the peer reset before it was
+  accepted is gone: `AcceptChannel` answers `Unknown`.
 - Writes are cut into frames of at most the receiver's `maxFramePayload`; concurrent writes to one
   channel are serialized, and frames of different channels interleave in the writer's queue.
 
@@ -271,7 +281,8 @@ connection's limits: `ConnectionLimits.frames`.
   a crash, a dispose) to tests. It covers the handshake, typed results and errors, issue paths,
   `_meta`, extension methods, ordering, concurrency, batches, cancellation, timeouts on a fake clock,
   pending-request slots and `Overloaded`, large messages and both size limits, channels (echo, server
-  opened, slow reader, reset, limits and multiplexing), malformed input answered as JSON-RPC says,
+  opened, slow reader, reset, limits and multiplexing, one-way transfers released at both ends, a
+  reset before the accept), malformed input answered as JSON-RPC says,
   oversized frames, a crashed peer, closing, and a peer that closes its output. It runs over in-process,
   stream over in-memory pipes, a child process on stdio (started directly, and through `LocalShell`
   with `ProcTransport`), and WebSocket over loopback and a Unix socket. T108's transport-parity suite
