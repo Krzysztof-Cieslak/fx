@@ -430,6 +430,11 @@ module Replay =
     /// written again into `written` and checked against what was recorded; every read shows exactly
     /// what the recorded read saw (waiting for replay to have written it); other streams are read from
     /// the recording.
+    ///
+    /// Each call does its part (the write, the wait and the read) before its entry is done, and
+    /// whatever its caller's cancellation says by then: the recorded call completed, and what was
+    /// recorded after it (a turn's cancellation, which ends the host calls of its cell) may happen as
+    /// soon as the entry is done. Otherwise an append could be lost in replay that the recording made.
     let store
         (segment: ReplaySegment)
         (lane: string)
@@ -443,16 +448,15 @@ module Replay =
         let source (stream: StreamId) =
             if isOutput stream then written else recorded
 
-        /// Waits until replay wrote `head` events to an output stream.
-        let reached (stream: StreamId) (head: int64) (cancellation: CancellationToken) : Task<unit> =
+        /// Waits until replay wrote `head` events to an output stream (or the segment stops).
+        let reached (stream: StreamId) (head: int64) : Task<unit> =
             task {
                 if isOutput stream && head > 0L then
-                    use linked =
-                        CancellationTokenSource.CreateLinkedTokenSource(cancellation, segment.Stop)
-
-                    let! _ = written.WaitPast stream (head - 1L) linked.Token
+                    let! _ = written.WaitPast stream (head - 1L) segment.Stop
                     ()
             }
+
+        let claimed (op: string) (input: string) (summary: string) = segment.Claim(lane, op, input, summary)
 
         {
             Append =
@@ -478,80 +482,76 @@ module Replay =
                                     )
                                 )
 
-                        let! recordedResult =
-                            segment.Answer(
+                        return!
+                            segment.AnswerThen(
                                 item,
                                 Gate.Immediate,
                                 Decode.using (Values.result Codec.int64 Values.appendError),
-                                cancellation
+                                cancellation,
+                                fun recordedResult ->
+                                    task {
+                                        let! result = written.Append stream expected meta events CancellationToken.None
+
+                                        if result <> recordedResult then
+                                            return
+                                                raise (
+                                                    segment.Diverge(
+                                                        lane,
+                                                        $"{summary} -> {recordedResult}",
+                                                        $"{summary} -> {result}",
+                                                        "an append ended differently"
+                                                    )
+                                                )
+                                        else
+                                            return result
+                                    }
                             )
-
-                        let! result = written.Append stream expected meta events cancellation
-
-                        if result <> recordedResult then
-                            return
-                                raise (
-                                    segment.Diverge(
-                                        lane,
-                                        $"{summary} -> {recordedResult}",
-                                        $"{summary} -> {result}",
-                                        "an append ended differently"
-                                    )
-                                )
-                        else
-                            return result
                     }
             Read =
                 fun stream after max cancellation ->
-                    task {
-                        let! count =
-                            answer
-                                segment
-                                lane
-                                Ops.LogRead
-                                (Inputs.read stream after max)
-                                $"{stream} after {after}"
-                                Codec.int
-                                cancellation
-
-                        if count = 0 then
-                            return []
-                        else
-                            do! reached stream (after + int64 count) cancellation
-                            return! (source stream).Read stream after count cancellation
-                    }
+                    segment.AnswerThen(
+                        claimed Ops.LogRead (Inputs.read stream after max) $"{stream} after {after}",
+                        Gate.Immediate,
+                        Decode.using Codec.int,
+                        cancellation,
+                        fun count ->
+                            task {
+                                if count = 0 then
+                                    return []
+                                else
+                                    do! reached stream (after + int64 count)
+                                    return! (source stream).Read stream after count CancellationToken.None
+                            }
+                    )
             Head =
                 fun stream cancellation ->
-                    task {
-                        let! head =
-                            answer
-                                segment
-                                lane
-                                Ops.LogHead
-                                (Inputs.text stream.Value)
-                                stream.Value
-                                Codec.int64
-                                cancellation
-
-                        do! reached stream head cancellation
-                        return head
-                    }
+                    segment.AnswerThen(
+                        claimed Ops.LogHead (Inputs.text stream.Value) stream.Value,
+                        Gate.Immediate,
+                        Decode.using Codec.int64,
+                        cancellation,
+                        fun head ->
+                            task {
+                                do! reached stream head
+                                return head
+                            }
+                    )
             WaitPast =
                 fun stream after cancellation ->
-                    task {
-                        let! head =
-                            answer
-                                segment
-                                lane
-                                Ops.LogWaitPast
-                                (Inputs.many [ Json.String stream.Value; Json.int64 after ])
-                                $"{stream} past {after}"
-                                Codec.int64
-                                cancellation
-
-                        do! reached stream head cancellation
-                        return head
-                    }
+                    segment.AnswerThen(
+                        claimed
+                            Ops.LogWaitPast
+                            (Inputs.many [ Json.String stream.Value; Json.int64 after ])
+                            $"{stream} past {after}",
+                        Gate.Immediate,
+                        Decode.using Codec.int64,
+                        cancellation,
+                        fun head ->
+                            task {
+                                do! reached stream head
+                                return head
+                            }
+                    )
             FindCommit =
                 fun stream key cancellation ->
                     answer

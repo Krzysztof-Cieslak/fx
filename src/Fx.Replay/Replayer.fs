@@ -325,6 +325,21 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
     member this.Answer<'T>
         (item: ReplayEntry option, gate: Gate, decode: Json -> 'T, cancellation: CancellationToken)
         : Task<'T> =
+        this.AnswerThen(item, gate, decode, cancellation, Task.FromResult)
+
+    /// The recorded outcome of a claimed call, decoded, when its gate opens, after `apply` did replay's
+    /// own part of the call with the recorded value (an append written again, a read waiting for what
+    /// the recorded one saw). The entry is done only then: what was recorded after the call (a turn's
+    /// cancellation) cannot happen before replay's part of it. The recorded call completed, so `apply`
+    /// must not give up on the caller's cancellation (only when the segment stops).
+    member this.AnswerThen<'T, 'U>
+        (
+            item: ReplayEntry option,
+            gate: Gate,
+            decode: Json -> 'T,
+            cancellation: CancellationToken,
+            apply: 'T -> Task<'U>
+        ) : Task<'U> =
         task {
             match item with
             | None ->
@@ -340,11 +355,28 @@ type ReplaySegment(number: int, entries: (JournalEntry * Json option) list, ende
                     if stop.IsCancellationRequested then
                         return raise (this.Stopped cancellation)
                     else
-                        this.Complete item
-
                         match item.Entry.Outcome, item.Value with
-                        | Outcome.Threw name, _ -> return raise (ReplayedFailure name)
-                        | _, Some value -> return decode value
+                        | Outcome.Threw name, _ ->
+                            this.Complete item
+                            return raise (ReplayedFailure name)
+                        | _, Some value ->
+                            let decoded =
+                                try
+                                    decode value
+                                with _ ->
+                                    this.Complete item
+                                    reraise ()
+
+                            let! applied =
+                                task {
+                                    try
+                                        return! apply decoded
+                                    with :? OperationCanceledException when stop.IsCancellationRequested ->
+                                        return raise (this.Stopped cancellation)
+                                }
+
+                            this.Complete item
+                            return applied
                         | _, None ->
                             return
                                 raise (

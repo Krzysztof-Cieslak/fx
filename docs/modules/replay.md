@@ -181,6 +181,13 @@ CodeAct instance (`CodeAct<ReplayTurnEnv, ReplayHandsEnv>`) whose configuration 
   recorded event with the same key and the replayed one), and once more at the end, event by event (seq,
   time, sender, key, cause, payload). Values replay keeps go to a fresh blob store over the recorded one
   and must exist in the recorded one. Model requests are checked by digest: byte for byte, canonical.
+- **A replayed call does its own part before its entry is done** (`ReplaySegment.AnswerThen`): an
+  append is written again, and a read waits for and reads what the recorded one saw, before the entry
+  completes and whatever the caller's cancellation says by then (only the segment stopping ends the
+  wait): the recorded call completed, and what was recorded after it may happen as soon as its entry is
+  done. A host stopped mid-command showed why: its turn's cancellation, recorded after the step
+  journal's `hostCallStarted` of the command, ended the host call in replay before replay had written
+  that event again, and the next host process's recovery waited for it for ever.
 
 `ReplayReport` gives the counts (segments, turns, entries, model requests, context and step events), the
 first `Divergence` (`Segment`, `Lane`, `Expected`, `Actual`, `Reason`) and the journal entries replay
@@ -224,6 +231,13 @@ capabilities answered, not on timing:
   code between them: one that lands at the very moment a call's answer does (a cell's last output) may
   find the code a step further on in replay. Independent events rarely meet that closely; never derive
   a cancellation from the answer it races with (above).
+- A kernel that ends on its own outside a cell's answer (killed between cells, or exiting right after
+  one): whether the host has handled the end of its output by the time it next looks is timing
+  (`SessionKernel.Acquire` and `Run` read whether the connection has ended), and so is how much of its
+  standard error was read when the connection broke on a failed write rather than at the end of its
+  output (`kernelEnded` keeps it). Replay delivers the process's output in its recorded order, but the
+  host's handling of it races with what comes after; a kernel that dies during a cell, or is killed by
+  an interrupt, is decided from what the cell's call returned.
 - Replay needs the binary's own interpreters and kernel options: a kernel's launch (its program,
   directories, variables' names and the `initialize` it sends, with the binary's version) is part of the
   spawn's and writes' inputs, so a session replays with the binary that recorded it, or one that starts

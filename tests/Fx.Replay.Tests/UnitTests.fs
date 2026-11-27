@@ -11,6 +11,7 @@ open Fx.Contracts
 open Fx.Effects
 open Fx.Effects.Fakes
 open Fx.Effects.Live
+open Fx.Machines
 open Fx.Machines.Host
 open Fx.Store
 open Fx.Store.Fakes
@@ -176,6 +177,55 @@ let private concurrent: Eff<Env, (Instant * Instant) list> =
 
     Eff.all [ for i in 1..8 -> child (1 + (i * 7) % 5) ]
 
+/// A stream the replayed store writes again (as a session's step journal).
+let private steps = StreamId.create "steps" "s1"
+
+let private stepMeta (key: string) : EventMeta =
+    {
+        At = Instant.ofUnixMicroseconds 1_700_000_000_000_000L
+        By = Attribution.system "test"
+        Key = IdempotencyKey key
+        Cause = None
+    }
+
+let private step (n: int) : Payload =
+    {
+        Version = 1
+        Data = Json.Object [ "n", Json.int n ]
+    }
+
+/// Records an append to `steps` and a read that saw it, through the recording store.
+let private recordAppendAndRead (stores: Stores) : Task<unit> =
+    task {
+        let log = Record.log stores.Journal Markers.Store id stores.Log.Log
+        let! appended = log.Append steps 0L (stepMeta "k1") [ step 1 ] CancellationToken.None
+        Expect.equal appended (Ok 1L) "recorded append"
+        let! page = log.Read steps 0L 100 CancellationToken.None
+        Expect.equal page.Length 1 "recorded read"
+        do! stores.Journal.Close()
+    }
+
+/// The segment of a recording, and the store replay writes again into `written` (wrapped by `wrap`).
+let private replayedStore
+    (stores: Stores)
+    (written: InMemoryEventLog<Payload>)
+    (wrap: ReplaySegment -> EventLog<Payload> -> EventLog<Payload>)
+    : Task<ReplaySegment * EventLog<Payload>> =
+    task {
+        let! segments = SessionReplay.segments stores.Recording "s1" CancellationToken.None
+        let journal = List.exactlyOne segments
+        let segment = ReplaySegment(journal.Number, journal.Entries, journal.Ended)
+
+        let store =
+            Replay.store segment Markers.Store stores.Recording.Log (wrap segment written.Log) [ steps ] (fun _ _ _ ->
+                "")
+
+        return segment, store
+    }
+
+let private entryOf (segment: ReplaySegment) (op: string) : ReplayEntry =
+    segment.Entries |> List.find (fun e -> e.Entry.Op = op)
+
 /// Runs `work` while busy threads keep every core loaded, so continuations are scheduled late and in
 /// any order.
 let private underLoad (work: unit -> Task<'T>) : Task<'T> =
@@ -248,6 +298,65 @@ let tests =
 
                     Expect.isTrue segment.Finished "every call replayed"
                     Expect.isNone segment.Divergence "no divergence"
+            }
+
+            testTask
+                "an append the recording made is written again before its entry is done, whatever its caller's cancellation says then" {
+                // What was recorded after an append may happen in replay as soon as its entry is done:
+                // a turn's cancellation, which ends the host call that appends (the step journal's
+                // hostCallStarted of a cell's command, when the host stopped mid-cell). The caller here
+                // is cancelled the moment replay writes, as that one was on a slow runner.
+                let stores = Stores()
+                do! recordAppendAndRead stores
+                let written = InMemoryEventLog<Payload>()
+                let caller = new CancellationTokenSource()
+                let mutable doneWhenWritten = None
+
+                let! (segment: ReplaySegment), (store: EventLog<Payload>) =
+                    replayedStore stores written (fun segment (log: EventLog<Payload>) ->
+                        { log with
+                            Append =
+                                fun stream expected meta events cancellation ->
+                                    caller.Cancel()
+                                    doneWhenWritten <- Some (entryOf segment Ops.LogAppend).Done
+                                    log.Append stream expected meta events cancellation
+                        })
+
+                let! appended = store.Append steps 0L (stepMeta "k1") [ step 1 ] caller.Token
+                Expect.equal appended (Ok 1L) "as recorded"
+                Expect.equal (written.Events steps |> List.map _.Event) [ step 1 ] "the event is written again"
+                Expect.equal doneWhenWritten (Some false) "written before the entry was done"
+                let! page = store.Read steps 0L 100 CancellationToken.None
+                Expect.equal (page |> List.map _.Event) [ step 1 ] "the read sees it"
+                Expect.isTrue segment.Finished "every call replayed"
+                Expect.isNone segment.Divergence "no divergence"
+            }
+
+            testTask "a read shows what the recorded one saw, also when its caller is cancelled while it waits for it" {
+                // Replay may read before it has written what the recorded read saw: the read waits, and
+                // its entry is done only once it has read it. A cancellation meanwhile came after the
+                // recorded read completed, so it changes nothing.
+                let stores = Stores()
+                do! recordAppendAndRead stores
+                let written = InMemoryEventLog<Payload>()
+
+                let! (segment: ReplaySegment), (store: EventLog<Payload>) =
+                    replayedStore stores written (fun _ log -> log)
+
+                let caller = new CancellationTokenSource()
+                let reading = store.Read steps 0L 100 caller.Token
+                caller.Cancel()
+                Expect.isFalse reading.IsCompleted "it waits for replay's append"
+                Expect.isFalse (entryOf segment Ops.LogRead).Done "its entry waits too"
+
+                let! appended =
+                    store.Append steps 0L (stepMeta "k1") [ step 1 ] CancellationToken.None
+
+                Expect.equal appended (Ok 1L) "as recorded"
+                let! page = reading.WaitAsync(TimeSpan.FromSeconds 30.0)
+                Expect.equal (page |> List.map _.Event) [ step 1 ] "what the recorded read saw"
+                Expect.isTrue segment.Finished "every call replayed"
+                Expect.isNone segment.Divergence "no divergence"
             }
 
             testTask "a timeout decides as it did" {
