@@ -249,7 +249,7 @@ let restarted (width: int) (height: int) : Model =
     ready s width height msgs
 
 /// A reply in Markdown, and a result card whose summary and check are Markdown too.
-let markdown (width: int) (height: int) : Model =
+let private markdownTurn () : Session * Msg list =
     let s = Session "01JD2W7Z9Q0000000000000007"
 
     let msgs =
@@ -279,6 +279,10 @@ let markdown (width: int) (height: int) : Model =
                 )
         ]
 
+    s, msgs
+
+let markdown (width: int) (height: int) : Model =
+    let s, msgs = markdownTurn ()
     ready s width height msgs
 
 /// A session whose replies recorded what they used: the turn's footer has the model and its speed,
@@ -347,6 +351,54 @@ let scrolled (width: int) (height: int) : Model =
             ]
     )
 
+let private shiftUp: Msg =
+    Msg.Key
+        { Keys.key KeyCode.Up with
+            Shift = true
+        }
+
+/// Selecting items (`Shift+↑`, then `↑`): the cell above the result card selected, with the keys
+/// that apply in the footer.
+let selected (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+    ready s width height (msgs @ [ shiftUp; key KeyCode.Up ])
+
+/// Two items expanded on their own at the normal detail: the cell (its code and what it returned)
+/// and the failed command (all it printed), which is selected.
+let expanded (width: int) (height: int) : Model =
+    let s, msgs = finishedTurn ()
+
+    ready
+        s
+        width
+        height
+        (msgs
+         @ [
+             shiftUp
+             key KeyCode.Up
+             key KeyCode.Enter
+             key KeyCode.Up
+             key KeyCode.Enter
+         ])
+
+/// A reply and a result card collapsed on their own (their first rows), selecting done.
+let collapsed (width: int) (height: int) : Model =
+    let s, msgs = markdownTurn ()
+
+    ready
+        s
+        width
+        height
+        (msgs
+         @ [
+             shiftUp
+             key KeyCode.Enter
+             key KeyCode.Up
+             key KeyCode.Up
+             key KeyCode.Enter
+             key KeyCode.Escape
+         ])
+
 /// A new session with no turns yet: the start screen.
 let fresh (width: int) (height: int) : Model =
     let s = Session "01JD2W7Z9Q0000000000000009"
@@ -376,6 +428,9 @@ let all: (string * (int -> int -> Model)) list =
         "palette", palette
         "slash", slash
         "scrolled", scrolled
+        "selected", selected
+        "expanded", expanded
+        "collapsed", collapsed
         "fresh", fresh
         "fresh-palette", freshPalette
     ]

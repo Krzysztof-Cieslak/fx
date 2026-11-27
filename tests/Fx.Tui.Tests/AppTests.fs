@@ -321,7 +321,7 @@ let tests =
                     test "the view keeps the scroll within the transcript" {
                         let _, model = ready ()
                         Expect.equal (View.settle { model with Scroll = 7 }).Scroll 0 "it fits: nothing to scroll"
-                        Expect.isFalse ((screen { model with Scroll = 7 }).Contains "↑") "no indicator"
+                        Expect.isFalse ((screen { model with Scroll = 7 }).Contains "↑ scrolled") "no indicator"
                         let small = { model with Width = 24; Height = 14 }
                         let top = View.settle { small with Scroll = 10_000 }
 
@@ -342,6 +342,294 @@ let tests =
                         Expect.equal model.Verbosity Verbosity.Quiet "around"
                         let _, cmds = play model [ ctrl 'l' ]
                         Expect.equal cmds [ Cmd.Redraw ] "redraw"
+                    }
+                ]
+
+            testList
+                "items"
+                [
+                    let shiftUp =
+                        Msg.Key
+                            { Keys.key KeyCode.Up with
+                                Shift = true
+                            }
+
+                    let rerun = ItemId.Call(1, "toolu_4")
+
+                    test
+                        "Shift+↑ selects the newest item; ↑ ↓ move, Home End go to the ends; past the newest, selecting ends" {
+                        let _, model = ready ()
+                        let model, cmds = play model [ shiftUp ]
+                        Expect.isEmpty cmds "nothing sent"
+                        Expect.equal model.Selection (Some(ItemId.Ending 1)) "the result card"
+                        let model, _ = play model [ key KeyCode.Up ]
+                        Expect.equal model.Selection (Some rerun) "the cell above it"
+
+                        let model, _ =
+                            play model [ key KeyCode.Up; key KeyCode.Up; key KeyCode.Up; key KeyCode.Up ]
+
+                        Expect.equal model.Selection (Some(ItemId.Reply(1, 0))) "what the model wrote first"
+                        let top, _ = play model [ key KeyCode.Up ]
+                        Expect.equal top.Selection model.Selection "the oldest stays"
+                        let model, _ = play model [ key KeyCode.Down ]
+                        Expect.equal model.Selection (Some(ItemId.Call(1, "toolu_1"))) "down"
+                        let model, _ = play model [ key KeyCode.End ]
+                        Expect.equal model.Selection (Some(ItemId.Ending 1)) "End: the newest"
+                        let home, _ = play model [ key KeyCode.Home ]
+                        Expect.equal home.Selection (Some(ItemId.Reply(1, 0))) "Home: the oldest"
+                        let model, _ = play model [ key KeyCode.Down ]
+                        Expect.isNone model.Selection "past the newest"
+
+                        for modifier in [ (fun (k: Key) -> { k with Ctrl = true }); (fun k -> { k with Alt = true }) ] do
+                            let _, model = ready ()
+                            let model, _ = play model [ Msg.Key(modifier (Keys.key KeyCode.Up)) ]
+                            Expect.equal model.Selection (Some(ItemId.Ending 1)) "Ctrl+↑ and Alt+↑ too"
+
+                        let model, _ = play (Screens.fresh 80 24) [ shiftUp ]
+                        Expect.isNone model.Selection "nothing to select on the start screen"
+                    }
+
+                    test "Enter or Space expands the item selected on its own, and collapses it; the detail stays" {
+                        let _, model = ready ()
+                        let code = "const r = await fx.shell.run"
+                        Expect.isFalse ((screen model).Contains code) "the cell's code is folded"
+                        let model, cmds = play model [ shiftUp; key KeyCode.Up; key KeyCode.Enter ]
+                        Expect.isEmpty cmds "Enter sends nothing while selecting"
+                        Expect.equal model.Folds (Map.ofList [ rerun, Fold.Expanded ]) "expanded"
+                        Expect.equal model.Verbosity Verbosity.Normal "the detail stays"
+                        let shown = screen model
+                        Expect.stringContains shown code "its code"
+                        Expect.stringContains shown "› ◇ Cell" "marked as selected"
+                        Expect.isFalse (shown.Contains "1 open Billing") "not what the read returned"
+                        Expect.isFalse (shown.Contains "▸ 1 cell") "no folded cells left"
+
+                        Expect.stringContains
+                            (List.last ((screen model).Split('\n') |> List.ofArray))
+                            "Enter collapse"
+                            "the footer"
+
+                        let model, _ = play model [ Msg.Key(Keys.char " ") ]
+                        Expect.equal model.Folds (Map.ofList [ rerun, Fold.Collapsed ]) "Space collapses it"
+                        Expect.isFalse ((screen model).Contains code) "folded again"
+                        let model, _ = play model [ key KeyCode.Escape ]
+                        Expect.isNone model.Selection "Esc ends selecting"
+                        Expect.isFalse ((screen model).Contains "› ◇ Cell") "nothing marked"
+                    }
+
+                    test "a reply collapses to its first row; quiet hides replies unless one was chosen" {
+                        let model = Screens.markdown 80 24
+                        let reply = ItemId.Reply(1, 0)
+                        let model, _ = play model [ shiftUp; key KeyCode.Up; key KeyCode.Up ]
+                        Expect.equal model.Selection (Some reply) "the reply"
+                        let model, _ = play model [ key KeyCode.Enter; key KeyCode.Escape ]
+                        Expect.equal model.Folds (Map.ofList [ reply, Fold.Collapsed ]) "collapsed"
+                        let shown = screen model
+                        Expect.stringContains shown "Set model.role.main in ~/.fx/config.json: …" "its first row"
+                        Expect.isFalse (shown.Contains "overrides it") "not the rest"
+
+                        let quiet, _ = play (Screens.markdown 80 24) [ ctrl 'o'; ctrl 'o' ]
+                        Expect.equal quiet.Verbosity Verbosity.Quiet "quiet"
+
+                        Expect.equal
+                            (App.items quiet |> List.filter (Items.shown quiet.Folds) |> List.map _.Id)
+                            [ ItemId.Call(1, "toolu_1"); ItemId.Ending 1 ]
+                            "no reply to select"
+
+                        let chosen, _ = play model [ ctrl 'o'; ctrl 'o' ]
+                        Expect.stringContains (screen chosen) "Set model.role.main" "the reply chosen still shows"
+                    }
+
+                    test "a result card collapses to its first row, and expanded shows its evidence's details" {
+                        let s = Session "01JD2W7Z9Q000000000000000B"
+
+                        let msgs =
+                            [
+                                yield! s.Start None
+                                yield! s.Prompt "run the tests"
+                                yield! s.Boundary 1
+                                yield!
+                                    s.End(
+                                        TurnResult.Done(
+                                            "All green.",
+                                            [
+                                                {
+                                                    Kind = "command"
+                                                    Summary = "make test → 214 passed"
+                                                    Detail = Json.Object [ "green", Json.Bool true ]
+                                                }
+                                            ],
+                                            None
+                                        )
+                                    )
+                            ]
+
+                        let model, _ = play (App.init setup 80 24 start) msgs
+                        Expect.isFalse ((screen model).Contains "command:") "no details at the normal detail"
+                        let model, _ = play model [ shiftUp; key KeyCode.Enter ]
+                        let shown = screen model
+                        Expect.stringContains shown "› ✓ Done  All green. …" "collapsed, marked"
+                        Expect.isFalse (shown.Contains "214 passed") "its evidence folded"
+                        let model, _ = play model [ key KeyCode.Enter ]
+                        Expect.stringContains (screen model) """command: {"green":true}""" "the details"
+
+                        let verbose, _ = play (App.init setup 80 24 start) (msgs @ [ ctrl 'o' ])
+                        Expect.stringContains (screen verbose) """command: {"green":true}""" "verbose shows them too"
+                    }
+
+                    test "what was chosen stays as new output arrives and streams; the detail changes the rest" {
+                        let s, model = ready ()
+                        let model, _ = play model [ shiftUp; key KeyCode.Up; key KeyCode.Enter ]
+                        let code = "const r = await fx.shell.run"
+
+                        let model, _ =
+                            play
+                                model
+                                (s.Prompt "now update the changelog"
+                                 @ s.Boundary 1
+                                 @ [
+                                     Msg.Streaming(s.Running, true, "Updating the changelog.", None)
+                                     s.Reply(1, [ cell "toolu_5" "// intent: add the entry\nawait add()" ])
+                                     s.Receipt(1, "toolu_5", "cell", "added")
+                                 ])
+
+                        Expect.equal model.Selection (Some rerun) "still selected"
+                        Expect.equal model.Folds (Map.ofList [ rerun, Fold.Expanded ]) "still expanded"
+                        let shown = screen { model with Height = 60 }
+                        Expect.stringContains shown code "its code"
+                        Expect.isFalse (shown.Contains "await add()") "the new cell's code is folded"
+                        let model, _ = play model [ ctrl 'o'; ctrl 'o' ]
+                        Expect.equal model.Verbosity Verbosity.Quiet "quiet"
+                        Expect.equal model.Selection (Some rerun) "Ctrl+O keeps the selection"
+                        let shown = screen { model with Height = 60 }
+                        Expect.stringContains shown code "the cell chosen still expanded"
+                        Expect.isFalse (shown.Contains "exit 1") "the rest quiet"
+                    }
+
+                    test "the selection is brought into view when it moves, not when the view scrolls away" {
+                        let _, model = ready ()
+                        let model = View.settle { model with Width = 40; Height = 14 }
+                        let model = View.settle (fst (play model [ shiftUp ]))
+
+                        let moved =
+                            View.settle (fst (play model [ key KeyCode.Up; key KeyCode.Up; key KeyCode.Up ]))
+
+                        Expect.isGreaterThan moved.Scroll 0 "scrolled up to it"
+
+                        Expect.exists
+                            (transcriptRows moved)
+                            (fun row -> row.StartsWith "› ◆ Edit")
+                            "the selection shows"
+
+                        let away =
+                            View.settle (fst (play moved [ key KeyCode.WheelDown; key KeyCode.WheelDown ]))
+
+                        Expect.equal away.Selection moved.Selection "still selected"
+                        Expect.isLessThan away.Scroll moved.Scroll "the wheel moved the view"
+                        Expect.isFalse (away.Reveal) "not brought back"
+
+                        let back = View.settle (fst (play away [ key KeyCode.Up ]))
+
+                        Expect.exists
+                            (transcriptRows back)
+                            (fun row -> row.StartsWith "› ◇ Read")
+                            "moving brings it back"
+
+                        let expanded =
+                            View.settle (
+                                fst (
+                                    play
+                                        back
+                                        [ key KeyCode.Down; key KeyCode.Down; key KeyCode.Down; key KeyCode.Enter ]
+                                )
+                            )
+
+                        let rows = transcriptRows expanded
+                        let first = rows |> List.findIndex (fun row -> row.StartsWith "› ◇ Cell")
+
+                        Expect.isTrue
+                            (rows |> List.skip first |> List.exists (fun row -> row.Contains "r.exitCode"))
+                            "expanded, its rows in view"
+                    }
+
+                    test "any other key ends selecting and does what it does; Esc never interrupts while selecting" {
+                        let s, model = ready ()
+                        let model, _ = play model [ shiftUp ]
+                        let typed, cmds = play model (typing "x")
+                        Expect.isNone typed.Selection "ended"
+                        Expect.equal (typed.Editor.Text, cmds) ("x", []) "typed into the prompt"
+                        let paged, _ = play model [ key KeyCode.PageUp; ctrl 'o' ]
+                        Expect.isSome paged.Selection "scrolling and the detail keep it"
+                        let running, _ = play model (s.Prompt "go on")
+                        let ended, cmds = play running [ key KeyCode.Escape ]
+                        Expect.equal (ended.Selection, cmds) (None, []) "Esc ends selecting, nothing interrupted"
+                        let _, cmds = play ended [ key KeyCode.Escape ]
+                        Expect.equal cmds [ Cmd.Interrupt(s.Id, "tui/run1/interrupt/2") ] "then it interrupts"
+                    }
+
+                    test "with a card open, selecting takes the arrows and Enter; the card's letters still answer it" {
+                        let model = Screens.grant 80 24
+                        let model, _ = play model [ shiftUp ]
+                        Expect.equal model.Selection (Some(ItemId.Call(1, "toolu_1"))) "the command waiting"
+                        let model, _ = play model [ key KeyCode.Right ]
+                        Expect.equal model.Selected 0 "the card's option did not move"
+
+                        Expect.equal
+                            model.Folds
+                            (Map.ofList [ ItemId.Call(1, "toolu_1"), Fold.Expanded ])
+                            "→ expanded it"
+
+                        let model, cmds = play model [ key KeyCode.Enter ]
+                        Expect.isEmpty cmds "Enter answered nothing"
+
+                        Expect.equal
+                            model.Folds
+                            (Map.ofList [ ItemId.Call(1, "toolu_1"), Fold.Collapsed ])
+                            "Enter collapsed it"
+
+                        let model, _ = play model [ key KeyCode.Left; key KeyCode.Right ]
+
+                        Expect.equal
+                            model.Folds
+                            (Map.ofList [ ItemId.Call(1, "toolu_1"), Fold.Expanded ])
+                            "← and → set it"
+
+                        let model, cmds = play model [ key (KeyCode.Char "y") ]
+                        Expect.isNone model.Selection "ended"
+
+                        match cmds with
+                        | [ Cmd.AnswerGrant(RequestId "g-1", _) ] -> ()
+                        | other -> failtest $"{other}"
+                    }
+
+                    test "the items a turn shows, with ids that stay as it grows" {
+                        let s, msgs = finishedTurn ()
+                        let before, _ = play (App.init setup 80 24 start) msgs
+
+                        let after, _ =
+                            play
+                                before
+                                (s.Prompt "again"
+                                 @ s.Boundary 1
+                                 @ [ s.Reply(1, [ text "Once more."; cell "toolu_1" "await again()" ]) ])
+
+                        let ids (model: Model) = App.items model |> List.map _.Id
+
+                        Expect.equal
+                            (ids before)
+                            [
+                                ItemId.Reply(1, 0)
+                                ItemId.Call(1, "toolu_1")
+                                ItemId.Call(1, "toolu_2")
+                                ItemId.Call(1, "toolu_3")
+                                ItemId.Call(1, "toolu_4")
+                                ItemId.Ending 1
+                            ]
+                            "the first turn"
+
+                        Expect.equal
+                            (ids after)
+                            (ids before @ [ ItemId.Reply(2, 0); ItemId.Call(2, "toolu_1") ])
+                            "the next turn's added, the first's the same"
                     }
                 ]
 

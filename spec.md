@@ -1045,7 +1045,7 @@ Legible; verifiable endings; steerable anytime; fewer, better questions (choices
     Changes   14 files +41 −37               [d]iff  [u]ndo  [r]eview
 ```
 
-- Verbosity levels; `// intent:` line per cell; typed endings drive the UI; steer vs queue keys; `Esc` interrupts.
+- Verbosity levels, with single items (a cell, an activity line, a result card) expanded or collapsed on their own over them; `// intent:` line per cell; typed endings drive the UI; steer vs queue keys; `Esc` interrupts.
 
 ### 19.3 Runs panel (goals, workflows, model-authored workflows)
 

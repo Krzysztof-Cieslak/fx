@@ -8,7 +8,7 @@
   ◇ Run      dotnet test tests/Billing                                     ✗ 48s
       exit 1
   ◇ Cell     rerun the tests                                               ✓ 46s
-  ▸ 1 cell (3 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (3 lines)                            [Ctrl+O expand · Shift+↑ select]
 
   ✓ Done  Migrated 37 call sites to RetryPolicy.
     Evidence  dotnet test tests/Billing → 214 passed

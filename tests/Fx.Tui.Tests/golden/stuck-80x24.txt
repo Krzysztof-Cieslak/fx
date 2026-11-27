@@ -6,7 +6,7 @@
   ◇ Cell     run the test                                                 ✓ 1.0s
   ? The agent did the same thing (cell) 3 times with the same result and
     stopped. How should it go on?
-  ▸ 1 cell (2 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (2 lines)                            [Ctrl+O expand · Shift+↑ select]
 
   ? Needs input
   ▣ fx · anthropic/claude-sonnet-5-5 · 3.0s

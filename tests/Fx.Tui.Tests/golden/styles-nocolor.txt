@@ -4,7 +4,7 @@
  3 {fg=default bg=default}  ◇ {fg=default bg=default bold}Run     {fg=default bg=default} dotnet test tests/Billing                 ✗ {fg=default bg=default dim}48s
  4 {fg=default bg=default}      exit 1
  5 {fg=default bg=default}  ◇ {fg=default bg=default bold}Cell    {fg=default bg=default} rerun the tests                           ✓ {fg=default bg=default dim}46s
- 6 {fg=default bg=default}  {fg=default bg=default dim}▸ 1 cell (3 lines){fg=default bg=default}                         {fg=default bg=default dim}[Ctrl+O expand]
+ 6 {fg=default bg=default}  {fg=default bg=default dim}▸ 1 cell (3 lines){fg=default bg=default}        {fg=default bg=default dim}[Ctrl+O expand · Shift+↑ select]
  7 
  8 {fg=default bg=default}  {fg=default bg=default bold}✓ Done  {fg=default bg=default}Migrated 37 call sites to RetryPolicy.
  9 {fg=default bg=default}    {fg=default bg=default bold}Evidence  {fg=default bg=default}dotnet test tests/Billing → 214 passed

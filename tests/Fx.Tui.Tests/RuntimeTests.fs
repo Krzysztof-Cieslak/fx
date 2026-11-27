@@ -150,4 +150,39 @@ let tests =
                 tty.Type "\u0003\u0003"
                 let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
                 Expect.isTrue final.Quitting "quit"
+
+            testCase "Shift+↑ from the terminal selects an item; Enter expands it on its own; Esc ends selecting"
+            <| fun () ->
+                let tty = FakeTty(60, 24)
+
+                let env =
+                    {
+                        Clock = SystemClock.clock
+                        Tty = tty.Tty
+                        Scope = Scope.root
+                    }
+
+                let inbox = Inbox<Msg>()
+                let interpret (_: Cmd) : Eff<TestEnv, unit> = eff { return () }
+
+                let start =
+                    { Screens.finished 60 24 with
+                        Now = (SystemClock.clock.Now()).UnixMicroseconds
+                    }
+
+                let running = Eff.run env (Runtime.run inbox interpret start)
+                waitFor tty "the result card" (fun text -> text.Contains "✓ Done")
+                // Shift+↑ as xterm sends it, then ↑: the cell above the result card.
+                tty.Type "\u001b[1;2A\u001b[A"
+                waitFor tty "the cell selected" (fun text -> text.Contains "› ◇ Cell")
+                Expect.stringContains (List.last tty.Lines) "Enter expand" "the keys in the footer"
+                tty.Type "\r"
+                waitFor tty "its code" (fun text -> text.Contains "r.exitCode")
+                Expect.isFalse (tty.Text.Contains "1 open Billing") "the other items as they were"
+                tty.Type "\u001b"
+                waitFor tty "selecting done" (fun text -> not (text.Contains "› ◇ Cell"))
+                Expect.stringContains tty.Text "r.exitCode" "still expanded"
+                tty.Type "\u0003\u0003"
+                let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
+                Expect.isTrue final.Quitting "quit"
         ]
