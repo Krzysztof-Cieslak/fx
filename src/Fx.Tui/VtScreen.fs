@@ -45,16 +45,30 @@ type VtScreen(width: int, height: int) =
 
         if w > 0 then
             if column + w > width then
-                // No automatic wrap is assumed (the TUI turns it off): the character is dropped.
+                // No automatic wrap is assumed (the TUI turns it off): a wide character with no room
+                // left is dropped.
                 ()
             else
                 let g = grid ()
+
+                // Overwriting half of a wide character blanks its other half.
+                if g[row][column] = "" && column > 0 then
+                    g[row][column - 1] <- " "
+
+                let after = column + w
+
+                if after < width && g[row][after] = "" then
+                    g[row][after] <- " "
+
                 g[row][column] <- cluster
 
-                if w = 2 && column + 1 < width then
+                if w = 2 then
                     g[row][column + 1] <- ""
 
-                column <- column + w
+                // As a terminal with wrap off does, the cursor stays on the last column once a
+                // character is drawn there: the next one overwrites it, and erasing the rest of the
+                // line (EL) erases it too.
+                column <- min after (width - 1)
 
     let eraseLine (mode: int) =
         let g = grid ()

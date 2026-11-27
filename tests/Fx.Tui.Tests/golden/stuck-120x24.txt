@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                      │
+┃ fix the flaky test                                                                  │ billing
+                                                                                      │
+  ◇ Cell     run the test                                                       ✓ 1.0s│ Context
+  ? The agent did the same thing (cell) 3 times with the same result and stopped. How │ nothing yet
+    should it go on?                                                                  │
+  ▸ 1 cell (2 lines)                                  [Ctrl+O expand · Shift+↑ select]│
+                                                                                      │
+  ? Needs input                                                                       │
+  ▣ fx · anthropic/claude-sonnet-5-5 · 3.0s                                           │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+┃ Question                                                                            │
+┃ Type the answer below; Enter sends it.                                              │
+┃ ›                                                                                   │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
+fx · …/src/billing:main · session …00000006                Enter answer  ● needs input│
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

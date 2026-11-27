@@ -32,6 +32,42 @@ let private transcriptRows (model: Model) : string list =
     |> List.skip (View.banner model).Length
     |> List.truncate model.TranscriptRoom
 
+/// Sizes the width checks draw every screen at: the golden sizes, odd widths, the sidebar's
+/// threshold and wider.
+let private widths = sizes @ [ 79, 24; 119, 24; 120, 24; 121, 30; 130, 24; 200, 40 ]
+
+/// Expects every row of a frame to fit the terminal (`exact`: to take all its columns), and the
+/// frame drawn on a terminal (wrap off, as Vt.enter leaves it) to show every character of every row.
+let private expectFits (exact: bool) (frame: Frame) =
+    Expect.equal frame.Rows.Length frame.Height "one row per terminal row"
+
+    frame.Rows
+    |> List.iteri (fun i row ->
+        let w = Row.width row
+        Expect.isLessThanOrEqual w frame.Width $"row {i} is {w} columns wide: {Row.text row}"
+
+        if exact then
+            Expect.equal w frame.Width $"row {i} takes all {frame.Width} columns: {Row.text row}")
+
+    let screen = VtScreen(frame.Width, frame.Height)
+    screen.Write Vt.enter
+    screen.Write(Vt.diff None frame)
+    Expect.equal screen.Lines (Frame.lines frame) "the terminal shows every column of every row"
+
+/// A model drawn with a painted theme in 24-bit colour.
+let private painted (choice: ThemeChoice) (model: Model) : Model =
+    { model with
+        Setup =
+            { model.Setup with
+                Terminal =
+                    {
+                        Depth = ColorDepth.TrueColor
+                        LightBackground = None
+                    }
+                Theme = choice
+            }
+    }
+
 [<Tests>]
 let tests =
     testList
@@ -41,10 +77,13 @@ let tests =
                 "golden renders"
                 [
                     for name, make in Screens.all do
-                        for width, height in sizes do
+                        for width, height in sizes @ [ 120, 24 ] do
                             test $"{name} at {width}x{height}" {
-                                Golden.expect $"{name}-{width}x{height}.txt" (Screens.render (make width height))
+                                let model = make width height
+                                expectFits false (View.view model)
+                                Golden.expect $"{name}-{width}x{height}.txt" (Screens.render model)
                             }
+
 
                     test "verbose shows every cell's code and what each action returned" {
                         let model =
@@ -122,6 +161,21 @@ let tests =
 
                         Golden.expect "question-verbose-80x24.txt" (Screens.render model)
                     }
+                ]
+
+            testList
+                "full width"
+                [
+                    for name, make in Screens.all do
+                        for width, height in widths do
+                            test $"{name} at {width}x{height} fits the terminal" {
+                                expectFits false (View.view (make width height))
+                            }
+
+                            for choice in [ ThemeChoice.Dark; ThemeChoice.Light ] do
+                                test $"{name} at {width}x{height} painted {choice} takes every column" {
+                                    expectFits true (View.view (painted choice (make width height)))
+                                }
                 ]
 
             testList

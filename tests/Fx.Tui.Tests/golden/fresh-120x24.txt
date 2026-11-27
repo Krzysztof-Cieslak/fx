@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+                                                       ████ █  █
+                                                       █    █  █
+                                                       ███   ██
+                                                       █    █  █
+                                                       █    █  █
+
+                      ┃ ›
+                      ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
+
+                      …/src/billing:main                                           Ctrl+P commands
+
+
+
+
+
+
+
+fx · …/src/billing:main · session …00000009     Enter send · Ctrl+P commands · Alt+Enter newline · Ctrl+O detail  ● idle
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 12,26

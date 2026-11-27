@@ -105,7 +105,7 @@ module Vt =
     /// Moves the cursor to a row and column (from 0).
     let moveTo (row: int) (column: int) : string = $"{esc}{row + 1};{column + 1}H"
 
-    let private writeRow (sb: StringBuilder) (index: int) (row: Row) =
+    let private writeRow (sb: StringBuilder) (width: int) (index: int) (row: Row) =
         sb.Append(moveTo index 0) |> ignore
         let mutable current = Style.plain
         sb.Append(esc + "0m") |> ignore
@@ -117,11 +117,13 @@ module Vt =
 
             sb.Append span.Text |> ignore
 
-        // Clear the rest of the line in the default style.
+        // Clear the rest of the line in the default style, if the row leaves any: with wrap off the
+        // cursor stays on the last column once a row fills it, and EL would erase that column too.
         if current <> Style.plain then
             sb.Append(esc + "0m") |> ignore
 
-        sb.Append(esc + "K") |> ignore
+        if Row.width row < width then
+            sb.Append(esc + "K") |> ignore
 
     /// What draws `next` over a screen that shows `previous` (`None`: unknown, so everything is drawn
     /// after clearing it): only the rows that changed, inside a synchronized update so the terminal
@@ -147,7 +149,7 @@ module Vt =
             let changed = full || i >= before.Length || before[i] <> row
 
             if changed && not (full && row.IsEmpty) then
-                writeRow sb i row)
+                writeRow sb next.Width i row)
 
         let cursorChanged =
             match previous with
