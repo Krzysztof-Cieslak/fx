@@ -87,7 +87,7 @@ module Commands =
             }
             {
                 Name = "approvals"
-                Title = "Ask for commands, or auto-approve sandboxed ones"
+                Title = "Ask for commands, or auto-approve workspace ones"
                 Keys = Some "Shift+Tab"
                 Argument = Some "ask|auto"
                 Action = CommandAction.Approvals

@@ -16,7 +16,7 @@ export interface Approval {
   by: ApprovedBy;
 }
 
-/** How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run what the sandbox confines, deny, off), the host's codeact.grants.mode, the confining sandbox driver, and why auto approvals are on or off. */
+/** How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, off), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why auto approvals are on or off. */
 export interface ApprovalsView {
   session: string;
   mode: "ask" | "auto" | "deny" | "off";
@@ -854,7 +854,7 @@ export interface SessionView {
   state: SessionState;
 }
 
-/** A person turns auto approvals on or off for a session: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto). */
+/** A person turns auto approvals on or off for a session, sandbox or not: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto). */
 export interface SetApprovals {
   /** From 1 to 128 characters. */
   session: string;

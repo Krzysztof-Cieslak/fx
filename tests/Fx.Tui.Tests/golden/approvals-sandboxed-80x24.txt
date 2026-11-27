@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────
+
+┃ build it and fetch the schema
+
+  ◇ Run      mkdir out && dotnet build                                auto ✓ 21s
+  ◇ Run      curl -O https://example.com/schema.json                asked ✓ 4.0s
+  Built, and the schema is in the workspace.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ⠋ turn 1 · thinking 0.0s
+┃ ›
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: bubblewrap
+fx · …/src/billing:main · session …0000000B            approvals: auto  ● turn 1
+────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

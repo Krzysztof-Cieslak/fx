@@ -18,6 +18,6 @@
   ⠋ turn 1 · thinking 0.0s
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
-fx · …/src/bi… approvals: auto  ● turn 1
+fx · …/src/billing:main … auto  ● turn 1
 ────────────────────────────────────────
 cursor 17,4

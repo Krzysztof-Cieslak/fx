@@ -1065,12 +1065,27 @@ let tests =
                             {
                                 Mode = "auto"
                                 Configured = "ask"
+                                Sandbox = None
                                 Reason = "a person turned them on"
                             }
 
                         let model, _ = play model [ Msg.Approvals(auto, true) ]
                         Expect.equal model.Approvals (Some auto) "kept"
-                        Expect.stringContains (screen model) "approvals: auto" "the info line and the notice"
+                        Expect.stringContains (screen model) "approvals: auto · unsandboxed" "the footer"
+
+                        Expect.stringContains
+                            (screen model)
+                            "commands run unasked with your rights"
+                            "what it means without a sandbox, once"
+
+                        let confinedAuto =
+                            { auto with
+                                Sandbox = Some "bubblewrap"
+                            }
+
+                        let sandboxed, _ = play model [ Msg.Approvals(confinedAuto, true) ]
+                        Expect.isFalse ((screen sandboxed).Contains "unsandboxed") "a sandbox confines them"
+                        Expect.stringContains (screen sandboxed) "confined by bubblewrap" "the note says so"
 
                         let _, cmds =
                             play

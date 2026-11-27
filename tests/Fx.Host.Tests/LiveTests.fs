@@ -370,34 +370,33 @@ let tests =
             }
 
             testTask
-                "auto approvals: commands the sandbox confines run unasked; a download and a write outside still ask; unsandboxed, every command asks" {
+                "auto approvals: workspace commands run unasked, sandbox or not; a download, a write outside and an install still ask; a sandbox confines what they do" {
                 do! network.Force()
 
                 if OperatingSystem.IsWindows() then
-                    skiptest "no sandbox driver confines processes on Windows yet (T511): auto approvals never apply"
-
-                let outside = Scratch.directory "outside-auto"
-                let escaped = System.IO.Path.Combine(outside, "escaped.txt")
+                    skiptest "the test's commands are sh's (PowerShell lines: CodeAct's PermissionTests)"
 
                 let attempt (line: string) (name: string) =
                     $"let {name} = \"ran\"\ntry {{ await {g}.shell.run({Json.quote line}) }} catch (e) {{ {name} = \"refused\" }}"
 
-                let cells =
+                let cells (outside: string) =
+                    let escaped = System.IO.Path.Combine(outside, "escaped.txt")
+                    let target = System.IO.Path.Combine(outside, "by-script.txt")
+                    let script = $"echo x > '{target}'\n"
+
                     [
                         $"// intent: build\nconst made = await {g}.shell.run(\"mkdir made && touch made/a.txt\")\nmade.exitCode"
+                        // A script in the workspace: a plain command, whatever the script does.
+                        $"// intent: run a script\nawait {g}.fs.write(\"escape.sh\", {Json.quote script})\nconst ran = await {g}.shell.run(\"sh escape.sh\")\nran.exitCode"
                         "// intent: fetch\n"
                         + attempt "curl -sS https://example.invalid/schema.json" "fetched"
                         "// intent: write outside\n" + attempt ("echo x > '" + escaped + "'") "wrote"
                         finish "Built; asked about the rest" "`${fetched} ${wrote}`"
                     ]
 
-                // The person installs Bun, allows the build where it asks, and refuses the rest.
+                // The person installs Bun and refuses the rest.
                 let decide (request: GrantRequest) : GrantAnswer =
-                    if
-                        request.Action.Value = "component.install"
-                        || request.Resource.StartsWith "mkdir "
-                        || request.Resource.StartsWith "touch "
-                    then
+                    if request.Action.Value = "component.install" then
                         always
                     else
                         {
@@ -410,8 +409,9 @@ let tests =
 
                 let runIn (name: string) (explicit: (string * Json) list) =
                     let p = place name
+                    let outside = Scratch.directory (name + "-outside")
                     let model = Model()
-                    model.AddAll cells
+                    model.AddAll(cells outside)
                     let person = Person(always, decide)
 
                     let host =
@@ -437,6 +437,8 @@ let tests =
                                     Title = None
                                 }
 
+                        Expect.equal (done' outcome person) "Built; asked about the rest" "done"
+
                         let confined =
                             match HostSessions.entries host with
                             | [ entry ] ->
@@ -444,12 +446,6 @@ let tests =
                                 | Some record -> record.Sandbox |> Option.exists _.Confines
                                 | None -> false
                             | _ -> false
-
-                        let asked =
-                            person.Asked
-                            |> List.filter (fun r -> r.Action.Value <> "component.install")
-                            |> List.map (fun r -> r.Action.Value + " " + r.Resource)
-                            |> List.sort
 
                         // What the step journal kept of the commands' approvals (audits).
                         let approved =
@@ -462,50 +458,70 @@ let tests =
                                     started.Approved |> List.map (fun a -> a.Resource + " " + string a.By)
                                 | _ -> [])
 
-                        p, outcome, person, confined, asked, approved
+                        let asked =
+                            person.Asked
+                            |> List.map (fun r -> r.Action.Value + " " + r.Resource)
+                            |> List.sort
+
+                        Expect.equal
+                            (asked |> List.filter (fun a -> not (a.StartsWith "component.install")))
+                            [
+                                "fs.write "
+                                + Fx.Models.WorkspacePath.normalize (System.IO.Path.Combine(outside, "escaped.txt"))
+                                "shell.exec curl -sS https://example.invalid/schema.json"
+                            ]
+                            "the download and the write outside asked, nothing else"
+
+                        Expect.isTrue
+                            (asked |> List.exists (fun a -> a.StartsWith "component.install bun@"))
+                            "the first install asked"
+
+                        Expect.equal
+                            approved
+                            [ "mkdir made auto"; "touch made/a.txt auto"; "sh escape.sh auto" ]
+                            "journaled as auto approvals"
+
+                        Expect.contains
+                            person.Lines
+                            "  ✓ auto-approved  mkdir made, touch made/a.txt"
+                            "fx run's activity"
+
+                        Expect.isTrue (System.IO.File.Exists(p.File "made/a.txt")) "built"
+                        Expect.isFalse (System.IO.File.Exists(System.IO.Path.Combine(outside, "escaped.txt"))) "refused"
+
+                        let notices =
+                            person.Lines |> List.filter (fun line -> line.StartsWith "approvals: auto")
+
+                        confined, outside, notices
                     finally
                         stop host
 
-                // With the OS's driver (where it confines): the build runs unasked.
-                let p, outcome, person, confined, asked, approved = runIn "auto" []
-                Expect.equal (done' outcome person) "Built; asked about the rest" "done"
-                Expect.isTrue (System.IO.File.Exists(p.File "made/a.txt")) "built"
-                Expect.isFalse (System.IO.File.Exists escaped) "refused"
+                // The sandbox is off by default: the script ran with the user's rights.
+                let confined, outside, notices = runIn "auto-unsandboxed" []
+                Expect.isFalse confined "unsandboxed"
 
-                let refusedLater =
-                    [
-                        "fs.write " + Fx.Models.WorkspacePath.normalize escaped
-                        "shell.exec curl -sS https://example.invalid/schema.json"
-                    ]
+                Expect.isTrue
+                    (System.IO.File.Exists(System.IO.Path.Combine(outside, "by-script.txt")))
+                    "with your rights"
+
+                match notices with
+                | [ line ] -> Expect.stringStarts line "approvals: auto · unsandboxed: " "fx run says it once"
+                | other -> failtest $"{other}"
+
+                // With the sandbox on, the same commands run unasked, confined.
+                let confined, outside, notices =
+                    runIn "auto-sandboxed" [ "sandbox.driver", Json.String "auto" ]
 
                 if confined then
-                    Expect.equal asked refusedLater "the download and the write outside asked, nothing else"
-                    Expect.equal approved [ "mkdir made auto"; "touch made/a.txt auto" ] "journaled as auto approvals"
+                    Expect.isFalse
+                        (System.IO.File.Exists(System.IO.Path.Combine(outside, "by-script.txt")))
+                        "the sandbox kept the script in"
 
-                    Expect.contains
-                        person.Lines
-                        "  ✓ auto-approved  mkdir made, touch made/a.txt"
-                        "fx run says what ran unasked"
+                    match notices with
+                    | [ line ] -> Expect.isFalse (line.Contains "unsandboxed") $"confined: {line}"
+                    | other -> failtest $"{other}"
                 elif Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1" then
                     failtest "a driver must confine here"
-                else
-                    Expect.equal
-                        asked
-                        (List.sort ([ "shell.exec mkdir made"; "shell.exec touch made/a.txt" ] @ refusedLater))
-                        "no driver confines: everything asks"
-
-                // The host turns sandboxing off: auto approvals never apply, every command asks.
-                let _, outcome, person, _, asked, approved =
-                    runIn "auto-unsandboxed" [ "sandbox.driver", Json.String "none" ]
-
-                Expect.equal (done' outcome person) "Built; asked about the rest" "done"
-
-                Expect.equal
-                    asked
-                    (List.sort ([ "shell.exec mkdir made"; "shell.exec touch made/a.txt" ] @ refusedLater))
-                    "every command asked"
-
-                Expect.isFalse (approved |> List.exists (fun a -> a.EndsWith " auto")) "nothing ran on auto approvals"
             }
 
             testTask

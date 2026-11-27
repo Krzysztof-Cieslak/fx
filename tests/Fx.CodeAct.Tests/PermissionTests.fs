@@ -1,6 +1,6 @@
 /// Host calls as grants (`Permissions`): what each core binding's calls need, on sh and PowerShell
 /// workplaces, with the allowlist, protected paths, working directories and opaque lines, and which
-/// commands auto approvals may run (`Confined`, T134).
+/// commands auto approvals may run (`InWorkspace`, T134).
 module Fx.CodeAct.Tests.PermissionTests
 
 open Expecto
@@ -48,7 +48,7 @@ let private confined (place: Workplace) (line: string) : string list =
             + " "
             + n.Resource
             + (if n.Listed then " (listed)" else "")
-            + (if n.Confined then " (confined)" else ""))
+            + (if n.InWorkspace then " (in workspace)" else ""))
 
 let private single (needs: CallNeeds) : GrantNeed =
     match needs with
@@ -139,15 +139,15 @@ let tests =
                 Expect.equal
                     (confined unix "mkdir a && dotnet test 2>&1 | tail -n 5")
                     [
-                        "shell.exec mkdir a (confined)"
-                        "shell.exec dotnet test (confined)"
-                        "shell.exec tail -n 5 (listed) (confined)"
+                        "shell.exec mkdir a (in workspace)"
+                        "shell.exec dotnet test (in workspace)"
+                        "shell.exec tail -n 5 (listed) (in workspace)"
                     ]
                     "plain commands"
 
                 Expect.equal
                     (confined unix "cd tests && dotnet test")
-                    [ "shell.exec dotnet test (confined)" ]
+                    [ "shell.exec dotnet test (in workspace)" ]
                     "in a directory of the workspace"
 
                 Expect.equal (confined unix "curl -s https://x.org") [ "shell.exec curl -s https://x.org" ] "a download"
@@ -159,7 +159,12 @@ let tests =
 
                 Expect.equal (confined unix "NO_COLOR=1 wget x") [ "shell.exec NO_COLOR=1 wget x" ] "an assignment"
                 Expect.equal (confined unix "git push origin main") [ "shell.exec git push origin main" ] "a push"
-                Expect.equal (confined unix "git status") [ "shell.exec git status (listed) (confined)" ] "git status"
+
+                Expect.equal
+                    (confined unix "git status")
+                    [ "shell.exec git status (listed) (in workspace)" ]
+                    "git status"
+
                 Expect.equal (confined unix "npm install") [ "shell.exec npm install" ] "an install"
 
                 Expect.equal
@@ -188,7 +193,7 @@ let tests =
 
                 Expect.equal
                     (confined unix "make > /tmp/log")
-                    [ "shell.exec make (confined)"; "fs.write /tmp/log" ]
+                    [ "shell.exec make (in workspace)"; "fs.write /tmp/log" ]
                     "a write outside still needs fs.write"
 
                 Expect.equal
@@ -196,7 +201,7 @@ let tests =
                     [ "shell.exec for f in *; do rm $f; done" ]
                     "an opaque line"
 
-                Expect.equal (confined windows "dotnet build") [ "shell.exec dotnet build (confined)" ] "PowerShell"
+                Expect.equal (confined windows "dotnet build") [ "shell.exec dotnet build (in workspace)" ] "PowerShell"
 
                 Expect.equal
                     (confined windows "Invoke-WebRequest https://x.org -OutFile a")

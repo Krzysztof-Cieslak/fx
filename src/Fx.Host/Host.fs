@@ -618,14 +618,15 @@ module Host =
                     let! handle = Envs.openEnv environment |> EffResult.mapError string
                     let! grantSettings = GrantSettings.ofVariants variants
 
-                    // Auto approvals hold only where a driver confines the hands' processes.
+                    // Auto approvals are checked on the driver that confines the hands (`none` when
+                    // nothing does), so policy can forbid them unsandboxed only.
                     let guarded =
                         { GrantSetup.create grantsCapability sessionLog turn grantSettings with
                             Sandbox =
                                 if handle.Sandbox.Info.Confines then
-                                    Some handle.Sandbox.Info.Driver
+                                    handle.Sandbox.Info.Driver
                                 else
-                                    None
+                                    AutoApprovals.Unsandboxed
                         }
 
                     return

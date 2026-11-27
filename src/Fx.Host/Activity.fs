@@ -78,7 +78,7 @@ module Activity =
             match receipt.Restarted with
             | Some restart -> $"  ↻ new kernel  {firstLine 160 restart.Reason}; names from earlier cells are gone"
             | None -> ()
-            // What ran without asking anyone: the sandbox confined it (auto approvals).
+            // What ran without asking anyone: commands written plainly in the workspace (auto approvals).
             if not auto.IsEmpty then
                 "  ✓ auto-approved  " + firstLine 160 (String.concat ", " auto)
             if receipt.IsError then

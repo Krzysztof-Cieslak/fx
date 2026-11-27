@@ -157,26 +157,6 @@ type EnvSummary =
     override this.ToString() =
         $"{this.Id} ({this.Provider}, {this.Phase})"
 
-/// How the grants guard decides a session's commands now (`session/approvals`; docs/modules/codeact.md,
-/// "Approval modes").
-type ApprovalsView =
-    {
-        Session: string
-        /// What happens to a command no grant covers: `ask` (a person is asked), `auto` (auto approvals
-        /// run what the sandbox confines to the workspace; the rest asks), `deny` (refused without
-        /// asking) or `off` (nothing is checked).
-        Mode: string
-        /// The host's `codeact.grants.mode` for the session.
-        Configured: string
-        /// The sandbox driver that confines the session's commands; none when no driver does (or its
-        /// environment is not ready).
-        Sandbox: string option
-        /// Why auto approvals are on or off, for people.
-        Reason: string
-    }
-
-    override this.ToString() = $"{this.Session}: {this.Mode}"
-
 /// `session/setApprovals`: a person turns auto approvals on or off for a session.
 type SetApprovals =
     {
@@ -543,7 +523,7 @@ module ClientProtocol =
                 }
         }
         |> Codec.describe
-            "How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run what the sandbox confines, deny, off), the host's codeact.grants.mode, the confining sandbox driver, and why auto approvals are on or off."
+            "How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, off), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why auto approvals are on or off."
         |> Codec.named "ApprovalsView"
 
     let setApprovalsParams: Codec<SetApprovals> =
@@ -554,7 +534,7 @@ module ClientProtocol =
             return { Session = session; Auto = auto }
         }
         |> Codec.describe
-            "A person turns auto approvals on or off for a session: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto)."
+            "A person turns auto approvals on or off for a session, sandbox or not: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto)."
         |> Codec.named "SetApprovals"
 
     let idRef: Codec<IdRef> =

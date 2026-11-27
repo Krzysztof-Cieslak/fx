@@ -19,7 +19,7 @@
 ┃  /exit       Leave (the session stays)
 ┃  /new        Start a new session
 ┃  /detail     Show more or less of each turn
-┃  /approvals  Ask for commands, or auto-approve sandboxed ones
+┃  /approvals  Ask for commands, or auto-approve workspace ones
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000000        ↑↓ select · Enter run  ● idle

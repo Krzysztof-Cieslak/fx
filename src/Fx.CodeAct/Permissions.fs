@@ -16,8 +16,8 @@ open Fx.Grants
 type GrantMode =
     /// The grants log decides; a person answers what no grant covers.
     | Ask
-    /// As `Ask`, with auto approvals on: commands a sandbox driver confines to the workspace run
-    /// without asking (docs/modules/codeact.md, "Approval modes").
+    /// As `Ask`, with auto approvals on: commands written plainly in the workspace run without
+    /// asking, sandbox or not (docs/modules/codeact.md, "Approval modes").
     | Auto
     /// The grants log decides; what no grant allows is refused without asking anyone (unattended runs).
     | Deny
@@ -70,7 +70,7 @@ module GrantSlots =
     let mode: Slot<GrantMode> =
         Slot.enum
             "codeact.grants.mode"
-            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), auto (as ask, but commands a sandbox driver confines to the workspace run without asking; network, installs and writes outside it still ask), deny (what no grant allows is refused without asking: unattended runs) or off (nothing is checked: sandboxed or throwaway environments only)."
+            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), auto (as ask, but commands written plainly in the workspace run without asking, sandbox or not; network, installs, writes outside it and the commands of codeact.grants.askCommands still ask), deny (what no grant allows is refused without asking: unattended runs) or off (nothing is checked: sandboxed or throwaway environments only)."
             [
                 GrantMode.Ask, "ask"
                 GrantMode.Auto, "auto"
@@ -367,9 +367,9 @@ type GrantNeed =
         /// policy says otherwise, without asking.
         Listed: bool
         /// A command written plainly in the workspace and not in `codeact.grants.askCommands`: auto
-        /// approvals run it without asking where a sandbox driver confines the hands, when no grant or
-        /// policy says otherwise.
-        Confined: bool
+        /// approvals run it without asking (with or without a sandbox), when no grant or policy says
+        /// otherwise.
+        InWorkspace: bool
     }
 
     override this.ToString() =
@@ -377,7 +377,7 @@ type GrantNeed =
         + " "
         + this.Resource
         + (if this.Listed then " (listed)" else "")
-        + (if this.Confined then " (confined)" else "")
+        + (if this.InWorkspace then " (in workspace)" else "")
 
 /// What a host call needs before it may run.
 [<RequireQualifiedAccess>]
@@ -525,7 +525,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions relative
                         Listed = false
-                        Confined = false
+                        InWorkspace = false
                     }
                 ]
         | Location.Outside outside ->
@@ -539,7 +539,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions outside
                         Listed = false
-                        Confined = false
+                        InWorkspace = false
                     }
                 ]
 
@@ -559,7 +559,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions outside
                         Listed = false
-                        Confined = false
+                        InWorkspace = false
                     }
                 ]
 
@@ -751,14 +751,14 @@ module Permissions =
                                 @ cwdNote
                             Suggestions = []
                             Listed = false
-                            Confined = false
+                            InWorkspace = false
                         }
                     ]
 
     /// What a command line needs: `shell.exec` for each simple command (unless listed), `fs.write`
     /// for redirections outside the workspace or to protected paths. A command written plainly (no
     /// word the shell expands, in the workspace, no argument or input outside it or excluded) is
-    /// `Listed` when `codeact.grants.allowCommands` has it and `Confined` unless
+    /// `Listed` when `codeact.grants.allowCommands` has it and `InWorkspace` unless
     /// `codeact.grants.askCommands` has it. A line the parser does not follow, a redirection to a name
     /// the shell expands or to a relative path after a change of directory, or more than `MaxNeeds`
     /// grants make the whole line one command.
@@ -841,7 +841,7 @@ module Permissions =
                                                     (if multi then [ evidence "command line" line ] else []) @ cwdNote
                                                 Suggestions = commandSuggestions resource
                                                 Listed = listed
-                                                Confined = plain && not (asksAlways settings simple.Words)
+                                                InWorkspace = plain && not (asksAlways settings simple.Words)
                                             }
                                         ]
                                 )
@@ -872,7 +872,7 @@ module Permissions =
                 match concat (List.ofSeq needs) with
                 | CallNeeds.Refused reason -> CallNeeds.Refused reason
                 | CallNeeds.Needs list ->
-                    // One grant per action and resource; listed (or confined) only if it is everywhere
+                    // One grant per action and resource; listed (or in the workspace) only if it is everywhere
                     // it occurs.
                     let merged =
                         list
@@ -880,7 +880,7 @@ module Permissions =
                         |> List.map (fun (_, same) ->
                             { same.Head with
                                 Listed = same |> List.forall (fun n -> n.Listed)
-                                Confined = same |> List.forall (fun n -> n.Confined)
+                                InWorkspace = same |> List.forall (fun n -> n.InWorkspace)
                             })
 
                     if (merged |> List.filter (fun n -> not n.Listed)).Length > MaxNeeds then
@@ -1004,7 +1004,7 @@ module Permissions =
                                                 |> Option.defaultValue []
                                                 |> suggest ResourceKind.Name target
                                             Listed = false
-                                            Confined = false
+                                            InWorkspace = false
                                         }
                                     ])
                         |> concat

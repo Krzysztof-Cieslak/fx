@@ -254,9 +254,9 @@ let restarted (width: int) (height: int) : Model =
 
     ready s width height msgs
 
-/// Auto approvals on (T134): commands the sandbox confined ran unasked, a download was asked about;
-/// the info line says so.
-let approvals (width: int) (height: int) : Model =
+/// Auto approvals on (T134): commands written plainly in the workspace ran unasked, a download was
+/// asked about; the footer says so, and whether a sandbox confines them.
+let private approvalsIn (environment: EnvInfo) (sandbox: string option) (width: int) (height: int) : Model =
     let s = Session "01JD2W7Z9Q000000000000000B"
 
     let auto (resource: string) : Fx.Prompt.Approval =
@@ -306,13 +306,21 @@ let approvals (width: int) (height: int) : Model =
                     {
                         Mode = "auto"
                         Configured = "ask"
-                        Reason = "a person turned them on (grant g1); bubblewrap confines commands"
+                        Sandbox = sandbox
+                        Reason = "a person turned them on (grant g1)"
                     },
                     false
                 )
         ]
 
-    readyIn confined s width height msgs
+    readyIn environment s width height msgs
+
+/// Auto approvals without a sandbox (the default): `approvals: auto · unsandboxed`.
+let approvals (width: int) (height: int) : Model = approvalsIn env None width height
+
+/// Auto approvals where bubblewrap confines the commands.
+let approvalsSandboxed (width: int) (height: int) : Model =
+    approvalsIn confined (Some "bubblewrap") width height
 
 /// A reply in Markdown, and a result card whose summary and check are Markdown too.
 let private markdownTurn () : Session * Msg list =
@@ -491,6 +499,7 @@ let all: (string * (int -> int -> Model)) list =
         "compacted", compacted
         "restarted", restarted
         "approvals", approvals
+        "approvals-sandboxed", approvalsSandboxed
         "markdown", markdown
         "usage", usage
         "palette", palette

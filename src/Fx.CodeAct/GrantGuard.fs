@@ -13,52 +13,8 @@ open Fx.Sessions
 open Fx.Grants
 open Fx.Prompt
 
-/// What a turn's grants guard works with. The composition root builds it for each turn's hands
-/// (`GrantGuard.attach`), with the variants of the turn's profile.
-[<NoEquality; NoComparison>]
-type GrantSetup =
-    {
-        /// The grants capability (`GrantsService.grants`): it checks and requests, and never grants.
-        Grants: Grants
-        /// The session events: a steer that arrives while a person is asked withdraws the request.
-        Sessions: EventLog<Event>
-        /// The turn the guard serves: its requests name its session, and their keys derive from its
-        /// start event.
-        Turn: TurnStart
-        /// `GrantSettings.ofVariants` of the turn's profile.
-        Settings: GrantSettings
-        /// The workspace's repository, as the host names it, for repository-scoped grants; `None` if
-        /// it has none.
-        Repo: string option
-        /// The agent that asks, as requests name it.
-        Agent: string
-        /// How bindings map to grants: `Permissions.core`, and the rules of other bindings (network
-        /// bindings: `Permissions.connects`).
-        Rules: BindingRule list
-        /// The sandbox driver that confines the hands' processes (`bubblewrap`, `seatbelt`); `None`
-        /// when none does (`none`, Windows v1, a fallback): then auto approvals never apply.
-        Sandbox: string option
-    }
-
-    override this.ToString() =
-        $"grant setup ({this.Turn}, {this.Settings})"
-
-module GrantSetup =
-    /// A turn's setup with the core bindings' rules, no repository and the main agent.
-    let create (grants: Grants) (sessions: EventLog<Event>) (turn: TurnStart) (settings: GrantSettings) : GrantSetup =
-        {
-            Grants = grants
-            Sessions = sessions
-            Turn = turn
-            Settings = settings
-            Repo = None
-            Agent = "main"
-            Rules = Permissions.core
-            Sandbox = None
-        }
-
-/// Whether auto approvals hold (docs/modules/codeact.md, "Approval modes"): commands a sandbox driver
-/// confines to the workspace run without asking.
+/// Whether auto approvals hold (docs/modules/codeact.md, "Approval modes"): commands written plainly
+/// in the workspace run without asking.
 [<RequireQualifiedAccess>]
 type AutoApprovals =
     | On of because: string
@@ -69,40 +25,42 @@ type AutoApprovals =
         | On because -> "on: " + because
         | Off because -> "off: " + because
 
-/// Auto approvals (docs/modules/codeact.md, "Approval modes"; spec §13): the guard does not ask a person
-/// about commands a sandbox driver confines to the workspace. A person turns them on with a grant of
-/// `approvals.auto` (session, repository or host: the TUI's switch, `fx grants allow`), the host with
-/// `codeact.grants.mode = auto`; a deny grant turns them off for its scope, and policy forbids them
-/// (a deny rule; the host makes one from a policy file that forbids `auto`). Never without a driver that
-/// confines.
+/// Auto approvals (docs/modules/codeact.md, "Approval modes"; spec §13.3): the guard does not ask a
+/// person about commands written plainly in the workspace (`GrantNeed.InWorkspace`), sandbox or not; a
+/// driver that confines makes them stronger (what it confines), never a condition. A person turns them
+/// on with a grant of `approvals.auto` (the TUI's switch for the session, `fx grants allow` for the
+/// host), the host with `codeact.grants.mode = auto`; a deny grant turns them off for its scope, and
+/// policy forbids them: a deny rule on `*`, or on `none` alone to forbid them only unsandboxed (the
+/// host makes the former from a policy file that forbids `auto`).
 [<RequireQualifiedAccess>]
 module AutoApprovals =
-    /// The grant that turns auto approvals on for its scope; its resource is the confining driver.
+    /// The grant that turns auto approvals on for its scope; its resource is the environment's sandbox
+    /// driver, `none` when nothing confines.
     let action = ActionName.create "approvals.auto"
 
-    /// What auto approvals are for the hands: the mode, the confining driver, and the grants log's
-    /// check of `approvals.auto` on it (`None` when there is no driver to check).
-    let decide
-        (mode: GrantMode)
-        (sandbox: string option)
-        (check: Result<GrantCheck, GrantError> option)
-        : AutoApprovals =
-        match mode, sandbox, check with
-        | GrantMode.Off, _, _ -> AutoApprovals.Off "codeact.grants.mode is off: nothing is checked"
-        | _, None, _
-        | _, _, None ->
-            AutoApprovals.Off "no sandbox driver confines this environment's processes, so every command asks"
-        | _, Some _, Some(Error e) -> AutoApprovals.Off $"the grants log could not be checked: {e.Message}"
-        | _, Some _, Some(Ok(GrantCheck.Denied reasons)) ->
-            AutoApprovals.Off("forbidden: " + String.concat "; " reasons)
-        | _, Some driver, Some(Ok(GrantCheck.Allowed grant)) ->
-            AutoApprovals.On $"a person turned them on (grant {grant.Value}); {driver} confines commands"
-        | GrantMode.Auto, Some driver, Some(Ok(GrantCheck.MustAsk reasons)) when reasons = [ string Because.NoGrant ] ->
-            AutoApprovals.On $"codeact.grants.mode is auto; {driver} confines commands"
-        | _, Some _, Some(Ok(GrantCheck.MustAsk reasons)) when reasons = [ string Because.NoGrant ] ->
+    /// The driver of hands that nothing confines (`sandbox.driver = none`, the default).
+    [<Literal>]
+    let Unsandboxed = "none"
+
+    /// What auto approvals are for the hands: the mode, the driver that runs their processes (`none`:
+    /// nothing confines them) and the grants log's check of `approvals.auto` on it.
+    let decide (mode: GrantMode) (driver: string) (check: Result<GrantCheck, GrantError>) : AutoApprovals =
+        let how =
+            if driver = Unsandboxed then
+                "commands run unsandboxed, with the user's rights"
+            else
+                $"{driver} confines commands"
+
+        match mode, check with
+        | GrantMode.Off, _ -> AutoApprovals.Off "codeact.grants.mode is off: nothing is checked"
+        | _, Error e -> AutoApprovals.Off $"the grants log could not be checked: {e.Message}"
+        | _, Ok(GrantCheck.Denied reasons) -> AutoApprovals.Off("forbidden: " + String.concat "; " reasons)
+        | _, Ok(GrantCheck.Allowed grant) -> AutoApprovals.On $"a person turned them on (grant {grant.Value}); {how}"
+        | GrantMode.Auto, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.On $"codeact.grants.mode is auto; {how}"
+        | _, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
             AutoApprovals.Off "nobody turned them on"
-        | _, Some _, Some(Ok(GrantCheck.MustAsk reasons)) ->
-            AutoApprovals.Off("policy asks: " + String.concat "; " reasons)
+        | _, Ok(GrantCheck.MustAsk reasons) -> AutoApprovals.Off("policy asks: " + String.concat "; " reasons)
 
     /// The grants log's query for auto approvals in a context.
     let query (driver: string) (context: GrantContext) : GrantQuery =
@@ -139,6 +97,51 @@ module AutoApprovals =
                     }
             else
                 None)
+
+/// What a turn's grants guard works with. The composition root builds it for each turn's hands
+/// (`GrantGuard.attach`), with the variants of the turn's profile.
+[<NoEquality; NoComparison>]
+type GrantSetup =
+    {
+        /// The grants capability (`GrantsService.grants`): it checks and requests, and never grants.
+        Grants: Grants
+        /// The session events: a steer that arrives while a person is asked withdraws the request.
+        Sessions: EventLog<Event>
+        /// The turn the guard serves: its requests name its session, and their keys derive from its
+        /// start event.
+        Turn: TurnStart
+        /// `GrantSettings.ofVariants` of the turn's profile.
+        Settings: GrantSettings
+        /// The workspace's repository, as the host names it, for repository-scoped grants; `None` if
+        /// it has none.
+        Repo: string option
+        /// The agent that asks, as requests name it.
+        Agent: string
+        /// How bindings map to grants: `Permissions.core`, and the rules of other bindings (network
+        /// bindings: `Permissions.connects`).
+        Rules: BindingRule list
+        /// The sandbox driver that confines the hands' processes (`bubblewrap`, `seatbelt`), or
+        /// `none` when nothing does (the default, Windows v1, a fallback): the resource auto
+        /// approvals are checked on (`approvals.auto`), so policy can forbid them unsandboxed only.
+        Sandbox: string
+    }
+
+    override this.ToString() =
+        $"grant setup ({this.Turn}, {this.Settings})"
+
+module GrantSetup =
+    /// A turn's setup with the core bindings' rules, no repository and the main agent.
+    let create (grants: Grants) (sessions: EventLog<Event>) (turn: TurnStart) (settings: GrantSettings) : GrantSetup =
+        {
+            Grants = grants
+            Sessions = sessions
+            Turn = turn
+            Settings = settings
+            Repo = None
+            Agent = "main"
+            Rules = Permissions.core
+            Sandbox = AutoApprovals.Unsandboxed
+        }
 
 /// How a wait for people ended.
 [<RequireQualifiedAccess>]
@@ -266,18 +269,15 @@ module GrantGuard =
 
     /// Auto approvals for the setup's session now.
     let auto (setup: GrantSetup) : Eff<'K, AutoApprovals> when 'K :> IScope =
-        match setup.Sandbox with
-        | None -> Eff.ret (AutoApprovals.decide setup.Settings.Mode None None)
-        | Some driver ->
-            let context =
-                {
-                    Session = Some setup.Turn.Session
-                    Run = None
-                    Repo = setup.Repo |> Option.map (fun repo -> { Repo = repo; Path = "" })
-                }
+        let context =
+            {
+                Session = Some setup.Turn.Session
+                Run = None
+                Repo = setup.Repo |> Option.map (fun repo -> { Repo = repo; Path = "" })
+            }
 
-            checkQuery setup (AutoApprovals.query driver context)
-            |> Eff.map (fun check -> AutoApprovals.decide setup.Settings.Mode (Some driver) (Some check))
+        checkQuery setup (AutoApprovals.query setup.Sandbox context)
+        |> Eff.map (AutoApprovals.decide setup.Settings.Mode setup.Sandbox)
 
     let private request
         (setup: GrantSetup)
@@ -392,7 +392,7 @@ module GrantGuard =
         }
 
     /// Asks for what the call needs: checks first (nothing is recorded in the grants log for a call
-    /// the rules settle), lets auto approvals run what a sandbox confines, then requests what a person
+    /// the rules settle), lets auto approvals run commands written plainly in the workspace, then requests what a person
     /// must decide, all at once, and waits for the answers. `Ok` says what ran without a grant in
     /// force: auto approvals, and the requests people answered.
     let private authorize<'K when 'K :> IClock and 'K :> IScopeWith<'K>>
@@ -414,7 +414,7 @@ module GrantGuard =
                     | Ok(GrantCheck.Allowed _) -> ()
                     | Ok(GrantCheck.Denied reasons) -> result <- Some(Error(denied need reasons))
                     | Ok(GrantCheck.MustAsk reasons) when need.Listed && reasons = [ noGrant ] -> ()
-                    | Ok(GrantCheck.MustAsk reasons) when need.Confined && reasons = [ noGrant ] ->
+                    | Ok(GrantCheck.MustAsk reasons) when need.InWorkspace && reasons = [ noGrant ] ->
                         let! state =
                             match autoState with
                             | Some state -> Eff.ret state

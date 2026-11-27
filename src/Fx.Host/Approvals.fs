@@ -3,14 +3,33 @@ namespace Fx.Host
 open Fx.Effects
 open Fx.Machines
 open Fx.Environments
-open Fx.Identity
 open Fx.Grants
 open Fx.Grants.Host
 open Fx.Sessions.Host
 open Fx.CodeAct
 
-/// A session's approval mode for clients (`session/approvals`, `session/setApprovals`;
-/// docs/modules/codeact.md, "Approval modes"): what the grants guard does with its commands, and a
+/// How the grants guard decides a session's commands now (`session/approvals`; docs/modules/codeact.md,
+/// "Approval modes").
+type ApprovalsView =
+    {
+        Session: string
+        /// What happens to a command no grant covers: `ask` (a person is asked), `auto` (auto approvals
+        /// run commands written plainly in the workspace; the rest asks), `deny` (refused without
+        /// asking) or `off` (nothing is checked).
+        Mode: string
+        /// The host's `codeact.grants.mode` for the session.
+        Configured: string
+        /// The sandbox driver that confines the session's commands; none when no driver does (the
+        /// default: they run with the user's rights) or the environment is not ready.
+        Sandbox: string option
+        /// Why auto approvals are on or off, for people.
+        Reason: string
+    }
+
+    override this.ToString() = $"{this.Session}: {this.Mode}"
+
+/// A session's approval mode for clients (`session/approvals`, `session/setApprovals`) and `fx run`
+/// (docs/modules/codeact.md, "Approval modes"): what the grants guard does with its commands, and a
 /// person's switch of auto approvals, which is a grant of `approvals.auto` for the session (only
 /// people grant: the method's least role is owner).
 [<RequireQualifiedAccess>]
@@ -46,15 +65,12 @@ module HostApprovals =
         eff {
             let! settings = settingsOf host session
             let! sandbox = sandboxOf host session
+            let driver = sandbox |> Option.defaultValue AutoApprovals.Unsandboxed
 
             let! check =
-                match sandbox with
-                | Some driver ->
-                    GrantsService.check host.Grants (AutoApprovals.query driver (context session))
-                    |> Eff.map Some
-                | None -> Eff.ret None
+                GrantsService.check host.Grants (AutoApprovals.query driver (context session))
 
-            return settings, sandbox, AutoApprovals.decide settings.Mode sandbox check
+            return settings, sandbox, AutoApprovals.decide settings.Mode driver check
         }
 
     /// What the guard does with the session's commands now.
@@ -84,6 +100,18 @@ module HostApprovals =
                 }
         }
 
+    /// What `fx run` says once, before the turn, when auto approvals hold: that commands run
+    /// unasked, and with what rights.
+    let notice (view: ApprovalsView) : string option =
+        match view.Mode, view.Sandbox with
+        | "auto", None ->
+            Some
+                "approvals: auto · unsandboxed: commands written plainly in the workspace run without asking, with your rights (they can read your files and use the network); downloads, installs and writes outside the workspace still ask"
+        | "auto", Some driver ->
+            Some
+                $"approvals: auto · {driver}: commands written plainly in the workspace run without asking, confined by the sandbox; downloads, installs and writes outside the workspace still ask"
+        | _ -> None
+
     /// This session's own grants of `approvals.auto` in force, with this effect.
     let private sessionGrants (host: Host) (session: string) (effect: GrantEffect) : Grant list =
         (GrantsService.list host.Grants false).Grants
@@ -103,44 +131,34 @@ module HostApprovals =
             Reason = Some reason
         }
 
-    let private grant (host: Host) (by: Attribution) (draft: GrantDraft) : Eff<HostEnv, Result<unit, ClientError>> =
+    let private grant (host: Host) (by: Attribution) (draft: GrantDraft) : Eff<HostEnv, Result<unit, string list>> =
         GrantsService.grant host.Grants by draft
-        |> Eff.map (
-            Result.map ignore
-            >> Result.mapError (fun e -> ClientError.Invalid [ e.Message ])
-        )
+        |> Eff.map (Result.map ignore >> Result.mapError (fun e -> [ e.Message ]))
 
     let private revokeAll
         (host: Host)
         (by: Attribution)
         (grants: Grant list)
         (reason: string)
-        : Eff<HostEnv, Result<unit, ClientError>> =
+        : Eff<HostEnv, Result<unit, string list>> =
         effResult {
             for grant in grants do
                 do!
                     GrantsService.revoke host.Grants by grant.Id (Some reason)
-                    |> EffResult.mapError (fun e -> ClientError.Invalid [ e.Message ])
+                    |> EffResult.mapError (fun e -> [ e.Message ])
         }
 
-    let private switchOn (host: Host) (by: Attribution) (session: string) : Eff<HostEnv, Result<unit, ClientError>> =
+    let private switchOn (host: Host) (by: Attribution) (session: string) : Eff<HostEnv, Result<unit, string list>> =
         effResult {
             let why = $"auto approvals switched on through {by.Via}"
             do! revokeAll host by (sessionGrants host session GrantEffect.Deny) why
-            let! settings, sandbox, state = stateOf host session
+            let! settings, _, state = stateOf host session
 
             let! outcome =
-                match state, settings.Mode, sandbox with
-                | AutoApprovals.On _, _, _ -> EffResult.ok ()
-                | AutoApprovals.Off because, GrantMode.Off, _ -> EffResult.error (ClientError.Invalid [ because ])
-                | AutoApprovals.Off _, _, None ->
-                    EffResult.error (
-                        ClientError.Invalid
-                            [
-                                "auto approvals need a sandbox driver that confines the environment's processes; this one runs unsandboxed, so every command asks"
-                            ]
-                    )
-                | AutoApprovals.Off _, _, Some _ ->
+                match state, settings.Mode with
+                | AutoApprovals.On _, _ -> EffResult.ok ()
+                | AutoApprovals.Off because, GrantMode.Off -> EffResult.error [ because ]
+                | AutoApprovals.Off _, _ ->
                     effResult {
                         do! grant host by (draft session GrantEffect.Allow why)
                         let! _, _, after = stateOf host session
@@ -156,13 +174,13 @@ module HostApprovals =
                                     (sessionGrants host session GrantEffect.Allow)
                                     "auto approvals are not allowed here"
 
-                            return! EffResult.error (ClientError.Invalid [ forbidden ])
+                            return! EffResult.error [ forbidden ]
                     }
 
             return outcome
         }
 
-    let private switchOff (host: Host) (by: Attribution) (session: string) : Eff<HostEnv, Result<unit, ClientError>> =
+    let private switchOff (host: Host) (by: Attribution) (session: string) : Eff<HostEnv, Result<unit, string list>> =
         effResult {
             let why = $"auto approvals switched off through {by.Via}"
             do! revokeAll host by (sessionGrants host session GrantEffect.Allow) why
@@ -175,15 +193,15 @@ module HostApprovals =
 
     /// A person turns auto approvals on (a session grant of `approvals.auto`, after revoking the
     /// session's deny grants) or off (revoking the session's allow grants, and a session deny grant
-    /// where they would still hold: the host's mode, a repository or host grant). Refused, with why,
-    /// where they cannot hold: nothing is checked (`off`), no driver confines the environment, or
-    /// policy forbids them.
+    /// where they would still hold: the host's mode, a repository or host grant), sandbox or not.
+    /// Refused, with why, where they cannot hold: nothing is checked (`off`), or policy forbids them
+    /// (everywhere, or only unsandboxed).
     let set
         (host: Host)
         (by: Attribution)
         (session: string)
         (auto: bool)
-        : Eff<HostEnv, Result<ApprovalsView, ClientError>> =
+        : Eff<HostEnv, Result<ApprovalsView, string list>> =
         effResult {
             do!
                 if auto then

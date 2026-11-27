@@ -98,7 +98,7 @@ let private showNeeds (needs: CallNeeds) : string =
             + " "
             + Json.quote n.Resource
             + (if n.Listed then " listed" else "")
-            + (if n.Confined then " confined" else "")
+            + (if n.InWorkspace then " in-workspace" else "")
             + " at "
             + Json.quote n.Place
             + " suggest "
@@ -304,9 +304,9 @@ let guard =
 
                 out.Add("mode deny: " + showResult (run (deny (shell "t1-s1-4" "mkdir c"))))
 
-                // Auto approvals (T134): the host's mode with a confining driver runs what it confines;
-                // without one, or in mode deny without auto, nothing runs unasked.
-                let autoWith (mode: GrantMode) (sandbox: string option) =
+                // Auto approvals (T134): the host's mode runs commands written plainly in the workspace,
+                // sandbox or not; in mode deny without auto nothing runs unasked.
+                let autoWith (mode: GrantMode) (sandbox: string) =
                     GrantGuard.create<Env>
                         { GrantSetup.create
                               (GrantsService.grants service)
@@ -319,7 +319,7 @@ let guard =
                         }
                         (Workplace.create "/home/me/ws" Os.Linux)
 
-                let auto = autoWith GrantMode.Auto (Some "bubblewrap")
+                let auto = autoWith GrantMode.Auto "bubblewrap"
 
                 out.Add(
                     "auto: "
@@ -327,8 +327,13 @@ let guard =
                 )
 
                 out.Add(
-                    "auto, no driver: "
-                    + showResult (run ((autoWith GrantMode.Deny None) (shell "t1-s1-6" "mkdir e")))
+                    "auto, unsandboxed: "
+                    + showResult (run ((autoWith GrantMode.Auto "none") (shell "t1-s1-6" "mkdir e2")))
+                )
+
+                out.Add(
+                    "deny, unsandboxed: "
+                    + showResult (run ((autoWith GrantMode.Deny "none") (shell "t1-s1-6" "mkdir e3")))
                 )
 
 
@@ -357,27 +362,25 @@ let guard =
 
                 out.Add(
                     "switched, mode deny: "
-                    + showResult (run ((autoWith GrantMode.Deny (Some "bubblewrap")) (shell "t1-s1-7" "mkdir g")))
+                    + showResult (run ((autoWith GrantMode.Deny "bubblewrap") (shell "t1-s1-7" "mkdir g")))
                 )
 
                 out.Add(
                     "switched, a download in mode deny: "
-                    + showResult (
-                        run ((autoWith GrantMode.Deny (Some "bubblewrap")) (shell "t1-s1-8" "mkdir h; curl -O x"))
-                    )
+                    + showResult (run ((autoWith GrantMode.Deny "bubblewrap") (shell "t1-s1-8" "mkdir h; curl -O x")))
                 )
 
-                for mode, sandbox, check in
+                for mode, driver, check in
                     [
-                        GrantMode.Auto, Some "bubblewrap", Some(Ok(GrantCheck.MustAsk [ "no grant applies" ]))
-                        GrantMode.Ask, Some "bubblewrap", Some(Ok(GrantCheck.MustAsk [ "no grant applies" ]))
-                        GrantMode.Auto, None, None
-                        GrantMode.Off, Some "seatbelt", None
-                        GrantMode.Auto, Some "seatbelt", Some(Ok(GrantCheck.Denied [ "policy says no" ]))
-                        GrantMode.Ask, Some "seatbelt", Some(Ok(GrantCheck.Allowed(GrantId "g1")))
-                        GrantMode.Auto, Some "seatbelt", Some(Ok(GrantCheck.MustAsk [ "policy asks" ]))
+                        GrantMode.Auto, "bubblewrap", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Auto, "none", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Ask, "bubblewrap", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Off, "seatbelt", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Auto, "none", Ok(GrantCheck.Denied [ "policy says no" ])
+                        GrantMode.Ask, "none", Ok(GrantCheck.Allowed(GrantId "g1"))
+                        GrantMode.Auto, "seatbelt", Ok(GrantCheck.MustAsk [ "policy asks" ])
                     ] do
-                    out.Add($"decide {mode} {sandbox} -> {AutoApprovals.decide mode sandbox check}")
+                    out.Add($"decide {mode} {driver} -> {AutoApprovals.decide mode driver check}")
 
                 let policy: Fx.Variants.Policy =
                     {
