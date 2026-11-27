@@ -27,7 +27,9 @@ type Inbox<'Msg>() =
 /// The Elm loop (spec §20: an Elm-style TUI): messages folded by `App.update`, the model settled and
 /// the screen drawn by `View.render` and written as the difference from the last frame (the settled
 /// model kept: the scroll follows the transcript), commands handed to the shell's
-/// interpreter. Keys come from the terminal, decoded; ticks move time on and notice resizes.
+/// interpreter. Keys come from the terminal, decoded; ticks move time on. The loop reads the
+/// terminal's size before it handles keys or a tick, so resizes are noticed on ticks and keys are
+/// handled at the size the terminal had when they were typed.
 [<RequireQualifiedAccess>]
 module Runtime =
     /// How long a lone `ESC` waits for the rest of a sequence before it is the Escape key.
@@ -63,23 +65,11 @@ module Runtime =
                     inbox.Post(Msg.Key key)
         }
 
-    /// Posts the time (and the size when it changed) often while something moves on screen.
-    let ticks<'R when 'R :> ITty and 'R :> IClock and 'R :> IScopeWith<'R>>
-        (inbox: Inbox<Msg>)
-        (busy: unit -> bool)
-        (size: TtySize)
-        : Eff<'R, unit> =
+    /// Posts the time often while something moves on screen (the loop reads the size on each tick).
+    let ticks<'R when 'R :> IClock and 'R :> IScopeWith<'R>> (inbox: Inbox<Msg>) (busy: unit -> bool) : Eff<'R, unit> =
         eff {
-            let mutable last = size
-
             while true do
                 do! Clock.sleep (TimeSpan.FromMilliseconds(if busy () then 100.0 else 500.0))
-                let! current = Tty.size
-
-                if current <> last then
-                    last <- current
-                    inbox.Post(Msg.Resized(current.Columns, current.Rows))
-
                 let! at = now
                 inbox.Post(Msg.Tick at)
         }
@@ -124,19 +114,51 @@ module Runtime =
                     | Cmd.Redraw -> frame.Value <- None
                     | cmd -> commands.Post cmd
 
+            let size =
+                ref
+                    {
+                        Columns = start.Width
+                        Rows = start.Height
+                    }
+
+            // The size now, told to the model when it changed. Read after the keys of the batch were
+            // read from the terminal, so keys typed after a resize are handled at the new size (the
+            // wheel scrolls the room the person sees), even before a tick.
+            let resize: Eff<'R, unit> =
+                eff {
+                    let! current = Tty.size
+
+                    if current <> size.Value then
+                        size.Value <- current
+                        apply (Msg.Resized(current.Columns, current.Rows))
+                }
+
+            let measures (msg: Msg) =
+                match msg with
+                | Msg.Key _
+                | Msg.Tick _ -> true
+                | _ -> false
+
             let main: Eff<'R, unit> =
                 eff {
                     do! draw
 
                     while not model.Value.Quitting do
-                        let! msg = inbox.Read()
-                        apply msg
+                        let! first = inbox.Read()
+                        let batch = ResizeArray [ first ]
                         let mutable more = true
 
-                        while more && not model.Value.Quitting do
+                        while more do
                             match inbox.TryRead() with
-                            | Some msg -> apply msg
+                            | Some msg -> batch.Add msg
                             | None -> more <- false
+
+                        if Seq.exists measures batch then
+                            do! resize
+
+                        for msg in batch do
+                            if not model.Value.Quitting then
+                                apply msg
 
                         do! draw
 
@@ -161,12 +183,6 @@ module Runtime =
                             | Error e -> inbox.Post(Msg.Sent(string cmd, Error(e.GetType().Name)))
                 }
 
-            let size =
-                {
-                    Columns = start.Width
-                    Rows = start.Height
-                }
-
-            do! Eff.race [ main; input inbox; ticks inbox busy size; worker ]
+            do! Eff.race [ main; input inbox; ticks inbox busy; worker ]
             return model.Value
         }

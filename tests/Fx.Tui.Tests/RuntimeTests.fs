@@ -151,6 +151,38 @@ let tests =
                 let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
                 Expect.isTrue final.Quitting "quit"
 
+            testCase "keys typed after a resize are handled at the new size, before a tick notices it"
+            <| fun () ->
+                let tty = FakeTty(80, 24)
+
+                let env =
+                    {
+                        Clock = SystemClock.clock
+                        Tty = tty.Tty
+                        Scope = Scope.root
+                    }
+
+                let inbox = Inbox<Msg>()
+                let interpret (_: Cmd) : Eff<TestEnv, unit> = eff { return () }
+
+                let start =
+                    { Screens.finished 80 24 with
+                        Now = (SystemClock.clock.Now()).UnixMicroseconds
+                    }
+
+                let footer () = List.last tty.Lines
+                let running = Eff.run env (Runtime.run inbox interpret start)
+                waitFor tty "the footer" (fun _ -> (footer ()).Contains "● idle")
+                Expect.stringContains tty.Text "replace deprecated" "the whole transcript fits: nothing to scroll"
+                // Shorter at once, and a notch up right away: it scrolls the transcript the short
+                // screen cuts, though no tick has noticed the new size yet.
+                tty.Resize(80, 12)
+                tty.Type "\u001b[<64;5;5M"
+                waitFor tty "the transcript scrolled up" (fun _ -> (footer ()).Contains "↑")
+                tty.Type "\u0003\u0003"
+                let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
+                Expect.isTrue final.Quitting "quit"
+
             testCase "Shift+↑ from the terminal selects an item; Enter expands it on its own; Esc ends selecting"
             <| fun () ->
                 let tty = FakeTty(60, 24)
