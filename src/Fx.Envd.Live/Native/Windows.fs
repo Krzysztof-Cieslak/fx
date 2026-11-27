@@ -42,7 +42,20 @@ extern nativeint private createFile(
     nativeint templateFile
 )
 
-/// `CreateFileW`: the handle, or the Win32 error.
+/// A fully qualified, normalized path in its extended-length form (`\\?\`), which `CreateFileW`
+/// takes beyond the old 260-character limit (.NET adds it the same way).
+let extended (path: string) : string =
+    if
+        path.StartsWith(@"\\?\", StringComparison.Ordinal)
+        || path.StartsWith(@"\\.\", StringComparison.Ordinal)
+    then
+        path
+    elif path.StartsWith(@"\\", StringComparison.Ordinal) then
+        @"\\?\UNC\" + path.Substring 2
+    else
+        @"\\?\" + path
+
+/// `CreateFileW`: the handle, or the Win32 error. `path` is fully qualified and normalized.
 let open'
     (path: string)
     (access: uint32)
@@ -50,7 +63,7 @@ let open'
     (disposition: uint32)
     (flags: uint32)
     : Result<SafeFileHandle, int> =
-    let name = Marshal.StringToHGlobalUni path
+    let name = Marshal.StringToHGlobalUni(extended path)
 
     try
         let handle = createFile (name, access, share, 0n, disposition, flags, 0n)
