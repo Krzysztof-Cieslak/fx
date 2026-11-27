@@ -87,8 +87,10 @@ module EnvHands =
         let handle = EnvHandle.attenuate plan.Sandbox handle
         let policy = handle.Sandbox.Policy
         // Below the recording taps: the journal, the context and the model only ever see redacted
-        // output (T138).
-        let client = Redacting.client handle.Redaction handle.Client
+        // output (T138). The file operations resolve paths beneath the writable roots, where envd
+        // follows no link (T113b): the guard's check cannot be raced.
+        let client =
+            Redacting.client handle.Redaction (EnvClient.beneath (SandboxGuard.roots policy) handle.Client)
 
         let interpreterSession (launch: int) : InterpreterSession =
             {

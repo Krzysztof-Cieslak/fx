@@ -14,10 +14,10 @@ open Fx.Sdk
 /// read access to its path, a write write access (`SandboxPolicy.access`). On Windows, where no
 /// driver confines processes yet, it is the only attenuation.
 ///
-/// envd follows symbolic links, and a sandboxed process can make them where it may write: a path
-/// through a link inside a writable root is refused (read it with the shell, which runs in the
-/// sandbox). A process that swaps a directory for a link between this check and the operation is
-/// not stopped: resolving paths beneath their roots in envd is follow-up work (docs/modules/sandbox.md).
+/// A sandboxed process can make symbolic links where it may write, and the check here reads paths as
+/// written: so the session's file operations resolve paths beneath the policy's writable roots
+/// (`roots`, `EnvClient.beneath`), where envd follows no link (T113b). A path through a link there
+/// fails in envd (read it with the shell, which runs in the sandbox), however late the link appears.
 [<RequireQualifiedAccess>]
 module SandboxGuard =
     let private text (value: Value) : string option =
@@ -64,22 +64,20 @@ module SandboxGuard =
             | _ -> []
         | _ -> []
 
+    /// The roots a session's file operations resolve beneath: the policy's writable ones, where a
+    /// sandboxed process can make links.
+    let roots (policy: SandboxPolicy) : string list =
+        SandboxPolicy.rules policy
+        |> List.filter (fun rule -> rule.Access = PathAccess.ReadWrite)
+        |> List.map (fun rule -> rule.Root)
+
     let private rank (access: PathAccess) =
         match access with
         | PathAccess.NoAccess -> 0
         | PathAccess.ReadOnly -> 1
         | PathAccess.ReadWrite -> 2
 
-    /// The components of a path that lie inside a writable root of the policy (where a sandboxed
-    /// process can make links), outermost first.
-    let private insideWritable (policy: SandboxPolicy) (path: string) : string list =
-        SandboxPolicy.rules policy
-        |> List.filter (fun rule -> rule.Access = PathAccess.ReadWrite && SandboxPath.isUnder rule.Root path)
-        |> List.collect (fun rule -> SandboxPath.between rule.Root path)
-        |> List.distinct
-
-    /// Refuses a host call that touches a path the policy does not give it, or goes through a link
-    /// inside a writable root.
+    /// Refuses a host call that touches a path the policy does not give it.
     let check<'R when 'R :> IFsOps and 'R :> IScope>
         (policy: SandboxPolicy)
         (os: Os)
@@ -105,30 +103,5 @@ module SandboxGuard =
 
             match refused with
             | Some reason -> return Error(HostCallError.Denied reason)
-            | None ->
-                let components =
-                    needs
-                    |> List.collect (fun (path, _) -> insideWritable policy path)
-                    |> List.distinct
-
-                if components.IsEmpty then
-                    return Ok()
-                else
-                    let! entries = FsOps.statMany components
-
-                    let link =
-                        List.zip components entries
-                        |> List.tryPick (fun (path, entry) ->
-                            match entry with
-                            | Ok entry when entry.Kind = EntryKind.Symlink -> Some path
-                            | _ -> None)
-
-                    match link with
-                    | Some path ->
-                        return
-                            Error(
-                                HostCallError.Denied
-                                    $"{path} is a symbolic link: file bindings do not follow links in a sandboxed environment; use the shell, which runs in the sandbox"
-                            )
-                    | None -> return Ok()
+            | None -> return Ok()
         }
