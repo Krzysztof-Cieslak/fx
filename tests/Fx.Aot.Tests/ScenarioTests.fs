@@ -1,12 +1,26 @@
 module Fx.Aot.Tests.ScenarioTests
 
+open System
 open System.Text.RegularExpressions
+open System.Threading.Tasks
 open Expecto
 open Fx.Aot.Scenarios
 
 let private platform = Platform.current ()
 
-let private output (scenario: Scenario) = scenario.Run().GetAwaiter().GetResult()
+/// A scenario's output. It runs on a thread-pool thread (a synchronous scenario runs inside `Run`),
+/// waited for at most `limit`: a scenario that hangs fails its case, naming it, instead of the run.
+let private outputWithin (limit: TimeSpan) (scenario: Scenario) =
+    let running =
+        Task.Run<string list>(Func<Task<string list>>(fun () -> scenario.Run()))
+
+    try
+        running.WaitAsync(limit).GetAwaiter().GetResult()
+    with :? TimeoutException when not running.IsCompleted ->
+        failtest $"{scenario.Name} was still running after {limit.TotalSeconds} s"
+
+/// Much longer than any scenario takes, even on a loaded machine.
+let private output = outputWithin (TimeSpan.FromMinutes 5.0)
 
 let private linux =
     {
@@ -63,6 +77,26 @@ let tests =
                         })
                     "macos-arm64"
                     "macos"
+            }
+
+            test "a scenario that never ends fails its case" {
+                // Synchronous, so it blocks inside `Run`; let go once the case has failed.
+                let release = new Threading.ManualResetEventSlim()
+
+                let never =
+                    Scenario.lines "never-ends" (fun () ->
+                        release.Wait()
+                        [])
+
+                let failure =
+                    try
+                        outputWithin (TimeSpan.FromMilliseconds 100.0) never |> ignore
+                        None
+                    with :? AssertException as e ->
+                        Some e.Message
+
+                release.Set()
+                Expect.equal failure (Some "never-ends was still running after 0.1 s") "failed, naming it"
             }
 
             test "the canary reports the JIT on the JIT" {

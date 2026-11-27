@@ -5,6 +5,7 @@ open System
 open System.ComponentModel
 open System.Diagnostics
 open System.Text
+open System.Threading.Tasks
 open Fx.Aot.Diff.Diff
 
 let private create (workdir: string) (file: string) (args: string list) : Process =
@@ -30,12 +31,16 @@ let capture (timeout: TimeSpan) (workdir: string) (file: string) (args: string l
         let stderr = p.StandardError.ReadToEndAsync()
 
         if p.WaitForExit timeout then
-            Ok
-                {
-                    ExitCode = p.ExitCode
-                    Stdout = stdout.Result
-                    Stderr = stderr.Result
-                }
+            // A process it started may still hold the pipes: their ends are bounded too.
+            if Task.WaitAll([| stdout :> Task; stderr :> Task |], timeout) then
+                Ok
+                    {
+                        ExitCode = p.ExitCode
+                        Stdout = stdout.Result
+                        Stderr = stderr.Result
+                    }
+            else
+                Error $"its output was still open {timeout.TotalSeconds} s after it exited"
         else
             p.Kill true
             Error $"timed out after {timeout.TotalSeconds} s"
