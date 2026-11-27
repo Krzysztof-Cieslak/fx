@@ -316,4 +316,22 @@ let tests (name: string) (create: string -> Shell) (release: Shell -> unit) : Te
                         | Some(Error e) -> failtest (string e)
                         | None -> failtest "nothing was spawned")
             }
+
+            // A long session: envd's proxies stream each process's output over a channel of their
+            // connection, and a connection has at most 256 open at a time. A program that starts
+            // quickly (PowerShell takes a while), so the test stays short everywhere.
+            test "runs more commands in a row than a connection has channels" {
+                withEnv (fun env ->
+                    let command =
+                        if windows then
+                            Command.exec "cmd.exe" [ "/d"; "/c"; "echo ok" ]
+                        else
+                            Command.exec "/bin/sh" [ "-c"; "echo ok" ]
+
+                    for i in 1..300 do
+                        match runIn env (Shell.run command) with
+                        | Ok output ->
+                            Expect.equal (lines (Output.stdoutText output), output.ExitCode) ("ok\n", 0) $"run {i}"
+                        | Error e -> failtest $"run {i}: {e}")
+            }
         ]

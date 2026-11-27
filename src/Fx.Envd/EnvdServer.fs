@@ -13,12 +13,6 @@ open Fx.Store
 /// envd's side of the environment protocol: the handlers over an `Envd`, and the service a transport
 /// is accepted with (`Rpc.accept (EnvdServer.service envd) transport`).
 module EnvdServer =
-    /// Takes the channel a request names; a channel that cannot be taken is a protocol misuse (a defect).
-    let private take (peer: Peer) (id: uint32) : Channel =
-        match peer.AcceptChannel id with
-        | Ok channel -> channel
-        | Error e -> raise (TransferFailedException e)
-
     let private run<'R, 'T when 'R :> IScope> (work: CancellationToken -> Task<'T>) : Eff<'R, 'T> =
         fun env -> work env.Scope.Cancellation
 
@@ -50,7 +44,7 @@ module EnvdServer =
             Handler.request EnvProtocol.fsRead (fun context (path, offset, count, channelId) ->
                 run (fun ct ->
                     task {
-                        let channel = take context.Peer channelId
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Outbound ct
 
                         let! chunk =
                             match count with
@@ -87,7 +81,7 @@ module EnvdServer =
             Handler.request EnvProtocol.fsWrite (fun context (path, channelId, atomic) ->
                 run (fun ct ->
                     task {
-                        let channel = take context.Peer channelId
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Inbound ct
 
                         match! Transfer.readAll channel ct with
                         | Error e -> return raise (TransferFailedException e)
@@ -112,9 +106,11 @@ module EnvdServer =
         [
             Handler.request EnvProtocol.execStart (fun _ spec -> run (fun ct -> envd.Start(spec, ct)))
             Handler.request EnvProtocol.execAttach (fun context (id, out, err, channelId) ->
-                run (fun _ ->
-                    let channel = take context.Peer channelId
-                    Task.FromResult(envd.Attach(context.Peer, id, out, err, channel))))
+                run (fun ct ->
+                    task {
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Outbound ct
+                        return envd.Attach(context.Peer, id, out, err, channel)
+                    }))
             Handler.request EnvProtocol.execWrite (fun _ (id, data) -> run (fun ct -> envd.Write(id, data, ct)))
             Handler.request EnvProtocol.execCloseStdin (fun _ id -> run (fun _ -> envd.CloseStdin id))
             Handler.request EnvProtocol.execResize (fun _ (id, size) -> run (fun _ -> envd.Resize(id, size)))
@@ -132,7 +128,7 @@ module EnvdServer =
             Handler.request EnvProtocol.blobsPut (fun context channelId ->
                 ok (fun ct ->
                     task {
-                        let channel = take context.Peer channelId
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Inbound ct
                         let! writer = blobs.Create ct
 
                         try
@@ -154,7 +150,7 @@ module EnvdServer =
             Handler.request EnvProtocol.blobsGet (fun context (hash, range, channelId) ->
                 run (fun ct ->
                     task {
-                        let channel = take context.Peer channelId
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Outbound ct
 
                         let! content =
                             match range with
@@ -179,7 +175,7 @@ module EnvdServer =
             Handler.request EnvProtocol.snapshotPatch (fun context (from, until, paths, channelId) ->
                 run (fun ct ->
                     task {
-                        let channel = take context.Peer channelId
+                        let! channel = Transfer.acceptChannel context.Peer channelId Flow.Outbound ct
 
                         match! snapshots.Patch from until paths ct with
                         | Error e -> return fail channel e

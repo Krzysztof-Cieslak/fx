@@ -180,4 +180,28 @@ let tests (name: string) (create: unit -> Blobs) : Test =
                 throwsCancellation (fun () -> wait (blobs.Get (BlobHash.ofBytes [| 1uy |]) token) |> ignore) "get"
 
                 Expect.equal (wait (blobs.Stat (BlobHash.ofBytes [| 1uy |]) none)) None "nothing stored")
+
+            // A long session: envd's proxies move each blob over a channel of their connection, and a
+            // connection has at most 256 open at a time.
+            testCase "serves more calls in a row than a connection has channels" (fun () ->
+                let blobs = create ()
+                let missing = BlobHash.ofBytes (bytes "never stored")
+
+                for i in 1..300 do
+                    let data = bytes $"blob {i}"
+                    let blob = wait (blobs.Put data none)
+                    Expect.equal (wait (blobs.Get blob.Hash none) |> ok "get") data $"get {i}"
+                    Expect.equal (wait (blobs.Read blob.Hash 5L 100 none) |> ok "read") data[5..] $"read {i}"
+                    Expect.equal (wait (blobs.Get missing none)) (Error(BlobError.NotFound missing)) $"missing {i}"
+                    let writer = wait (blobs.Create none)
+                    wait (writer.Write (bytes $"chunked {i}") none)
+
+                    Expect.equal
+                        (wait (writer.Commit none)).Hash
+                        (BlobHash.ofBytes (bytes $"chunked {i}"))
+                        $"commit {i}"
+
+                    let aborted = wait (blobs.Create none)
+                    wait (aborted.Write data none)
+                    wait (aborted.Abort()))
         ]

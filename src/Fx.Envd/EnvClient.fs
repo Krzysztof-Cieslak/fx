@@ -255,6 +255,32 @@ module EnvClient =
     let start (client: EnvClient) (spec: StartSpec) (cancellation: CancellationToken) =
         call client.Peer EnvProtocol.execStart spec cancellation
 
+    let private attachOn
+        (peer: Peer)
+        (id: string)
+        (outFrom: int64)
+        (errFrom: int64)
+        (cancellation: CancellationToken)
+        : Task<Result<Attachment, ExecError>> =
+        task {
+            let! channel = Transfer.openChannel peer Flow.Inbound cancellation
+
+            let! attached =
+                task {
+                    try
+                        return! call peer EnvProtocol.execAttach (id, outFrom, errFrom, channel.Id) cancellation
+                    with e ->
+                        channel.Reset(Transfer.Abandoned, "the call failed")
+                        return Transfer.rethrow e
+                }
+
+            match attached with
+            | Ok() -> return Ok(Attachment channel)
+            | Error e ->
+                channel.Reset(Transfer.Abandoned, "the call failed")
+                return Error e
+        }
+
     /// Attaches to a process's output from the given offsets (`exec/attach`): how a host that
     /// reconnected resumes.
     let attach
@@ -264,26 +290,7 @@ module EnvClient =
         (errFrom: int64)
         (cancellation: CancellationToken)
         : Task<Result<Attachment, ExecError>> =
-        task {
-            match! client.Peer.OpenChannel cancellation with
-            | Error e -> return raise (TransferFailedException e)
-            | Ok channel ->
-                let! attached =
-                    task {
-                        try
-                            return!
-                                call client.Peer EnvProtocol.execAttach (id, outFrom, errFrom, channel.Id) cancellation
-                        with e ->
-                            channel.Reset(Transfer.Abandoned, "the call failed")
-                            return raise e
-                    }
-
-                match attached with
-                | Ok() -> return Ok(Attachment channel)
-                | Error e ->
-                    channel.Reset(Transfer.Abandoned, "the call failed")
-                    return Error e
-        }
+        attachOn client.Peer id outFrom errFrom cancellation
 
     let status (client: EnvClient) (id: string) (cancellation: CancellationToken) =
         call client.Peer EnvProtocol.execStatus id cancellation
@@ -307,6 +314,12 @@ module EnvClient =
                 do! onProcess client.Peer EnvProtocol.execWrite (id, chunk) cancellation
         }
 
+    /// Releases a process (`exec/release`, which kills it if needed) in the background.
+    let private releaseLater (peer: Peer) (id: string) : unit =
+        (callOrThrow peer EnvProtocol.execRelease id CancellationToken.None)
+            .ContinueWith(fun (t: Task<unit>) -> t.Exception |> ignore)
+        |> ignore
+
     /// A started process as `Proc` (pipes) or `Pty` (terminal): its output, exit code and release.
     type private Remote(peer: Peer, id: string, attachment: Attachment) =
         let mutable outputEnded = false
@@ -315,9 +328,7 @@ module EnvClient =
 
         member _.ReleaseIfDone() =
             if outputEnded && exitCode.IsSome && Interlocked.Exchange(&released, 1) = 0 then
-                (callOrThrow peer EnvProtocol.execRelease id CancellationToken.None)
-                    .ContinueWith(fun (t: Task<unit>) -> t.Exception |> ignore)
-                |> ignore
+                releaseLater peer id
 
         /// The next data, skipping gaps; `None` at the end.
         member this.Next(cancellation: CancellationToken) : Task<(OutputStream * byte array) option> =
@@ -364,6 +375,15 @@ module EnvClient =
             else
                 onProcess peer EnvProtocol.execKill id CancellationToken.None
 
+        /// Lets go of a process whose output nobody will read (a run that failed or was cancelled):
+        /// stops receiving it, and releases it (killing it if needed) in the background.
+        member _.Abandon() : unit =
+            outputEnded <- true
+            attachment.Close()
+
+            if Interlocked.Exchange(&released, 1) = 0 then
+                releaseLater peer id
+
         /// Ends it for good: kills it, waits for its exit, and releases it.
         member this.Close() : Task<unit> =
             task {
@@ -385,18 +405,25 @@ module EnvClient =
             match! call peer EnvProtocol.execStart spec cancellation with
             | Error e -> return Error e
             | Ok started ->
-                match! peer.OpenChannel cancellation with
-                | Error e -> return raise (TransferFailedException e)
-                | Ok channel ->
-                    match! call peer EnvProtocol.execAttach (started.Id, 0L, 0L, channel.Id) cancellation with
-                    | Error e ->
-                        channel.Reset(Transfer.Abandoned, "the call failed")
-                        return raise (EnvCallException(EnvProtocol.execAttach.Name, string e))
-                    | Ok() -> return Ok(started, Remote(peer, started.Id, Attachment channel))
+                let! attached =
+                    task {
+                        try
+                            return! attachOn peer started.Id 0L 0L cancellation
+                        with e ->
+                            // Nobody would read its output: it must not run on alone.
+                            releaseLater peer started.Id
+                            return Transfer.rethrow e
+                    }
+
+                match attached with
+                | Error e ->
+                    releaseLater peer started.Id
+                    return raise (EnvCallException(EnvProtocol.execAttach.Name, string e))
+                | Ok attachment -> return Ok(started, Remote(peer, started.Id, attachment))
         }
 
     let private shell (peer: Peer) : Shell =
-        let spawnProc (spec: ProcSpec) (cancellation: CancellationToken) : Task<Result<Proc, ShellError>> =
+        let spawnRemote (spec: ProcSpec) (cancellation: CancellationToken) =
             task {
                 let start =
                     {
@@ -409,26 +436,24 @@ module EnvClient =
                 match! spawn peer start cancellation with
                 | Error(ExecError.NotStarted(program, reason)) -> return Error(ShellError.NotStarted(program, reason))
                 | Error e -> return raise (EnvCallException(EnvProtocol.execStart.Name, string e))
-                | Ok(started, remote) ->
-                    return
-                        Ok
-                            {
-                                Pid = started.Pid
-                                Write = remote.Write
-                                CloseStdin =
-                                    fun () ->
-                                        onProcess peer EnvProtocol.execCloseStdin started.Id CancellationToken.None
-                                Read =
-                                    fun cancellation ->
-                                        task {
-                                            match! remote.Next cancellation with
-                                            | Some(OutputStream.Out, bytes) -> return Some(Stdout bytes)
-                                            | Some(OutputStream.Err, bytes) -> return Some(Stderr bytes)
-                                            | None -> return None
-                                        }
-                                Wait = remote.Wait
-                                Kill = remote.Kill
-                            }
+                | Ok started -> return Ok started
+            }
+
+        let procOf (started: Started) (remote: Remote) : Proc =
+            {
+                Pid = started.Pid
+                Write = remote.Write
+                CloseStdin = fun () -> onProcess peer EnvProtocol.execCloseStdin started.Id CancellationToken.None
+                Read =
+                    fun cancellation ->
+                        task {
+                            match! remote.Next cancellation with
+                            | Some(OutputStream.Out, bytes) -> return Some(Stdout bytes)
+                            | Some(OutputStream.Err, bytes) -> return Some(Stderr bytes)
+                            | None -> return None
+                        }
+                Wait = remote.Wait
+                Kill = remote.Kill
             }
 
         {
@@ -437,13 +462,25 @@ module EnvClient =
                     task {
                         cancellation.ThrowIfCancellationRequested()
 
-                        match! spawnProc command.Spec cancellation with
+                        match! spawnRemote command.Spec cancellation with
                         | Error e -> return Error e
-                        | Ok proc ->
-                            let! output = Proc.collect proc command.Stdin cancellation
-                            return Ok output
+                        | Ok(started, remote) ->
+                            try
+                                let! output = Proc.collect (procOf started remote) command.Stdin cancellation
+                                return Ok output
+                            with e ->
+                                // Its output may never be read to the end now: let go of its channel
+                                // and of the process.
+                                remote.Abandon()
+                                return Transfer.rethrow e
                     }
-            Spawn = spawnProc
+            Spawn =
+                fun spec cancellation ->
+                    task {
+                        match! spawnRemote spec cancellation with
+                        | Error e -> return Error e
+                        | Ok(started, remote) -> return Ok(procOf started remote)
+                    }
         }
 
     let private terminal (peer: Peer) : Terminal =
@@ -668,56 +705,52 @@ module EnvClient =
                     task {
                         cancellation.ThrowIfCancellationRequested()
 
-                        match! peer.OpenChannel cancellation with
-                        | Error e -> return raise (TransferFailedException e)
-                        | Ok channel ->
-                            let pending = call peer EnvProtocol.blobsPut channel.Id CancellationToken.None
-                            let mutable finished = false
+                        let! channel = Transfer.openChannel peer Flow.Outbound cancellation
+                        let pending = call peer EnvProtocol.blobsPut channel.Id CancellationToken.None
+                        let mutable finished = false
 
-                            let check () =
-                                if finished then
-                                    raise (ObjectDisposedException(nameof BlobWriter))
+                        let check () =
+                            if finished then
+                                raise (ObjectDisposedException(nameof BlobWriter))
 
-                            return
-                                {
-                                    Write =
-                                        fun chunk cancellation ->
-                                            task {
-                                                check ()
+                        return
+                            {
+                                Write =
+                                    fun chunk cancellation ->
+                                        task {
+                                            check ()
 
-                                                match! channel.Write(ReadOnlyMemory chunk, cancellation) with
-                                                | Ok() -> ()
-                                                | Error e -> raise (TransferFailedException e)
-                                            }
-                                    Commit =
-                                        fun cancellation ->
-                                            task {
-                                                check ()
-                                                finished <- true
+                                            match! channel.Write(ReadOnlyMemory chunk, cancellation) with
+                                            | Ok() -> ()
+                                            | Error e -> raise (TransferFailedException e)
+                                        }
+                                Commit =
+                                    fun cancellation ->
+                                        task {
+                                            check ()
+                                            finished <- true
 
-                                                match! channel.CloseOutput cancellation with
-                                                | Error e -> return raise (TransferFailedException e)
-                                                | Ok() ->
-                                                    match! pending with
-                                                    | Ok blob -> return blob
-                                                    | Error(none: NoError) ->
-                                                        return
-                                                            raise (
-                                                                EnvCallException(EnvProtocol.blobsPut.Name, string none)
-                                                            )
-                                            }
-                                    Abort =
-                                        fun () ->
-                                            if not finished then
-                                                finished <- true
-                                                channel.Reset(Transfer.Abandoned, "aborted")
+                                            match! channel.CloseOutput cancellation with
+                                            | Error e -> return raise (TransferFailedException e)
+                                            | Ok() ->
+                                                match! pending with
+                                                | Ok blob -> return blob
+                                                | Error(none: NoError) ->
+                                                    return
+                                                        raise (EnvCallException(EnvProtocol.blobsPut.Name, string none))
+                                        }
+                                Abort =
+                                    fun () ->
+                                        if not finished then
+                                            finished <- true
+                                            channel.Reset(Transfer.Abandoned, "aborted")
 
-                                                pending.ContinueWith(fun (t: Task<Result<BlobRef, NoError>>) ->
-                                                    t.Exception |> ignore)
-                                                |> ignore
+                                            pending.ContinueWith(fun (t: Task<Result<BlobRef, NoError>>) ->
+                                                t.Exception |> ignore)
+                                            |> ignore
 
-                                            Task.FromResult()
-                                }
+                                        Task.FromResult()
+                            }
                     }
         }
 

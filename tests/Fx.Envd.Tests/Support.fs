@@ -135,6 +135,8 @@ let env () : ConnectionEnv =
 type Connection =
     {
         Client: EnvClient
+        /// envd's end of the connection.
+        Server: Peer
         /// Cuts the connection abruptly (both ends).
         Cut: unit -> unit
     }
@@ -148,12 +150,16 @@ let connect (envd: Envd) : Connection =
             (ConnectionLimits.frames ConnectionLimits.defaults)
             (ConnectionLimits.frames ConnectionLimits.defaults)
 
+    let accepted =
+        TaskCompletionSource<Peer>(TaskCreationOptions.RunContinuationsAsynchronously)
+
     task {
         match! Eff.run (env ()) (Rpc.accept (EnvdServer.service envd) server) with
         | Ok peer ->
+            accepted.TrySetResult peer |> ignore
             let! _ = peer.Completion
             ()
-        | Error _ -> ()
+        | Error e -> accepted.TrySetException(InvalidOperationException(string e)) |> ignore
     }
     |> ignore
 
@@ -161,6 +167,7 @@ let connect (envd: Envd) : Connection =
     | Ok connected ->
         {
             Client = connected
+            Server = wait accepted.Task
             Cut =
                 fun () ->
                     client.Abort()
