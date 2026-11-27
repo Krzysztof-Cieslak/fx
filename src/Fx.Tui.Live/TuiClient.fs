@@ -296,8 +296,14 @@ module TuiClient =
                 match! Rpc.call peer ClientProtocol.approvals { Session = session } with
                 | Ok view -> inbox.Post(Msg.Approvals(approvalsOf view, false))
                 | Error _ -> ()
-            | Cmd.SetApprovals(session, auto) ->
-                match! Rpc.call peer ClientProtocol.setApprovals { Session = session; Auto = auto } with
+            | Cmd.SetApprovals(session, mode) ->
+                let mode =
+                    match mode with
+                    | "yolo" -> ApprovalSwitch.Yolo
+                    | "auto" -> ApprovalSwitch.Auto
+                    | _ -> ApprovalSwitch.Ask
+
+                match! Rpc.call peer ClientProtocol.setApprovals { Session = session; Mode = mode } with
                 | Ok view -> inbox.Post(Msg.Approvals(approvalsOf view, true))
                 | Error(CallError.Failed(ClientError.Invalid reasons)) ->
                     inbox.Post(Msg.Sent("approvals", Error(String.concat "; " reasons)))

@@ -445,7 +445,7 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
 | `ask` (default) | its requests are made at once (batched prompts), and the call waits for their answers |
 | `auto` | as `ask`, with auto approvals on (below): commands written plainly in the workspace run unasked, sandbox or not |
 | `deny` | refused at once, nothing recorded: unattended runs |
-| `off` | nothing is checked at all: sandboxed (`sandbox.driver` on) or throwaway environments |
+| `yolo` | with yolo approvals on (below): it runs unasked, whatever it reaches, sandbox or not; deny grants and policy still refuse |
 
 - **What the guard says.** `Hands.Guard` gives `Ok` with the call's `Approval`s: each need that no
   grant in force allowed and how it ran (`auto`, or `person` with the request's key; listed commands
@@ -509,18 +509,46 @@ reaches outside the workspace asks.
   ask list is a guardrail of known spellings, not a boundary (a script the agent wrote, or a cell's own
   `fetch`, reaches the network in any mode). Auto-approved commands with the network closed, and asking
   to open it, wait for the egress proxy (spec §18).
-- **Where they hold** (`AutoApprovals.decide`, pure): never with `codeact.grants.mode = off` (nothing
-  is checked). Otherwise the grants log's check of `approvals.auto` on the hands' driver
+- **Where they hold** (`AutoApprovals.decide`, pure): the grants log's check of `approvals.auto` on the hands' driver
   (`GrantSetup.Sandbox`: the composition root's, from the environment's sandbox; `none` when nothing
   confines), in the session's context: a grant allows them (a person's, for the session, the host or a
   repository: the TUI's switch, `fx grants allow approvals.auto '*'`); a deny grant or policy forbids
-  them; with no grant they follow the mode (`auto` on, `ask` and `deny` off); a policy that asks leaves
+  them; with no grant they follow the mode (`auto` and `yolo` on, `ask` and `deny` off); a policy that asks leaves
   them off. Policy forbids them everywhere with a deny rule on `*` (the host makes one from a policy
   file that forbids `auto` or pins the mode to another value: `AutoApprovals.policyRules`), or only
   unsandboxed with a deny rule on `none`.
 - **Checked per call**, once and only when a need is in the workspace: a switch applies to the next
   command, also in the running turn. In `deny` mode with auto approvals on, what they cover runs and the
   rest is refused.
+
+**Yolo approvals** (`codeact.grants.mode = yolo`, or a grant of `approvals.yolo`): nobody is asked about
+anything. Once a call's needs are checked, everything that would ask (or, in `deny` mode, be refused for
+want of a grant) runs: commands of any kind (downloads, git's remotes, installs, `sh -c`, opaque
+lines), writes and reads outside the workspace or to protected paths, network bindings, and calls
+nothing can name in a grant (`CallNeeds.Refused`). The guard says so on each (`ApprovedBy.Yolo`:
+activity lines `yolo`, `✓ yolo-approved`); auto approvals still say `auto` for what they cover.
+
+- **What still refuses.** Deny grants and policy rules (and gates) for what the call needs: yolo
+  approves what nobody decided, never what someone forbade.
+- **Sandbox or not.** Unsandboxed, everything the agent does runs with the user's rights, network
+  included; clients say so (`approvals: yolo · unsandboxed`, `fx run`'s line). With a confining
+  driver its policy still holds.
+- **First installs.** The host's installer approves a component's first install on yolo approvals too
+  (`YoloInstalls`, the composition root's): the host's mode, a host grant of `approvals.yolo`, or a
+  session in the environment whose `Ensure` asks; checked on `none` (the installer is not confined).
+  An environment is created before its first session exists, so a session's switch covers only later
+  installs (an environment recreated); the host's mode or a host grant covers the first.
+- **Where they hold** (`YoloApprovals.decide`, pure): the grants log's check of `approvals.yolo` on the
+  hands' driver in the session's context, as for auto approvals: a grant allows them (a person's: the
+  TUI's `/yolo`, `fx grants allow approvals.yolo '*'`), a deny grant or policy forbids them, with no
+  grant they follow the mode (`yolo` on, others off). A policy file that forbids `yolo` or `auto`
+  for the mode, or pins it to another value, forbids them (`YoloApprovals.policyRules`: a deny rule on
+  `*`); a rule on `none` forbids them only unsandboxed.
+- **Checked per call**, once and only when something would ask or be refused for want of a grant.
+- **A person's switch** (`session/setApprovals`, host.md): `yolo` grants `approvals.yolo` for the
+  session; `auto` and `ask` switch it off (revoking the session's grant, and a session deny grant
+  where the host's mode is `yolo`). The mode was called `off` before (it checked nothing, deny grants
+  included); `yolo` replaces it.
 
 | Slot | Default | |
 |---|---|---|

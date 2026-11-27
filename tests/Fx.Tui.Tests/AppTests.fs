@@ -1113,7 +1113,7 @@ let tests =
                                         }
                                 ]
 
-                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, true) ] "on: nothing said yet, so it asks"
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "auto") ] "on: nothing said yet, so it asks"
 
                         let auto: ApprovalsInfo =
                             {
@@ -1151,12 +1151,12 @@ let tests =
                                         }
                                 ]
 
-                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "off"
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "ask") ] "off"
 
                         let _, cmds = play model (typing "/approvals ask" @ [ key KeyCode.Enter ])
-                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "/approvals ask"
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "ask") ] "/approvals ask"
                         let _, cmds = play model (typing "/approvals" @ [ key KeyCode.Enter ])
-                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "/approvals switches"
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "ask") ] "/approvals switches"
                         let model, cmds = play model (typing "/approvals sure" @ [ key KeyCode.Enter ])
                         Expect.equal cmds [] "nothing sent"
                         Expect.stringContains (screen model) "no approval mode sure" "said so"
@@ -1167,6 +1167,47 @@ let tests =
 
                         Expect.stringContains (screen model) "auto approvals need a sandbox" "why"
                     }
+
+                    test "/yolo and /approvals yolo switch to yolo approvals; Shift+Tab goes back to asking" {
+                        let s, model = ready ()
+
+                        let _, cmds = play model (typing "/yolo" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "yolo") ] "/yolo"
+                        let _, cmds = play model (typing "/approvals yolo" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, "yolo") ] "/approvals yolo"
+
+                        let yolo: ApprovalsInfo =
+                            {
+                                Mode = "yolo"
+                                Configured = "ask"
+                                Sandbox = None
+                                Reason = "a person turned yolo on"
+                            }
+
+                        let model, _ = play model [ Msg.Approvals(yolo, true) ]
+                        Expect.stringContains (screen model) "approvals: yolo · unsandboxed" "the footer"
+
+                        Expect.stringContains
+                            (screen model)
+                            "everything runs unasked with your rights"
+                            "what it means without a sandbox, once"
+
+                        let _, cmds =
+                            play
+                                model
+                                [
+                                    Msg.Key
+                                        { Keys.key KeyCode.Tab with
+                                            Shift = true
+                                        }
+                                ]
+
+                        Expect.equal
+                            cmds
+                            [ Cmd.SetApprovals(s.Id, "ask") ]
+                            "Shift+Tab never lands on yolo, and leaves it"
+                    }
+
 
                     test "the mode is asked for with the environment, and again when a grant of auto approvals changes" {
                         let s, _ = ready ()

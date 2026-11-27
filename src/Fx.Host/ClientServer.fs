@@ -221,7 +221,7 @@ module ClientServer =
                     do! known host p.Session
 
                     let! view =
-                        HostApprovals.set host by p.Session p.Auto
+                        HostApprovals.set host by p.Session p.Mode
                         |> EffResult.mapError ClientError.Invalid
 
                     return view

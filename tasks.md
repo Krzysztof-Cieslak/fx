@@ -34,7 +34,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
 - **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
 - **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
-- **Wave 14:** T133c TUI: Markdown, T307 Runs panel (graph), T609 Desktop
+- **Wave 14:** T133c TUI: Markdown, T134b Yolo approvals, T307 Runs panel (graph), T609 Desktop
 - **Wave 15:** T133b TUI: transcript layout
 - **Wave 16:** T133e TUI: usage and sidebar, T133f TUI: commands, T133h TUI: scrolling, T133i TUI: full width, T133j TUI: expand one item
 - **Wave 17:** T133g TUI: start screen
@@ -110,6 +110,7 @@ flowchart LR
     T133i["T133i TUI: full width"]
     T133j["T133j TUI: expand one item"]
     T134["T134 Approval modes"]
+    T134b["T134b Yolo approvals"]
     T135["T135 CodeAct: a kernel that stays"]
     T137["T137 Sandbox opt-in"]
     T138["T138 Environments: chosen variables"]
@@ -290,6 +291,7 @@ flowchart LR
   T133b --> T133j
   T127b --> T134
   T132a --> T134
+  T134 --> T134b
   T127 --> T135
   T113 --> T137
   T112 --> T138
@@ -407,7 +409,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T115,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T135,T137,T138,T206 done
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T115,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T206 done
   class T132 inprogress
 ```
 
@@ -484,6 +486,7 @@ flowchart LR
 | T133i | TUI: full width | T133b | §19.2 | done | Dogfooding (T132): characters go missing at the right edge, which looks like an off-by-one in sizing. Lines, panels, boxes and the sidebar use exactly the terminal's columns (wide and combining characters counted by their display width, nothing clipped, nothing wrapped by the terminal); golden renders at several widths that assert every line's display width. |
 | T133j | TUI: expand one item | T133b | §19.2 | done | Dogfooding (T132): `Ctrl+O` only cycles the detail for everything. Single items (a cell, an activity line, a result card) can be selected and expanded or collapsed on their own, with the keys in the footer and tui.md; the global detail stays. Update tests and golden renders. |
 | T134 | Approval modes | T127b, T132a | §13, §19.4 | done | Dogfooding (T132): asking for every shell command is tiring. A mode (a variant slot, e.g. `grants.mode`: `ask`, `auto`) where commands that stay in the workspace run without asking, sandbox or not (T137 made the sandbox opt-in; one makes the mode stronger, clients say when it is off), closer to opencode; writes outside the workspace, network and installs still ask; policy can forbid the mode; the TUI shows the mode and can switch it. spec §13 updated; host tests with a scripted model. |
+| T134b | Yolo approvals | T134 | §13.3 | done | Even more aggressive than auto: everything is approved without asking, sandbox or not (any command, downloads, installs, writes and reads outside the workspace, the network, first installs of components); deny grants and policy still refuse. The mode `off` (checked nothing, config only) becomes `yolo`; a person switches a session to it (`session/setApprovals` takes `ask \| auto \| yolo`; the TUI's `/yolo`, `/approvals yolo`; `Shift+Tab` never lands on it) with a session grant of `approvals.yolo`; policy forbids it. spec §13.3 updated; guard, protocol and TUI tests. |
 | T135 | CodeAct: a kernel that stays | T127 | §6.9 | done | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
 | T137 | Sandbox opt-in | T113 | §9.1, §18 | done | Dogfooding (T132): the sandbox kept ordinary tools from working (NuGet could not read `~/.nuget/NuGet/NuGet.Config`, a credential location; Cargo, Yarn Berry and the MSBuild server write or read under `~`), and per-tool variables (T136, dropped) were a growing list of special cases; mainstream agents run without an OS sandbox, with permission prompts as the control. The sandbox becomes opt-in: `sandbox.driver` defaults to `none` (privileged: host config or the command line turn it on with `auto` or a driver; a project cannot); the default carries no warning (`sandbox: off` in the TUI and `fx run`), while a requested sandbox that cannot run still warns (`auto`) or fails the environment (a driver). Seatbelt lets the environment's own unix sockets through; the prompt describes the sandbox when one confines. spec §9.1, §18 and the docs say what each mode leaves open and what breaks. Host tests: the default, opting in, `auto`'s fallback, a project's config. Replaces T136. |
 | T138 | Environments: chosen variables | T112, T121, T123, T131, T137 | §9.4, §11, §13, §18 | done | Dogfooding (T132): fx's agent cannot use `gh` or push, because the host scrubs credential-like variables (`GH_TOKEN`). A person chooses the variables an environment's commands get: the privileged slot `env.variables` (`host:<NAME>`, `secret:<name>` or a literal for plain names; `env.deny`), and an environment spec's `variables`, where a project's credentials need the person's consent (`env.credential`, `secret.read`, repo-scoped). Values are redacted from everything the model, logs and the journal see; names shown and recorded. Plan: [docs/plans/t138-env-variables.md](docs/plans/t138-env-variables.md). |

@@ -210,16 +210,17 @@ module View =
             else
                 [ s t.Muted (String.concat " · " parts + "  ") ]
 
-        // How the session's commands are decided (`Shift+Tab` switches): auto approvals stand out,
-        // and so does a mode that asks nobody.
+        // How the session's commands are decided (`Shift+Tab` switches ask and auto, `/yolo` asks
+        // nobody): auto approvals stand out, and yolo most.
         let approvals =
             match model.Approvals with
             | Some info ->
-                // Without a sandbox, auto approvals run commands with the user's rights: say so.
-                let unsandboxed = info.Mode = "auto" && info.Sandbox.IsNone
+                // Without a sandbox, auto and yolo approvals run commands with the user's rights: say so.
+                let unsandboxed = (info.Mode = "auto" || info.Mode = "yolo") && info.Sandbox.IsNone
 
                 let style =
                     match info.Mode with
+                    | "yolo" -> t.Error
                     | "auto" when unsandboxed -> t.Warning
                     | "auto" -> t.Accent
                     | "ask" -> t.Muted
@@ -396,12 +397,13 @@ module View =
         : Row list =
         let marker = if call.Changes then s t.Warning "◆" else s t.Accent "◇"
 
-        // Whether it ran on auto approvals or on a person's answer (what no grant allowed already).
+        // Whether it ran on a person's answer, yolo or auto approvals (what no grant allowed already).
         let approved =
             let by (f: Fx.Prompt.ApprovedBy -> bool) =
                 call.Approvals |> List.exists (fun a -> f a.By)
 
             if by (fun b -> b.IsPerson) then [ s t.Warning "asked " ]
+            elif by (fun b -> b.IsYolo) then [ s t.Warning "yolo " ]
             elif by (fun b -> b.IsAuto) then [ s t.Muted "auto " ]
             else []
 
@@ -456,6 +458,7 @@ module View =
                             match approval.By with
                             | Fx.Prompt.ApprovedBy.Auto -> "auto approvals"
                             | Fx.Prompt.ApprovedBy.Person _ -> "a person"
+                            | Fx.Prompt.ApprovedBy.Yolo -> "yolo approvals"
 
                         yield!
                             lines

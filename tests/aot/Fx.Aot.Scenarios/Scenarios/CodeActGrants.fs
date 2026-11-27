@@ -192,7 +192,8 @@ let private showResult (result: Result<Fx.Prompt.Approval list, HostCallError>) 
                 + " by "
                 + (match a.By with
                    | Fx.Prompt.ApprovedBy.Auto -> "auto"
-                   | Fx.Prompt.ApprovedBy.Person _ -> "a person"))
+                   | Fx.Prompt.ApprovedBy.Person _ -> "a person"
+                   | Fx.Prompt.ApprovedBy.Yolo -> "yolo"))
 
         "allowed (" + String.Join(", ", shown) + ")"
     | Error e -> string e
@@ -402,7 +403,7 @@ let guard =
                         GrantMode.Auto, "bubblewrap", Ok(GrantCheck.MustAsk [ "no grant applies" ])
                         GrantMode.Auto, "none", Ok(GrantCheck.MustAsk [ "no grant applies" ])
                         GrantMode.Ask, "bubblewrap", Ok(GrantCheck.MustAsk [ "no grant applies" ])
-                        GrantMode.Off, "seatbelt", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Yolo, "seatbelt", Ok(GrantCheck.MustAsk [ "no grant applies" ])
                         GrantMode.Auto, "none", Ok(GrantCheck.Denied [ "policy says no" ])
                         GrantMode.Ask, "none", Ok(GrantCheck.Allowed(GrantId "g1"))
                         GrantMode.Auto, "seatbelt", Ok(GrantCheck.MustAsk [ "policy asks" ])
@@ -420,6 +421,21 @@ let guard =
                     "policy -> "
                     + String.Join(", ", AutoApprovals.policyRules [ policy ] |> List.map string)
                 )
+
+                for mode, driver, check in
+                    [
+                        GrantMode.Yolo, "none", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Auto, "bubblewrap", Ok(GrantCheck.MustAsk [ "no grant applies" ])
+                        GrantMode.Ask, "seatbelt", Ok(GrantCheck.Allowed(GrantId "g2"))
+                        GrantMode.Yolo, "none", Ok(GrantCheck.Denied [ "policy says no" ])
+                    ] do
+                    out.Add($"yolo {mode} {driver} -> {YoloApprovals.decide mode driver check}")
+
+                out.Add(
+                    "yolo policy -> "
+                    + String.Join(", ", YoloApprovals.policyRules [ policy ] |> List.map string)
+                )
+
 
                 for entry in (GrantsService.snapshot service).State.Requests |> Map.toList |> List.map snd do
                     out.Add("request " + entry.Request.Resource + ": " + string entry.Status)

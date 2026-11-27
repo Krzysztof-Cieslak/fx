@@ -21,15 +21,18 @@ type GrantMode =
     | Auto
     /// The grants log decides; what no grant allows is refused without asking anyone (unattended runs).
     | Deny
-    /// Nothing is checked: for sandboxed or throwaway environments only.
-    | Off
+    /// Yolo approvals: everything runs without asking anyone, sandbox or not: what a person would be
+    /// asked (commands of any kind, writes and reads outside the workspace, the network, first installs
+    /// of components) and what `Deny` would refuse for want of a grant. Deny grants and policy still
+    /// refuse (docs/modules/codeact.md, "Approval modes").
+    | Yolo
 
     override this.ToString() =
         match this with
         | Ask -> "ask"
         | Auto -> "auto"
         | Deny -> "deny"
-        | Off -> "off"
+        | Yolo -> "yolo"
 
 /// How a turn's host calls are checked, read once per turn from its profile.
 type GrantSettings =
@@ -66,16 +69,16 @@ module GrantSlots =
                 |> Result.mapError (fun reason -> $"not a {what} pattern: {reason}"))
         )
 
-    /// `codeact.grants.mode`: `ask`, `auto`, `deny` or `off`.
+    /// `codeact.grants.mode`: `ask`, `auto`, `deny` or `yolo`.
     let mode: Slot<GrantMode> =
         Slot.enum
             "codeact.grants.mode"
-            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), auto (as ask, but commands written plainly in the workspace run without asking, sandbox or not; network, installs, writes outside it and the commands of codeact.grants.askCommands still ask), deny (what no grant allows is refused without asking: unattended runs) or off (nothing is checked: sandboxed or throwaway environments only)."
+            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), auto (as ask, but commands written plainly in the workspace run without asking, sandbox or not; network, installs, writes outside it and the commands of codeact.grants.askCommands still ask), deny (what no grant allows is refused without asking: unattended runs) or yolo (everything runs without asking anyone, sandbox or not: any command, writes and reads outside the workspace, the network, first installs; only deny grants and policy refuse)."
             [
                 GrantMode.Ask, "ask"
                 GrantMode.Auto, "auto"
                 GrantMode.Deny, "deny"
-                GrantMode.Off, "off"
+                GrantMode.Yolo, "yolo"
             ]
             GrantMode.Ask
         |> Slot.privileged

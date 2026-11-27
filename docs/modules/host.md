@@ -145,7 +145,10 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   ([codeact.md](codeact.md#approval-modes-spec-133-t134)) hold sandbox or not, and are checked on it, so
   a grants policy rule on `none` forbids them only unsandboxed; the grants log gets a policy rule that
   denies `approvals.auto` from a policy file that forbids `codeact.grants.mode = auto` or pins the mode to another value
-  (`AutoApprovals.policyRules`). A session keeps the profile it started with: a host restarted with
+  (`AutoApprovals.policyRules`), and one that denies `approvals.yolo` from a policy file that forbids
+  `yolo` or `auto`, or pins the mode to another value (`YoloApprovals.policyRules`). The installer's
+  approvals go through `YoloInstalls.approve` first: yolo approvals (the host's mode, a host grant, or a
+  session in the environment that asks) approve a first install without a person. A session keeps the profile it started with: a host restarted with
   another mode changes new sessions' (a person switches an existing session's with
   `session/setApprovals`). The hands are recorded (`Wraps`: their clock, files,
   envd's file operations and the sandboxed shell; terminals refused), the guard with its decisions, and
@@ -190,8 +193,8 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 | `session/overrides` | `{session, key, set: {slot: value}, unset: [slot]}` → `{after, count}` (`invalid` with the resolution's issues) | collaborator |
 | `session/close`, `session/reopen` | `{session, key}` → `{after, count}` (closing ends the session's grants) | collaborator |
 | `session/offers` | `{session}` → the open requests this client can answer | viewer |
-| `session/approvals` | `{session}` → `ApprovalsView` `{session, mode: ask \| auto \| deny \| off, configured, sandbox?, reason}`: what the grants guard does with the session's commands now (`configured` is `codeact.grants.mode` of the session's profile; `sandbox` the driver that confines its environment, absent when none does: its commands run with the user's rights; `reason` why auto approvals are on or off) (T134) | viewer |
-| `session/setApprovals` | `{session, auto}` → `ApprovalsView`: a person turns auto approvals on (a session grant of `approvals.auto` by the caller, after revoking the session's deny grants) or off (revoking the session's allow grants, and a session deny grant where they would still hold); allowed sandbox or not; `invalid` with the reason where they cannot hold (mode `off`, policy) (`HostApprovals`, T134) | owner |
+| `session/approvals` | `{session}` → `ApprovalsView` `{session, mode: ask \| auto \| deny \| yolo, configured, sandbox?, reason}`: what the grants guard does with the session's commands now (`configured` is `codeact.grants.mode` of the session's profile; `sandbox` the driver that confines its environment, absent when none does: its commands run with the user's rights; `reason` why yolo approvals are on, or auto approvals on or off) (T134, T134b) | viewer |
+| `session/setApprovals` | `{session, mode: ask \| auto \| yolo}` → `ApprovalsView`: a person switches the session (`HostApprovals.set`): `yolo` turns yolo approvals on (a session grant of `approvals.yolo` by the caller, after revoking the session's deny grants of it); `auto` turns them off and auto approvals on (a session grant of `approvals.auto`); `ask` turns both off. Off revokes the session's allow grants, and makes a session deny grant where they would still hold (the host's mode, a host grant); allowed sandbox or not; `invalid` with the reason where policy forbids them (T134, T134b) | owner |
 | `session/subscribe` | `{session, after}` → runs until cancelled, sending `session/event` `{session, item}` (`SessionFeed`: replay after `after`, a snapshot first if far behind, then live) | viewer |
 | `session/context` | `{session, after}` → runs until cancelled, sending `session/contextEvent` `{session, item}` (a context event with its envelope, after `after` of the context log, then live) and `session/streaming` `{session, turn, fresh, text, tool?}` as the running turn's model writes (T130) | viewer |
 | `grants/*` | `GrantsProtocol` ([grants.md](grants.md)); answering, granting and revoking need an owner who is a person (`notAPerson` otherwise) | viewer / owner |
@@ -357,7 +360,8 @@ do; nothing is ever approved for them:
 
 1. **Credentials**: `fx auth login <provider>` once, or the provider's variable (`ANTHROPIC_API_KEY`,
    `OPENAI_API_KEY`). A run without them fails before anything is installed.
-2. **Installs**: the first install of a component is always a person's grant; no variant skips it.
+2. **Installs**: the first install of a component is a person's grant, unless yolo approvals hold
+   (`codeact.grants.mode = yolo`, or `fx grants allow approvals.yolo '*'`).
    Allow it once per data directory: `fx grants allow component.install bun@1.4.5` (the command a
    headless run prints), or `fx grants allow component.install 'bun@*'` for every version.
 3. **What turns do**: the CodeAct guard asks for commands outside `codeact.grants.allowCommands`,
@@ -372,10 +376,13 @@ do; nothing is ever approved for them:
    anyone (the unattended choice); `auto` runs unasked commands written plainly in the
    workspace, sandbox or not (downloads, installs, writes outside the workspace still ask, so without a
    terminal they fail "not answered"; unsandboxed, the commands run with the user's rights, and the run
-   says so once: `approvals: auto · unsandboxed: …`); `off` checks nothing and is only for
-   sandboxed or throwaway environments. The sandbox applies either way. Auto approvals are also a
+   says so once: `approvals: auto · unsandboxed: …`); `yolo` asks nobody about anything (any command,
+   downloads, installs and first installs of components, writes and reads outside the workspace, the
+   network; deny grants and policy still refuse), sandbox or not, and says so once (`approvals: yolo ·
+   unsandboxed: …`): an unattended run that should never stop for a person. The sandbox applies either way. Auto approvals are also a
    grant: `fx grants allow approvals.auto '*'` turns them on for every session of this host (with
-   `deny`, what they cover runs and the rest is refused).
+   `deny`, what they cover runs and the rest is refused); so are yolo approvals (`fx grants allow
+   approvals.yolo '*'`: every session, and the host's first installs).
 4. **The sandbox** is off by default ([sandbox.md](sandbox.md) "Opt-in"): the run's commands and kernel
    have the user's rights (they can read the user's credentials, the product's own credentials file
    included, write anywhere the user can and use the network), and the grants above are the guard.
@@ -441,7 +448,10 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   types; the least roles; `session/approvals` and `session/setApprovals` (a person's switch is a session
   grant and its revocation, without a sandbox too; with the host's mode `auto`, off is a session deny
   grant; with `sandbox.driver = auto`, the confining driver and why; a policy that forbids it; viewers
-  read, cannot switch).
+  read, cannot switch); yolo (T134b): a session grant of `approvals.yolo` that `auto` and `ask` revoke,
+  `fx run`'s notice, the host's mode `yolo` (down is a session deny grant), a policy that forbids `auto`
+  forbidding yolo too, and first installs approved by the host's mode or a session of the environment
+  (`YoloInstalls.approval`).
 - `LiveTests` (the network for Bun; cached in `artifacts/host-tests/downloads`; skipped offline,
   required in CI): `fx run -p` with TypeScript cells on bun-ts, Bun installed by the host's installer
   after the person approves; a restart that continues the session without asking again; a turn the

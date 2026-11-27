@@ -70,14 +70,14 @@ type EnvInfo =
 type ApprovalsInfo =
     {
         /// `ask`, `auto` (auto approvals run commands written plainly in the workspace), `deny` or
-        /// `off`.
+        /// `yolo` (everything runs without asking).
         Mode: string
         /// The host's `codeact.grants.mode` for the session.
         Configured: string
         /// The sandbox driver that confines the session's commands; `None`: they run with the user's
         /// rights (the default).
         Sandbox: string option
-        /// Why auto approvals are on or off.
+        /// Why yolo approvals are on, or auto approvals on or off.
         Reason: string
     }
 
@@ -201,8 +201,8 @@ type Cmd =
     | ListSessions
     /// Ask how the session's commands are decided (it arrives as `Msg.Approvals`).
     | Approvals of session: string
-    /// A person turns auto approvals on or off for the session (`session/setApprovals`).
-    | SetApprovals of session: string * auto: bool
+    /// A person switches the session to `ask`, `auto` or `yolo` (`session/setApprovals`).
+    | SetApprovals of session: string * mode: string
     /// Draw everything again (the screen may have been changed by someone else).
     | Redraw
     | Quit
@@ -215,7 +215,7 @@ type Cmd =
         | OpenSession id -> "open " + id
         | ListSessions -> "list sessions"
         | Approvals session -> "approvals of " + session
-        | SetApprovals(session, auto) -> $"auto approvals {auto} for {session}"
+        | SetApprovals(session, mode) -> $"approvals {mode} for {session}"
         | Interrupt(_, key) -> $"interrupt ({key})"
         | Answer(_, key, request, _) -> $"answer {request} ({key})"
         | AnswerGrant(request, answer) -> $"grant {request.Value}: {answer}"
@@ -693,27 +693,21 @@ module App =
             ThemeChoice.Ansi16, "ansi16"
         ]
 
-    /// Asks the host to turn auto approvals on or off for the session: a person's grant.
-    let private setApprovals (auto: bool) (model: Model) : Model * Cmd list =
+    /// Asks the host to switch the session to `ask`, `auto` or `yolo`: a person's grant.
+    let private setApprovals (mode: string) (model: Model) : Model * Cmd list =
         match model.Session with
-        | Some session ->
-            notice
-                (if auto then
-                     "approvals: switching to auto…"
-                 else
-                     "approvals: switching to ask…")
-                model,
-            [ Cmd.SetApprovals(session.Id, auto) ]
+        | Some session -> notice $"approvals: switching to {mode}…" model, [ Cmd.SetApprovals(session.Id, mode) ]
         | None -> error "the session has not started yet" model, []
 
-    /// Switches between asking and auto approvals (`Shift+Tab`, `/approvals`).
+    /// Switches between asking and auto approvals (`Shift+Tab`, `/approvals`); from yolo, back to
+    /// asking. Yolo is only ever chosen by name (`/yolo`, `/approvals yolo`).
     let private switchApprovals (model: Model) : Model * Cmd list =
-        let auto =
+        let mode =
             match model.Approvals with
-            | Some info -> info.Mode = "auto"
-            | None -> false
+            | Some info -> info.Mode
+            | None -> "ask"
 
-        setApprovals (not auto) model
+        setApprovals (if mode = "auto" || mode = "yolo" then "ask" else "auto") model
 
     /// Runs a command with what was typed after its name.
     let private run (command: TuiCommand) (argument: string) (model: Model) : Model * Cmd list =
@@ -772,9 +766,11 @@ module App =
         | CommandAction.Approvals ->
             match argument.ToLowerInvariant() with
             | "" -> switchApprovals model
-            | "auto" -> setApprovals true model
-            | "ask" -> setApprovals false model
-            | other -> error $"no approval mode {other}: ask or auto" model, []
+            | "ask"
+            | "auto"
+            | "yolo" as mode -> setApprovals mode model
+            | other -> error $"no approval mode {other}: ask, auto or yolo" model, []
+        | CommandAction.Yolo -> setApprovals "yolo" model
         | CommandAction.Exit -> { model with Quitting = true }, [ Cmd.Quit ]
 
     /// The commands a `/` prompt being typed may name, best first.
@@ -1340,12 +1336,14 @@ module App =
             },
             []
         | Msg.Grant n ->
-            // A grant of auto approvals made, revoked or expired (here, by `fx grants` or another
-            // client): ask how the session's commands are decided now.
+            // A grant of auto or yolo approvals made, revoked or expired (here, by `fx grants` or
+            // another client): ask how the session's commands are decided now.
             let refresh =
                 match n.Event, model.Session with
                 | GrantEvent.Granted granted, Some session when
-                    granted.Action.Value = "approvals.auto" && n.Seq > model.GrantsSeq
+                    (granted.Action.Value = "approvals.auto"
+                     || granted.Action.Value = "approvals.yolo")
+                    && n.Seq > model.GrantsSeq
                     ->
                     [ Cmd.Approvals session.Id ]
                 | (GrantEvent.Revoked _ | GrantEvent.Expired _), Some session when n.Seq > model.GrantsSeq ->
@@ -1362,6 +1360,11 @@ module App =
                 notice "approvals: auto · unsandboxed: commands run unasked with your rights" model, []
             | true, "auto", Some driver ->
                 notice $"approvals: auto · commands run unasked, confined by {driver}" model, []
+            // Yolo: everything runs unasked; say what that means.
+            | true, "yolo", None ->
+                notice "approvals: yolo · unsandboxed: everything runs unasked with your rights" model, []
+            | true, "yolo", Some driver ->
+                notice $"approvals: yolo · everything runs unasked, confined by {driver}" model, []
             | true, mode, _ -> notice $"approvals: {mode}" model, []
             | false, _, _ -> model, []
         | Msg.Sent(_, Ok()) -> model, []

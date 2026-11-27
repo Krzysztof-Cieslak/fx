@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
-  I'll look at the call sites first.
   ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
   ◆ Edit     src/Billing/Client.fs                                        ✓ 0.3s
   ◇ Run      dotnet test tests/Billing                                     ✗ 48s
@@ -20,6 +19,7 @@
 ┃  /new        Start a new session
 ┃  /detail     Show more or less of each turn
 ┃  /approvals  Ask for commands, or auto-approve workspace ones
+┃  /yolo       Approve everything without asking (Shift+Tab goes back to ask)
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000000        ↑↓ select · Enter run  ● idle

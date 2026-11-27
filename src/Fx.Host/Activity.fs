@@ -69,10 +69,14 @@ module Activity =
             | Some _, _ :: rest -> rest
             | _, pieces -> pieces
 
-        let auto =
+        let by (who: ApprovedBy) =
             receipt.Approvals
-            |> List.filter (fun approval -> approval.By = ApprovedBy.Auto)
+            |> List.filter (fun approval -> approval.By = who)
             |> List.map _.Resource
+
+        let auto = by ApprovedBy.Auto
+        let yolo = by ApprovedBy.Yolo
+
 
         [
             match receipt.Restarted with
@@ -81,6 +85,9 @@ module Activity =
             // What ran without asking anyone: commands written plainly in the workspace (auto approvals).
             if not auto.IsEmpty then
                 "  ✓ auto-approved  " + firstLine 160 (String.concat ", " auto)
+            // What ran on yolo approvals: whatever it reached.
+            if not yolo.IsEmpty then
+                "  ✓ yolo-approved  " + firstLine 160 (String.concat ", " yolo)
             if receipt.IsError then
                 let text = pieces |> List.map Piece.render |> String.concat "\n"
                 "  ✗ " + firstLine 120 text

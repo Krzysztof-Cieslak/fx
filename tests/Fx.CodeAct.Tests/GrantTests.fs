@@ -411,7 +411,7 @@ let private autoTests =
                     "the mode, sandboxed"
 
                 Expect.isNone (on GrantMode.Ask "bubblewrap" noGrant) "ask"
-                Expect.isNone (on GrantMode.Off "seatbelt" noGrant) "off"
+                Expect.isSome (on GrantMode.Yolo "seatbelt" noGrant) "yolo includes auto"
                 Expect.isSome (on GrantMode.Ask "none" (Ok(GrantCheck.Allowed(GrantId "g")))) "a grant"
                 Expect.isNone (on GrantMode.Auto "seatbelt" (Ok(GrantCheck.MustAsk [ "policy asks" ]))) "policy asks"
                 Expect.isNone (on GrantMode.Auto "none" (Ok(GrantCheck.Denied [ "no" ]))) "forbidden"
@@ -437,9 +437,177 @@ let private autoTests =
                     "a pin to another mode"
 
                 Expect.isEmpty (AutoApprovals.policyRules [ policy [ mode, Json.String "auto" ] [] ]) "a pin to auto"
-                Expect.isEmpty (AutoApprovals.policyRules [ policy [] [ mode, [ Json.String "off" ] ] ]) "other values"
+                Expect.isEmpty (AutoApprovals.policyRules [ policy [ mode, Json.String "yolo" ] [] ]) "a pin to yolo"
+                Expect.isEmpty (AutoApprovals.policyRules [ policy [] [ mode, [ Json.String "yolo" ] ] ]) "other values"
             }
         ]
+
+let private yoloMode =
+    { GrantSettings.defaults with
+        Mode = GrantMode.Yolo
+    }
+
+let private yolo (action: string) (resource: string) : Approval =
+    {
+        Action = action
+        Resource = resource
+        By = ApprovedBy.Yolo
+    }
+
+let private yoloGrant (effect: GrantEffect) (scope: GrantScope) : GrantDraft =
+    {
+        Action = YoloApprovals.action
+        Resource = "*"
+        Effect = effect
+        Scope = scope
+        Expires = None
+        Reason = Some "yolo approvals in a test"
+    }
+
+/// Yolo approvals: everything a call needs runs without a person, sandbox or not; deny grants and
+/// policy still refuse.
+let private yoloTests =
+    testList
+        "yolo approvals"
+        [
+            testTask "the mode runs what would ask, unsandboxed, and asks nobody" {
+                let b = bench []
+
+                let! result =
+                    b.Call(yoloMode, shellCall "t1-s1-1" "curl -O https://x.test/a && rm -rf /tmp/a")
+
+                match result with
+                | Ok(approvals: Approval list) ->
+                    Expect.equal
+                        (approvals |> List.sortBy (fun a -> a.Action, a.Resource))
+                        (approvals
+                         |> List.map (fun a -> yolo a.Action a.Resource)
+                         |> List.sortBy (fun a -> a.Action, a.Resource))
+                        "all of it by yolo approvals"
+
+                    Expect.isTrue
+                        (approvals |> List.exists (fun a -> a.Resource = "curl -O https://x.test/a"))
+                        "the download"
+                | Error e -> failtest $"{e}"
+
+                let! plain = b.Call(yoloMode, shellCall "t1-s1-2" "mkdir made")
+                Expect.equal plain (Ok [ auto "shell.exec" "mkdir made" ]) "workspace commands on auto approvals"
+                Expect.equal (requestCount b.Service) 0 "nobody asked"
+            }
+
+            testTask "deny grants and policy still refuse" {
+                let b = bench [ denyRule "test/no-rm" "rm **" ]
+                let! rm = b.Call(yoloMode, shellCall "t1-s1-1" "rm -rf build")
+                deniedWith rm "deny by policy test/no-rm"
+                Expect.equal (requestCount b.Service) 0 "nobody asked"
+            }
+
+            testTask "a person's grant turns them on for the session, in any mode; a deny grant off" {
+                let b = bench []
+
+                let denyMode =
+                    { GrantSettings.defaults with
+                        Mode = GrantMode.Deny
+                    }
+
+                let! before = b.Call(denyMode, shellCall "t1-s1-1" "curl x")
+                deniedWith before "nobody is asked here"
+
+                b.Grant(yoloGrant GrantEffect.Allow (GrantScope.Session "s2")) |> ignore
+                let! elsewhere = b.Call(denyMode, shellCall "t1-s1-2" "curl x")
+                deniedWith elsewhere "nobody is asked here"
+
+                b.Grant(yoloGrant GrantEffect.Allow (GrantScope.Session "s1")) |> ignore
+                let! after = b.Call(denyMode, shellCall "t1-s1-3" "curl x")
+                Expect.equal after (Ok [ yolo "shell.exec" "curl x" ]) "on for the session"
+
+                let! asking =
+                    b.Call(GrantSettings.defaults, shellCall "t1-s1-4" "curl y", sandbox = "bubblewrap")
+
+                Expect.equal asking (Ok [ yolo "shell.exec" "curl y" ]) "in ask mode, sandboxed"
+
+                // A deny grant turns them off, also where the host's mode is yolo.
+                b.Grant(yoloGrant GrantEffect.Deny (GrantScope.Session "s1")) |> ignore
+                let waiting = b.Call(yoloMode, shellCall "t1-s1-5" "curl z")
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "curl z" "asked despite the host's mode"
+                answer b.Env b.Service requests.Head deny
+                let! _ = waiting
+                ()
+            }
+
+            testTask "policy forbids them everywhere, or only unsandboxed" {
+                let forbid (resource: string) : PolicyRule =
+                    {
+                        Id = "test/no-yolo"
+                        Action = YoloApprovals.action
+                        Resource = resource
+                        Effect = PolicyEffect.Deny
+                        Reason = "not here"
+                    }
+
+                let b = bench [ forbid "*" ]
+                let waiting = b.Call(yoloMode, shellCall "t1-s1-1" "curl x", sandbox = "bubblewrap")
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "curl x" "asked despite the mode"
+                answer b.Env b.Service requests.Head deny
+                let! _ = waiting
+
+                let b = bench [ forbid AutoApprovals.Unsandboxed ]
+
+                let! sandboxed =
+                    b.Call(yoloMode, shellCall "t1-s1-1" "curl x", sandbox = "bubblewrap")
+
+                Expect.equal sandboxed (Ok [ yolo "shell.exec" "curl x" ]) "a sandbox confines it"
+                let waiting = b.Call(yoloMode, shellCall "t1-s1-2" "curl x")
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "curl x" "unsandboxed, it asks"
+                answer b.Env b.Service requests.Head deny
+                let! _ = waiting
+                ()
+            }
+
+            test "the decision and the policy a variant policy makes" {
+                let noGrant = Ok(GrantCheck.MustAsk [ "no grant applies" ])
+
+                let on (mode: GrantMode) (driver: string) check =
+                    match YoloApprovals.decide mode driver check with
+                    | AutoApprovals.On because -> Some because
+                    | AutoApprovals.Off _ -> None
+
+                Expect.equal
+                    (on GrantMode.Yolo "none" noGrant)
+                    (Some "codeact.grants.mode is yolo; everything runs unasked and unsandboxed, with the user's rights")
+                    "the mode, unsandboxed"
+
+                Expect.isNone (on GrantMode.Auto "none" noGrant) "auto is not yolo"
+                Expect.isNone (on GrantMode.Deny "none" noGrant) "deny"
+                Expect.isSome (on GrantMode.Ask "none" (Ok(GrantCheck.Allowed(GrantId "g")))) "a grant"
+                Expect.isNone (on GrantMode.Yolo "none" (Ok(GrantCheck.Denied [ "no" ]))) "forbidden"
+                Expect.isNone (on GrantMode.Yolo "none" (Ok(GrantCheck.MustAsk [ "policy asks" ]))) "policy asks"
+
+                let policy (pins: (string * Json) list) (forbids: (string * Json list) list) : Fx.Variants.Policy =
+                    {
+                        Origin = "policy.json"
+                        Pins = pins
+                        Forbids = forbids
+                    }
+
+                let mode = "codeact.grants.mode"
+
+                let rules p =
+                    YoloApprovals.policyRules [ p ]
+                    |> List.map (fun r -> r.Action, r.Resource, r.Effect)
+
+                let denied = [ YoloApprovals.action, "*", PolicyEffect.Deny ]
+                Expect.equal (rules (policy [] [ mode, [ Json.String "yolo" ] ])) denied "a forbid"
+                Expect.equal (rules (policy [] [ mode, [ Json.String "auto" ] ])) denied "forbidding auto forbids yolo"
+                Expect.equal (rules (policy [ mode, Json.String "auto" ] [])) denied "a pin to another mode"
+                Expect.isEmpty (rules (policy [ mode, Json.String "yolo" ] [])) "a pin to yolo"
+                Expect.isEmpty (rules (policy [] [ mode, [ Json.String "deny" ] ])) "other values"
+            }
+        ]
+
 
 let private guardTests =
     testList
@@ -547,7 +715,7 @@ let private guardTests =
                 Expect.equal (requestCount b.Service) 0 "nobody asked"
             }
 
-            testTask "mode deny refuses what a person would decide; mode off checks nothing" {
+            testTask "mode deny refuses what a person would decide; mode yolo asks nobody, but policy refuses" {
                 let b = bench [ denyRule "test/no-rm" "rm **" ]
 
                 let! denied =
@@ -560,15 +728,20 @@ let private guardTests =
 
                 deniedWith denied "nobody is asked here (codeact.grants.mode is deny): no grant applies"
 
-                let! off =
-                    b.Call(
-                        { GrantSettings.defaults with
-                            Mode = GrantMode.Off
-                        },
-                        shellCall "t1-s1-1" "rm -rf /"
-                    )
+                let! rm = b.Call(yoloMode, shellCall "t1-s1-1" "rm -rf /")
+                deniedWith rm "deny by policy test/no-rm"
 
-                Expect.equal off (Ok []) "not checked"
+                let! made = b.Call(yoloMode, shellCall "t1-s1-2" "mkdir /tmp/made")
+
+                match made with
+                | Ok(approvals: Approval list) ->
+                    Expect.isNonEmpty approvals "what it needed"
+
+                    Expect.isTrue
+                        (approvals |> List.forall (fun a -> a.By = ApprovedBy.Yolo))
+                        "outside the workspace, unasked"
+                | Error e -> failtest $"{e}"
+
                 Expect.equal (requestCount b.Service) 0 "nobody asked"
             }
 
@@ -1226,4 +1399,4 @@ let private replayTests =
 
 [<Tests>]
 let tests =
-    testList "CodeAct grants" [ guardTests; autoTests; turnTests; replayTests ]
+    testList "CodeAct grants" [ guardTests; autoTests; yoloTests; turnTests; replayTests ]

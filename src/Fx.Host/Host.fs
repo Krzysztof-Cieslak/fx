@@ -28,6 +28,68 @@ open Fx.CodeAct
 open Fx.Replay
 open Fx.Auth
 
+/// Yolo approvals approve first installs of components too (docs/modules/codeact.md, "Approval
+/// modes"): the host's `codeact.grants.mode = yolo`, a host grant of `approvals.yolo`, or one of the
+/// sessions in the environment whose `Ensure` asks (a person's `/yolo`). Checked on `none`: the
+/// installer is not confined. Otherwise the request goes to a person (`Approvals.viaGrants`).
+[<RequireQualifiedAccess>]
+module YoloInstalls =
+    [<Literal>]
+    let private EnvironmentHolder = "environment:"
+
+    /// Why yolo approvals approve an install that `holder` asked for (`environment:<id>`: the sessions
+    /// `sessionsOf` gives for the environment count too), if they do.
+    let approval<'R when 'R :> IScope>
+        (grants: Grants)
+        (mode: GrantMode)
+        (sessionsOf: string -> string list)
+        (holder: string)
+        : Eff<'R, string option> =
+        eff {
+            let sessions =
+                if holder.StartsWith(EnvironmentHolder, StringComparison.Ordinal) then
+                    sessionsOf (holder.Substring EnvironmentHolder.Length)
+                else
+                    []
+
+            let contexts: GrantContext list =
+                (None :: (sessions |> List.map Some))
+                |> List.map (fun session ->
+                    {
+                        Session = session
+                        Run = None
+                        Repo = None
+                    })
+
+            let mutable approved = None
+
+            for context in contexts do
+                if approved.IsNone then
+                    let! check =
+                        fun (env: 'R) ->
+                            grants.Check (YoloApprovals.query AutoApprovals.Unsandboxed context) env.Scope.Cancellation
+
+                    match YoloApprovals.decide mode AutoApprovals.Unsandboxed check with
+                    | AutoApprovals.On because -> approved <- Some because
+                    | AutoApprovals.Off _ -> ()
+
+            return approved
+        }
+
+    /// Approves an install on yolo approvals, or leaves it to `otherwise`.
+    let approve<'R when 'R :> IScope>
+        (grants: Grants)
+        (mode: GrantMode)
+        (sessionsOf: string -> string list)
+        (otherwise: ApprovalRequest -> Eff<'R, ApprovalAnswer>)
+        : ApprovalRequest -> Eff<'R, ApprovalAnswer> =
+        fun request ->
+            eff {
+                match! approval grants mode sessionsOf request.Holder with
+                | Some because -> return Approved("yolo approvals: " + because)
+                | None -> return! otherwise request
+            }
+
 /// A running host (spec §3, the "brain"): its stores, the extensions in effect, the variant registry
 /// and its resolution, the grants log, service credentials, identity, environments, model access and
 /// the session host with the CodeAct strategy. Built by `Host.start`, released by `Host.stop`. One per data directory: the
@@ -408,13 +470,26 @@ module Host =
                             Policy =
                                 (ExtensionHost.contributions GrantPolicy.rules extensions |> List.map _.Value)
                                 @ AutoApprovals.policyRules config.Policies
+                                @ YoloApprovals.policyRules config.Policies
                             Gates = ExtensionHost.contributions GrantPolicy.gates extensions
                         })
 
             cleanup.Push(fun () -> Eff.run env2 (GrantsService.stop grants) :> Task)
 
+            // Sessions (read before components: yolo approvals of a session approve its environment's
+            // first installs).
+            let index = SessionIndex.typed stores.Log
+            let! indexed = SessionIndex.entries index
+
+            let entries =
+                ConcurrentDictionary<string, SessionEntry>(
+                    indexed |> List.map (fun e -> Collections.Generic.KeyValuePair(e.Session, e)),
+                    StringComparer.Ordinal
+                )
+
             // Components: planned for this machine, installed into the host's install root when an
-            // environment on it needs them; the first install of each is a grant (spec §6.1, §13).
+            // environment on it needs them; the first install of each is a grant (spec §6.1, §13), which
+            // yolo approvals give.
             let lockfile =
                 match plan options.Target extensions with
                 | Ok lockfile -> Some lockfile
@@ -427,6 +502,14 @@ module Host =
                 | None -> Eff.ret EnvComponents.none
                 | Some lockfile ->
                     eff {
+                        let! hostGrants = GrantSettings.ofVariants variants
+
+                        let sessionsOf (environment: string) =
+                            entries.Values
+                            |> Seq.filter (fun entry -> entry.Environment = environment)
+                            |> Seq.map _.Session
+                            |> List.ofSeq
+
                         let approve =
                             Approvals.viaGrants
                                 (GrantsService.grants grants)
@@ -440,6 +523,7 @@ module Host =
                                     Run = None
                                     Repo = None
                                 }
+                            |> YoloInstalls.approve (GrantsService.grants grants) hostGrants.Mode sessionsOf
 
                         let settings =
                             { InstallerSettings.create paths.Runtimes Name approve with
@@ -560,15 +644,6 @@ module Host =
                 }
 
             // Sessions.
-            let index = SessionIndex.typed stores.Log
-            let! indexed = SessionIndex.entries index
-
-            let entries =
-                ConcurrentDictionary<string, SessionEntry>(
-                    indexed |> List.map (fun e -> Collections.Generic.KeyValuePair(e.Session, e)),
-                    StringComparer.Ordinal
-                )
-
             let spec = workspaceSpec options config
             let environmentGate = new SemaphoreSlim(1, 1)
 
