@@ -109,14 +109,25 @@ and `SnapshotsConformance`, the suites the in-memory interpreters pass.
   in pages and then follows live, without gaps or repeats; a property test appends from another
   thread while subscribers start at random positions.
 
-### One process per store
+### One writer per file
 
-A store is meant to be owned by one process (the host). Two connections or processes writing one file
-stay correct (the head and key checks run inside the write lock, as the two-process test shows), but
-commits from another process wake no waiters here: they are seen only by the next read. Following
-another process's writes would need `PRAGMA data_version` polling. Nor are they fair: SQLite's busy
-timeout polls for the write lock (sleeps of up to 100 ms, no queue), so a process that commits back to
-back can keep another waiting past `BusyTimeout`, whose commit then fails as `Busy`.
+A store is meant to be the only writer of its file, owned by one process (the host). The host has
+exactly one: one host runs per data directory (`host.lock`, held exclusively, so a second host is
+refused even in the same process), and its `SqliteEventStore` serves the log and the snapshots
+through its one writer thread.
+
+Two writers on one file, in two processes or as two stores opened on it in one process (two writing
+connections all the same), stay correct: the head and key checks run inside the write lock, as the
+two-process and two-store tests show. But:
+
+- The other writer's commits wake no waiters here: they are seen only by the next read. Following
+  them would need `PRAGMA data_version` polling.
+- They are not fair. SQLite's busy timeout polls for the write lock (sleeps of up to 100 ms, no
+  queue), so a writer that commits back to back can keep the other waiting past `BusyTimeout`, whose
+  commit then fails as `Busy`. A store's writer thread fed by several callers takes the lock again
+  within a millisecond of each commit: with synced commits of about 50 ms (Windows), a hundred in a row
+  outlast the other's 5 s. A gate per file could queue two stores of one process, but the host never
+  opens two; tests that run two writers keep each to rounds that the test starts together.
 
 ### Durability
 
@@ -253,9 +264,10 @@ T125). `Codecs.blobRef` is `{"hash": "sha256:…", "size"}`.
   `SnapshotsConformance` and `BlobsConformance` (fakes and real stores), on Linux, macOS and Windows.
 - **Schemas**: upcasting chains, unreadable events, payloads never rewritten (read back raw from
   SQLite).
-- **Store**: reopening, keys surviving restarts, two stores on one file, concurrent writers, group
-  commit across many streams, limits, cancellation, closing, refusing newer schemas and non-databases,
-  snapshot versioning through a projection.
+- **Store**: reopening, keys surviving restarts, two stores on one file (the head check, and eight
+  writers through them in rounds of one commit each), group commit across many streams, limits,
+  cancellation, closing, refusing newer schemas and non-databases, snapshot versioning through a
+  projection.
 - **Properties**: subscribe hands over from replay to live without gaps or repeats while another
   thread appends.
 - **Processes**: a writer killed mid-append, and two writer processes on one stream (above).
