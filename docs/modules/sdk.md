@@ -25,7 +25,7 @@ they are packaged and versioned, and how to write an extension with them. The ex
 | `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models`, `.Grants`, `.Identity` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp`, and for service credentials `IKeyring`, `IPrivateFiles`, `IHostVariables`, `SecretText`); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes; the grants log's model (actions, patterns, grants, requests, the effective rules); principals (ids, roles, credentials, `initialize`'s identity members) |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
-| `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and T115's Bun extension host) | codecs, the generated contract types, the extension API, the protocol's server |
+| `@<name>/sdk` (`Product.npmPackage "sdk"`) | `packages/sdk` | TypeScript extensions (and the Bun extension host, `packages/exthost-bun`) | codecs, the generated contract types, the extension API, the protocol's server |
 
 - **Built-ins** (`extensions/`) reference `src/Fx.Sdk` and nothing else, and their compiled assemblies
   reference only `sdkSurface` (`Fx.Sdk`, `Fx.Prelude`, `Fx.Contracts`, `Fx.Contracts.TypeScript`,
@@ -210,18 +210,28 @@ await runStdio([{
   Expected failures of a method are its typed errors (`err(...)`).
 - `activationMismatches(manifest, activation)` lists what an activation provides beyond or short of its
   manifest, as the host checks it; use it in the extension's tests.
-- Until T115 provides the `bun` runtime, a TypeScript extension runs with the `process` runtime: its
-  manifest's `launch` starts the pinned Bun on its bundle (`bun build --target=bun`) with
-  `fx.runtime.bun`'s hardened launch (flags, untrusted overrides, files, environment; T114), as
-  `tests/Fx.Extensions.Tests/TypeScriptSample.fs` does. Import the SDK by its package name; inside this
-  repository, by a relative path, so that no source hardcodes the product name.
-
+- **On the `bun` runtime** (`fx.exthost.bun`, [extensions.md](extensions.md#runtimes)): the package is a
+  directory with the manifest (`runtime: "bun"`) and `extension.js`, the extension's module bundled
+  with its dependencies (`bun build --target=bun`), its default export the extension
+  (`export default extension`). Every Bun package of a host shares the extension host's process. As
+  `tests/Fx.Extensions.Tests/BunRuntime.fs` loads the sample.
+- **As its own process** (the `process` runtime): its manifest's `launch` starts the pinned Bun on its
+  bundle, whose module calls `runStdio`, with `fx.runtime.bun`'s hardened launch (flags, untrusted
+  overrides, files, environment; T114), as `tests/Fx.Extensions.Tests/TypeScriptSample.fs` does.
+- Import the SDK by its package name; inside this repository, by a relative path, so that no source
+  hardcodes the product name.
+- **Extension runtimes in TypeScript:** an extension contributes one under
+  `ExtensionRuntimes.contributionType` (privileged) with the runtime's name as id. Its `activate(request,
+  env)` gets the package's manifest, its directory and the package's own environment
+  (`request.environment`; `env` is the runtime's), and answers `ok(activation)` or `err(reason)` (a
+  failed activation); throwing is a defect. The server then serves the package as it serves its own
+  extensions. The Bun extension host is one (`packages/exthost-bun`).
 ## Testing
 
 - **Transport parity** (`ParitySuite`, [extensions.md](extensions.md)): the sample in the host's process,
   behind the process runtime in memory, in a child process (`Fx.Aot.Scenarios ext-peer`, which runs
-  `ExtensionProcess.run`), built from the SDK packages, and in TypeScript on the pinned Bun: one
-  transcript.
+  `ExtensionProcess.run`), built from the SDK packages, and in TypeScript on the pinned Bun, as a process
+  and as a package on the `bun` runtime: one transcript.
 - **Server conformance** (`tests/Fx.Extensions.Tests/Parity/ServerConformance.fs`): a function from a way
   to reach a process serving the sample's contract to tests of the protocol as the host sees it (the
   handshake, activation, every method's typed errors, defects, deactivation). The F# server in process,
@@ -232,7 +242,8 @@ await runStdio([{
 - **The pinned Bun** comes from `tests/Fx.Kernel.Tests/PinnedBun.fs` (linked into the extension tests);
   CI caches it. Offline, those tests are skipped locally and fail in CI. The launch is
   `fx.runtime.bun`'s (`RuntimeBun.launch`), with its owned directories under the package directory.
-- CI: `bun check --no-script` and `bun test` in `packages/sdk` and `packages/sample-extension` (Lint),
+- CI: `bun check --no-script` and `bun test` in `packages/sdk`, `packages/sample-extension` and
+  `packages/exthost-bun` (Lint),
   `bun scripts/packages.ts` and the suites on Linux, macOS and Windows (Build and test).
 
 ## Left to later tasks
@@ -240,5 +251,5 @@ await runStdio([{
 | What | Task |
 |---|---|
 | Host capabilities in `IExtensionEnv` beyond the clock, attenuated to the manifest's `capabilities` (`IVariants` reads of an extension's slots, …), and over the protocol for extension processes (`host/*` requests from the process, in both SDKs); `IPackages`; reading contributions from extension code | T109b |
-| The `bun` extension runtime (`fx.exthost.bun`), hosting TypeScript packages written with `@fx/sdk` in one process, and contributing `ExtensionRuntime` from TypeScript | T115 |
+| The `bun` runtime in the host: `fx.exthost.bun` among the built-ins, its files written with hash checks, the pinned Bun installed for it | T115b |
 | Publishing the packages to nuget.org and npm | with the first release |

@@ -474,7 +474,7 @@ never sent, which stops at the first install's approval (no terminal), withdraws
 | What | Task |
 |---|---|
 | `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T509 |
-| Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase | T115, with host-config extensions |
+| Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase; `fx.exthost.bun` among the built-ins | T115b, with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
 | Machine retry delays and store page sizes as slots | when tuned |
 | Choosing an environment per session (the picker) | later (after T130) |

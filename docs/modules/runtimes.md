@@ -127,7 +127,7 @@ the files are rewritten, so a process cannot change what the next launch reads.
 `OwnedDirs.under dir` is the usual layout: `cwd`, `home`, `config`, `cache`, `tmp`. Owned
 directories belong to one launch, or to one kernel or session. Never put them inside the workspace.
 
-### Using a runtime (T115, T117: `Interpreter.prepare`, interpreters.md)
+### Using a runtime (T117: `Interpreter.prepare`, interpreters.md; T115b)
 
 ```fsharp
 // 1. Install it: the extension requires { Id = "bun"; Version = "^1.4" } (manifest `requires`),
@@ -189,7 +189,7 @@ environment). Their output does not depend on the operating system.
 
 | What | Task |
 |---|---|
-| Launching a process extension on a runtime (a manifest `launch` that names the `bun` runtime and its entry point), the TypeScript extension host | T115 |
+| Launching a process extension on a runtime whose component the host installed (`fx.exthost.bun`'s launch is `fx.runtime.bun`'s, composed by `ExthostBun.manifestOn`, with `${bin.bun}` left for the host to fill) | T115b |
 | The bun-ts kernel's owned directories per session (per environment: `EnvLayout.owned`, environments.md), killing stale kernels (T117 launches it on this runtime: interpreters.md) | T127, T129 |
 | Where launches' owned directories live (under the product's home, per session), serving runtimes to envd over the environment protocol | T111, T129 |
 | `ReleaseIndex` with `SHASUMS256.txt` and its signature as the vendor index | T211 |
