@@ -207,8 +207,10 @@ type private Waiter =
 ///   commit), each append with its own key and head checks. Callers continue on the thread pool.
 /// - **Many readers.** Reads run on the caller's thread with a pooled read-only connection; with
 ///   write-ahead logging they never wait for the writer.
-/// - **Waiting.** The writer wakes `WaitPast` waiters after each commit. Commits by another process
-///   are seen by reads and by the head check, but wake no waiters: one process owns a store.
+/// - **Waiting.** The writer wakes `WaitPast` waiters after each commit. Commits by another writer (a
+///   process, or another store on the file) are seen by reads and by the head check, but wake no
+///   waiters, and the two are not fair to each other (SQLite polls for the write lock): a store is
+///   meant to be its file's only writer.
 [<Sealed>]
 type SqliteEventStore internal (path: string, options: EventStoreOptions, writer: Database, readers: ReaderPool) =
     let queue = new BlockingCollection<WriteRequest>()

@@ -227,24 +227,25 @@ let tests =
                 use b = openStore path
                 let logs = [| EventLog.typed strings a.Log; EventLog.typed strings b.Log |]
 
-                let writer (w: int) =
-                    Task.Run(fun () ->
-                        let log = logs[w % 2]
+                /// Appends the commit, with a fresh head after each conflict.
+                let land (log: EventLog<string>) (key: string) =
+                    let mutable written = false
 
-                        for i in 1..25 do
-                            let key = $"w{w}-{i}"
-                            let mutable written = false
+                    while not written do
+                        let head = wait (log.Head stream none)
 
-                            while not written do
-                                let head = wait (log.Head stream none)
+                        match wait (log.Append stream head (meta key) [ key + ".1"; key + ".2" ] none) with
+                        | Ok _ -> written <- true
+                        | Error(Conflict _) -> ()
+                        | Error error -> failtest (string error)
 
-                                match wait (log.Append stream head (meta key) [ key + ".1"; key + ".2" ] none) with
-                                | Ok _ -> written <- true
-                                | Error(Conflict _) -> ()
-                                | Error error -> failtest (string error))
-
-                Task.WaitAll([| for w in 0..7 -> writer w |], TimeSpan.FromMinutes 2.0)
-                |> fun finished -> Expect.isTrue finished "finished"
+                // In rounds: eight writers, four per store, land one commit each and meet at the head
+                // check. Free-running, one store's writer thread, kept busy by its own four, held the
+                // write lock for all their commits, longer than the other's busy timeout: SQLite polls
+                // for the lock, without a queue, so two stores on a file are not fair (store.md).
+                for i in 1..25 do
+                    let round = [| for w in 0..7 -> Task.Run(fun () -> land logs[w % 2] $"w{w}-{i}") |]
+                    Expect.isTrue (Task.WaitAll(round, TimeSpan.FromMinutes 1.0)) $"round {i} finished"
 
                 let commits = checkCommits (readAll logs[0] stream) (fun _ -> 2)
                 Expect.equal commits.Length 200 "every commit"
