@@ -404,7 +404,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T135,T137,T138,T206 done
-  class T132 inprogress
+  class T115,T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -447,7 +447,7 @@ flowchart LR
 | T113 | Sandbox drivers | T108, T111 | §9.1 | done | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
 | T113b | envd paths beneath roots | T113 | §9.1, §18 | todo | envd's file operations take a root and resolve paths beneath it without following symbolic links (`openat2` `RESOLVE_BENEATH` on Linux, `O_NOFOLLOW_ANY` on macOS, reparse-point checks on Windows), so the bindings' sandbox check (`SandboxGuard`) cannot be raced by a sandboxed process swapping a directory for a link; the fs conformance suites cover links. |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
-| T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | todo | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
+| T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | in-progress | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
 | T116 | Kernel protocol | T101, T107 | §6.4 | done | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
 | T117 | bun-ts kernel | T109, T111, T114, T116 | §6.3–6.5 | done | `fx.interpreter.bun-ts`: persistent cells, transpile, bounded output, host bridge (`fx.*` stubs from codecs), `fx.finish`; passes kernel conformance. |
 | T118 | Canonical model | T101, T101b, T108 | §10.2–10.3 | done | Canonical chat model (typed parts, `ProviderState`), `ChatWire` contract, typed errors, wire-conformance harness over recorded streams. |
