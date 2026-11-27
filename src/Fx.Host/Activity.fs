@@ -69,10 +69,18 @@ module Activity =
             | Some _, _ :: rest -> rest
             | _, pieces -> pieces
 
+        let auto =
+            receipt.Approvals
+            |> List.filter (fun approval -> approval.By = ApprovedBy.Auto)
+            |> List.map _.Resource
+
         [
             match receipt.Restarted with
             | Some restart -> $"  ↻ new kernel  {firstLine 160 restart.Reason}; names from earlier cells are gone"
             | None -> ()
+            // What ran without asking anyone: the sandbox confined it (auto approvals).
+            if not auto.IsEmpty then
+                "  ✓ auto-approved  " + firstLine 160 (String.concat ", " auto)
             if receipt.IsError then
                 let text = pieces |> List.map Piece.render |> String.concat "\n"
                 "  ✗ " + firstLine 120 text
