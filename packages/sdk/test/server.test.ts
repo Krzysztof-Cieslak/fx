@@ -10,6 +10,8 @@ import {
   Decision,
   type Extension,
   ExtMethod,
+  type ExtensionRuntime,
+  ExtensionRuntimes,
   Hook,
   Transform,
   activationMismatches,
@@ -70,7 +72,7 @@ const extension: Extension = {
 };
 
 /** A host on the other end of an in-memory connection. */
-function connect() {
+function connect(served: readonly Extension[] = [extension]) {
   const frames: any[] = [];
   const waiting = new Map<number, (message: any) => void>();
   const peer = new RpcPeer({
@@ -80,7 +82,7 @@ function connect() {
       waiting.get(message.id)?.(message);
     },
   });
-  serveExtensions(peer, [extension], { peer: { name: "test", version: "1.0.0" } });
+  serveExtensions(peer, served, { peer: { name: "test", version: "1.0.0" } });
   let next = 1;
   const send = (method: string, params: unknown): Promise<any> => {
     const id = next++;
@@ -208,5 +210,53 @@ describe("the extension protocol's server", () => {
     const activation = await extension.activate({ extension: "test.ext", signal: new AbortController().signal, clock: { now: () => new Date(0) } });
     expect(activationMismatches(extension.manifest, activation)).toEqual([]);
     expect(activationMismatches({ ...extension.manifest, contributions: [], rpc: { methods: [] } }, activation)).toHaveLength(7);
+  });
+
+  test("a runtime an extension contributes loads packages, which the process then serves", async () => {
+    const requests: string[] = [];
+    const echo: ExtensionRuntime = {
+      activate: async (request, env) => {
+        requests.push(`${env.extension} loads ${request.manifest.id} from ${request.root} for ${request.environment.extension}`);
+        if (request.manifest.id === "acme.broken") return err("its code does not load");
+        if (request.manifest.id === "acme.defect") throw new TypeError("the runtime broke");
+        return ok({
+          contributions: [contribution(words, "w", request.manifest.id)],
+          methods: [divide.handle((d) => ok(d.dividend))],
+        });
+      },
+    };
+    const host: Extension = {
+      manifest: { ...Manifest.create("test.host", "1.0.0", "process"), contributions: [Declare.contribution(ExtensionRuntimes.contributionType, "echo")] },
+      activate: () => ({ contributions: [contribution(ExtensionRuntimes.contributionType, "echo", echo)], methods: [] }),
+    };
+    const { send, initialize } = connect([host]);
+    await initialize({ extensionProtocol: "1" });
+    const manifest = (id: string) => ({ ...Manifest.create(id, "1.0.0", "echo"), contributions: [Declare.contribution(words, "w")], rpc: { methods: [Declare.method(divide)] } });
+
+    const before = await send("extension/activate", { extension: "acme.tools", manifest: manifest("acme.tools"), root: "/pkg" });
+    expect(before.error.data).toEqual({ kind: "activationFailed", extension: "acme.tools", reason: "this process has no extension runtime echo" });
+
+    const runtimeHost = await send("extension/activate", { extension: "test.host" });
+    expect(runtimeHost.result.contributions).toEqual([{ type: "extension-runtime", id: "echo" }]);
+    expect((await send("extension/invoke", { extension: "test.host", type: "extension-runtime", id: "echo", input: null })).error.data).toEqual({
+      kind: "inProcessOnly",
+      address: "test.host/extension-runtime/echo",
+    });
+
+    const loaded = await send("extension/activate", { extension: "acme.tools", manifest: manifest("acme.tools"), root: "/pkg" });
+    expect(loaded.result.contributions).toEqual([{ type: "test.word", id: "w", value: "acme.tools" }]);
+    expect(loaded.result.manifest.id).toBe("acme.tools");
+    expect((await send("extension/activate", { extension: "acme.tools", manifest: manifest("acme.tools"), root: "/pkg" })).result).toEqual(loaded.result);
+    expect(requests).toEqual(["test.host loads acme.tools from /pkg for acme.tools"]);
+    expect((await send("extension/call", { extension: "acme.tools", method: "divide", params: { dividend: 6, divisor: 3 } })).result).toEqual({ output: 6 });
+
+    const broken = await send("extension/activate", { extension: "acme.broken", manifest: manifest("acme.broken") });
+    expect(broken.error.data).toEqual({ kind: "activationFailed", extension: "acme.broken", reason: "its code does not load" });
+    expect((await send("extension/call", { extension: "acme.broken", method: "divide", params: {} })).error.data).toEqual({ kind: "notActive", extension: "acme.broken" });
+    const defect = await send("extension/activate", { extension: "acme.defect", manifest: manifest("acme.defect") });
+    expect(defect.error).toEqual({ code: errorCodes.internalError, message: "internal error (TypeError)" });
+
+    expect((await send("extension/deactivate", { extension: "acme.tools" })).result).toBeNull();
+    expect((await send("extension/call", { extension: "acme.tools", method: "divide", params: {} })).error.data).toEqual({ kind: "notActive", extension: "acme.tools" });
   });
 });
