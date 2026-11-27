@@ -165,7 +165,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - Method names follow `Protocol.checkMethodName`: `rpc.` and `$/` are reserved. Extension methods are `Protocol.ownExtensionMethod "group/name"` and `_meta` keys are `Protocol.metaKey "name"`; never write the namespace by hand.
 - Transports wrap streams and sockets that a composition root opened (`StreamTransport`, `WebSocketTransport`, `LocalClient`); `src/Fx.Rpc` does no I/O of its own. Nothing else may write to a stream that carries the protocol: no logging on stdout.
 - A notification handler blocks the ones after it: never wait in it for a call to the same peer.
-- Bulk data goes over binary channels, not in JSON messages.
+- Bulk data goes over binary channels, not in JSON messages. A channel counts against `maxChannels` at both ends until both directions have ended or it is reset: a side that never writes closes its output as soon as it has the channel, or a long session runs out of channels.
 - A new transport passes the conformance suite (`RpcConformance.tests` in `tests/Fx.Rpc.Tests`).
 
 **Kernel protocol** (module spec: [`docs/modules/kernel-protocol.md`](docs/modules/kernel-protocol.md))

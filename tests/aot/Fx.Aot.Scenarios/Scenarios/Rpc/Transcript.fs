@@ -224,6 +224,8 @@ let run (transport: Transport) (ending: Ending) : Task<string list> =
         | Ok ref ->
             match peer.AcceptChannel ref.Channel with
             | Ok channel ->
+                // This side only reads: closing its output lets both ends release the channel.
+                let! _ = within (channel.CloseOutput CancellationToken.None)
                 let! data = within (readAll channel)
 
                 match data with
@@ -233,6 +235,46 @@ let run (transport: Transport) (ending: Ending) : Task<string list> =
                 | Error e -> say ("server channel: " + string e)
             | Error e -> say ("accept: " + string e)
         | Error e -> say ("send channel: " + string e)
+
+        // More one-way transfers than the connection has channels: each side closes the direction it
+        // never uses, so both ends release a channel as soon as its transfer ends.
+        let mutable transferred = 0
+
+        for i in 1 .. 3 * channels.MaxChannels do
+            let! download = within (Eff.run env (Rpc.openChannel peer))
+
+            match download with
+            | Ok channel ->
+                let! _ = within (channel.CloseOutput CancellationToken.None)
+                let reading = readAll channel
+                let! filled = call Methods.fillChannel { Into = channel.Id; Size = 100 * i }
+                let! data = within reading
+
+                match filled, data with
+                | Ok size, Ok bytes when size = bytes.Length -> transferred <- transferred + 1
+                | _ -> say $"download {i}: {show filled string}"
+            | Error e -> say $"download {i}: {e}"
+
+            let! upload = within (Eff.run env (Rpc.openChannel peer))
+
+            match upload with
+            | Ok channel ->
+                let sinking =
+                    Eff.run env (Rpc.call peer Methods.sinkChannel { Channel = channel.Id })
+
+                let! _ =
+                    within (channel.Write(ReadOnlyMemory(Array.zeroCreate<byte>(100 * i)), CancellationToken.None))
+
+                let! _ = within (channel.CloseOutput CancellationToken.None)
+                let! sunk = within sinking
+
+                match sunk with
+                | Ok size when size = int64 (100 * i) -> transferred <- transferred + 1
+                | _ -> say $"upload {i}: {show sunk string}"
+            | Error e -> say $"upload {i}: {e}"
+
+        let! there = call Methods.openChannels ()
+        say $"one-way transfers: {transferred}, open channels here {peer.OpenChannels}, there {show there string}"
 
         let! tooLarge = call Methods.length { Text = String('a', 2 * 1024 * 1024) }
         say ("request over the limit: " + show tooLarge string)

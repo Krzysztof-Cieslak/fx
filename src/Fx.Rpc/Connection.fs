@@ -1204,6 +1204,10 @@ and [<Sealed>] Peer
     /// Takes a channel the peer opened.
     member _.AcceptChannel(id: uint32) : Result<Channel, ChannelError> = channels.Accept id
 
+    /// How many channels count against `maxChannels` on this side: opened here or by the peer, and
+    /// not yet released (both directions ended, or reset). For diagnostics and tests.
+    member _.OpenChannels: int = channels.Count
+
     /// Closes the connection (see the type's documentation) and waits until it has ended.
     member _.CloseAsync() : Task<CloseReason> = shutdown CloseReason.Local
 

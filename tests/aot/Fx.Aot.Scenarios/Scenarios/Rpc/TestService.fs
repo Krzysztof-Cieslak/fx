@@ -40,6 +40,8 @@ type Size = { Size: int }
 
 type ChannelRef = { Channel: uint32 }
 
+type Fill = { Into: uint32; Size: int }
+
 /// The typed errors of `test/divide`.
 type MathError =
     | DivideByZero
@@ -92,6 +94,16 @@ module Codecs =
             return { Channel = channel }
         }
 
+    let fill: Codec<Fill> =
+        Codec.record {
+            let! into = Codec.field "into" (fun (f: Fill) -> f.Into) Rpc.channelId
+
+            and! size =
+                Codec.field "size" (fun (f: Fill) -> f.Size) (Codec.int |> Codec.atLeast 0)
+
+            return { Into = into; Size = size }
+        }
+
     let mathError: Codec<MathError> =
         Codec.union "kind" {
             let! divideByZero = Codec.case0 "divideByZero" DivideByZero
@@ -136,6 +148,16 @@ module Methods =
     let hold = Method.define "test/hold" Codecs.channel Codec.unit
     /// Reads a held channel to its end: the number of bytes, or -1 if it failed.
     let drain = Method.define "test/drain" Codecs.channel Codec.int64
+    /// A download: accepts the channel (whose opener only reads), writes `size` bytes of `pattern`,
+    /// closes its output and returns the size.
+    let fillChannel = Method.define "test/fillChannel" Codecs.fill Codec.int
+    /// An upload: accepts the channel, closes its own output at once (it only reads), reads to the end
+    /// and returns the number of bytes.
+    let sinkChannel = Method.define "test/sinkChannel" Codecs.channel Codec.int64
+    /// The channels that count against the limit on the service's side.
+    let openChannels = Method.define "test/openChannels" Codec.unit Codec.int
+    /// Tries to accept the channel: "accepted" (then resets it), or why not.
+    let acceptChannel = Method.define "test/acceptChannel" Codecs.channel Codec.string
 
     /// An extension method in the product's namespace: returns "pong".
     let ping =
@@ -352,6 +374,38 @@ let service () : Service<Env> =
                         | Ok bytes -> return Ok(int64 bytes.Length)
                         | Error _ -> return Ok -1L
                     })
+
+            Handler.request Methods.fillChannel (fun context fill ->
+                fun (_: Env) ->
+                    task {
+                        let channel = accept context.Peer fill.Into
+
+                        match! writePattern channel (int64 fill.Size) 10000 with
+                        | Ok() -> return Ok fill.Size
+                        | Error e -> return invalidOp (string e)
+                    })
+
+            Handler.request Methods.sinkChannel (fun context ref ->
+                fun (env: Env) ->
+                    task {
+                        let channel = accept context.Peer ref.Channel
+
+                        match! channel.CloseOutput env.Scope.Cancellation with
+                        | Error e -> return invalidOp (string e)
+                        | Ok() ->
+                            match! readAll channel with
+                            | Ok bytes -> return Ok(int64 bytes.Length)
+                            | Error e -> return invalidOp (string e)
+                    })
+
+            Handler.request Methods.openChannels (fun context () -> Eff.ret (Ok context.Peer.OpenChannels))
+
+            Handler.request Methods.acceptChannel (fun context ref ->
+                match context.Peer.AcceptChannel ref.Channel with
+                | Ok channel ->
+                    channel.Reset(ResetCode.Cancelled, "accepted")
+                    Eff.ret (Ok "accepted")
+                | Error e -> Eff.ret (Ok(string e)))
 
             Handler.request Methods.ping (fun _ () -> Eff.ret (Ok "pong"))
         ]

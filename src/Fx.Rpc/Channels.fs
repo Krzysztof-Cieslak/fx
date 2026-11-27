@@ -100,21 +100,21 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
         creditWaiter <- None
         r, c
 
-    /// Fails the channel; returns whether it was not failed before. Under no lock.
-    let fail (error: ChannelError) : bool =
-        let first, waiters =
-            lock gate (fun () ->
-                match failure with
-                | Some _ -> false, (None, None)
-                | None ->
-                    failure <- Some error
-                    inbound.Clear()
-                    true, wakeAll ())
+    /// Fails the channel: whether it was not failed before, whether both directions had ended already,
+    /// and the waiters to wake (after the channel is released). Under no lock.
+    let markFailed (error: ChannelError) =
+        lock gate (fun () ->
+            match failure with
+            | Some _ -> false, false, (None, None)
+            | None ->
+                failure <- Some error
+                inbound.Clear()
+                true, outputClosed && inputEnded, wakeAll ())
 
+    let wake (waiters: TaskCompletionSource<unit> option * TaskCompletionSource<unit> option) =
         let r, c = waiters
         signal r
         signal c
-        first
 
     member _.Id = id
 
@@ -216,6 +216,8 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
         }
 
     /// Ends this side's output after the data already written: the peer reads the end. Idempotent.
+    /// A side that never writes closes its output as soon as it has the channel: until both
+    /// directions have ended, the channel counts against `maxChannels` on both sides.
     member _.CloseOutput(cancellation: CancellationToken) : Task<Result<unit, ChannelError>> =
         task {
             do! writing.WaitAsync cancellation
@@ -225,20 +227,22 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
                     lock gate (fun () ->
                         match failure with
                         | Some e -> Error e
-                        | None when outputClosed -> Ok false
+                        | None when outputClosed -> Ok None
                         | None ->
                             outputClosed <- true
-                            Ok true)
+                            Ok(Some inputEnded))
 
                 match step with
                 | Error e -> return Error e
-                | Ok false -> return Ok()
-                | Ok true ->
+                | Ok None -> return Ok()
+                | Ok(Some finished) ->
+                    // Released before the close goes out: once the peer sees the end, this side no
+                    // longer counts the channel.
+                    if finished then
+                        host.Release id
+
                     let! sent =
                         host.Send(Frame.Binary(ChannelFrame.encode (ChannelFrame.Close id)), cancellation)
-
-                    if lock gate (fun () -> inputEnded) then
-                        host.Release id
 
                     if sent then
                         return Ok()
@@ -249,14 +253,23 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
         }
 
     /// Aborts both directions: buffered data is dropped, the peer's reads and writes fail with
-    /// `ResetByPeer`. Does nothing if the channel already failed.
+    /// `ResetByPeer`. Does nothing if the channel already failed; sends nothing once both directions
+    /// have ended (there is nothing left to abort).
     member _.Reset(code: uint32, reason: string) : unit =
-        if fail (ChannelError.ResetLocally(code, reason)) then
-            // In order, not urgent: a reset must never overtake the channel's open frame.
-            host.Send(Frame.Binary(ChannelFrame.encode (ChannelFrame.Reset(id, code, reason))), CancellationToken.None)
-            |> ignore
+        let first, finished, waiters = markFailed (ChannelError.ResetLocally(code, reason))
 
+        if first then
             host.Release id
+
+            if not finished then
+                // In order, not urgent: a reset must never overtake the channel's open frame.
+                host.Send(
+                    Frame.Binary(ChannelFrame.encode (ChannelFrame.Reset(id, code, reason))),
+                    CancellationToken.None
+                )
+                |> ignore
+
+            wake waiters
 
     /// From the connection's reader: data from the peer. `Some code` resets the channel.
     member internal _.Deliver(data: ArraySegment<byte>) : uint32 option =
@@ -298,6 +311,8 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
         signal waiting
         ok
 
+    /// From the connection's reader: the peer closed its output. Released before the reader wakes, so
+    /// whoever sees the end of a channel whose output is closed sees it released.
     member internal _.EndInput() : unit =
         let release, waiting =
             lock gate (fun () ->
@@ -306,12 +321,16 @@ type Channel internal (id: uint32, host: IChannelHost, receiveWindow: int, sendC
                 reader <- None
                 outputClosed, r)
 
-        signal waiting
-
         if release then
             host.Release id
 
-    member internal _.Fail(error: ChannelError) : unit = fail error |> ignore
+        signal waiting
+
+    /// The channel failed from outside (the peer reset it, the connection ended); the connection has
+    /// released it already.
+    member internal _.Fail(error: ChannelError) : unit =
+        let _, _, waiters = markFailed error
+        wake waiters
 
     override _.ToString() = $"channel {id}"
 
@@ -382,16 +401,19 @@ type internal ChannelTable
 
         Task.FromResult opened
 
-    /// Takes a channel the peer opened. Each one can be accepted once.
+    /// Takes a channel the peer opened. Each one can be accepted once; one the peer reset before is
+    /// gone.
     member _.Accept(id: uint32) : Result<Channel, ChannelError> =
         lock gate (fun () ->
             match closed with
             | Some reason -> Error(ChannelError.ConnectionClosed reason)
             | None ->
-                if waiting.Remove id then
-                    Ok channels[id]
-                else
-                    Error(ChannelError.Unknown id))
+                match channels.TryGetValue id with
+                | true, channel when waiting.Remove id -> Ok channel
+                | _ -> Error(ChannelError.Unknown id))
+
+    /// The channels that count against `maxChannels` on this side: not yet released.
+    member _.Count: int = lock gate (fun () -> channels.Count)
 
     /// Routes a received frame. `Some reason` is a protocol violation that ends the connection.
     member _.Receive(frame: ChannelFrame) : string option =
@@ -450,8 +472,11 @@ type internal ChannelTable
                 channel.EndInput()
                 None
             | ChannelFrame.Reset(_, code, reason) ->
+                lock gate (fun () ->
+                    channels.Remove id |> ignore
+                    waiting.Remove id |> ignore)
+
                 channel.Fail(ChannelError.ResetByPeer(code, reason))
-                lock gate (fun () -> channels.Remove id |> ignore)
                 None
 
     /// The connection ended: every channel fails.
