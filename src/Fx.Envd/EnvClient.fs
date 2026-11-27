@@ -541,6 +541,7 @@ module EnvClient =
 
     let private readRange
         (peer: Peer)
+        (roots: string list)
         (path: string)
         (offset: int64)
         (count: int option)
@@ -550,7 +551,7 @@ module EnvClient =
             let! outcome =
                 Transfer.download
                     peer
-                    (fun channel -> call peer EnvProtocol.fsRead (path, offset, count, channel) cancellation)
+                    (fun channel -> call peer EnvProtocol.fsRead (path, offset, count, channel, roots) cancellation)
                     cancellation
 
             return
@@ -565,6 +566,7 @@ module EnvClient =
 
     let private writeFile
         (peer: Peer)
+        (roots: string list)
         (atomic: bool)
         (path: string)
         (content: byte array)
@@ -573,47 +575,54 @@ module EnvClient =
         Transfer.upload
             peer
             content
-            (fun channel -> call peer EnvProtocol.fsWrite (path, channel, atomic) cancellation)
+            (fun channel -> call peer EnvProtocol.fsWrite (path, channel, atomic, roots) cancellation)
             cancellation
 
-    let private stat (peer: Peer) (path: string) (cancellation: CancellationToken) : Task<Result<Entry, FsError>> =
+    let private stat
+        (peer: Peer)
+        (roots: string list)
+        (path: string)
+        (cancellation: CancellationToken)
+        : Task<Result<Entry, FsError>> =
         task {
-            match! callOrThrow peer EnvProtocol.fsStat [ path ] cancellation with
+            match! callOrThrow peer EnvProtocol.fsStat ([ path ], roots) cancellation with
             | [ result ] -> return result
             | results ->
                 return raise (EnvCallException(EnvProtocol.fsStat.Name, $"{results.Length} results for one path"))
         }
 
-    let private fsRead (peer: Peer) : FsRead =
+    let private fsRead (peer: Peer) (roots: string list) : FsRead =
         {
             ReadFile =
                 fun path cancellation ->
                     task {
-                        let! chunk = readRange peer path 0L None cancellation
+                        let! chunk = readRange peer roots path 0L None cancellation
                         return chunk |> Result.map (fun c -> c.Content)
                     }
-            Stat = stat peer
-            List = fun path cancellation -> call peer EnvProtocol.fsList path cancellation
+            Stat = stat peer roots
+            List = fun path cancellation -> call peer EnvProtocol.fsList (path, roots) cancellation
         }
 
-    let private fs (peer: Peer) : Fs =
+    let private fs (peer: Peer) (roots: string list) : Fs =
         {
-            WriteFile = writeFile peer false
-            CreateDirectory = fun path cancellation -> call peer EnvProtocol.fsCreateDirectory path cancellation
-            Delete = fun path cancellation -> call peer EnvProtocol.fsDelete path cancellation
+            WriteFile = writeFile peer roots false
+            CreateDirectory =
+                fun path cancellation -> call peer EnvProtocol.fsCreateDirectory (path, roots) cancellation
+            Delete = fun path cancellation -> call peer EnvProtocol.fsDelete (path, roots) cancellation
             Move =
-                fun source destination cancellation -> call peer EnvProtocol.fsMove (source, destination) cancellation
+                fun source destination cancellation ->
+                    call peer EnvProtocol.fsMove (source, destination, roots) cancellation
         }
 
-    let private fsOps (peer: Peer) (router: WatchRouter) : FsOps =
+    let private fsOps (peer: Peer) (roots: string list) (router: WatchRouter) : FsOps =
         {
-            StatMany = fun paths cancellation -> callOrThrow peer EnvProtocol.fsStat paths cancellation
+            StatMany = fun paths cancellation -> callOrThrow peer EnvProtocol.fsStat (paths, roots) cancellation
             ReadRange =
                 fun path offset count cancellation ->
                     FsOps.checkRange offset count
-                    readRange peer path offset (Some count) cancellation
-            WriteAtomic = writeFile peer true
-            ApplyPatch = fun patches cancellation -> call peer EnvProtocol.fsPatch patches cancellation
+                    readRange peer roots path offset (Some count) cancellation
+            WriteAtomic = writeFile peer roots true
+            ApplyPatch = fun patches cancellation -> call peer EnvProtocol.fsPatch (patches, roots) cancellation
             Search = fun query cancellation -> call peer EnvProtocol.fsSearch query cancellation
             Watch =
                 fun spec cancellation ->
@@ -790,9 +799,9 @@ module EnvClient =
         {
             Peer = peer
             Platform = platform
-            FsRead = fsRead peer
-            Fs = fs peer
-            FsOps = fsOps peer router
+            FsRead = fsRead peer []
+            Fs = fs peer []
+            FsOps = fsOps peer [] router
             Shell = shell peer
             Terminal = terminal peer
             Blobs = blobs peer
@@ -849,6 +858,20 @@ module EnvClient =
                                 )
                         | Ok platform -> return Ok(ofPeer peer platform router)
             }
+
+    /// The client with its file operations resolved beneath `roots` (absolute, in envd's syntax): a path
+    /// under one of them goes from the outermost such root without following symbolic links, and one
+    /// through a link fails with `InvalidPath` (T113b, `EnvdServices.Beneath`). Sessions whose
+    /// processes run in a sandbox pass its writable roots, where those processes can make links. Watching
+    /// is unchanged.
+    let beneath (roots: string list) (client: EnvClient) : EnvClient =
+        let ops = fsOps client.Peer roots (WatchRouter())
+
+        { client with
+            FsRead = fsRead client.Peer roots
+            Fs = fs client.Peer roots
+            FsOps = { ops with Watch = client.FsOps.Watch }
+        }
 
     /// Closes the connection (envd's processes go on running; a host can reconnect to them).
     let close (client: EnvClient) : Task<CloseReason> = client.Peer.CloseAsync()

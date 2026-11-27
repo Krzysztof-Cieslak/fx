@@ -10,6 +10,16 @@ open Fx.Pty
 open Fx.Rpc
 open Fx.Store
 
+/// envd's file capabilities: the basic ones and its operations beyond them.
+type EnvdFiles =
+    {
+        FsRead: FsRead
+        Fs: Fs
+        FsOps: FsOps
+    }
+
+    override _.ToString() = "EnvdFiles"
+
 /// What envd serves: the capabilities of the machine it runs on, as interpreters. The composition
 /// root builds them (the live ones in Fx.Envd.Live; fakes in tests).
 type EnvdServices =
@@ -19,6 +29,11 @@ type EnvdServices =
         FsRead: FsRead
         Fs: Fs
         FsOps: FsOps
+        /// The file capabilities beneath roots (T113b): a path under one of the roots (absolute) is
+        /// resolved beneath the outermost of them without following symbolic links (a link on the way
+        /// fails with `InvalidPath`, `Beneath`'s reason); other paths as by `FsRead`, `Fs` and `FsOps`.
+        /// Watching is not affected.
+        Beneath: string list -> EnvdFiles
         Shell: Shell
         Terminal: Terminal
         Blobs: Blobs

@@ -193,6 +193,50 @@ let conformance =
                     Release = connection.Cut
                 })
 
+            test "a client beneath roots sends them with every file request, and others none" {
+                let fs = InMemoryFs(SystemClock.clock, false)
+                let asked = ResizeArray<string list>()
+                let inner = services (ControlledShell()).Shell fs 1024 None
+
+                let envd =
+                    Envd
+                        { inner with
+                            Beneath =
+                                fun roots ->
+                                    lock asked (fun () -> asked.Add roots)
+                                    inner.Beneath roots
+                        }
+
+                let connection = connect envd
+
+                let root =
+                    Path.Combine(Path.GetTempPath(), "envd-beneath-" + Guid.NewGuid().ToString("N"))
+
+                ok (wait (fs.Fs.CreateDirectory root none))
+                let client = EnvClient.beneath [ root; "/other" ] connection.Client
+                let at name = Path.Combine(root, name)
+
+                try
+                    ok (wait (client.Fs.WriteFile (at "a.txt") "a"B none))
+                    ok (wait (client.FsOps.WriteAtomic (at "b.txt") "b"B none))
+                    ok (wait (client.FsRead.ReadFile (at "a.txt") none)) |> ignore
+                    ok (wait (client.FsOps.ReadRange (at "a.txt") 0L 1 none)) |> ignore
+                    ok (wait (client.FsRead.Stat (at "a.txt") none)) |> ignore
+                    wait (client.FsOps.StatMany [ at "a.txt" ] none) |> ignore
+                    ok (wait (client.FsRead.List root none)) |> ignore
+                    ok (wait (client.Fs.CreateDirectory (at "d") none))
+                    ok (wait (client.Fs.Move (at "b.txt") (at "c.txt") none))
+                    ok (wait (client.FsOps.ApplyPatch [ Delete(at "c.txt", None) ] none)) |> ignore
+                    ok (wait (client.Fs.Delete (at "d") none))
+                    Expect.equal (List.ofSeq asked) (List.replicate 11 [ root; "/other" ]) "every request"
+
+                    asked.Clear()
+                    ok (wait (connection.Client.FsRead.ReadFile (at "a.txt") none)) |> ignore
+                    Expect.isEmpty asked "the plain client sends none"
+                finally
+                    connection.Cut()
+            }
+
             BlobsConformance.tests "host cache over the envd proxy" (fun () ->
                 let envd, _ = fakeEnvd (ControlledShell()).Shell
                 BlobCache.over (InMemoryBlobs().Blobs) (connect envd).Client.Blobs)
