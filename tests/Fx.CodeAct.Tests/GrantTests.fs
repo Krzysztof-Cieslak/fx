@@ -160,15 +160,16 @@ type private Bench =
         Service: GrantsService<GrantsEnv>
     }
 
-    member this.Guard(settings: GrantSettings, ?rules: BindingRule list) =
+    member this.Guard(settings: GrantSettings, ?rules: BindingRule list, ?sandbox: string) =
         let setup =
             { GrantSetup.create (GrantsService.grants this.Service) (SessionLog.typed this.Store.Log) turn settings with
                 Rules = defaultArg rules Permissions.core
+                Sandbox = sandbox
             }
 
         GrantGuard.create<GrantsEnv> setup place
 
-    member this.Call(settings: GrantSettings, call: HostCall, ?cancellation: CancellationToken) =
+    member this.Call(settings: GrantSettings, call: HostCall, ?cancellation: CancellationToken, ?sandbox: string) =
         let env =
             { this.Env with
                 Scope =
@@ -177,7 +178,18 @@ type private Bench =
                     }
             }
 
-        Eff.run env (this.Guard settings call)
+        let guard =
+            match sandbox with
+            | Some driver -> this.Guard(settings, sandbox = driver)
+            | None -> this.Guard settings
+
+        Eff.run env (guard call)
+
+    /// A person's grant, failing the test if it is refused.
+    member this.Grant(draft: GrantDraft) : Grant =
+        match wait (Eff.run this.Env (GrantsService.grant this.Service alice draft)) with
+        | Ok grant -> grant
+        | Error e -> failtest $"{e}"
 
     override _.ToString() = "Bench"
 
@@ -198,10 +210,227 @@ let private shellCall (cell: string) (line: string) : HostCall =
         Args = [ Value.Inline(Json.String line) ]
     }
 
-let private deniedWith (result: Result<unit, HostCallError>) (part: string) =
+let private deniedWith (result: Result<Approval list, HostCallError>) (part: string) =
     match result with
     | Error(HostCallError.Denied reason) -> Expect.stringContains reason part "why"
     | other -> failtest $"expected a denial, got {other}"
+
+/// What the guard says of a call a person allowed by answering `request`.
+let private answered (request: GrantRequest) : Approval =
+    {
+        Action = request.Action.Value
+        Resource = request.Resource
+        By = ApprovedBy.Person request.Key
+    }
+
+let private autoMode =
+    { GrantSettings.defaults with
+        Mode = GrantMode.Auto
+    }
+
+let private auto (action: string) (resource: string) : Approval =
+    {
+        Action = action
+        Resource = resource
+        By = ApprovedBy.Auto
+    }
+
+let private autoGrant (effect: GrantEffect) (scope: GrantScope) : GrantDraft =
+    {
+        Action = AutoApprovals.action
+        Resource = "*"
+        Effect = effect
+        Scope = scope
+        Expires = None
+        Reason = Some "auto approvals in a test"
+    }
+
+/// Auto approvals (T134): what a sandbox driver confines runs without a person.
+let private autoTests =
+    testList
+        "auto approvals"
+        [
+            testTask
+                "with a driver that confines, plain commands in the workspace run unasked, nothing in the grants log" {
+                let b = bench []
+
+                let! result =
+                    b.Call(
+                        autoMode,
+                        shellCall "t1-s1-1" "mkdir made && dotnet test 2>&1 | tail -n 5",
+                        sandbox = "bubblewrap"
+                    )
+
+                Expect.equal
+                    result
+                    (Ok [ auto "shell.exec" "mkdir made"; auto "shell.exec" "dotnet test" ])
+                    "auto approvals (tail is listed: it needs none)"
+
+                Expect.equal (requestCount b.Service) 0 "nobody asked, nothing recorded in the grants log"
+            }
+
+            testTask "downloads, installs and writes outside the workspace still ask" {
+                let b = bench []
+
+                let waiting =
+                    b.Call(
+                        autoMode,
+                        shellCall "t1-s1-1" "make > /tmp/log; curl -O https://x.org/a",
+                        sandbox = "bubblewrap"
+                    )
+
+                let! (requests: GrantRequest list) = pendingAt b.Service 2
+
+                Expect.equal
+                    (requests |> List.map (fun r -> r.Action.Value + " " + r.Resource) |> List.sort)
+                    [ "fs.write /tmp/log"; "shell.exec curl -O https://x.org/a" ]
+                    "asked"
+
+                for request in requests do
+                    answer b.Env b.Service request (allow ScopeChoice.Once None)
+
+                let! result = waiting
+
+                match result with
+                | Ok(approvals: Approval list) ->
+                    Expect.equal (List.head approvals) (auto "shell.exec" "make") "make ran on auto approvals"
+
+                    Expect.equal
+                        (List.tail approvals |> List.sortBy (fun a -> a.Resource))
+                        (requests |> List.map answered |> List.sortBy (fun a -> a.Resource))
+                        "the rest by people"
+                | Error e -> failtest $"{e}"
+            }
+
+            testTask "without a driver that confines, auto approvals never apply" {
+                let b = bench []
+                let waiting = b.Call(autoMode, shellCall "t1-s1-1" "mkdir made")
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "mkdir made" "asked"
+                answer b.Env b.Service requests.Head deny
+                let! refused = waiting
+                deniedWith refused "was denied"
+            }
+
+            testTask "a person's grant turns them on for its scope, a deny grant off; mode deny keeps refusing the rest" {
+                let b = bench []
+
+                let denyMode =
+                    { GrantSettings.defaults with
+                        Mode = GrantMode.Deny
+                    }
+
+                let! before = b.Call(denyMode, shellCall "t1-s1-1" "mkdir a", sandbox = "bubblewrap")
+                deniedWith before "nobody is asked here"
+
+                // Another session's grant does not count.
+                b.Grant(autoGrant GrantEffect.Allow (GrantScope.Session "s2")) |> ignore
+
+                let! elsewhere =
+                    b.Call(denyMode, shellCall "t1-s1-2" "mkdir a", sandbox = "bubblewrap")
+
+                deniedWith elsewhere "nobody is asked here"
+
+                b.Grant(autoGrant GrantEffect.Allow (GrantScope.Session "s1")) |> ignore
+
+                let! after =
+                    b.Call(denyMode, shellCall "t1-s1-3" "mkdir a; curl x", sandbox = "seatbelt")
+
+                deniedWith after "shell.exec `curl x` needs a grant"
+
+                let! plain = b.Call(denyMode, shellCall "t1-s1-4" "mkdir a", sandbox = "seatbelt")
+                Expect.equal plain (Ok [ auto "shell.exec" "mkdir a" ]) "on for the session"
+
+                // A deny grant turns them off, also where the host's mode is auto.
+                b.Grant(autoGrant GrantEffect.Deny (GrantScope.Session "s1")) |> ignore
+                let! off = b.Call(denyMode, shellCall "t1-s1-5" "mkdir c", sandbox = "seatbelt")
+                deniedWith off "nobody is asked here"
+
+                let waiting = b.Call(autoMode, shellCall "t1-s1-6" "mkdir d", sandbox = "seatbelt")
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "mkdir d" "asked despite the host's mode"
+                answer b.Env b.Service requests.Head deny
+                let! _ = waiting
+                ()
+            }
+
+            testTask "policy forbids them; deny grants and policy rules for commands still refuse" {
+                let forbid: PolicyRule =
+                    {
+                        Id = "test/no-auto"
+                        Action = AutoApprovals.action
+                        Resource = "*"
+                        Effect = PolicyEffect.Deny
+                        Reason = "not here"
+                    }
+
+                let b = bench [ forbid ]
+
+                let waiting =
+                    b.Call(autoMode, shellCall "t1-s1-1" "mkdir made", sandbox = "bubblewrap")
+
+                let! (requests: GrantRequest list) = pendingAt b.Service 1
+                Expect.equal requests.Head.Resource "mkdir made" "asked despite the mode"
+                answer b.Env b.Service requests.Head deny
+                let! _ = waiting
+
+                let b = bench [ denyRule "test/no-rm" "rm **" ]
+
+                let! rm =
+                    b.Call(autoMode, shellCall "t1-s1-1" "rm -rf build", sandbox = "bubblewrap")
+
+                deniedWith rm "deny by policy test/no-rm"
+            }
+
+            test "the decision and the policy a variant policy makes" {
+                let noGrant = Ok(GrantCheck.MustAsk [ "no grant applies" ])
+
+                Expect.isTrue (AutoApprovals.decide GrantMode.Auto (Some "bubblewrap") (Some noGrant)).IsOn "the mode"
+                Expect.isFalse (AutoApprovals.decide GrantMode.Ask (Some "bubblewrap") (Some noGrant)).IsOn "ask"
+                Expect.isFalse (AutoApprovals.decide GrantMode.Auto None None).IsOn "no driver"
+                Expect.isFalse (AutoApprovals.decide GrantMode.Off (Some "seatbelt") (Some noGrant)).IsOn "off"
+
+                Expect.isTrue
+                    (AutoApprovals.decide GrantMode.Ask (Some "seatbelt") (Some(Ok(GrantCheck.Allowed(GrantId "g")))))
+                        .IsOn
+                    "a grant"
+
+                Expect.isFalse
+                    (AutoApprovals.decide
+                        GrantMode.Auto
+                        (Some "seatbelt")
+                        (Some(Ok(GrantCheck.MustAsk [ "policy asks" ]))))
+                        .IsOn
+                    "policy asks"
+
+                Expect.isFalse
+                    (AutoApprovals.decide GrantMode.Auto (Some "seatbelt") (Some(Ok(GrantCheck.Denied [ "no" ])))).IsOn
+                    "forbidden"
+
+                let policy (pins: (string * Json) list) (forbids: (string * Json list) list) : Fx.Variants.Policy =
+                    {
+                        Origin = "policy.json"
+                        Pins = pins
+                        Forbids = forbids
+                    }
+
+                let mode = "codeact.grants.mode"
+
+                Expect.equal
+                    (AutoApprovals.policyRules [ policy [] [ mode, [ Json.String "auto" ] ] ]
+                     |> List.map (fun r -> r.Action, r.Resource, r.Effect))
+                    [ AutoApprovals.action, "*", PolicyEffect.Deny ]
+                    "a forbid"
+
+                Expect.equal
+                    (AutoApprovals.policyRules [ policy [ mode, Json.String "ask" ] [] ]).Length
+                    1
+                    "a pin to another mode"
+
+                Expect.isEmpty (AutoApprovals.policyRules [ policy [ mode, Json.String "auto" ] [] ]) "a pin to auto"
+                Expect.isEmpty (AutoApprovals.policyRules [ policy [] [ mode, [ Json.String "off" ] ] ]) "other values"
+            }
+        ]
 
 let private guardTests =
     testList
@@ -213,7 +442,7 @@ let private guardTests =
                 let! listed =
                     b.Call(GrantSettings.defaults, shellCall "t1-s1-1" "ls -la && cat a.txt")
 
-                Expect.equal listed (Ok()) "listed"
+                Expect.equal listed (Ok []) "listed"
 
                 let! write =
                     b.Call(
@@ -225,7 +454,7 @@ let private guardTests =
                         }
                     )
 
-                Expect.equal write (Ok()) "a write in the workspace"
+                Expect.equal write (Ok []) "a write in the workspace"
                 Expect.equal (requestCount b.Service) 0 "nothing asked"
             }
 
@@ -257,11 +486,11 @@ let private guardTests =
 
                 answer b.Env b.Service request (allow ScopeChoice.Once None)
                 let! result = waiting
-                Expect.equal result (Ok()) "allowed"
+                Expect.equal result (Ok [ answered request ]) "allowed by a person"
 
                 // The same call again is the same request, already answered.
                 let! again = b.Call(GrantSettings.defaults, call)
-                Expect.equal again (Ok()) "the same request"
+                Expect.equal again (Ok []) "the same request"
                 Expect.equal (requestCount b.Service) 1 "no new request"
 
                 // Another cell asks anew; a denial refuses the call.
@@ -279,9 +508,9 @@ let private guardTests =
                 let! (requests: GrantRequest list) = pendingAt b.Service 1
                 answer b.Env b.Service requests.Head (allow ScopeChoice.Session (Some "npm run **"))
                 let! result = first
-                Expect.equal result (Ok()) "allowed"
+                Expect.equal result (Ok [ answered requests.Head ]) "allowed"
                 let! later = b.Call(GrantSettings.defaults, shellCall "t1-s2-1" "npm run test")
-                Expect.equal later (Ok()) "covered"
+                Expect.equal later (Ok []) "covered"
                 Expect.equal (requestCount b.Service) 1 "asked once"
             }
 
@@ -330,7 +559,7 @@ let private guardTests =
                         shellCall "t1-s1-1" "rm -rf /"
                     )
 
-                Expect.equal off (Ok()) "not checked"
+                Expect.equal off (Ok []) "not checked"
                 Expect.equal (requestCount b.Service) 0 "nobody asked"
             }
 
@@ -424,7 +653,7 @@ let private guardTests =
                 Expect.equal requests.Head.Resource "example.com:443" "host and port"
                 answer b.Env b.Service requests.Head (allow ScopeChoice.Once None)
                 let! allowed = waiting
-                Expect.equal allowed (Ok()) "allowed"
+                Expect.equal allowed (Ok [ answered requests.Head ]) "allowed"
 
                 let windowsGuard =
                     GrantGuard.create<GrantsEnv> setup (Workplace.create "C:\\ws" Os.Windows)
@@ -987,4 +1216,5 @@ let private replayTests =
         ]
 
 [<Tests>]
-let tests = testList "CodeAct grants" [ guardTests; turnTests; replayTests ]
+let tests =
+    testList "CodeAct grants" [ guardTests; autoTests; turnTests; replayTests ]

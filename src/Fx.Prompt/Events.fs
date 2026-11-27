@@ -51,6 +51,33 @@ type KernelRestart =
     override this.ToString() =
         $"kernel launch {this.Launch}: {this.Reason}"
 
+/// Who let a host call run that no grant in force allowed (spec §13).
+[<RequireQualifiedAccess>]
+type ApprovedBy =
+    /// Auto approvals: a sandbox driver confined it, and nobody was asked.
+    | Auto
+    /// A person answered its grant request (the request's key in the grants log).
+    | Person of request: string
+
+    override this.ToString() =
+        match this with
+        | Auto -> "auto"
+        | Person request -> "person (" + request + ")"
+
+/// How one of an action's host calls was let run without a grant that already allowed it
+/// (docs/modules/codeact.md, "Approval modes"): for people and audits (clients mark the action's
+/// activity line `auto` or `asked`); the render never reads it.
+type Approval =
+    {
+        /// The grant's action (`shell.exec`) and resource (`dotnet test`).
+        Action: string
+        Resource: string
+        By: ApprovedBy
+    }
+
+    override this.ToString() =
+        $"{this.Action} {this.Resource} by {this.By}"
+
 /// A stable receipt: the result of a tool call or cell, as the model will see it from now on (NOOA).
 /// It is recorded once, bounded, with large values by reference, so later events never change it.
 type Receipt =
@@ -66,7 +93,13 @@ type Receipt =
         IsError: bool
         /// The cell ran in a new kernel (absent in receipts recorded before it was kept).
         Restarted: KernelRestart option
+        /// How its host calls ran that no grant in force allowed: auto approvals, or a person's
+        /// answer (the first `Receipt.MaxApprovals`; empty in receipts recorded before they were kept).
+        Approvals: Approval list
     }
+
+    /// The most approvals a receipt keeps (a cell may run many commands; the step journal has each).
+    static member MaxApprovals = 16
 
     override this.ToString() =
         let call = this.Call |> Option.defaultValue "-"
@@ -253,6 +286,50 @@ module ContextCodecs =
         |> Codec.describe "A new kernel a cell ran in: its launch, and why the kernel before it is gone."
         |> Codec.named "KernelRestart"
 
+    let approvedBy: Codec<ApprovedBy> =
+        Codec.union "kind" {
+            let! auto = Codec.case0 "auto" ApprovedBy.Auto
+
+            and! person =
+                Codec.case1 "person" ApprovedBy.Person (Field.required "request" Codec.string)
+
+            return
+                fun by ->
+                    match by with
+                    | ApprovedBy.Auto -> auto
+                    | ApprovedBy.Person request -> person request
+        }
+        |> Codec.describe "Who let a host call run: auto approvals, or a person who answered its grant request."
+        |> Codec.named "ApprovedBy"
+
+    let approval: Codec<Approval> =
+        Codec.record {
+            let! action = Codec.field "action" (fun (a: Approval) -> a.Action) Codec.string
+            and! resource = Codec.field "resource" (fun a -> a.Resource) Codec.string
+            and! by = Codec.field "by" (fun a -> a.By) approvedBy
+
+            return
+                {
+                    Action = action
+                    Resource = resource
+                    By = by
+                }
+        }
+        |> Codec.describe
+            "How a host call ran that no grant in force allowed: its grant's action and resource, and who let it."
+        |> Codec.named "Approval"
+
+    /// Approvals as an optional `approvals` member: absent when there are none, so what was written
+    /// before they were kept reads and writes the same.
+    let approvals (get: 'T -> Approval list) : RecordFields<'T, Approval list option> =
+        Codec.optionalField
+            "approvals"
+            (fun value ->
+                match get value with
+                | [] -> None
+                | approvals -> Some approvals)
+            (Codec.list approval)
+
     let receipt: Codec<Receipt> =
         Codec.record {
             let! turn = Codec.field "turn" (fun (r: Receipt) -> r.Turn) count
@@ -262,6 +339,7 @@ module ContextCodecs =
             and! pieces = Codec.field "pieces" (fun r -> r.Pieces) (Codec.list Piece.codec)
             and! isError = Codec.defaultField "isError" (fun r -> r.IsError) false Codec.bool
             and! restarted = Codec.optionalField "restarted" (fun r -> r.Restarted) kernelRestart
+            and! approved = approvals (fun (r: Receipt) -> r.Approvals)
 
             return
                 {
@@ -272,6 +350,7 @@ module ContextCodecs =
                     Pieces = pieces
                     IsError = isError
                     Restarted = restarted
+                    Approvals = approved |> Option.defaultValue []
                 }
         }
         |> Codec.named "Receipt"

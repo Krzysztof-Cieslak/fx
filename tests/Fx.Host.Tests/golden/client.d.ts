@@ -9,6 +9,18 @@ export interface AnswerSession {
   answer: unknown;
 }
 
+/** How a host call ran that no grant in force allowed: its grant's action and resource, and who let it. */
+export interface Approval {
+  action: string;
+  resource: string;
+  by: ApprovedBy;
+}
+
+/** Who let a host call run: auto approvals, or a person who answered its grant request. */
+export type ApprovedBy =
+  | { kind: "auto" }
+  | { kind: "person"; request: string };
+
 export interface Attribution {
   principal: string;
   via: string;
@@ -89,6 +101,7 @@ export type ContextEvent =
       /** @default false */
       isError?: boolean;
       restarted?: KernelRestart;
+      approvals?: Approval[];
     }
   | {
       kind: "pinned";

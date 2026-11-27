@@ -412,6 +412,7 @@ let tests =
                                 Pieces = [ Fx.Prompt.Piece.Text $"exit {n}" ]
                                 IsError = false
                                 Restarted = None
+                                Approvals = []
                             }
 
                     let append (n: int) =

@@ -16,6 +16,9 @@ open Fx.Grants
 type GrantMode =
     /// The grants log decides; a person answers what no grant covers.
     | Ask
+    /// As `Ask`, with auto approvals on: commands a sandbox driver confines to the workspace run
+    /// without asking (docs/modules/codeact.md, "Approval modes").
+    | Auto
     /// The grants log decides; what no grant allows is refused without asking anyone (unattended runs).
     | Deny
     /// Nothing is checked: for sandboxed or throwaway environments only.
@@ -24,6 +27,7 @@ type GrantMode =
     override this.ToString() =
         match this with
         | Ask -> "ask"
+        | Auto -> "auto"
         | Deny -> "deny"
         | Off -> "off"
 
@@ -35,6 +39,9 @@ type GrantSettings =
         /// `codeact.grants.allowCommands`: command patterns that run without a grant when written
         /// plainly in the workspace (deny grants and policy still apply).
         AllowCommands: string list
+        /// `codeact.grants.askCommands`: command patterns auto approvals never cover (they reach the
+        /// network, install software or run a shell's inline command line).
+        AskCommands: string list
         /// `codeact.grants.protectedPaths`: workspace paths whose writes need a grant.
         ProtectedPaths: string list
         /// `codeact.grants.timeoutMs`: how long a request waits for a person.
@@ -59,12 +66,17 @@ module GrantSlots =
                 |> Result.mapError (fun reason -> $"not a {what} pattern: {reason}"))
         )
 
-    /// `codeact.grants.mode`: `ask`, `deny` or `off`.
+    /// `codeact.grants.mode`: `ask`, `auto`, `deny` or `off`.
     let mode: Slot<GrantMode> =
         Slot.enum
             "codeact.grants.mode"
-            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), deny (what no grant allows is refused without asking: unattended runs) or off (nothing is checked: sandboxed or throwaway environments only)."
-            [ GrantMode.Ask, "ask"; GrantMode.Deny, "deny"; GrantMode.Off, "off" ]
+            "How host calls that need a grant (commands, writes outside the workspace or to protected paths, reads outside it, network) are checked: ask (the grants log decides, a person answers what no grant covers), auto (as ask, but commands a sandbox driver confines to the workspace run without asking; network, installs and writes outside it still ask), deny (what no grant allows is refused without asking: unattended runs) or off (nothing is checked: sandboxed or throwaway environments only)."
+            [
+                GrantMode.Ask, "ask"
+                GrantMode.Auto, "auto"
+                GrantMode.Deny, "deny"
+                GrantMode.Off, "off"
+            ]
             GrantMode.Ask
         |> Slot.privileged
 
@@ -100,6 +112,132 @@ module GrantSlots =
             defaultCommands
         |> Slot.privileged
 
+    /// The commands auto approvals never cover by default: they reach the network (downloads, remote
+    /// shells, git's remotes, hosting CLIs), install software (package managers' installs, adds and
+    /// publishes, which also run packages' scripts) or hand a shell an inline command line the guard
+    /// cannot split. A guardrail of known spellings, not a boundary: a script can reach the network
+    /// too (docs/modules/codeact.md, "Approval modes").
+    let defaultAskCommands: string list =
+        [
+            // Downloads and remote shells.
+            "curl **"
+            "wget **"
+            "ssh **"
+            "scp **"
+            "sftp **"
+            "rsync **"
+            "nc **"
+            "ncat **"
+            "netcat **"
+            "socat **"
+            "telnet **"
+            "ftp **"
+            // git's remotes and hosting CLIs.
+            "git clone **"
+            "git fetch **"
+            "git pull **"
+            "git push **"
+            "git ls-remote **"
+            "git remote update **"
+            "git submodule update **"
+            "gh **"
+            "glab **"
+            // Installs and publishes.
+            "npm install **"
+            "npm i **"
+            "npm ci **"
+            "npm add **"
+            "npm update **"
+            "npm publish **"
+            "npm exec **"
+            "npx **"
+            "pnpm install **"
+            "pnpm i **"
+            "pnpm add **"
+            "pnpm update **"
+            "pnpm dlx **"
+            "pnpm publish **"
+            "yarn"
+            "yarn install **"
+            "yarn add **"
+            "yarn up **"
+            "yarn dlx **"
+            "yarn npm **"
+            "bun install **"
+            "bun i **"
+            "bun add **"
+            "bun update **"
+            "bun x **"
+            "bunx **"
+            "bun publish **"
+            "pip install **"
+            "pip3 install **"
+            "pipx **"
+            "uv pip install **"
+            "uv add **"
+            "uv sync **"
+            "uv tool **"
+            "uvx **"
+            "poetry install **"
+            "poetry add **"
+            "cargo install **"
+            "cargo add **"
+            "cargo fetch **"
+            "cargo update **"
+            "cargo publish **"
+            "go get **"
+            "go install **"
+            "go mod download **"
+            "dotnet add ** package **"
+            "dotnet tool install **"
+            "dotnet tool update **"
+            "dotnet workload install **"
+            "dotnet nuget push **"
+            "gem install **"
+            "bundle install **"
+            "brew install **"
+            "brew upgrade **"
+            "apt install **"
+            "apt-get install **"
+            "apk add **"
+            "dnf install **"
+            "yum install **"
+            "snap install **"
+            "winget install **"
+            "choco install **"
+            "scoop install **"
+            // A shell's inline command line: the guard does not split it.
+            "sh -c **"
+            "bash -c **"
+            "zsh -c **"
+            "dash -c **"
+            "pwsh -c **"
+            "pwsh -Command **"
+            "powershell -c **"
+            "powershell -Command **"
+            "cmd /c **"
+            // PowerShell's downloads and installs.
+            "Invoke-WebRequest **"
+            "iwr **"
+            "Invoke-RestMethod **"
+            "irm **"
+            "Start-BitsTransfer **"
+            "Install-Module **"
+            "Install-Package **"
+            "Install-Script **"
+            "Save-Module **"
+            "Update-Module **"
+        ]
+
+    /// `codeact.grants.askCommands`: command patterns auto approvals never cover.
+    let askCommands: Slot<string list> =
+        Slot.create
+            "codeact.grants.askCommands"
+            "Commands (grants' command patterns, matched ignoring case, after leading variable assignments and wrappers such as env, sudo, nohup, time, timeout, nice and xargs) that auto approvals never run without a person: they reach the network, install software or hand a shell an inline command line. A guardrail, not a boundary."
+            (patterns ResourceKind.Command "command")
+            defaultAskCommands
+        |> Slot.privileged
+
     /// The workspace paths whose writes need a grant by default: the repository's own data (its
     /// hooks run code) and the project's configuration.
     let defaultProtected: string list =
@@ -132,6 +270,7 @@ module GrantSlots =
         [
             Slot.info mode
             Slot.info allowCommands
+            Slot.info askCommands
             Slot.info protectedPaths
             Slot.info timeoutMs
         ]
@@ -143,6 +282,7 @@ module GrantSettings =
         {
             Mode = GrantSlots.mode.Default
             AllowCommands = GrantSlots.allowCommands.Default
+            AskCommands = GrantSlots.askCommands.Default
             ProtectedPaths = GrantSlots.protectedPaths.Default
             Timeout = None
             Exclusions = Exclusions.none
@@ -153,6 +293,7 @@ module GrantSettings =
         eff {
             let! mode = Variants.get GrantSlots.mode
             let! commands = Variants.get GrantSlots.allowCommands
+            let! asks = Variants.get GrantSlots.askCommands
             let! paths = Variants.get GrantSlots.protectedPaths
             let! timeout = Variants.get GrantSlots.timeoutMs
             let! exclusions = ContentExclusions.read
@@ -161,6 +302,7 @@ module GrantSettings =
                 {
                     Mode = mode
                     AllowCommands = commands
+                    AskCommands = asks
                     ProtectedPaths = paths
                     Timeout = timeout |> Option.map (fun ms -> TimeSpan.FromMilliseconds(float ms))
                     // Settings that do not compile fail the turn (the strategy checks them first).
@@ -224,6 +366,10 @@ type GrantNeed =
         /// Listed in `codeact.grants.allowCommands` and written plainly: allowed when no grant or
         /// policy says otherwise, without asking.
         Listed: bool
+        /// A command written plainly in the workspace and not in `codeact.grants.askCommands`: auto
+        /// approvals run it without asking where a sandbox driver confines the hands, when no grant or
+        /// policy says otherwise.
+        Confined: bool
     }
 
     override this.ToString() =
@@ -231,6 +377,7 @@ type GrantNeed =
         + " "
         + this.Resource
         + (if this.Listed then " (listed)" else "")
+        + (if this.Confined then " (confined)" else "")
 
 /// What a host call needs before it may run.
 [<RequireQualifiedAccess>]
@@ -378,6 +525,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions relative
                         Listed = false
+                        Confined = false
                     }
                 ]
         | Location.Outside outside ->
@@ -391,6 +539,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions outside
                         Listed = false
+                        Confined = false
                     }
                 ]
 
@@ -410,6 +559,7 @@ module Permissions =
                         Evidence = [ evidence "through" via ]
                         Suggestions = pathSuggestions outside
                         Listed = false
+                        Confined = false
                     }
                 ]
 
@@ -450,6 +600,34 @@ module Permissions =
                     "pop-location"
                 ]
 
+    /// The most working directories a line's commands are followed in; more make it unknown.
+    [<Literal>]
+    let private MaxDirectories = 16
+
+    /// Where later commands run after a command that changes the directory (`cd x`, `pushd x`,
+    /// `Set-Location x`, `popd`), given where they may run before it: any of those, or those changed
+    /// to the plain path it names (subshells and groups are flattened, so a `cd` in one may have been
+    /// undone; the set holds every directory the line may be in). `None`: unknown (`cd` alone or to
+    /// `-`, options, an expansion).
+    let private changed (place: Workplace) (dirs: string list) (simple: SimpleCommand) : string list option =
+        let program = (List.head simple.Words).Text.ToLowerInvariant()
+
+        match List.tail simple.Words with
+        | [] when program = "popd" || program = "pop-location" -> Some dirs
+        | [ target ] when
+            not target.Expands
+            && target.Text <> ""
+            && not (target.Text.StartsWith '-')
+            && program <> "popd"
+            && program <> "pop-location"
+            ->
+            let next =
+                dirs @ (dirs |> List.map (fun dir -> absolute place dir target.Text))
+                |> List.distinct
+
+            if next.Length > MaxDirectories then None else Some next
+        | _ -> None
+
     /// Whether a path is out of a listed command's reach: outside the workspace, unnamed, or a file
     /// content exclusions keep from models.
     let private hidden (settings: GrantSettings) (place: Workplace) (cwd: string) (path: string) : bool =
@@ -468,6 +646,90 @@ module Permissions =
             true
         else
             hidden settings place cwd argument
+
+    /// Programs that run the command after their own options (`env A=1 curl …`, `timeout 10 curl …`).
+    let private wrappers =
+        set
+            [
+                "env"
+                "sudo"
+                "doas"
+                "nohup"
+                "time"
+                "nice"
+                "ionice"
+                "command"
+                "exec"
+                "stdbuf"
+                "timeout"
+                "xargs"
+                "setsid"
+                "unbuffer"
+                "chronic"
+                "caffeinate"
+            ]
+
+    let private isAssignment (text: string) =
+        let eq = text.IndexOf '='
+
+        eq > 0
+        && (Char.IsAsciiLetter text[0] || text[0] = '_')
+        && text.Substring(0, eq)
+           |> Seq.forall (fun c -> Char.IsAsciiLetterOrDigit c || c = '_')
+
+    /// A wrapper's numeric argument (`timeout 10`, `nice -n 5`, `timeout 1.5m`).
+    let private isAmount (text: string) =
+        let digits = text.TrimEnd([| 's'; 'm'; 'h'; 'd' |])
+
+        digits <> ""
+        && Char.IsAsciiDigit digits[0]
+        && digits |> Seq.forall (fun c -> Char.IsAsciiDigit c || c = '.')
+
+    /// A program's name without its directory and Windows' `.exe` (`/usr/bin/curl` is `curl`).
+    let private programName (text: string) : string =
+        let name =
+            match text.LastIndexOfAny [| '/'; '\\' |] with
+            | cut when cut >= 0 -> text.Substring(cut + 1)
+            | _ -> text
+
+        if name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) then
+            name.Substring(0, name.Length - 4)
+        else
+            name
+
+    /// The command a simple command runs, past leading variable assignments and wrappers with their
+    /// options, its program named without its directory: what `codeact.grants.askCommands` matches.
+    let private payload (words: Word list) : string option =
+        let mutable rest = words
+        let mutable wrapped = false
+        let mutable going = true
+
+        while going do
+            match rest with
+            | word :: tail when isAssignment word.Text -> rest <- tail
+            | word :: tail when wrapped && (word.Text.StartsWith '-' || isAmount word.Text) -> rest <- tail
+            | word :: tail when wrappers.Contains(programName word.Text) ->
+                rest <- tail
+                wrapped <- true
+            | _ -> going <- false
+
+        match rest with
+        | [] -> None
+        | program :: args ->
+            ShellSyntax.resource (
+                { program with
+                    Text = programName program.Text
+                }
+                :: args
+            )
+
+    /// Whether auto approvals must leave a command to a person (`codeact.grants.askCommands`).
+    let asksAlways (settings: GrantSettings) (words: Word list) : bool =
+        match payload words with
+        | None -> false
+        | Some command ->
+            settings.AskCommands
+            |> List.exists (fun pattern -> Pattern.matchesIgnoringCase ResourceKind.Command pattern command)
 
     /// The whole line as one command for a person to judge.
     let private opaque (command: string) (reason: string) (cwdNote: Evidence list) : CallNeeds =
@@ -489,13 +751,17 @@ module Permissions =
                                 @ cwdNote
                             Suggestions = []
                             Listed = false
+                            Confined = false
                         }
                     ]
 
     /// What a command line needs: `shell.exec` for each simple command (unless listed), `fs.write`
-    /// for redirections outside the workspace or to protected paths. A line the parser does not
-    /// follow, a redirection to a name the shell expands or to a relative path after a change of
-    /// directory, or more than `MaxNeeds` grants make the whole line one command.
+    /// for redirections outside the workspace or to protected paths. A command written plainly (no
+    /// word the shell expands, in the workspace, no argument or input outside it or excluded) is
+    /// `Listed` when `codeact.grants.allowCommands` has it and `Confined` unless
+    /// `codeact.grants.askCommands` has it. A line the parser does not follow, a redirection to a name
+    /// the shell expands or to a relative path after a change of directory, or more than `MaxNeeds`
+    /// grants make the whole line one command.
     let command (settings: GrantSettings) (place: Workplace) (cwd: string option) (line: string) : CallNeeds =
         let start =
             cwd
@@ -512,20 +778,26 @@ module Permissions =
             | Some dir -> [ evidence "working directory" dir ]
             | None -> []
 
+        let inside (dir: string) =
+            match locate place place.Workspace dir with
+            | Location.Inside _ -> true
+            | _ -> false
+
         match ShellSyntax.parse place.Shell line with
         | CommandLine.Opaque reason -> opaque line reason cwdNote
         | CommandLine.Parsed commands ->
             let needs = ResizeArray<CallNeeds>()
             let mutable failure: string option = None
-            // The directory later commands run in, while it is known.
-            let mutable current = Some start
+            // The directories later commands may run in, while they are known.
+            let mutable current = Some [ start ]
 
             for simple in commands do
                 if failure.IsNone then
                     let program = simple.Words |> List.tryHead |> Option.map (fun w -> w.Text)
 
                     match program with
-                    | Some program when changesDirectory place.Shell program -> current <- None
+                    | Some program when changesDirectory place.Shell program ->
+                        current <- current |> Option.bind (fun dirs -> changed place dirs simple)
                     | _ ->
                         match ShellSyntax.resource simple.Words with
                         | None -> ()
@@ -533,23 +805,27 @@ module Permissions =
                             match Resource.validate ResourceKind.Command resource with
                             | Error why -> failure <- Some why
                             | Ok() ->
-                                let listed =
-                                    settings.AllowCommands
-                                    |> List.exists (fun pattern ->
-                                        Pattern.matches ResourceKind.Command pattern resource)
-                                    && simple.Words |> List.forall (fun w -> not w.Expands)
+                                // Written plainly in the workspace, from every directory it may run in.
+                                let plain =
+                                    simple.Words |> List.forall (fun w -> not w.Expands)
                                     && (match current with
-                                        | Some dir ->
-                                            (match locate place place.Workspace dir with
-                                             | Location.Inside _ -> true
-                                             | _ -> false)
-                                            && simple.Words
-                                               |> List.tail
-                                               |> List.forall (fun w -> not (escapes settings place dir w.Text))
-                                            && simple.Reads
-                                               |> List.forall (fun w ->
-                                                   not w.Expands && not (hidden settings place dir w.Text))
+                                        | Some dirs ->
+                                            dirs
+                                            |> List.forall (fun dir ->
+                                                inside dir
+                                                && simple.Words
+                                                   |> List.tail
+                                                   |> List.forall (fun w -> not (escapes settings place dir w.Text))
+                                                && simple.Reads
+                                                   |> List.forall (fun w ->
+                                                       not w.Expands && not (hidden settings place dir w.Text)))
                                         | None -> false)
+
+                                let listed =
+                                    plain
+                                    && settings.AllowCommands
+                                       |> List.exists (fun pattern ->
+                                           Pattern.matches ResourceKind.Command pattern resource)
 
                                 let multi = commands.Length > 1 || resource <> ShellSyntax.normalize line
 
@@ -559,12 +835,13 @@ module Permissions =
                                             {
                                                 Action = shellExec
                                                 Resource = resource
-                                                Place = if current = Some start then startPlace else ""
+                                                Place = if current = Some [ start ] then startPlace else ""
                                                 Summary = bounded 300 $"Run `{resource}`"
                                                 Evidence =
                                                     (if multi then [ evidence "command line" line ] else []) @ cwdNote
                                                 Suggestions = commandSuggestions resource
                                                 Listed = listed
+                                                Confined = plain && not (asksAlways settings simple.Words)
                                             }
                                         ]
                                 )
@@ -575,11 +852,19 @@ module Permissions =
                                     failure <- Some "a redirection to a file named by an expansion"
                                 else
                                     match current with
-                                    | None when not (RuntimeSpec.isAbsoluteOn place.Os target.Text) ->
-                                        failure <- Some "a redirection to a relative path after a change of directory"
-                                    | _ ->
-                                        let dir = current |> Option.defaultValue place.Workspace
+                                    | Some [ dir ] ->
                                         needs.Add(write settings place dir "a redirection of shell.run" target.Text)
+                                    | _ when RuntimeSpec.isAbsoluteOn place.Os target.Text ->
+                                        needs.Add(
+                                            write
+                                                settings
+                                                place
+                                                place.Workspace
+                                                "a redirection of shell.run"
+                                                target.Text
+                                        )
+                                    | _ ->
+                                        failure <- Some "a redirection to a relative path after a change of directory"
 
             match failure with
             | Some reason -> opaque line reason cwdNote
@@ -587,13 +872,15 @@ module Permissions =
                 match concat (List.ofSeq needs) with
                 | CallNeeds.Refused reason -> CallNeeds.Refused reason
                 | CallNeeds.Needs list ->
-                    // One grant per action and resource; listed only if listed everywhere it occurs.
+                    // One grant per action and resource; listed (or confined) only if it is everywhere
+                    // it occurs.
                     let merged =
                         list
                         |> List.groupBy (fun n -> n.Action, n.Resource)
                         |> List.map (fun (_, same) ->
                             { same.Head with
                                 Listed = same |> List.forall (fun n -> n.Listed)
+                                Confined = same |> List.forall (fun n -> n.Confined)
                             })
 
                     if (merged |> List.filter (fun n -> not n.Listed)).Length > MaxNeeds then
@@ -717,6 +1004,7 @@ module Permissions =
                                                 |> Option.defaultValue []
                                                 |> suggest ResourceKind.Name target
                                             Listed = false
+                                            Confined = false
                                         }
                                     ])
                         |> concat

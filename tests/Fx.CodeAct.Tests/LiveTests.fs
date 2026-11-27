@@ -156,7 +156,7 @@ let private localEnvironmentWith
                 }
             ProjectTrusted = false
             Launcher = HostEnvironment.scrub (hostEnvironment ())
-            Guard = fun _ -> EffResult.ok ()
+            Guard = fun _ -> EffResult.ok []
             Sandbox = overrides
         }
 

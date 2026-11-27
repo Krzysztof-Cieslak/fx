@@ -45,6 +45,11 @@ module Actions =
             def "fs.write" ResourceKind.Path all "Write or delete a file."
             def "net.connect" ResourceKind.Name all "Open a network connection to `host:port` (spec §18 egress)."
             def
+                "approvals.auto"
+                ResourceKind.Name
+                all
+                "Run commands the named sandbox driver confines to the workspace without asking (auto approvals, spec §13)."
+            def
                 "component.install"
                 ResourceKind.Name
                 [ ScopeKind.Once; ScopeKind.Repo; ScopeKind.Host ]

@@ -150,36 +150,40 @@ type CodeAct<'R, 'K
     let watchOf (writer: JournalWriter) : Watch<'K> =
         {
             Calling =
-                fun call ->
+                fun call approved ->
                     match writer.Running with
-                    | Some action when
-                        not (List.contains call.Binding StepJournal.readOnly)
-                        && (call.CellId.IsNone || call.CellId = action.Cell)
-                        ->
-                        let token, index = writer.BeginHostCall action
+                    | Some action when call.CellId.IsNone || call.CellId = action.Cell ->
+                        // What no grant in force allowed goes on the action's receipt.
+                        action.Approve approved
 
-                        let args =
-                            Json.serialize (
-                                Json.Array(
-                                    call.Args
-                                    |> List.map (fun arg ->
-                                        match arg with
-                                        | Value.Inline json -> json
-                                        | other -> Json.String(string other))
+                        if List.contains call.Binding StepJournal.readOnly then
+                            Eff.ret None
+                        else
+                            let token, index = writer.BeginHostCall action
+
+                            let args =
+                                Json.serialize (
+                                    Json.Array(
+                                        call.Args
+                                        |> List.map (fun arg ->
+                                            match arg with
+                                            | Value.Inline json -> json
+                                            | other -> Json.String(string other))
+                                    )
                                 )
-                            )
 
-                        writer.Append(
-                            $"{action.Key}/host/{index}",
-                            StepEvent.HostCallStarted
-                                {
-                                    Call = action.Call
-                                    Index = index
-                                    Binding = call.Binding
-                                    Args = StepJournal.bound StepJournal.ArgsChars args
-                                }
-                        )
-                        |> Eff.map (fun () -> Some token)
+                            writer.Append(
+                                $"{action.Key}/host/{index}",
+                                StepEvent.HostCallStarted
+                                    {
+                                        Call = action.Call
+                                        Index = index
+                                        Binding = call.Binding
+                                        Args = StepJournal.bound StepJournal.ArgsChars args
+                                        Approved = approved
+                                    }
+                            )
+                            |> Eff.map (fun () -> Some token)
                     | _ -> Eff.ret None
             Called =
                 fun token result ->
@@ -599,6 +603,7 @@ type CodeAct<'R, 'K
                             Pieces = Receipts.failed $"The kernel did not start: {reason}"
                             IsError = true
                             Restarted = None
+                            Approvals = []
                         },
                         None
                 | Ok(running, note) ->
@@ -637,6 +642,7 @@ type CodeAct<'R, 'K
                                 Pieces = Receipts.cell settings.ReceiptChars note intent record.Reads result
                                 IsError = Receipts.isError result.Outcome
                                 Restarted = Receipts.restart note
+                                Approvals = []
                             },
                             record.Finished
                     | Error failure ->
@@ -647,6 +653,7 @@ type CodeAct<'R, 'K
                                 Pieces = Receipts.kernelFailed note failure ended
                                 IsError = true
                                 Restarted = Receipts.restart note
+                                Approvals = []
                             },
                             None
         }
@@ -692,7 +699,13 @@ type CodeAct<'R, 'K
             writer.SetRunning(Some journaled)
 
             try
-                return! execute hands kernel settings limits journaled action
+                let! executed, finished = execute hands kernel settings limits journaled action
+
+                return
+                    { executed with
+                        Approvals = journaled.Approvals
+                    },
+                    finished
             finally
                 writer.SetRunning None
         }
@@ -798,6 +811,7 @@ type CodeAct<'R, 'K
                                         Pieces = Recovery.rerun resumed.Decided :: Receipts.failed message
                                         IsError = true
                                         Restarted = None
+                                        Approvals = []
                                     },
                                     None
                                 )
@@ -825,6 +839,7 @@ type CodeAct<'R, 'K
                                     Pieces = pieces
                                     IsError = isError
                                     Restarted = None
+                                    Approvals = []
                                 },
                                 None
                             )
@@ -841,6 +856,7 @@ type CodeAct<'R, 'K
                                     Pieces = executed.Pieces
                                     IsError = executed.IsError
                                     Restarted = executed.Restarted
+                                    Approvals = executed.Approvals
                                 })
 
                     match finished with
@@ -864,6 +880,7 @@ type CodeAct<'R, 'K
                                                 Recovery.notRun
                                         IsError = true
                                         Restarted = None
+                                        Approvals = []
                                     })
 
                     state.Step <- halted.Step
@@ -1055,6 +1072,7 @@ type CodeAct<'R, 'K
                                                             Pieces = Receipts.skipped
                                                             IsError = true
                                                             Restarted = None
+                                                            Approvals = []
                                                         },
                                                         None
                                                     )
@@ -1064,6 +1082,7 @@ type CodeAct<'R, 'K
                                                             Pieces = Receipts.failed message
                                                             IsError = true
                                                             Restarted = None
+                                                            Approvals = []
                                                         },
                                                         None
                                                     )
@@ -1100,6 +1119,7 @@ type CodeAct<'R, 'K
                                                             Pieces = executed.Pieces
                                                             IsError = executed.IsError
                                                             Restarted = executed.Restarted
+                                                            Approvals = executed.Approvals
                                                         })
 
                                             match finished with

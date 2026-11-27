@@ -67,6 +67,7 @@ let private receipt (turn: int) (step: int) (call: string) =
             Pieces = [ Piece.Text "ok" ]
             IsError = false
             Restarted = None
+            Approvals = []
         }
 
 let private ref' (turn: int) (step: int) (index: int) (id: string) (attempt: int) : CallRef =
@@ -110,6 +111,7 @@ let private everyKind: StepEvent list =
                 Index = 1
                 Binding = "shell.run"
                 Args = """["dotnet test"]"""
+                Approved = []
             }
         StepEvent.HostCallEnded
             {

@@ -52,8 +52,9 @@ type KernelPlan =
         /// The launcher's variables: on the host's machine, the host's scrubbed ones
         /// (`HostEnvironment.scrub`); only the runtime's allowlist reaches a kernel.
         Launcher: (string * string) list
-        /// Checked before every host call (T127b: grants), after the sandbox's own check.
-        Guard: Fx.Kernel.HostCall -> Eff<EnvHands, Result<unit, HostCallError>>
+        /// Checked before every host call (T127b: grants), after the sandbox's own check; `Ok` with
+        /// what no grant in force allowed (`Hands.Guard`).
+        Guard: Fx.Kernel.HostCall -> Eff<EnvHands, Result<Fx.Prompt.Approval list, HostCallError>>
         /// What the session's agent may not do in the environment's sandbox (spec §7.1): e.g. a
         /// reviewer's read-only workspace. Its processes, kernels and bindings get the tighter policy.
         Sandbox: SandboxOverrides

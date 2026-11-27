@@ -115,6 +115,7 @@ let private apply (sim: Sim) (op: Op) : Sim =
                     Pieces = pieces
                     IsError = modulo kind 5 = 3
                     Restarted = None
+                    Approvals = []
                 })
             sim
     | Boundary when sim.State.Running.IsSome -> sim |> boundary

@@ -153,6 +153,7 @@ let private returns (cfg: RenderConfig) (id: string) (pieces: Piece list) (log: 
                 Pieces = pieces
                 IsError = false
                 Restarted = None
+                Approvals = []
             })
         log
 

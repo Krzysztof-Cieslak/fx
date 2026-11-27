@@ -369,7 +369,11 @@ module Host =
                     (GrantsService.start
                         { GrantsSettings.create (GrantStoreLog.hostLocal stores.Log) with
                             Actions = actions
-                            Policy = ExtensionHost.contributions GrantPolicy.rules extensions |> List.map _.Value
+                            // A policy file that forbids auto approvals as the host's mode forbids
+                            // them as a person's grant too.
+                            Policy =
+                                (ExtensionHost.contributions GrantPolicy.rules extensions |> List.map _.Value)
+                                @ AutoApprovals.policyRules config.Policies
                             Gates = ExtensionHost.contributions GrantPolicy.gates extensions
                         })
 
@@ -588,7 +592,7 @@ module Host =
                         ProjectTrusted = config.ProjectTrusted
                         Launcher = launcher
                         // The grants log's checks come per turn (GrantGuard.attach, below).
-                        Guard = fun _ -> EffResult.ok ()
+                        Guard = fun _ -> EffResult.ok []
                         // The session's agent's overrides come with agents (T213).
                         Sandbox = SandboxOverrides.none
                     })
@@ -610,7 +614,16 @@ module Host =
                     let! plan = kernelPlan variants
                     let! handle = Envs.openEnv environment |> EffResult.mapError string
                     let! grantSettings = GrantSettings.ofVariants variants
-                    let guarded = GrantSetup.create grantsCapability sessionLog turn grantSettings
+
+                    // Auto approvals hold only where a driver confines the hands' processes.
+                    let guarded =
+                        { GrantSetup.create grantsCapability sessionLog turn grantSettings with
+                            Sandbox =
+                                if handle.Sandbox.Info.Confines then
+                                    Some handle.Sandbox.Info.Driver
+                                else
+                                    None
+                        }
 
                     return
                         GrantGuard.attach guarded (EnvHands.ofHandle options.Clock hostScope plan turn.Session handle)
