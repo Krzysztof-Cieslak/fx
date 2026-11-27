@@ -39,8 +39,12 @@ package of a host runs in the same process.
 2. Regenerate `ExthostFiles.fs` (above), rebuild, and run `dotnet test --project tests/Fx.Extensions.Tests`:
    the parity suite loads the TypeScript sample on the `bun` runtime through these files, on the pinned Bun.
 
-## Left to T115b
+## In the host
 
-Loading it in the host: writing its files into the data directory with hash checks, installing the
-pinned Bun in the bootstrap's components phase and putting the installed Bun's path in its launch
-(`${bin.bun}`), and adding it to the built-ins.
+A built-in (`Builtins.candidates` in `src/Fx.Host`). At each start the host writes `files` into
+`<data>/extensions/fx.exthost.bun` with hash checks (`Bundled.extract`), installs the pinned Bun in
+the bootstrap's components phase and starts the process with the installed Bun as `${bin.bun}`. A first
+install of Bun is never asked for while the host starts: without yolo approvals or a grant
+(`fx grants allow component.install bun@*`) it fails, as a warning only if a package runs on `bun`, and
+the next start (after a session's kernel installed the same Bun) uses it. See
+[docs/modules/host.md](../../docs/modules/host.md#the-start-hoststart).
