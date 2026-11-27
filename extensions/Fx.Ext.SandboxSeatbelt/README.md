@@ -2,8 +2,10 @@
 
 The bundled macOS sandbox driver (spec §9.1, §16.4): every process an agent starts in an environment
 (commands, terminals, kernels, setup) runs under `/usr/bin/sandbox-exec` with a Seatbelt profile
-built from the environment's policy. A native extension built on the public SDK only; the module
-spec is [docs/modules/sandbox.md](../../docs/modules/sandbox.md).
+built from the environment's policy. Opt-in (T137): a host turns it on with the privileged variant
+`sandbox.driver = "auto"` (or `"seatbelt"` to require it); by default no sandbox applies. A native
+extension built on the public SDK only; the module spec is
+[docs/modules/sandbox.md](../../docs/modules/sandbox.md).
 
 ## The profile (`Profile.fs`)
 

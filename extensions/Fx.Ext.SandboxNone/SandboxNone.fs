@@ -1,7 +1,8 @@
-/// `fx.sandbox.none` (spec §9.1, §16.4): the sandbox driver that confines nothing. Processes start
-/// as they are; an environment using it carries a persistent "unsandboxed" warning, and only the
-/// type-level attenuation of the host's bindings applies (spec §7.1). The only driver on Windows in
-/// v1 (AppContainer: T511). A native extension built only on the public SDK. See README.md and
+/// `fx.sandbox.none` (spec §9.1, §16.4): the sandbox driver that confines nothing, the host's default
+/// (the sandbox is opt-in, T137). Processes start as they are, and only the type-level attenuation of
+/// the host's bindings applies (spec §7.1); an environment that uses it because a requested sandbox
+/// cannot run carries a persistent "unsandboxed" warning. The only driver on Windows in v1
+/// (AppContainer: T511). A native extension built only on the public SDK. See README.md and
 /// docs/modules/sandbox.md.
 module Fx.Ext.SandboxNone.SandboxNone
 
@@ -47,7 +48,7 @@ let driver: SandboxDriver =
 
 let manifest: Manifest =
     { Manifest.create id "1.0.0" Runtimes.Native with
-        Description = Some "No sandbox: processes run unconfined, with a persistent warning."
+        Description = Some "No sandbox (the default): processes run with the user's rights."
         Contributions = [ Declare.contribution SandboxDrivers.contributionType Id ]
     }
 

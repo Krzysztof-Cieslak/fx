@@ -62,7 +62,10 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
 - In an environment, the session's processes and kernels run in its sandbox under the agent's
   overrides (`KernelPlan.Sandbox`, e.g. a reviewer's read-only workspace), and `SandboxGuard` checks
   every host call of the file bindings against the same policy before the plan's guard
-  ([sandbox.md](sandbox.md)).
+  ([sandbox.md](sandbox.md)). The sandbox is opt-in (T137: the host's `sandbox.driver` is `none` by
+  default): without one, processes run with the user's rights and only the bindings keep to the
+  policy. `Hands.Sandbox` is the policy when a driver confines them (`None` otherwise): the prompt
+  describes it, and approval modes (T134) can read whether commands are confined.
 - The session host must know the kinds `agent.question` and `decision.outcomeUnknown` (`Questions.kinds`),
   and the host's registry the slots a turn reads (`CodeActSlots.read`: the core's, the render's, content
   exclusions', the strategy's and its grants guard's). Both are the composition root's (`src/Fx.Host`).
@@ -83,8 +86,10 @@ Each step:
 2. **History**: the session's events and its context events, merged (below), folded by
    `Transcript.ofItems`.
 3. **Frame**: the prefix's sections (instructions, the surface's tools, the interpreter's prompt with the
-   bridge's declarations) through `Transcript.reconcile`: recorded once (`Framed`), later changes as
-   `Updated` at the end of the history.
+   bridge's declarations, and, when a driver confines the hands' processes, the sandbox's description:
+   `Instructions.sandbox` of `Hands.Sandbox`, [sandbox.md](sandbox.md) "In the host") through
+   `Transcript.reconcile`: recorded once (`Framed`), later changes as `Updated` at the end of the
+   history.
 4. **Budgets** (`codeact.budget.steps`, `codeact.budget.tokens`): over budget, the turn asks the user to
    go on (a question, below).
 5. **Compaction** (below): a summary prepared during the last step is recorded first; otherwise the
@@ -384,8 +389,9 @@ kept is journaled as lost with why (no JSON form, too large, a handle).
 
 Before a host call runs, from a cell or a direct tool alike, the turn's grants guard (`GrantGuard`,
 attached to the hands by the composition root) asks the grants log ([grants.md](grants.md)) about
-what the call needs. A guardrail, not a boundary: the sandbox (T113) is the boundary, and Windows v1 has
-none (spec §18).
+what the call needs. A guardrail, not a boundary: the sandbox (T113) is the boundary where a host turns
+one on, and it is off by default (T137; Windows v1 has none): then the grants guard is the control
+that stands between the agent and what the user's rights reach (spec §18).
 
 **What a call needs** (`Permissions.needs`, pure: from the call's arguments and the workplace, never
 the filesystem):
@@ -432,7 +438,7 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
 |---|---|
 | `ask` (default) | its requests are made at once (batched prompts), and the call waits for their answers |
 | `deny` | refused at once, nothing recorded: unattended runs |
-| `off` | nothing is checked at all: sandboxed or throwaway environments |
+| `off` | nothing is checked at all: sandboxed (`sandbox.driver` on) or throwaway environments |
 
 - **Keys** derive from what asks: `<turn's start event>/<cell or tool call>/<action>/<digest of the
   resource>` (`GrantGuard.key`). A retried call is the same request with the same answer; the same
@@ -555,7 +561,7 @@ fake clock), on all eight targets.
 | Partial output of commands in doubt (`shell.run`, `bash`): run them as envd processes, whose output logs resume by byte offset, and journal the process | T205 |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
-| Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | when the sandbox (T113) is not there to catch them |
+| Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | the sandbox is off by default (T137), so nothing catches them there |
 | Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
 | Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |

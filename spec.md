@@ -103,7 +103,7 @@ Topology: **host** (brain: agent loop, sessions, model keys), **environments** (
     • exec/PTY (ConPTY on Windows) with sequence-numbered, resumable output
     • fs: batch stat, search, apply-patch, watch   • repo navigation (tree-sitter, LSP proxy)
     • content-addressed blob store   • workspace snapshots   • git, port forwarding
-    • component installer   • sandbox drivers (none on Windows initially, with warning)
+    • component installer   • sandbox drivers (opt-in; none on Windows initially)
     • CodeAct kernels from interpreter extensions (bun-ts by default)
     • egress proxy with policy + credential injection
 ```
@@ -418,7 +418,7 @@ type Agent<'R,'I,'O> =
     Skills: SkillRef list; Memory: MemoryScope; Ledger: LedgerAccess }
 ```
 
-- Attenuation enforced twice: types (e.g. no `IFsWrite`) and sandbox (Windows v1: type-level only, with warning).
+- Attenuation enforced twice: types (e.g. no `IFsWrite`) and sandbox where the host turns one on (the sandbox is opt-in, §9.1; otherwise, and on Windows v1, type-level only).
 - Untyped agents default to `string → TaskResult`.
 
 ### 7.2 Authoring: three forms, one value
@@ -506,7 +506,7 @@ type GoalStatus =
 - **Default context policy: `FreshHandoff`** (Ralph/Amp style); evals may override per task class.
 - **Progress:** structured plan (`fx.goal.mark` sticks only if checks pass), progress log, checkpoint commit per iteration.
 - **Stop rules in code:** no tool calls, empty diff, same failing checks, repeated fingerprints, atomic budgets, min/max iterations → `Stuck` → decision.
-- **Anti-reward-hacking:** protected paths (sandbox-enforced; type-level only on Windows v1), pinned verifier, hidden checks, separate evaluator, tamper metrics.
+- **Anti-reward-hacking:** protected paths (sandbox-enforced where a sandbox is on; type-level otherwise, e.g. on Windows v1), pinned verifier, hidden checks, separate evaluator, tamper metrics.
 
 ### 8.3 Workflows (graph style)
 
@@ -599,9 +599,10 @@ Interactive sessions; **specs in the repo → goals** (Ralph-style plan files).
 ### 9.1 Contribution types
 
 - **Environment providers** — built-in `fx.env.local`, `fx.env.ssh`, `fx.env.docker`; plugins: E2B, Daytona, Modal, Sprites, Morph, Apple containers, Kubernetes, devcontainers, Codespaces, OpenShell, benchmark task containers.
-- **Sandbox drivers** — built-in none, bubblewrap+seccomp, Seatbelt; **Windows: `none` with a persistent warning in v1** (AppContainer later); plugins: nsjail, gVisor.
+- **Sandbox drivers** — built-in none, bubblewrap+seccomp, Seatbelt; **opt-in**: the host's privileged `sandbox.driver` is `none` by default; **Windows has only `none` in v1** (AppContainer later); plugins: nsjail, gVisor.
+  - **Why opt-in** (a design change, T137): dogfooding (T132) showed that a sandbox with a read-only home and unreadable credential files keeps ordinary tools from working: those that keep state under `~` (NuGet's packages, Cargo's registry, the MSBuild server) and those that fail on an unreadable config rather than ignoring it (NuGet on `~/.nuget/NuGet/NuGet.Config`, Yarn Berry). Moving each tool's home with variables was a list of special cases that kept growing; mainstream agents run without an OS sandbox, with permission prompts as the control, and Windows v1 ran unsandboxed anyway. The general fix, a copy-on-write home per environment (the real home as a read-only lower layer, credential paths absent), comes later (T512).
   - The host wraps every process it starts for an agent (commands, terminals, kernels, setup); envd itself is not sandboxed (it may run in the host's process, keeps its own state, and serves agents with different policies). A policy gives paths by access (the workspace, owned and temporary directories writable; credentials and the product's data directory denied; git hooks/config and `.fx/` protected) and the network (`open` or `none`; allowlists come with the egress proxy).
-  - The privileged `sandbox.driver` chooses (`auto`: the OS's driver, falling back to `none` with the warning where it cannot run); specs and agents (`SandboxOverrides`) only tighten. The file bindings, which run in envd, are checked against the same policy. Details: `docs/modules/sandbox.md`.
+  - The privileged `sandbox.driver` chooses: `none` (the default: off, with no warning; clients show `sandbox: off`), `auto` (the OS's driver, falling back to `none` with a persistent warning where it cannot run), or a driver's id (required: the environment fails where it cannot run). Only host config, the command line and policy select it, never a project; specs and agents (`SandboxOverrides`) only tighten. The file bindings, which run in envd, are checked against the same policy, sandbox or not. With a sandbox on, what changes git's config or hooks fails (they are protected), as do commits in a linked worktree and tools that write under `~` or read a credential-listed file (`sandbox.writable` helps the former). Details: `docs/modules/sandbox.md`.
 
 ### 9.2 Provider contract
 
@@ -642,7 +643,7 @@ type EnvProvider =
 ```toml
 [environments.dev]
 provider = "local"
-sandbox  = "bubblewrap"          # "none" on Windows (warning)
+sandbox  = "bubblewrap"          # a spec may require a sandbox; absent: the host's sandbox.driver (default none)
 network  = "allowlist:dev"
 
 [environments.box]
@@ -1005,8 +1006,8 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 
 - **Trust boundary:** model providers are **outside**. Every model-bound payload (main loop, `fx.llm`, agents, summarizer, judgments) passes **model-egress hooks**: **content exclusions** built in (paths/globs + Copilot org exclusions); **secret redaction** is a policy extension point.
   - Request parts carry their **provenance** (the files their content quotes); exclusions match it, so whoever puts a file's content into a request names the file. Provenance never leaves; content without it (a command's output) is caught upstream (bindings, render), not at egress. Patterns only add up (no negations; lists from different origins combine by union), so policy and host lists cannot be undone by a project; render, bindings and egress share one matcher. Details: `docs/modules/egress.md`.
-- **Credentials:** host-only; environments get scoped per-session tokens; secrets always referenced.
-- **Sandbox drivers** are the process boundary. **Windows v1 runs unsandboxed with a persistent warning**; type-level attenuation and grants still apply.
+- **Credentials:** host-only; environments get scoped per-session tokens; secrets always referenced. Host-only means the model never receives them through fx (configuration refers to secrets; egress hooks see every request), not that an agent's processes cannot read files: without a sandbox they run with the user's rights and can read the user's credential files, fx's own credentials file in its data directory included.
+- **Sandbox drivers** are the process boundary **when a host turns one on** (opt-in, §9.1, T137). By default an agent's commands, kernels and setup run with the user's rights: they can read the user's credentials, write anywhere the user can and use the network. **Grants** (permission prompts for commands, writes outside the workspace, the network and installs) are then the primary control, with type-level attenuation, the bindings' policy checks and content exclusions as guardrails; Windows v1 has no confining driver at all. A sandbox a host asks for never falls back silently: `auto` warns where none can run, a named driver fails the environment.
 - **Egress proxy:** deny-by-default, resolved-address allowlists, method/path rules, credential injection, git push checks, per-tool-call attribution, install source allowlists.
 - **Supply chain:** vendor-index digests by default (pinned-digest policy available), package signatures, sandboxed `Script` installs, read-only `System` installs, lockfiles.
 - **Trust before execution:** project config, extensions, agent/workflow definitions, `.fx/ledger` loading, runtime configs and hooks wait for project trust; `LaunchSpec` must deny runtime injection vectors; localhost listeners require token + `Origin` check (and a `Host` check against DNS rebinding; no CORS).
@@ -1093,7 +1094,7 @@ and RunStatus =
 - Plan → decide → implement: decision anchors move from plan to code; settled decision files are committed with the code.
 - Context transparency: `/context`.
 - Sessions: persist across disconnects (`fx attach`), pairing, attention inbox (sessions + runs), subagents as child sessions, jobs/ports, notifications, serialized multi-client inputs.
-- Environments: picker, `/env`, setup logs, cost/TTL, export, Windows "unsandboxed" banner.
+- Environments: picker, `/env`, setup logs, cost/TTL, export, the sandbox in the info line (`off` by default), an "unsandboxed" banner when a requested sandbox cannot run.
 - Models and auth: `fx connect`, `fx auth …`, `/model`, Copilot device-code login, plan usage, fallback chains.
 - Extensions and components: `fx ext …`, `fx runtime …`, install prompts (grants), `fx grants allow|deny|revoke|list` to decide beforehand (unattended runs).
 - Authoring: `fx agents …`, `fx workflow …`, `fx runs …`, `fx trigger …`, `fx test`, `fx ledger init|status`.
@@ -1166,7 +1167,7 @@ Action surface (`cells-only` / `hybrid`), TUI style (`tui.theme`: `auto` / `dark
 - **Subagent sycophancy** → fresh context, declared inputs, model diversity, false-approve metrics.
 - **Git-native ledger edge cases** (merges, rebases, many files, conflicts surfacing after pull, public rationale, schema evolution) → one file per event, causal parents, Conflicted, opt-in, upcasters, history-rewrite warnings, merge tests, PR review.
 - **No ownership model** → any trusted principal settles repo decisions; PR review until the deferred model lands.
-- **Windows unsandboxed in v1** → persistent warning, grants, type-level attenuation, AppContainer in phase 5.
+- **No OS sandbox by default** (opt-in since T137; Windows has none in v1) → grants (permission prompts), type-level attenuation, egress hooks; the drivers for hosts that turn them on; a copy-on-write home (T512) so a sandbox stops breaking tools, AppContainer in phase 5.
 - **Agent-built F# / Native AOT** → style guide, analyzers, specs + conformance suites, JIT-vs-native diffs.
 - **Borrowed Copilot identity on by default** (account flagging, header drift) → profile switching, header overlay, clear labelling.
 - **Secret leakage to providers** (exclusions only built in) → egress extension point, `.env` grant.

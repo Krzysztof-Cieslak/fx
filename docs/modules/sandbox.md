@@ -1,9 +1,10 @@
 # Module spec: sandbox drivers (`Fx.Sdk` `Sandbox.fs`; `fx.sandbox.none|bubblewrap|seatbelt`)
 
-Spec: §9.1 (sandbox drivers: none, bubblewrap + seccomp, Seatbelt; Windows `none` with a persistent
-warning in v1, AppContainer later), §7.1 (attenuation enforced twice: types and sandbox), §8.2
-(protected paths are sandbox-enforced), §16.4–16.5 (built-ins, privileged contributions), §18
-(sandbox drivers are the process boundary), §19.5 (the Windows "unsandboxed" banner). Task: T113.
+Spec: §9.1 (sandbox drivers: none, bubblewrap + seccomp, Seatbelt, opt-in; Windows has only `none` in
+v1, AppContainer later), §7.1 (attenuation enforced twice: types and sandbox), §8.2 (protected paths
+are sandbox-enforced where a sandbox is on), §16.4–16.5 (built-ins, privileged contributions), §18
+(sandbox drivers are the process boundary when a host turns one on), §19.5 (the "unsandboxed" banner
+when a requested sandbox cannot run). Tasks: T113, T137 (opt-in).
 Code: the contract in [`src/Fx.Sdk/Sandbox.fs`](../../src/Fx.Sdk/Sandbox.fs); the host's side in
 [`src/Fx.Environments/Sandbox.fs`](../../src/Fx.Environments/Sandbox.fs) (choice, policy, sandboxed
 shell and terminals) and `Envs.fs` (the install step); the bindings' mirror in
@@ -17,12 +18,17 @@ Tests: `tests/Fx.Sdk.Tests/SandboxTests.fs` (the contract), `tests/Fx.Ext.Sandbo
 `tests/Fx.Environments.Tests` (the conformance suite on every built-in driver; choosing a driver;
 sandboxed local environments), `tests/Fx.CodeAct.Tests/LiveTests.fs` (the bun-ts kernel sandboxed, and a
 read-only reviewer), `tests/Fx.Extensions.Tests` (the packages load; a project cannot contribute
-drivers), and the `sandbox-*` scenarios of the JIT-vs-native diff.
+drivers), `tests/Fx.Host.Tests` (the default runs unsandboxed without a warning; `auto` from the host's
+config confines or warns; a required driver that cannot run fails the run; a project cannot select
+`sandbox.driver`; the sandboxed run and T135's kernel opt in), and the `sandbox-*` scenarios of the
+JIT-vs-native diff. Tests that need a sandbox select `sandbox.driver` themselves: the default never
+confines.
 
 A **sandbox driver** is the process boundary of an environment (spec §18): every process the agent
 starts there (commands, terminals, kernels, setup) runs confined to a **policy**. Grants, content
 exclusions and the bindings' checks are guardrails; the sandbox is what holds when a process ignores
-them.
+them. **The sandbox is opt-in** (T137): a host turns it on with the privileged variant
+`sandbox.driver` (`auto` or a driver's id); by default (`none`) the agent's processes run as the user.
 
 ```
 EnvSpec.sandbox + sandbox.driver (privileged) ──choose──▶ driver ──probe (once per attach)──▶ SandboxReady
@@ -32,14 +38,52 @@ EnvSandbox.policy (layout, home, sandbox.writable/denied, network) ─▶ Sandbo
 process (ProcSpec) ──stat the policy's paths (one fs/stat)──▶ driver.Wrap (pure) ──▶ ProcSpec ──▶ envd
 ```
 
+## Opt-in (T137)
+
+Dogfooding (T132) showed what a sandbox costs: ordinary tools stopped working in it. NuGet failed on
+`~/.nuget/NuGet/NuGet.Config` (it holds feeds' credentials, so it is on the credential list, and NuGet
+fails when the file exists but cannot be read); Cargo, Yarn Berry and the MSBuild server keep state
+under `~` or read a credential-listed config. Working around each tool with variables (T136: moving
+`DOTNET_CLI_HOME`, NuGet's folders, `CARGO_HOME`, `XDG_RUNTIME_DIR` into the environment) was a list
+of special cases that would keep growing, and was dropped. Mainstream coding agents run without an OS
+sandbox, with permission prompts as the control, and Windows v1 runs unsandboxed anyway. So:
+
+- `sandbox.driver` defaults to **`none`**. It stays privileged: the host's config or the command line
+  (`--variant sandbox.driver=auto`) turn the sandbox on, never a project's config or a session.
+- The drivers stay bundled (`fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none`) and
+  work as before when a host chooses them.
+- **Never fall back silently** still holds for a sandbox that was asked for: a driver the host names
+  that cannot run fails the environment; `auto` falls back to `none` with a warning that says why.
+- The default carries **no warning**: clients show `sandbox: off` (the TUI's info line, `fx run`'s
+  environment line); the banner and `warning:` lines are for a requested sandbox that cannot run.
+- The general fix for tools that keep state under `~`, a copy-on-write home per environment, is T512
+  (below, "Known limits").
+
+**Sandbox off (the default).** The agent's commands, terminals, kernels and setup run with the
+user's rights: they can read the user's credentials (SSH keys, cloud and registry tokens, the
+keyring's session bus, and the product's own credentials file in its data directory), write anywhere
+the user can, and use the network. What guards them is the grants log: permission prompts for
+commands, writes outside the workspace, the network and installs (T127b; approval modes, T134), and
+content exclusions at egress. "Credentials live only on the host" (spec §18) then means that the model
+never receives them through the product (configuration refers to secrets, egress hooks run on every
+request), not that an agent's processes cannot read files. The file bindings keep to the
+environment's policy as a guardrail (`SandboxGuard`, below), but a command does not.
+
+**Sandbox on** (`auto`, `bubblewrap`, `seatbelt`): processes run confined to the environment's policy
+(next section): the workspace writable except git's config and hooks and the project's directory;
+temporary files, the launches' directories and the tools' caches of the environment writable; the
+product's data directory and the credential locations unreadable; the rest of the machine, the home
+included, read-only; the network as the spec says. What breaks is in "Known limits".
+
 ## In the host
 
 The host ([host.md](host.md)) lists the three drivers among its built-ins (bubblewrap and Seatbelt
 before none, so `auto` takes the OS's driver), registers `SandboxSlots.all` in its slot registry
-(`HostSlots.core`), and gives `EnvsHost` the drivers in effect: every session's environment is
-sandboxed by the host's choice, and its kernel and commands run in it. `fx run` prints the
-environment's warnings once at the start (`warning: runs unsandboxed: …`), so an unsandboxed run (on
-Windows, with `sandbox.driver = none`, or where bubblewrap cannot run) says so and why.
+(`HostSlots.core`), and gives `EnvsHost` the drivers in effect: every session's environment gets the
+host's choice, and its kernel and commands run in it. `fx run` prints the environment once at the
+start (`env: default (local) · sandbox: off`, or the driver), then its warnings: a sandbox the host
+asked for that cannot run says so and why (`warning: runs unsandboxed: the sandbox the host asked for
+cannot run here (…)`).
 
 **Tools' caches.** The user's home is read-only in the sandbox, and writing into the user's own
 caches would let an agent reach what runs outside it later, so a confining sandbox gives every
@@ -49,7 +93,16 @@ the process sets the variable itself (`EnvSandbox.caches`): `XDG_CACHE_HOME`,
 download again into it the first time. NuGet's global packages and Cargo's registry have no such
 variable that is safe to move (it would also move their configuration or toolchains): a host that
 wants them writable lists them in `sandbox.writable`, knowing the risk. git needs nothing writable
-outside the workspace, and the pinned Bun's kernel writes only its owned directories.
+outside the workspace, and the pinned Bun's kernel writes only its owned directories. Without a
+sandbox none of this applies: processes get no cache variables and use the user's own caches.
+
+**The prompt.** When a driver confines the hands' processes, CodeAct's prefix ends with a `sandbox`
+section (`Instructions.sandbox` of `Hands.Sandbox`, rendered from the policy alone, paths relative to
+the workspace, so environments with the same policy share it): what stays read-only in the workspace
+and how git's refusals read, what cannot be read, that credentials and the files that hold them are
+hidden, that the home is read-only so tools that keep state there can fail (the user can make a
+directory writable, `sandbox.writable`), and the network. The journal records the policy with the
+hands (`HandsInfo.Sandbox`), so replay renders the same frame. Unsandboxed hands get no section.
 
 ## Where the sandbox applies
 
@@ -133,17 +186,18 @@ The list of credential locations is a guardrail of known places (keep secrets in
 is reachable only through the denied session bus on Linux, and through the keychain's own access
 control on macOS). The user's home is read-only, so tools that write caches there fail unless the host
 lists the cache in `sandbox.writable`; each writable cache is a way for what an agent wrote to run
-outside the sandbox later.
+outside the sandbox later. A credential location stays unreadable even inside a writable path (the
+longest root decides): `sandbox.writable` cannot help a tool that reads one.
 
 ## Choosing a driver (`EnvSandbox.choose`)
 
-The privileged variant `sandbox.driver` (default `auto`) and the spec's `sandbox`:
+The privileged variant `sandbox.driver` (default `none`, T137) and the spec's `sandbox`:
 
 | `sandbox.driver` | spec's `sandbox` | the driver |
 |---|---|---|
-| `auto` | absent | the first contributed driver that confines on the environment's OS (bubblewrap on Linux, Seatbelt on macOS), **falling back to `none`** with notes that say why if its probe fails; `none` where no driver confines (Windows) |
+| `none` (default) | absent or `none` | `none`: off (`SandboxChoice.Off`), recorded without notes, no warning |
+| `auto` | absent | the first contributed driver that confines on the environment's OS (bubblewrap on Linux, Seatbelt on macOS), **falling back to `none`** with notes that say why if its probe fails; `none` with a note where no driver confines (Windows) |
 | `auto` | `none` | `none` if no driver confines on the OS; refused otherwise (only the host turns sandboxing off) |
-| `none` | absent or `none` | `none` |
 | a driver | absent or the same | that driver, **required**: if its probe fails, the environment fails |
 | any | another confining driver | that driver, required (a spec can always tighten), unless the host requires a different one (refused) |
 
@@ -151,10 +205,14 @@ The privileged variant `sandbox.driver` (default `auto`) and the spec's `sandbox
   driver, builds the policy, creates `<home>/tmp` and `<home>/sandbox`, runs setup in the sandbox (with
   `setup.network`, else the spec's `network`), and records `EnvSandboxInfo {driver, confines, notes}`
   in the `readied` event (an optional member, so version 1's events read the same).
-- `network: none` needs a driver that confines; with `none` the environment fails.
-- `Envs.warnings record`: an environment that is not confined (or whose record predates sandboxes)
-  carries `runs unsandboxed: …` with the notes, the persistent warning clients show (the TUI's banner,
-  T130). On Windows it says that Windows has no sandbox driver yet (AppContainer, T511).
+- `network: none` needs a driver that confines; with `none` (the default too) the environment fails,
+  naming the variant that turns a sandbox on.
+- `Envs.warnings record`: an environment that is not confined although the host asked for a sandbox
+  (an unconfined sandbox with notes: `auto` fell back) carries `runs unsandboxed: the sandbox the host
+  asked for cannot run here (…)`, the persistent warning clients show (the TUI's banner, T130). On
+  Windows the note says that Windows has no sandbox driver yet (AppContainer, T511). The host's own
+  `none` has no notes and no warning; `Envs.sandboxLabel` names it `off` for clients. (Records written
+  before T137 noted a host's `none` too; the next attach records them again.)
 - `EnvSpecs.check` checks the form of `sandbox`; `EnvSpecs.checkSandbox` (at `Create`) that it names a
   driver in effect; `network` and `setup.network` are `open` or `none` (allowlists need the egress
   proxy).
@@ -174,7 +232,9 @@ The privileged variant `sandbox.driver` (default `auto`) and the spec's `sandbox
    resolving paths beneath their roots in envd (`openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`) is
    follow-up work.
 
-On Windows (no driver confines yet) only the second applies, with the unsandboxed warning.
+Where no driver confines (the default, and Windows) only the second applies: the bindings keep to the
+policy (no reading the credential locations or the data directory, no writing outside the workspace's
+writable roots), but commands are not confined.
 
 ## The drivers
 
@@ -224,8 +284,44 @@ real processes through its wrap on this machine's shell and terminals:
 - a driver that confines nothing leaves processes as they are (and says so: `Confines = false`).
 
 Every built-in passes it on its OS: CI runs bubblewrap on Linux (x64 and arm64) and Seatbelt on macOS
-(arm64 and Intel) with `SANDBOX_TESTS=1`, and `none` everywhere; the CodeAct live tests run the bun-ts
-kernel in the sandbox. A new driver is done when it passes it on every OS it lists.
+(arm64 and Intel) with `SANDBOX_TESTS=1`, and `none` everywhere; the CodeAct live tests and the host's
+sandboxed runs opt in (`sandbox.driver = auto`) and run the bun-ts kernel in the sandbox. A new driver is done when it passes it on every OS it lists.
+
+## Known limits
+
+With the sandbox on:
+
+- **Tools that keep state under `~`** fail where no variable moves it into the environment: NuGet's
+  global packages folder (`~/.nuget/packages`), Cargo's registry (`~/.cargo`), the MSBuild server and
+  .NET's named mutexes (the runtime directory, `/run/user/<uid>`, is denied on Linux), `go install`
+  into `~/go/bin`, `pip install --user`. Workaround: the host lists the directory in the privileged
+  `sandbox.writable` (each one is a way for what an agent wrote to run outside the sandbox later). The
+  general fix is a copy-on-write home per environment (T512).
+- **Tools that read a config on the credential list** fail on the unreadable file rather than ignoring
+  it: NuGet (`~/.nuget/NuGet/NuGet.Config`), Yarn Berry (`~/.yarnrc.yml`: "EACCES"); Maven and Gradle
+  likely too (`~/.m2/settings.xml`, `~/.gradle/gradle.properties`). npm and pip ignore theirs. A
+  credential location stays unreadable inside a `sandbox.writable` path, so there is no workaround but
+  turning the sandbox off for that work (T512 would show such files as absent).
+- **git's config and hooks are read-only** in a writable workspace (`.git/config`, `.git/hooks`, and
+  `.<product>`): what changes them fails: `git config`, `git remote add`, `git branch
+  --set-upstream-to`, `git push -u`, installing hooks, and tools that keep their own state in
+  `.git/config` (lane's `lane new` stores a lane's base there). Under bubblewrap the error reads "could
+  not write config file .git/config: Device or resource busy" (git renames its lock file onto the
+  path, a mount point); under Seatbelt "Operation not permitted". This is deliberate: both run code
+  outside the sandbox the next time a person uses git (`core.hooksPath`, `core.fsmonitor`, aliases,
+  hooks). The prompt says so.
+- **A linked worktree as the workspace**: its git directory (`<main>/.git/worktrees/<name>`) and the
+  objects are outside the workspace, so git cannot commit there. Open the main checkout.
+- **Signing and pushing**: SSH and GPG keys and the agents' sockets are hidden, so signed commits
+  (`commit.gpgsign`) and pushes over SSH or with a credential helper fail; leave them to the person.
+- **macOS with the network denied** blocks every unix socket, the environment's own included: .NET's
+  named pipes (MSBuild's nodes, the compiler server) cannot connect. With the network allowed the
+  environment's writable directories and `TMPDIR` keep their sockets.
+- **Protected paths that do not exist** when a process starts are not mounted by bubblewrap (it would
+  create them in the workspace): a sandboxed process can create a missing `.git/hooks`.
+- **One temporary directory per environment**: processes under different policies in one environment
+  (an implementer and a read-only reviewer) share `TMPDIR`, so a long-lived process of one can serve
+  the other over a unix socket there.
 
 ## Native AOT
 
@@ -241,13 +337,13 @@ natively (`--only sandbox-`).
 
 | What | Task |
 |---|---|
-| `fx.sandbox.appcontainer` on Windows; then the unsandboxed banner goes | T511 |
+| `fx.sandbox.appcontainer` on Windows, which `auto` then picks there | T511 |
+| A copy-on-write home per environment (the real home as a read-only lower layer, a private upper layer, credential paths as whiteouts), so tools that keep state under `~` work in the sandbox without per-tool variables; bubblewrap's `--overlay` needs 0.10 (Ubuntu 24.04 has 0.9), Seatbelt cannot remap paths | T512 |
 | Network allowlists (`allowlist:<name>`), credential injection, per-call attribution: the egress proxy | with the egress proxy (spec §18) |
 | Agents' `sandbox:` from their definitions into `KernelPlan.Sandbox`; child sessions | T213 |
 | Protected paths from goals (`protect: ["tests/**"]`): globs that name a directory become its path; others need a check of the diff | T212 |
 | envd resolving the bindings' paths beneath their roots (`openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`), closing the link race of `SandboxGuard` | follow-up (T113b) |
 | The user's home on other machines (home-relative denied paths there), drivers probing over the environment protocol | T501 |
-| Choosing a sandbox per environment in the TUI; `sandbox.writable` entries for NuGet and Cargo caches (no variable moves them) | T130; when people ask |
-| Showing `Envs.warnings` persistently (the Windows banner) | T130 |
+| Choosing a sandbox per environment in the TUI | when people ask |
 | Sandboxed `Script` installs; sandboxing extension processes | T211; with the extension host |
 | Plugins: nsjail, gVisor | — |

@@ -303,7 +303,7 @@ let explain (discovery: Discovery) (errors: string) : SandboxUnavailable =
             Reason = "bubblewrap could not create a sandbox" + said
             Remedy =
                 Some
-                    "in a container, bwrap needs user namespaces (e.g. run the container with --security-opt seccomp=unconfined and --security-opt apparmor=unconfined); otherwise set the privileged variant sandbox.driver to none"
+                    "in a container, bwrap needs user namespaces (e.g. run the container with --security-opt seccomp=unconfined and --security-opt apparmor=unconfined); otherwise set the privileged variant sandbox.driver back to none (its default)"
         }
 
 /// A command that starts bwrap's sandbox and exits 0 in it: what the probe tries.
