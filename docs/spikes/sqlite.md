@@ -203,7 +203,11 @@ let append stream expected body : Result<unit, string> =
   connection can be shared, and another thread's statement never lands in someone's transaction. For
   parallel reads, open more connections; in WAL mode readers do not block the writer or each other.
   `Database.interrupt` works from any thread, and `Database.cancellable db token f` turns a
-  cancellation into `Interrupt`.
+  cancellation into `Interrupt`. SQLite forgets an interrupt that comes while no statement runs (the
+  next statement to start clears it), so `cancellable` keeps a statement running on the connection
+  (`SELECT 1`, stepped once) while `f` runs: a cancellation just before one of `f`'s statements starts
+  still stops it, where it would otherwise run to its end (for ever, for an endless query). `f` holds
+  the connection throughout, and what needs it idle (`VACUUM`) fails inside.
 - **Copies.** `serialize`/`deserialize` (the file format as bytes), `backup` (the online backup API),
   and `VACUUM INTO ?` for a compact copy on disk.
 

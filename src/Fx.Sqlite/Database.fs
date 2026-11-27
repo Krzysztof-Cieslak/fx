@@ -395,8 +395,27 @@ module Database =
             if added then
                 handle.DangerousRelease()
 
+    /// Runs `run` with a statement left running on the connection (stepped once, reset after it).
+    /// SQLite forgets an interrupt that comes while no statement runs: a statement that starts then
+    /// clears it. With one running, an interrupt stays in effect for every statement `run` starts.
+    let private holdingInterrupts (db: Database) (run: unit -> Result<'T, SqliteError>) : Result<'T, SqliteError> =
+        cached db "SELECT 1" (fun holder ->
+            let pointer = holder.Pointer
+            holder.Running <- true
+
+            try
+                match Native.sqlite3_step pointer with
+                | Native.SQLITE_ROW -> run ()
+                | code -> Error(db.Connection.Error code)
+            finally
+                Native.sqlite3_reset pointer |> ignore
+                holder.Running <- false)
+
     /// Runs `operation`, interrupting it if the token is cancelled meanwhile: a cancelled operation
-    /// fails with `Interrupt`, and so does one whose token was cancelled before it started.
+    /// fails with `Interrupt`, and so does one whose token was cancelled before it started. A
+    /// statement runs on the connection throughout, so a cancellation just before one of the
+    /// operation's statements starts still stops it: what needs the connection idle (`VACUUM`)
+    /// fails inside.
     let cancellable
         (db: Database)
         (cancellation: CancellationToken)
@@ -407,8 +426,13 @@ module Database =
         elif not cancellation.CanBeCanceled then
             operation ()
         else
-            use _ = cancellation.Register(fun () -> interrupt db)
-            operation ()
+            holdingInterrupts db (fun () ->
+                use _ = cancellation.Register(fun () -> interrupt db)
+
+                if cancellation.IsCancellationRequested then
+                    Error interrupted
+                else
+                    operation ())
 
     /// The main database as bytes: the file format (https://sqlite.org/fileformat.html), so
     /// `deserialize` or writing the bytes to a file gives the same database.
