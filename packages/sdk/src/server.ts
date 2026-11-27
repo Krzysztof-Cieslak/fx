@@ -3,11 +3,12 @@
 // ones, with the same methods, typed errors and rules: every request names the extension; activating
 // twice answers the same; code runs in its extension's environment with the request's cancellation;
 // a failure in extension code is a defect (JSON-RPC InternalError), which the host turns into a
-// denying gate, a failed transform, a reported observer or a crashed method.
+// denying gate, a failed transform, a reported observer or a crashed method. A package for a runtime an
+// active extension contributes (`ExtensionRuntimes`) is loaded by that runtime, and served here too.
 
 import type { Validation } from "./codec.ts";
 import type { Activated, ExtensionProtocolError, Manifest } from "./generated/contracts.d.ts";
-import { type Activation, type Clock, type Extension, type ExtensionEnv, systemClock } from "./extension.ts";
+import { type Activation, type Clock, type Extension, type ExtensionEnv, type ExtensionRuntime, ExtensionRuntimes, systemClock } from "./extension.ts";
 import {
   ExtensionProtocol,
   activateParamsCodec,
@@ -62,6 +63,14 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
   const clock = options.clock ?? systemClock;
   const envOf = (extension: string, signal: AbortSignal): ExtensionEnv => ({ extension, signal, clock });
   const answer = (activated: Activated) => activatedCodec.encode(activated);
+  /** A runtime with this name contributed by an active extension, with that extension's id. */
+  const runtimeNamed = (name: string): { runtime: ExtensionRuntime; owner: string } | undefined => {
+    for (const [owner, served] of active) {
+      const found = served.activation.contributions.find((c) => c.type === ExtensionRuntimes.contributionType.name && c.id === name);
+      if (found !== undefined) return { runtime: found.value as ExtensionRuntime, owner };
+    }
+    return undefined;
+  };
 
   return peer
     .serve({
@@ -87,12 +96,19 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
         active.set(extension.manifest.id, { manifest: extension.manifest, activation });
         return answer(describeActivation(extension.manifest, activation));
       }
-      if (params.manifest !== undefined && params.manifest.id === params.extension) {
-        throw typed({
-          kind: "activationFailed",
-          extension: params.manifest.id,
-          reason: `this process has no extension runtime ${params.manifest.runtime}`,
-        });
+      const manifest = params.manifest;
+      if (manifest !== undefined && manifest.id === params.extension) {
+        const found = runtimeNamed(manifest.runtime);
+        if (found === undefined) {
+          throw typed({ kind: "activationFailed", extension: manifest.id, reason: `this process has no extension runtime ${manifest.runtime}` });
+        }
+        const loaded = await found.runtime.activate(
+          { manifest, root: params.root, environment: envOf(manifest.id, signal) },
+          envOf(found.owner, signal),
+        );
+        if (!loaded.ok) throw typed({ kind: "activationFailed", extension: manifest.id, reason: loaded.error });
+        active.set(manifest.id, { manifest, activation: loaded.value });
+        return answer(describeActivation(manifest, loaded.value));
       }
       throw typed({ kind: "unknownExtension", extension: params.extension });
     })

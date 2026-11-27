@@ -32,8 +32,11 @@ export interface Clock {
 /** The system clock. */
 export const systemClock: Clock = { now: () => new Date() };
 
-/** The kinds of contribution types a TypeScript extension contributes to (spec §16.3). */
-export type ContributionKind = "data" | "gate" | "transform" | "observe";
+/**
+ * The kinds of contribution types a TypeScript extension contributes to (spec §16.3): data, hooks, and
+ * code that stays in its process (an extension runtime).
+ */
+export type ContributionKind = "data" | "gate" | "transform" | "observe" | "code";
 
 /** How an extension process runs a contribution's code for the host: JSON in, JSON out. */
 export type Serve = (input: unknown, env: ExtensionEnv) => Promise<Validation<Json>>;
@@ -145,13 +148,15 @@ export interface Contribution {
   readonly kind: ContributionKind;
   /** Its JSON form, sent to the host on activation. */
   readonly json: Json | undefined;
-  /** How this process runs its code; `undefined` for data. */
+  /** How this process runs its code; `undefined` for data and for code that stays in its process. */
   readonly serve: Serve | undefined;
+  /** The value as it was contributed, for this process (the server finds extension runtimes by it). */
+  readonly value: unknown;
 }
 
 /** A contribution of a value under a type, with an id unique for the type. */
 export function contribution<T>(type: ContributionType<T>, id: string, value: T): Contribution {
-  return { type: type.name, id, kind: type.kind, json: type.toJson(value), serve: type.serve?.(value) };
+  return { type: type.name, id, kind: type.kind, json: type.toJson(value), serve: type.serve?.(value), value };
 }
 
 /** A method's outcome: its result, or one of its typed errors. */
@@ -249,6 +254,45 @@ export interface Extension {
   readonly manifest: Manifest;
   activate(env: ExtensionEnv): Activation | Promise<Activation>;
 }
+
+/**
+ * What an extension runtime is asked to activate (`ActivationRequest`): a package whose manifest names
+ * the runtime, the package's directory on the host, and the environment the package's code runs in
+ * (its own, not the runtime's: an extension's authority is its environment).
+ */
+export interface ActivationRequest {
+  readonly manifest: Manifest;
+  /** The package directory, absent when the host has none to give. */
+  readonly root: string | undefined;
+  /** The environment of the package's extension. */
+  readonly environment: ExtensionEnv;
+}
+
+/**
+ * An extension runtime (spec §16.1 `ExtensionRuntime`): loads packages whose manifest names it, e.g.
+ * `bun` from the Bun extension host. Contributed under `ExtensionRuntimes.contributionType` with the
+ * runtime's name as the contribution id; the host then activates those packages through this process
+ * (`extension/activate` with the manifest and the package directory), and their code runs here.
+ */
+export interface ExtensionRuntime {
+  /**
+   * Loads and activates a package in its own environment (`request.environment`); `env` is the
+   * runtime's. An expected failure (the package cannot be loaded) is `err(reason)`, which the host
+   * reports as a failed activation; throwing is a defect.
+   */
+  activate(request: ActivationRequest, env: ExtensionEnv): Promise<MethodResult<Activation, string>>;
+}
+
+/** The extension system's contribution types a TypeScript extension contributes to. */
+export const ExtensionRuntimes = {
+  /** Extension runtimes, by name (the contribution id). Privileged: only trusted sources contribute one. */
+  contributionType: {
+    name: "extension-runtime",
+    kind: "code",
+    toJson: () => undefined,
+    serve: undefined,
+  } as ContributionType<ExtensionRuntime>,
+};
 
 /** Typed helpers to write a manifest's declarations (`Declare`). */
 export const Declare = {
