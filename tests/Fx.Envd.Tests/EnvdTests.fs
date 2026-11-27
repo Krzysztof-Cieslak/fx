@@ -410,6 +410,148 @@ let processes =
             }
         ]
 
+/// Waits (a little) until neither end of a connection counts a channel; fails with the counts.
+let private expectNoChannels (connection: Connection) (what: string) =
+    let counts () =
+        connection.Client.Peer.OpenChannels, connection.Server.OpenChannels
+
+    // The caller's own end is released before its call returns; envd's end may wait for a reset
+    // the caller sent when it gave up (an aborted writer, a cancelled run).
+    Expect.equal (fst (counts ())) 0 $"{what}: the host's end released its channel"
+    let mutable tries = 0
+
+    while counts () <> (0, 0) && tries < 500 do
+        Thread.Sleep 10
+        tries <- tries + 1
+
+    Expect.equal (counts ()) (0, 0) $"{what}: no channel stays open"
+
+[<Tests>]
+let channels =
+    testList
+        "Channels through the protocol"
+        [
+            // A channel counts against the connection's limit (256) until both ends let go of it: a
+            // transfer that left it half open broke every file and process call of a long session.
+            test "every transfer releases its channel at both ends, whether it succeeded or failed" {
+                let shell = ControlledShell()
+                let envd, fs = fakeEnvd shell.Shell
+                let connection = connect envd
+                let client = connection.Client
+                let settled = expectNoChannels connection
+
+                let root =
+                    Path.Combine(Path.GetTempPath(), "envd-channels-" + Guid.NewGuid().ToString("N"))
+
+                ok (wait (fs.Fs.CreateDirectory root none))
+                let file = Path.Combine(root, "f.txt")
+                let missing = Path.Combine(root, "missing")
+
+                ok (wait (client.Fs.WriteFile file "abc"B none))
+                settled "a write"
+                ok (wait (client.FsOps.WriteAtomic file "abcd"B none))
+                settled "an atomic write"
+                Expect.equal (wait (client.FsRead.ReadFile file none)) (Ok "abcd"B) "read"
+                settled "a read"
+                Expect.equal (ok (wait (client.FsOps.ReadRange file 1L 2 none))).Content "bc"B "range"
+                settled "a range"
+                Expect.isError (wait (client.FsRead.ReadFile missing none)) "missing"
+                settled "a read that failed"
+                Expect.isError (wait (client.Fs.WriteFile (Path.Combine(missing, "x")) [||] none)) "no parent"
+                settled "a write that failed"
+
+                let blob = wait (client.Blobs.Put "blob"B none)
+                settled "a put"
+                Expect.equal (wait (client.Blobs.Get blob.Hash none)) (Ok "blob"B) "get"
+                settled "a get"
+                Expect.equal (wait (client.Blobs.Read blob.Hash 1L 2 none)) (Ok "lo"B) "blob range"
+                settled "a blob range"
+                Expect.isError (wait (client.Blobs.Get (BlobHash.ofBytes "none"B) none)) "missing blob"
+                settled "a get that failed"
+                let writer = wait (client.Blobs.Create none)
+                wait (writer.Write "chunk"B none)
+                Expect.equal (wait (writer.Commit none)).Hash (BlobHash.ofBytes "chunk"B) "committed"
+                settled "a committed writer"
+                let aborted = wait (client.Blobs.Create none)
+                wait (aborted.Write "chunk"B none)
+                wait (aborted.Abort())
+                settled "an aborted writer"
+
+                let snapshot = { Commit = "0"; Tree = "0" }
+                Expect.isError (wait (client.Snapshots.Patch snapshot snapshot None none)) "no snapshots"
+                settled "a patch that failed"
+
+                let running =
+                    client.Shell.Run (Command.exec "prog" [] |> Command.withStdinText "in") none
+
+                let child = shell.Spawned
+                child.Emit(Stdout "out"B)
+                child.Exit 0
+                Expect.equal (Output.stdoutText (ok (wait running))) "out" "ran"
+                settled "a run"
+
+                let started = ok (wait (EnvClient.start client startSpec none))
+                let attached = shell.Spawned
+                let attachment = ok (wait (EnvClient.attach client started.Id 0L 0L none))
+                attached.Emit(Stdout "x"B)
+                attached.Exit 0
+                let mutable records = 0
+
+                while (wait (attachment.Next none)).IsSome do
+                    records <- records + 1
+
+                Expect.equal records 1 "one record"
+                settled "an attachment read to its end"
+                wait (EnvClient.release client started.Id none)
+
+                match wait (EnvClient.attach client "nope" 0L 0L none) with
+                | Error(ExecError.UnknownProcess "nope") -> ()
+                | other -> failtest $"{other}"
+
+                settled "an attachment that failed"
+            }
+
+            test "a cancelled run lets go of its channel and of its process" {
+                let shell = ControlledShell()
+                let fs = InMemoryFs(SystemClock.clock, false)
+                // Keeps all of the output, so envd has more to send than the channel's window.
+                let envd = Envd(services shell.Shell fs (4 * 1024 * 1024) None)
+                let connection = connect envd
+                let client = connection.Client
+                use cancel = new CancellationTokenSource()
+                let running = client.Shell.Run (Command.exec "prog" []) cancel.Token
+                let child = shell.Spawned
+                let mutable tries = 0
+
+                // Cancelled once it streams the output (which nobody reads once the run is over).
+                while connection.Server.OpenChannels = 0 && tries < 500 do
+                    Thread.Sleep 10
+                    tries <- tries + 1
+
+                child.Emit(Stdout(Array.create (1024 * 1024) 1uy))
+                Thread.Sleep 50
+                cancel.Cancel()
+
+                let cancelled =
+                    try
+                        wait running |> ignore
+                        false
+                    with :? OperationCanceledException ->
+                        true
+
+                Expect.isTrue cancelled "cancelled"
+                expectNoChannels connection "a cancelled run"
+                let mutable released = false
+
+                for _ in 1..250 do
+                    if not released then
+                        released <- wait (EnvClient.list client none) |> List.isEmpty
+                        Thread.Sleep 20
+
+                Expect.isTrue released "the process was released"
+            }
+        ]
+
 [<Tests>]
 let handshake =
     testList

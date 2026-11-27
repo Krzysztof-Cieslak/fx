@@ -461,4 +461,30 @@ let tests (name: string) (create: unit -> Fixture) : Test =
                     | Ok watcher ->
                         wait (watcher.Close())
                         failtest "watching a missing directory")
+
+            // A long session: envd's proxies move each file over a channel of their connection, and a
+            // connection has at most 256 open at a time.
+            test "serves more calls in a row than a connection has channels" (fun f at ->
+                let file = at [ "many.txt" ]
+                let missing = at [ "missing" ]
+
+                for i in 1..300 do
+                    ok (wait (f.Ops.WriteAtomic file (utf8 $"line {i}\n") none))
+
+                    let edit =
+                        {
+                            Line = 2
+                            Count = 0
+                            Lines = [ "next" ]
+                        }
+
+                    ok (patch f [ Edit(file, None, [ edit ]) ]) |> ignore
+                    let chunk = ok (wait (f.Ops.ReadRange file 0L 100 none))
+                    Expect.equal (text chunk.Content) $"line {i}\nnext\n" $"read {i}"
+                    Expect.equal (wait (f.Ops.ReadRange missing 0L 1 none)) (Error(NotFound missing)) $"missing {i}"
+
+                    Expect.equal
+                        (wait (f.Ops.WriteAtomic (at [ "missing"; "x" ]) [||] none))
+                        (Error(NotFound(at [ "missing"; "x" ])))
+                        $"no parent {i}")
         ]

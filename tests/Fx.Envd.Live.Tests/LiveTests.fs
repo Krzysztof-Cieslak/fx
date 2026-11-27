@@ -329,6 +329,109 @@ let live =
                         session.Close()
             }
 
+            // A channel counts against the connection's limit (256) until both ends let go of it: a
+            // transfer that left it half open broke every file and process call of a long session.
+            test "every transfer lets go of its channel" {
+                for reach in reaches do
+                    let session = openSession reach (Scratch.directory ())
+                    let client = session.Client
+
+                    // The host's end is released before the call returns.
+                    let settled (what: string) =
+                        Expect.equal client.Peer.OpenChannels 0 $"{reach}, {what}: no channel stays open"
+
+                    try
+                        let file = Path.Combine(session.Workspace, "f.txt")
+                        ok (wait (client.Fs.WriteFile file "abc"B none))
+                        settled "a write"
+                        ok (wait (client.FsOps.WriteAtomic file "abcd"B none))
+                        settled "an atomic write"
+                        Expect.equal (ok (wait (client.FsRead.ReadFile file none))) "abcd"B "read"
+                        settled "a read"
+
+                        Expect.isError
+                            (wait (client.FsRead.ReadFile (Path.Combine(session.Workspace, "no")) none))
+                            "no file"
+
+                        settled "a read that failed"
+                        let blob = wait (client.Blobs.Put "blob"B none)
+                        settled "a put"
+                        Expect.equal (wait (client.Blobs.Get blob.Hash none)) (Ok "blob"B) "get"
+                        settled "a get"
+
+                        let echo =
+                            if windows then
+                                Command.exec "cmd.exe" [ "/d"; "/c"; "echo hi" ]
+                            else
+                                Command.exec "/bin/sh" [ "-c"; "echo hi" ]
+
+                        let output = ok (wait (client.Shell.Run echo none))
+                        Expect.equal ((Output.stdoutText output).TrimEnd()) "hi" "ran"
+                        settled "a run"
+
+                        use timeout = new CancellationTokenSource(TimeSpan.FromSeconds 1.0)
+
+                        let cancelled =
+                            try
+                                wait (
+                                    client.Shell.Run
+                                        (Command.script (if windows then "Start-Sleep -Seconds 60" else "sleep 60"))
+                                        timeout.Token
+                                )
+                                |> ignore
+
+                                false
+                            with :? OperationCanceledException ->
+                                true
+
+                        Expect.isTrue cancelled "the run was cancelled"
+                        settled "a cancelled run"
+                        let mutable left = wait (EnvClient.list client none)
+
+                        for _ in 1..250 do
+                            if not left.IsEmpty then
+                                Thread.Sleep 20
+                                left <- wait (EnvClient.list client none)
+
+                        Expect.isEmpty left "the processes of the runs were released"
+
+                        let started = start client (script "echo out" "Write-Output out")
+                        let attachment = ok (wait (EnvClient.attach client started.Id 0L 0L none))
+                        Expect.equal ((readAll attachment).TrimEnd()) "out" "attached"
+                        settled "an attachment read to its end"
+                        wait (EnvClient.release client started.Id none)
+
+                        match
+                            wait (
+                                client.Terminal.Spawn
+                                    { PtySpec.script "" with
+                                        Program = script "echo term" "Write-Output term"
+                                    }
+                                    none
+                            )
+                        with
+                        | Error e -> failtest (string e)
+                        | Ok pty ->
+                            let transcript = Transcript pty
+                            wait (transcript.ReadToEnd none)
+                            wait (pty.Close())
+                            Expect.stringContains transcript.Plain "term" "the terminal ran"
+                            settled "a terminal"
+
+                        let first = ok (wait (client.Snapshots.Take "first" none))
+                        ok (wait (client.Fs.WriteFile file "changed"B none))
+                        let second = ok (wait (client.Snapshots.Take "second" none))
+
+                        Expect.stringContains
+                            (ok (wait (client.Snapshots.Patch first second None none)))
+                            "changed"
+                            "patch"
+
+                        settled "a patch"
+                    finally
+                        session.Close()
+            }
+
             test "fx envd refuses a missing workspace and needs --stdio" {
                 let run (args: string list) =
                     let info =

@@ -179,7 +179,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
 **envd** (module spec: [`docs/modules/envd.md`](docs/modules/envd.md))
 - envd is a mode of the binary (`fx envd --stdio`) that serves an environment's capabilities over the environment protocol. Host code uses the same capability records either way: `EnvClient` implements `FsRead`, `Fs`, `FsOps`, `Shell`, `Terminal`, `Blobs` and `Snapshots` over a connection.
 - Adding an operation: a method in `EnvProtocol` (codecs), a handler in `EnvdServer`, the proxy in `EnvClient`, and a case in the capability's conformance suite, which runs directly, in process and over an `fx envd --stdio` child.
-- Bulk data goes over a channel the caller opens and names in the request; the handler accepts it before anything else, and a caller whose call fails resets it (`Transfer`).
+- Bulk data goes over a channel the caller opens and names in the request; the handler accepts it before anything else, and a caller whose call fails resets it (`Transfer`). Open and accept channels only with `Transfer.openChannel`/`acceptChannel` and the transfer's `Flow`, which closes the direction that side never uses, so both ends release the channel when the transfer ends.
 - Processes belong to the `Envd`, not to a connection: a host resumes their output from byte offsets (`EnvClient.attach`). Watches end with their connection.
 - In envd mode standard output is the protocol: messages go to standard error.
 

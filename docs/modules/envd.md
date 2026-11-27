@@ -96,11 +96,22 @@ brackets; all definitions in `EnvProtocol`):
 | Snapshots | `snapshot/take {message}` → `SnapshotRef`; `snapshot/diff {from, to}` → `{changes}`; `snapshot/patch {from, to, paths?, channel}`; `snapshot/restore {to, paths?}` [`SnapshotError`] |
 
 - **Bulk data goes over binary channels that the caller opens** and names in the request. The handler
-  accepts the channel first thing. Downloads (`fs/read`, `blobs/get`, `snapshot/patch`): envd writes
-  the content and closes the channel before it answers; the caller reads concurrently with the call.
-  Uploads (`fs/write`, `blobs/put`): the caller writes and closes; envd answers after the end. A caller
-  whose call fails resets its channel (`Transfer.download`/`upload`). Unaccepted channels count against
-  `maxChannels` until the connection ends, which is why the handler always accepts.
+  accepts the channel first thing. Downloads (`fs/read`, `blobs/get`, `snapshot/patch`, `exec/attach`):
+  envd writes the content and closes the channel before it answers (an attachment when the process's
+  output ends); the caller reads concurrently with the call. Uploads (`fs/write`, `blobs/put`): the
+  caller writes and closes; envd answers after the end. A caller whose call fails resets its channel
+  (`Transfer.download`/`upload`). Unaccepted channels count against `maxChannels` until the connection
+  ends, which is why the handler always accepts.
+- **Each side uses one direction and closes the other at once.** A channel is released only when both
+  directions have ended ([rpc.md](rpc.md), "Releasing"), so the side that only reads (the caller of a
+  download, envd in an upload) closes its output as soon as it has the channel: channels are opened
+  and accepted only through `Transfer.openChannel` and `Transfer.acceptChannel` with the transfer's
+  `Flow` (`Inbound` closes the output). Before this, every transfer left its channel half open at
+  both ends, and after about 250 of them on one connection every file and process call of a TUI
+  session failed with `TransferFailedException` ("too many channels (limit 256)").
+- A `Shell.Run` that fails or is cancelled while it reads stops receiving the output (its channel is
+  reset) and releases the process in the background; a process whose attachment cannot be set up is
+  released too, so nothing runs on that nobody reads.
 - Typed errors are tagged unions like every union codec: `FsError` is `{"kind": "notFound", "path": …}`,
   with `reason` for `invalidPath` and `message` for `ioFailed`; `ExecError`, `PatchError` (whose `fs`
   case nests an `FsError`), `SearchError`, `BlobError` and `SnapshotError` likewise.
@@ -206,7 +217,11 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
   `TerminalConformance` (`tests/Fx.Pty.Tests`) turned the local tests into suites. With
   `FsConformance` and `BlobsConformance` they run against the live interpreters, the proxies over
   fakes in process, and the proxies over envd built from the live interpreters, in process and as an
-  `fx envd --stdio` child (the binary next to the tests): transport parity.
+  `fx envd --stdio` child (the binary next to the tests): transport parity. Each suite has a long
+  session (300 calls in a row on one connection, more than its 256 channels, failures included).
+- Channels: after every kind of transfer (succeeded, failed, aborted, cancelled) neither end of the
+  connection counts a channel (`Peer.OpenChannels`): over fakes at both ends, and with the live
+  interpreters at the host's end in process and over stdio.
 - Resuming: over fakes with a process the test drives (cut the connection, the process goes on,
   re-attach from the offsets read), and with a real process in process.
 - The `envd-in-process` and `envd-stdio-child` scenarios run one scripted session (files, pipes, a

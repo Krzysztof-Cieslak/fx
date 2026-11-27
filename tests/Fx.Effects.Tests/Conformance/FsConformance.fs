@@ -194,4 +194,21 @@ let tests (name: string) (create: unit -> Fixture) : Test =
                 ok (run fs (Fs.writeText (at [ "a"; ".."; "b.txt" ]) "up"))
                 Expect.equal (ok (run fs (Fs.readText (at [ "b.txt" ])))) "up" "normalized"
                 Expect.equal (ok (run fs (Fs.readText (at [ "a"; "."; ".."; "b.txt" ])))) "up" "read normalized")
+
+            // A long session: envd's proxies move each file over a channel of their connection, and a
+            // connection has at most 256 open at a time.
+            test "serves more reads and writes in a row than a connection has channels" (fun fs at ->
+                let file = at [ "many.txt" ]
+                let missing = at [ "missing" ]
+
+                for i in 1..300 do
+                    let content = bytes $"call {i}"
+                    ok (run fs (Fs.writeFile file content))
+                    Expect.equal (ok (run fs (Fs.readFile file))) content $"read {i}"
+                    Expect.equal (run fs (Fs.readFile missing)) (Error(NotFound missing)) $"missing {i}"
+
+                    Expect.equal
+                        (run fs (Fs.writeFile (at [ "missing"; "x" ]) content))
+                        (Error(NotFound(at [ "missing"; "x" ])))
+                        $"no parent {i}")
         ]
