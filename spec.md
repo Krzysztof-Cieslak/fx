@@ -659,7 +659,10 @@ workspace  = { source = "git", ref = "HEAD", export = "branch" }
 components = { placement = "prebaked", fallback = "host-push" }
 setup      = { run = ["bun install"], network = "open", secrets = ["npm"] }
 policy     = { network = "allowlist:dev", idle = "suspend:15m", ttl = "8h", budget = "$5/day" }
+variables  = { GH_TOKEN = "host:GH_TOKEN", NPM_TOKEN = "secret:npm", RUST_LOG = "debug" }
 ```
+
+**Variables** (T138) are what an environment's commands get beyond the host's scrubbed variables: `host:<NAME>` (the host's own variable), `secret:<name>` (an fx secret, §11) or a literal, which config refuses for names that look like credentials and for runtime injection vectors. A person chooses them for every environment with the privileged variant `env.variables` (same syntax; it wins over a spec's for the same name), and removes names from any origin with `env.deny` (patterns). A spec from host config needs no consent; a project's credentials (credential-like names, `secret:` references) apply only with a person's grant (`env.credential`, `secret.read`, §13) for that start or that project, never the host. They reach commands (shell, terminals, setup), never kernels; values are resolved by the host each time envd starts and never persisted; the lifecycle records names, sources and outcomes. Credential values are redacted (`[redacted NAME]`) from everything the environment hands a turn and from model requests (§18). Details: `docs/modules/environments.md`, "Variables".
 
 ### 9.5 Lifecycle
 
@@ -797,7 +800,7 @@ type AuthMethod =
 
 ### 11.5 Rules
 
-Privileged identity/secret extensions only from host config or policy; policy only tightens.
+Privileged identity/secret extensions only from host config or policy; policy only tightens. Secrets reach an environment's commands only as a person chose (`env.variables` in host config, or a project's `secret:` variable with a `secret.read` grant, §9.4); the host resolves them when envd starts and never persists or journals their values.
 
 ---
 
@@ -895,8 +898,8 @@ type GrantEvent = Requested of GrantRequest | Granted of Grant   // a grant from
                 | Closed of RequestId * CloseReason              // withdrawn, covered by a later grant, refused, timed out, session ended
 ```
 
-- **Actions** are an open vocabulary (`shell.exec`, `fs.write`, `net.connect`, `component.install`, `budget.raise`, `model.enable`, `model.paidFallback`, `secret.read`, `env.dotenv`, `safeOutput.apply`, `workflow.approval`, …; extensions add theirs). Each names its resource kind (path, command, name) and the scopes an answer may choose. **Patterns** are globs over canonical resources (`*` within a segment, `?`, `**` across segments, `\` escapes); allows match exactly, denies and policy ignoring case (fail closed).
-- **Answers** choose a scope (*once / session / repo (+path) / host*, §19.4), filled in from the request's context, and may broaden the resource to a pattern that matches it.
+- **Actions** are an open vocabulary (`shell.exec`, `fs.write`, `net.connect`, `component.install`, `budget.raise`, `model.enable`, `model.paidFallback`, `secret.read`, `env.credential`, `env.dotenv`, `safeOutput.apply`, `workflow.approval`, …; extensions add theirs). Each names its resource kind (path, command, name) and the scopes an answer may choose. **Patterns** are globs over canonical resources (`*` within a segment, `?`, `**` across segments, `\` escapes); allows match exactly, denies and policy ignoring case (fail closed).
+- **Answers** choose a scope (*once / session / repo (+path) / host*, §19.4), filled in from the request's context, and may broaden the resource to a pattern that matches it. A request offers `repo` only when it names a repository: an environment's credential asked for by a project names the project (its directory), so a `repo` answer (or `fx grants allow … --scope repo` there) covers that project alone.
 - Effective rules are a projection: deny wins, then most-specific grant, else ask. Policy only tightens: policy rules and gates can only ask or deny.
 - **`GrantStore` is an extension point**; default host-local (a stream of the host's event store); a repo-policy store can use the same API.
 - Agents can only **request** grants (`IGrants`: check, request, await, withdraw); people answer, grant and revoke through the client protocol (`grants/*`), or beforehand on the host's machine with `fx grants` as the OS user who owns the host. A request nobody can answer (a headless run without a terminal) is withdrawn by the host, never answered on a person's behalf, and requests are keyed by what asks (a call, an install attempt), so it is asked again next time. Module spec: `docs/modules/grants.md`.
@@ -1019,6 +1022,7 @@ Pinned hashes; nothing project-local before trust; policy extensions unremovable
 - **Trust boundary:** model providers are **outside**. Every model-bound payload (main loop, `fx.llm`, agents, summarizer, judgments) passes **model-egress hooks**: **content exclusions** built in (paths/globs + Copilot org exclusions); **secret redaction** is a policy extension point.
   - Request parts carry their **provenance** (the files their content quotes); exclusions match it, so whoever puts a file's content into a request names the file. Provenance never leaves; content without it (a command's output) is caught upstream (bindings, render), not at egress. Patterns only add up (no negations; lists from different origins combine by union), so policy and host lists cannot be undone by a project; render, bindings and egress share one matcher. Details: `docs/modules/egress.md`.
 - **Credentials:** host-only; environments get scoped per-session tokens; secrets always referenced. Host-only means the model never receives them through fx (configuration refers to secrets; egress hooks see every request), not that an agent's processes cannot read files: without a sandbox they run with the user's rights and can read the user's credential files, fx's own credentials file in its data directory included.
+- **Person-chosen credentials** (T138, §9.4): an environment's commands get a credential only when a person chose it (`env.variables`, host config) or granted a project's request for it. Values are resolved on the host when envd starts, never persisted, recorded by name only, and redacted by exact match (`[redacted NAME]`) from process and terminal output, kernels' output, files and search results the hands read (below the replay journal), and from model requests. Encoded copies (base64, URL or JSON escapes) are not caught (T601); values under 8 characters are not passed.
 - **Sandbox drivers** are the process boundary **when a host turns one on** (opt-in, §9.1, T137). By default an agent's commands, kernels and setup run with the user's rights: they can read the user's credentials, write anywhere the user can and use the network. **Grants** (permission prompts for commands, writes outside the workspace, the network and installs; with auto approvals, §13.3, commands written plainly in the workspace run unasked) are then the primary control, with type-level attenuation, the bindings' policy checks and content exclusions as guardrails; Windows v1 has no confining driver at all. A sandbox a host asks for never falls back silently: `auto` warns where none can run, a named driver fails the environment.
 - **Egress proxy:** deny-by-default, resolved-address allowlists, method/path rules, credential injection, git push checks, per-tool-call attribution, install source allowlists.
 - **Supply chain:** vendor-index digests by default (pinned-digest policy available), package signatures, sandboxed `Script` installs, read-only `System` installs, lockfiles.

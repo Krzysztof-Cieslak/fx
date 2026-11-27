@@ -147,6 +147,9 @@ hands refuse terminals.
 Outputs are journaled as they were: what a command printed or a file held is what the model saw too.
 Protect journals like the logs they sit next to.
 
+Variables a person chose for an environment's commands (T138) are journaled by name only like any command variables; their values reach the journal only redacted, because the hands' capabilities are wrapped with `Redacting.client` below the recording taps. The host's end-to-end test (`tests/Fx.Host.Tests/LiveTests.fs`) checks that no injected value is in the event store or the blob store, not even in base64, and that the session replays exactly.
+
+
 ## Replay
 
 `SessionReplay.run settings recording session` reads the journal's segments and, for each, runs a fresh

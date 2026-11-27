@@ -217,6 +217,10 @@ A result is decoded by `Fx.Sessions.Codecs.turnResult`, then checked (`Ensure.al
 A refused `finish` throws in the cell with the issues (`finishRejected`); the model fixes the result and
 finishes again.
 
+### Chosen variables in the prompt (T138)
+
+`Hands.Variables` lists the variables a person chose for the environment's commands, by name, with why one is missing. `Instructions.variables` adds a `variables` section to the prefix (empty when there are none, like `sandbox`): which are set for commands (not for a cell's own process), that `gh` is authenticated when `GH_TOKEN` or `GITHUB_TOKEN` is, that credentials read as `[redacted NAME]`, and which were asked for and left out. `EnvHands.ofHandle` wraps the environment's client with `Redacting.client` below the recording taps. The journal's `HandsInfo.variables` keeps the list (absent when empty) so replay renders the same prompt.
+
 ## Receipts
 
 Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `ContextEvent.withhold`:

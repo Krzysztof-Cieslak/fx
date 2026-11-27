@@ -387,6 +387,17 @@ do; nothing is ever approved for them:
    `.git/config` and hooks (`git config`, `git push -u`) and commits in a linked worktree: list a
    tool's directory in the privileged `sandbox.writable` (a credential location stays unreadable), or
    run such steps without the sandbox.
+5. **Credentials for commands** (T138): choose them in host config (`env.variables`), which needs no
+   consent; a project's environment spec that asks for one is withdrawn without a terminal, so grant it
+   beforehand in the project's directory: `fx grants allow env.credential GH_TOKEN --scope repo` (or
+   `secret.read <name>` for a `secret:` reference).
+
+
+## Chosen variables (T138)
+
+The host resolves the variables environments' commands get (environments.md, "Variables"): `EnvVariableConsent.resolver`, built in `Host.start` with the person's `env.variables` and `env.deny`, the host's variables, its secret sources (service credentials start before environments for this) and the grants log. A project's credential asks the person: the TUI shows a card, `fx run` prompts at a terminal (`[r] always for this project`), and without a terminal the request is withdrawn and the run names `fx grants allow env.credential <NAME> --scope repo`, to run in the project's directory. A variable left out is a warning on `fx run`'s env line, which names the variables passed (`vars: GH_TOKEN`). Model requests are cleaned of every live credential value (`Host.redactingLlm`) before the egress hooks.
+
+To give `gh` and `git push` a token: `{"variants": {"env.variables": {"GH_TOKEN": "host:GH_TOKEN"}}}` in `~/.fx/config.json`. Approvals are unchanged: `gh **`, `git push **` and `git fetch **` still ask under `auto`.
 
 ## Native AOT
 
