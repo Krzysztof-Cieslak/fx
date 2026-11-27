@@ -59,6 +59,9 @@ type Hands<'K> =
         /// The workspace's snapshots (envd's), if the environment has them: each step records the
         /// workspace before its actions, so a call in doubt after a crash shows what changed.
         Snapshots: Snapshots option
+        /// The policy processes start under, when a sandbox driver confines them (spec §9.1): the
+        /// prompt tells the model what the sandbox keeps from it (`Instructions.sandbox`).
+        Sandbox: SandboxPolicy option
     }
 
     override this.ToString() = $"hands ({this.Workspace})"

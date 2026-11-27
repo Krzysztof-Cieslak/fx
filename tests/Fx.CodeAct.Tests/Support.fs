@@ -484,6 +484,7 @@ let localHands
                         Exclude = []
                     }
             )
+        Sandbox = None
     }
 
 /// A fixture on local hands, with the interpreter `make` gives for its root.

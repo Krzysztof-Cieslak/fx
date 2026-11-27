@@ -272,6 +272,7 @@ let private sessionIn
                                         Interpreter = kernel
                                         Guard = fun _ -> EffResult.ok ()
                                         Snapshots = None
+                                        Sandbox = None
                                     }
                             )
                     Catalog = catalog
@@ -547,6 +548,7 @@ let private recovery () : Task<string list> =
                                                 Interpreter = kernel
                                                 Guard = fun _ -> EffResult.ok ()
                                                 Snapshots = None
+                                                Sandbox = None
                                             }
                                     )
                             Catalog = fun _ -> None

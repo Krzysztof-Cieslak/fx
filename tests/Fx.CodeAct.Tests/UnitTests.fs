@@ -261,11 +261,11 @@ let tests =
             }
 
             test "a conversation keeps the surface its frame recorded" {
-                let sections = Instructions.sections ActionSurface.Hybrid "interpreter"
+                let sections = Instructions.sections ActionSurface.Hybrid "interpreter" None
                 Expect.equal (Instructions.recordedSurface sections) (Some ActionSurface.Hybrid) "hybrid"
 
                 Expect.equal
-                    (Instructions.recordedSurface (Instructions.sections ActionSurface.CellsOnly "x"))
+                    (Instructions.recordedSurface (Instructions.sections ActionSurface.CellsOnly "x" None))
                     (Some ActionSurface.CellsOnly)
                     "cells-only"
 
@@ -275,6 +275,52 @@ let tests =
                     (sections |> List.map (fun s -> s.Id))
                     [ "instructions"; "tools"; "interpreter" ]
                     "the prefix's sections"
+            }
+
+            test "a sandbox that confines the hands' processes is described, from its policy" {
+                let policy: Fx.Sdk.SandboxPolicy =
+                    {
+                        Workspace = "/src/app"
+                        WorkspaceAccess = Fx.Sdk.WorkspaceAccess.ReadWrite
+                        Writable = [ "/home/u/.fx/environments/e1/owned" ]
+                        Readable = []
+                        Protected = [ "/src/app/.git/hooks"; "/src/app/.git/config"; "/src/app/.fx" ]
+                        Denied = [ "/home/u/.fx"; "/home/u/.ssh"; "/src/app/.env" ]
+                        Temp = Some "/home/u/.fx/environments/e1/tmp"
+                        Network = Fx.Sdk.NetworkAccess.Allowed
+                    }
+
+                let sections =
+                    Instructions.sections ActionSurface.Hybrid "interpreter" (Some policy)
+
+                Expect.equal
+                    (sections |> List.map (fun s -> s.Id))
+                    [ "instructions"; "tools"; "interpreter"; "sandbox" ]
+                    "the sandbox last"
+
+                let text = Instructions.sandbox policy
+
+                Expect.stringContains
+                    text
+                    "except `.git/hooks`, `.git/config` and `.fx`: they stay read-only"
+                    "what stays read-only, relative to the workspace"
+
+                Expect.stringContains text "Device or resource busy" "how git's refusal reads"
+                Expect.stringContains text "- `.env` cannot be read." "hidden in the workspace"
+                Expect.stringContains text "Credentials are hidden" "credentials"
+                Expect.stringContains text "the home directory included, is read-only" "the home"
+                Expect.stringContains text "The network is available." "the network"
+                Expect.isFalse (text.Contains "/home/u") "no paths outside the workspace"
+
+                let reviewer =
+                    Instructions.sandbox
+                        { policy with
+                            WorkspaceAccess = Fx.Sdk.WorkspaceAccess.ReadOnly
+                            Network = Fx.Sdk.NetworkAccess.Denied
+                        }
+
+                Expect.stringContains reviewer "The workspace is read-only" "a reviewer"
+                Expect.stringContains reviewer "There is no network" "no network"
             }
 
             test "quotes carry provenance, are withheld when a source is excluded, and are never seen" {

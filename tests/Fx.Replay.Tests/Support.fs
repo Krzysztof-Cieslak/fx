@@ -414,6 +414,7 @@ let createIn
             Interpreter = ScriptProc.interpreter kernelOptions
             Guard = fun _ -> EffResult.ok ()
             Snapshots = None
+            Sandbox = None
         }
 
     let overrides = selections |> List.map fst

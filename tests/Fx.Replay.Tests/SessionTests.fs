@@ -327,6 +327,39 @@ let tests =
             recordsAndReplays "model errors retried after a delay" (fun () -> create []) retried ignore2
 
             recordsAndReplays
+                "hands in a sandbox: the prompt describes it, and replay renders it again"
+                (fun () ->
+                    createGuarded [] ran (Inherit []) None (fun _ _ _ hands ->
+                        Eff.ret
+                            { hands with
+                                Sandbox =
+                                    Some
+                                        {
+                                            Workspace = hands.Workspace
+                                            WorkspaceAccess = Fx.Sdk.WorkspaceAccess.ReadWrite
+                                            Writable = []
+                                            Readable = []
+                                            Protected = [ Fx.Sdk.SandboxPath.under hands.Workspace ".git/config" ]
+                                            Denied = []
+                                            Temp = None
+                                            Network = Fx.Sdk.NetworkAccess.Denied
+                                        }
+                            }))
+                cellsOnly
+                (fun f report ->
+                    Expect.equal report.Requests f.Model.Requests.Length "every request"
+
+                    let system =
+                        f.Model.Requests.Head.System
+                        |> List.choose (fun part ->
+                            match part with
+                            | Part.Text text -> Some text.Text
+                            | _ -> None)
+                        |> String.concat "\n"
+
+                    Expect.stringContains system "There is no network" "the sandbox, described")
+
+            recordsAndReplays
                 "compaction: in the background, asked for by a cell, and after an overflow"
                 (fun () -> createIn catalog [] ran (Inherit []) None (fun _ _ _ hands -> Eff.ret hands))
                 compacting
