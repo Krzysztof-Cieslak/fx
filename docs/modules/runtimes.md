@@ -127,7 +127,11 @@ the files are rewritten, so a process cannot change what the next launch reads.
 `OwnedDirs.under dir` is the usual layout: `cwd`, `home`, `config`, `cache`, `tmp`. Owned
 directories belong to one launch, or to one kernel or session. Never put them inside the workspace.
 
-### Using a runtime (T117: `Interpreter.prepare`, interpreters.md; T115b)
+### Using a runtime (T117: `Interpreter.prepare`, interpreters.md)
+
+A process extension on a runtime (`fx.exthost.bun`: `ExthostBun.manifestOn` composes `fx.runtime.bun`'s
+launch) requires the runtime's component; the host installs it in the bootstrap's components phase and
+fills the launch's `${bin.bun}` with the installed path ([extensions.md](extensions.md#bootstrap-spec-161)).
 
 ```fsharp
 // 1. Install it: the extension requires { Id = "bun"; Version = "^1.4" } (manifest `requires`),

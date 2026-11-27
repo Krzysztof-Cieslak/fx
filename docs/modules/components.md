@@ -221,11 +221,14 @@ waits, the probe timeout) and `ITrace`.
 
 ### The extension bootstrap
 
-`Components.installFor` fits `HostSettings.InstallComponents` (the components phase of spec §16.1):
-it ensures an admitted extension's `requires`, held by `extension:<id>`. The composition root (T129)
-plans the lockfile before the bootstrap from the component definitions of builtin and host-config
-candidates (components are privileged, so project extensions cannot contribute them), or uses the
-existing lockfile if `Lockfile.isCurrent`; it records `Lockfile.hash` in the profile.
+`Components.installFor` (the environment's `IComponents`) and `Components.installWith` (a `Components`
+value) fit `HostSettings.InstallComponents` (the components phase of spec §16.1): they ensure an
+admitted extension's `requires`, held by `extension:<id>`, and return the installed components, whose
+commands fill its launch's `${bin.<name>}`. The host plans each extension's requirements from the
+component definitions the in-binary extensions contribute (`Host.planFor`: components are privileged,
+so project extensions cannot contribute them) and installs them with the same installer environments
+use; installs for extensions never wait for a person (`ExtensionInstalls`, [host.md](host.md)). The
+environments' lockfile (interpreters' requirements) is recorded in the profile (`Lockfile.hash`).
 
 ## Conformance suite v1
 
