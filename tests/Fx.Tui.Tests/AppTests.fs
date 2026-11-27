@@ -525,7 +525,7 @@ let tests =
 
                         Expect.equal away.Selection moved.Selection "still selected"
                         Expect.isLessThan away.Scroll moved.Scroll "the wheel moved the view"
-                        Expect.isFalse (away.Reveal) "not brought back"
+                        Expect.isNone away.Reveal "not brought back"
 
                         let back = View.settle (fst (play away [ key KeyCode.Up ]))
 
@@ -599,6 +599,64 @@ let tests =
                         match cmds with
                         | [ Cmd.AnswerGrant(RequestId "g-1", _) ] -> ()
                         | other -> failtest $"{other}"
+                    }
+
+                    test "a click on an item expands it, or collapses it; anywhere else it does nothing" {
+                        let _, model = ready ()
+                        let model = View.settle model
+                        let lines = (screen model).Split('\n')
+
+                        let row (text: string) =
+                            lines |> Array.findIndex (fun line -> line.Contains text)
+
+                        Expect.equal (Map.tryFind (row "◇ Cell") model.ItemsAt) (Some rerun) "the cell's row"
+
+                        Expect.equal
+                            (Map.tryFind (row "exit 1") model.ItemsAt)
+                            (Some(ItemId.Call(1, "toolu_3")))
+                            "a row under an activity line is its item's"
+
+                        let clicked, cmds = play model [ key (KeyCode.Click(30, row "◇ Cell")) ]
+                        Expect.isEmpty cmds "nothing sent"
+                        Expect.equal clicked.Folds (Map.ofList [ rerun, Fold.Expanded ]) "expanded"
+                        Expect.isNone clicked.Selection "not selecting"
+                        Expect.stringContains (screen clicked) "r.exitCode" "its code"
+                        let clicked = View.settle clicked
+
+                        let row =
+                            (screen clicked).Split('\n')
+                            |> Array.findIndex (fun line -> line.Contains "◇ Cell")
+
+                        let again, _ = play clicked [ key (KeyCode.Click(3, row)) ]
+                        Expect.equal again.Folds (Map.ofList [ rerun, Fold.Collapsed ]) "collapsed"
+
+                        let prompt = lines |> Array.findIndex (fun line -> line.StartsWith "┃ ›")
+                        let blank = lines |> Array.findIndex (fun line -> line = "")
+
+                        let nothing, _ =
+                            play
+                                model
+                                [
+                                    key (KeyCode.Click(5, prompt))
+                                    key (KeyCode.Click(5, 0))
+                                    key (KeyCode.Click(5, blank))
+                                ]
+
+                        Expect.isTrue nothing.Folds.IsEmpty "the prompt, the banner, a blank row"
+                        let cellRow = lines |> Array.findIndex (fun line -> line.Contains "◇ Cell")
+                        let selecting, _ = play model [ shiftUp; key (KeyCode.Click(5, cellRow)) ]
+                        Expect.equal selecting.Selection (Some rerun) "while selecting, it selects too"
+
+                        let wide = View.settle { model with Width = 130 }
+
+                        let wideRow =
+                            (screen wide).Split('\n')
+                            |> Array.findIndex (fun line -> line.Contains "◇ Cell")
+
+                        let side, _ = play wide [ key (KeyCode.Click(125, wideRow)) ]
+                        Expect.isTrue side.Folds.IsEmpty "not the sidebar's columns"
+                        let main, _ = play wide [ key (KeyCode.Click(10, wideRow)) ]
+                        Expect.equal main.Folds (Map.ofList [ rerun, Fold.Expanded ]) "the main column's"
                     }
 
                     test "the items a turn shows, with ids that stay as it grows" {
