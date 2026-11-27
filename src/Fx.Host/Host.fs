@@ -658,7 +658,11 @@ module Host =
             warnings.AddRange(
                 Setup.problems
                     { extensions with
-                        Report = extensions.Report |> List.skip inBinary.Report.Length
+                        Report =
+                            extensions.Report
+                            |> List.skip inBinary.Report.Length
+                            |> List.filter (fun entry ->
+                                not (Setup.unneeded (Setup.candidates options exclusions) entry))
                     }
             )
 

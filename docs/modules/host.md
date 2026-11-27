@@ -114,8 +114,10 @@ In this order; any expected failure is an `Error` with every line, and what star
    for extensions never ask (`ExtensionInstalls`: nobody is attached while the host starts): an
    install already in `runtimes/` is found, yolo approvals or a grant the rules give at once
    (`fx grants allow component.install bun@*`) approve one, anything else refuses it, and the extension
-   fails with a warning that says how to allow it; the next start tries again. Failures become
-   warnings.
+   fails; the next start tries again. Failures become warnings, except an extension that only
+   contributes runtimes none of the candidates runs on (`Setup.unneeded`: `fx.exthost.bun` with no
+   package on `bun`), which stays in the report: with a Bun package, its warning says how to allow
+   the install.
 8. **Identity**: the machine id, `PeerCredentials.currentAccount`, session tokens and the
    authenticator over the contributed identity providers.
 9. **Environments**: `EnvsHost` on `environments/host` with the contributed providers and sandbox

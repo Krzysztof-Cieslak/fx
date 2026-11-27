@@ -219,6 +219,28 @@ module Setup =
             host
             (candidates options exclusions)
 
+    /// Whether a failure is of an extension that only contributes extension runtimes (`fx.exthost.bun`)
+    /// that none of the candidates runs on: nothing needs it, so it is no warning (it stays in the
+    /// report). A Bun package's failure for want of `bun` brings its own warning, and this one.
+    let unneeded (candidates: Candidate list) (entry: ReportEntry) : bool =
+        let manifests = candidates |> List.map (fun c -> Package.manifest c.Package)
+
+        match manifests |> List.tryFind (fun m -> m.Id = entry.Id) with
+        | Some manifest when not manifest.Contributions.IsEmpty ->
+            let runtimes =
+                manifest.Contributions
+                |> List.map (fun decl ->
+                    if decl.Type = ExtensionRuntimes.contributionType.Name then
+                        Some decl.Id
+                    else
+                        None)
+
+            runtimes |> List.forall Option.isSome
+            && runtimes
+               |> List.choose id
+               |> List.forall (fun runtime -> manifests |> List.forall (fun m -> m.Runtime <> runtime))
+        | _ -> false
+
     /// What went wrong loading extensions, one line each (activated and skipped ones are fine).
     let problems (extensions: Fx.Extensions.Host) : string list =
         extensions.Report

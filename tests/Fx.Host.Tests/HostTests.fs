@@ -108,6 +108,28 @@ let private grantsCommand (options: HostOptions) (command: GrantsCommand) : stri
     | Ok lines -> lines
     | Error errors -> failtest (String.concat "\n" errors)
 
+/// What the report says about fx.exthost.bun, unless it activated.
+let private exthostReport (host: Host) : string list =
+    host.Extensions.Report
+    |> List.filter (fun entry -> entry.Id = "fx.exthost.bun")
+    |> List.map string
+    |> List.filter (fun line -> not (line.EndsWith "activated"))
+
+/// The options with a package on the `bun` runtime from host config (its directory is empty: it needs
+/// the Bun extension host before anything is read from it).
+let private withBunPackage (p: Place) (opts: HostOptions) : HostOptions =
+    let dir = Path.Combine(p.Data, "..", "hello")
+    Directory.CreateDirectory dir |> ignore
+
+    { opts with
+        Extensions =
+            [
+                Fx.Extensions.Candidate.create
+                    Fx.Extensions.Source.HostConfig
+                    (Fx.Extensions.Package.Manifest(Fx.Sdk.Manifest.create "tests.hello" "1.0.0" "bun", Some dir))
+            ]
+    }
+
 [<Tests>]
 let tests =
     testList
@@ -366,15 +388,13 @@ let tests =
                         (File.Exists(Path.Combine(opts.Paths.Extensions, "fx.exthost.bun", "config", "bunfig.toml")))
                         "the runtime's files too"
 
-                    match host.Warnings |> List.filter (fun w -> w.Contains "fx.exthost.bun") with
-                    | [ warning ] ->
-                        Expect.stringContains warning "[components] failed" warning
-                        Expect.stringContains warning "needs a person's approval" warning
+                    // Nothing runs on `bun`: no warning, only the report says why.
+                    Expect.isEmpty host.Warnings "no warnings"
 
-                        Expect.stringContains
-                            warning
-                            $"`{Product.binaryName} grants allow component.install bun@*`"
-                            warning
+                    match exthostReport host with
+                    | [ line ] ->
+                        Expect.stringContains line "[components] failed" line
+                        Expect.stringContains line "needs a person's approval" line
                     | other -> failtest $"{other}"
 
                     Expect.isFalse
@@ -389,12 +409,24 @@ let tests =
                 finally
                     stop host
 
-                // A file changed on disk is written again.
+                // A file changed on disk is written again. With a package on `bun`, the warning says how.
                 File.WriteAllText(main, "// changed")
-                let host = start opts
+                let host = start (withBunPackage p opts)
 
                 try
                     Expect.equal (File.ReadAllText main) expected.Content "written again"
+
+                    match host.Warnings |> List.filter (fun w -> w.Contains "fx.exthost.bun") with
+                    | [ warning ] ->
+                        Expect.stringContains warning "needs a person's approval" warning
+
+                        Expect.stringContains
+                            warning
+                            $"`{Product.binaryName} grants allow component.install bun@*`"
+                            warning
+                    | other -> failtest $"{other}"
+
+                    Expect.exists host.Warnings (fun w -> w.StartsWith "tests.hello") "the package's own failure"
                 finally
                     stop host
 
@@ -415,7 +447,7 @@ let tests =
                 let host = start opts
 
                 try
-                    match host.Warnings |> List.filter (fun w -> w.Contains "fx.exthost.bun") with
+                    match exthostReport host with
                     | [ warning ] ->
                         // Approved by the grant: the (fake) download is what fails.
                         Expect.stringContains warning "download failed" warning
@@ -446,10 +478,8 @@ let tests =
                     | Error errors ->
                         Expect.stringContains (String.concat "\n" errors) "another host is running" "refused"
 
-                    // A fresh data directory: fx.exthost.bun's Bun is not installed, and nobody approved it.
-                    match host.Warnings with
-                    | [ warning ] -> Expect.stringStarts warning "fx.exthost.bun [components] failed" warning
-                    | other -> failtest $"only fx.exthost.bun's warning: {other}"
+                    // fx.exthost.bun's Bun is not approved, but nothing runs on `bun`: no warning.
+                    Expect.isEmpty host.Warnings "no warnings"
 
                     Expect.isSome host.Lockfile "components planned"
                 finally
@@ -684,9 +714,7 @@ let tests =
                 let host = start opts
 
                 try
-                    Expect.isEmpty
-                        (host.Warnings |> List.filter (fun w -> not (w.StartsWith "fx.exthost.bun")))
-                        "every provider's methods check"
+                    Expect.isEmpty host.Warnings "every provider's methods check"
 
                     match
                         wait (
