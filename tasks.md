@@ -26,8 +26,8 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
-- **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
-- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
+- **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
+- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
 - **Wave 10:** T129a Host composition + headless run, T212 Run kernel, T217 Eval harness, T608 Agent teams
@@ -110,6 +110,7 @@ flowchart LR
     T133j["T133j TUI: expand one item"]
     T134["T134 Approval modes"]
     T135["T135 CodeAct: a kernel that stays"]
+    T137["T137 Sandbox opt-in"]
   end
   subgraph P2["Phase 2 — Agent quality, UX, models, agents, goals, evals"]
     T201["T201 Values & references"]
@@ -162,6 +163,7 @@ flowchart LR
     T509["T509 Cloud model routes"]
     T510["T510 First cloud env (E2B)"]
     T511["T511 AppContainer sandbox"]
+    T512["T512 Sandbox: copy-on-write home"]
   end
   subgraph P6["Phase 6 — Ecosystem"]
     T601["T601 Egress redaction"]
@@ -284,6 +286,7 @@ flowchart LR
   T127b --> T134
   T132a --> T134
   T127 --> T135
+  T113 --> T137
   T117 --> T201
   T126 --> T201
   T008 --> T202
@@ -376,6 +379,7 @@ flowchart LR
   T115 --> T510
   T503 --> T510
   T113 --> T511
+  T137 --> T512
   T124 --> T601
   T116 --> T602
   T211 --> T602
@@ -393,7 +397,7 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133j,T135,T206 done
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133j,T135,T137,T206 done
   class T132 inprogress
 ```
 
@@ -470,6 +474,7 @@ flowchart LR
 | T133j | TUI: expand one item | T133b | §19.2 | done | Dogfooding (T132): `Ctrl+O` only cycles the detail for everything. Single items (a cell, an activity line, a result card) can be selected and expanded or collapsed on their own, with the keys in the footer and tui.md; the global detail stays. Update tests and golden renders. |
 | T134 | Approval modes | T127b, T132a | §13, §19.4 | todo | Dogfooding (T132): asking for every shell command is tiring. A mode (a variant slot, e.g. `grants.mode`: `ask`, `auto`) where commands that stay in the sandbox and the workspace run without asking, closer to opencode; writes outside the workspace, network and installs still ask; policy can forbid the mode; the TUI shows the mode and can switch it. spec §13 updated; host tests with a scripted model. |
 | T135 | CodeAct: a kernel that stays | T127 | §6.9 | done | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
+| T137 | Sandbox opt-in | T113 | §9.1, §18 | done | Dogfooding (T132): the sandbox kept ordinary tools from working (NuGet could not read `~/.nuget/NuGet/NuGet.Config`, a credential location; Cargo, Yarn Berry and the MSBuild server write or read under `~`), and per-tool variables (T136, dropped) were a growing list of special cases; mainstream agents run without an OS sandbox, with permission prompts as the control. The sandbox becomes opt-in: `sandbox.driver` defaults to `none` (privileged: host config or the command line turn it on with `auto` or a driver; a project cannot); the default carries no warning (`sandbox: off` in the TUI and `fx run`), while a requested sandbox that cannot run still warns (`auto`) or fails the environment (a driver). Seatbelt lets the environment's own unix sockets through; the prompt describes the sandbox when one confines. spec §9.1, §18 and the docs say what each mode leaves open and what breaks. Host tests: the default, opting in, `auto`'s fallback, a project's config. Replaces T136. |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
@@ -533,7 +538,8 @@ flowchart LR
 | T508 | Web client | T507 | §3 | todo | Fable web client sharing `Evolve` projections. |
 | T509 | Cloud model routes | T118, T121 | §11.3 | todo | `command` + `sigv4` auth, Bedrock / Agent Platform / Azure routes, auth-flow forwarding, mTLS gateways. |
 | T510 | First cloud env (E2B) | T112, T115, T503 | §9.1 | todo | E2B environment provider as a Bun extension. |
-| T511 | AppContainer sandbox | T113 | §9.1 | todo | `fx.sandbox.appcontainer` for Windows; removes the unsandboxed banner when active. |
+| T511 | AppContainer sandbox | T113 | §9.1 | todo | `fx.sandbox.appcontainer` for Windows: opt-in like the other drivers (`auto` picks it there), so `auto` on Windows no longer falls back to `none` with a warning. |
+| T512 | Sandbox: copy-on-write home | T137 | §9.1, §18 | todo | Dogfooding (T132, T137): in the sandbox, tools that keep state under `~` fail (NuGet's packages, Cargo, Yarn Berry, the MSBuild server's runtime directory), and so do tools that read a config on the credential list (`~/.nuget/NuGet/NuGet.Config`, `.yarnrc.yml`), because it is unreadable rather than absent. Each environment gets a copy-on-write home: the real home as a read-only lower layer, a private upper layer the sandbox writes, and credential paths as whiteouts (absent, so tools fall back to their defaults), with no per-tool variables. Findings: unprivileged overlayfs works (Linux 6.12); bubblewrap's `--overlay` arrived in 0.10, and Ubuntu 24.04 ships 0.9 (probe for it, or mount the overlay in a user namespace of our own); Seatbelt cannot remap paths on macOS (find another way or leave macOS as it is); Windows comes with T511. Done when the sandbox conformance suite covers the home's layers and this repository's restore and build (and a Cargo build) pass in the sandbox with the user's real home. |
 
 ### Phase 6 — Ecosystem
 
