@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                      │
+┃ how do I use opus by default?                                                       │ billing
+                                                                                      │
+  Set model.role.main in ~/.fx/config.json: …                                         │ Context
+  ◇ Cell     check the config                                                   ✓ 1.0s│ nothing yet
+  ▸ 1 cell (2 lines)                                  [Ctrl+O expand · Shift+↑ select]│
+                                                                                      │
+  ✓ Done  Created ~/.fx/config.json: fx uses Opus 5.5 by default …                    │
+  ▣ fx · anthropic/claude-sonnet-5-5 · 3.0s                                           │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+┃ ›                                                                                   │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
+fx · …/src/billing:main · session …00000007       Enter send · Ctrl+P commands  ● idle│
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

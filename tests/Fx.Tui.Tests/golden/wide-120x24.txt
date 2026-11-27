@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                      │
+┃ 翻訳を確認して 👍🏽 — vérifie les traductions                                         │ billing
+                                                                                      │
+  日本語のファイルを読みます。                                                        │ Context
+  ◇ Read     docs/日本語.md                                                     ✗ 0.4s│ nothing yet
+      no such file: docs/日本語.md                                                    │
+                                                                                      │
+  ✗ Failed  the model call failed: overloaded                                         │
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1.4s                                           │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+                                                                                      │
+  held: the last turn did not finish; a prompt goes on                                │
+┃ ›                                                                                   │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
+fx · …/src/billing:main · session …00000004       Enter send · Ctrl+P commands  ● held│
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

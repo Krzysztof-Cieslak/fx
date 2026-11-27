@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                      │
+  I'll look at the call sites first.                                                  │ billing
+  ◇ Read     src/Billing/Client.fs                                              ✓ 0.2s│
+  ◆ Edit     src/Billing/Client.fs                                              ✓ 0.3s│ Context
+  ◇ Run      dotnet test tests/Billing                                           ✗ 48s│ nothing yet
+      exit 1                                                                          │
+  ◇ Cell     rerun the tests                                                     ✓ 46s│
+  ▸ 1 cell (3 lines)                                  [Ctrl+O expand · Shift+↑ select]│
+                                                                                      │
+  ✓ Done  Migrated 37 call sites to RetryPolicy.                                      │
+    Evidence  dotnet test tests/Billing → 214 passed                                  │
+    Verify    dotnet test tests/Billing                                               │
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s                                          │
+                                                                                      │
+┃ now update the changelog                                                            │
+                                                                                      │
+  Updating CHANGELOG.md: the entry goes under *Unreleased*.                           │
+                                                                                      │
+  Then the version in `Directory.Build.props`, and the tests again.                   │
+                                                                                      │
+  ⠴ turn 2 · writing 0.0s                                                             │
+┃ ›                                                                                   │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
+fx · …/src/billing:main · session …00000000          Enter steer · Tab queue  ● turn 2│
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 21,4

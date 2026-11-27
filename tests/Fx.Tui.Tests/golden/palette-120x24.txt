@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  I'll look at the call sites first.                                                  │
+  ◇ Read     src/Billing/Client.fs                                              ✓ 0.2s│ billing
+  ◆ Edit     src/Billing/Client.fs                                              ✓ 0.3s│
+  ◇ Run      dotnet test tests/Billing                                           ✗ 48s│ Context
+      exit 1                                                                          │ nothing yet
+  ◇ Cell     rerun the tests                                                     ✓ 46s│
+  ▸ 1 cell (3 lines)                                  [Ctrl+O expand · Shift+↑ select]│
+                                                                                      │
+  ✓ Done  Migrated 37 call sites to RetryPolicy.                                      │
+    Evidence  dotnet test tests/Billing → 214 passed                                  │
+    Verify    dotnet test tests/Billing                                               │
+  ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s                                          │
+                                                                                      │
+┃ Commands                                                                       esc  │
+┃ › se                                                                                │
+┃  /sessions   Switch to another session                                              │
+┃  /model      Use another model from the next turn on                                │
+┃  /exit       Leave (the session stays)                                              │
+┃  /new        Start a new session                                                    │
+┃  /detail     Show more or less of each turn                                         │
+┃  /approvals  Ask for commands, or auto-approve workspace ones                       │
+┃ ›                                                                                   │
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
+fx · …/src/billing:main · session …00000000  ↑↓ select · Enter run · Esc close  ● idle│
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor hidden

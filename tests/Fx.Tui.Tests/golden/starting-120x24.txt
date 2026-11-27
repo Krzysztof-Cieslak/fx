@@ -1,0 +1,27 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+                                                       ████ █  █
+                                                       █    █  █
+                                                       ███   ██
+                                                       █    █  █
+                                                       █    █  █
+
+                        ⠋ starting: creating the session and its environment
+                      ┃ ›
+                      ┃ anthropic/claude-sonnet-5-5
+
+                      …/src/billing                                                Ctrl+P commands
+
+
+
+
+
+
+fx · …/src/billing         Enter send · Ctrl+P commands · Alt+Enter newline · Ctrl+O detail · Shift+↑ select  ● starting
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+cursor 13,26

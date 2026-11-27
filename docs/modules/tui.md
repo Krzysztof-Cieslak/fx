@@ -41,7 +41,10 @@ to send, and a pure `view` that draws the model as a frame.
 - **The loop** (`Runtime.run`) folds messages from an `Inbox` (keys, ticks, the host's
   notifications, commands' outcomes), draws after each batch (`View.render`: the model settled, and
   its frame; the settled model is kept), and writes only the rows that changed
-  (`Vt.diff`, in a synchronized update). Commands run one at a time in order on a worker; those sent
+  (`Vt.diff`, in a synchronized update). Rows use exactly the terminal's columns (display widths: wide
+  characters take two, combining marks none) and automatic wrap is off; a row that fills the width is
+  not followed by an erase to the end of the line, which would take its last column (with wrap off the
+  cursor stays there; T133i). Commands run one at a time in order on a worker; those sent
   before quitting go out before it returns. Keys come from the terminal through `Keys.decode`; a lone
   `ESC` waits 40 ms for the rest of a sequence. Ticks (100 ms while something moves, else 500 ms)
   move the clock on. The loop reads the terminal's size before it handles a batch with keys or a
@@ -360,8 +363,13 @@ terminal check's P/Invoke without a terminal).
   theme); colour depths from variables, lowering, SGR codes, the theme a choice gives, and
   golden styles of a screen at every depth (`styles-*.txt`); text widths (CJK, emoji, combining marks), wrapping, rows; key decoding (sequences
   cut between reads, pastes, mouse reports in both encodings, cut too); the editor over grapheme clusters; frames on a `VtScreen` and the frame
-  difference; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session
-  machine itself) at 80×24, 40×20 and 24×14 (starting, a finished turn, a running turn with steering
+  difference (`VtScreen` keeps the cursor on the last column as a terminal with wrap off does, so a
+  row that fills the width and then erases to the end of the line loses its last column there too);
+  full width: every screen at 24 to 200 columns (odd widths, both sides of the sidebar's threshold)
+  has no row wider than the terminal, painted themes fill every row to exactly its width, and the
+  frame drawn on a `VtScreen` shows every column of every row; golden renders (`golden/`, `UPDATE_GOLDEN=1`) of scripted sessions (made by the session
+  machine itself) at 80×24, 40×20, 24×14 and 120×24 (the sidebar's threshold), each also checked for
+  width (starting, a finished turn, a running turn with steering
   and a queued prompt, the agent's question after a draft, the loop guard's question, permissions, a
   decision, wide characters and a failure, a compacted turn, verbose, scrolled up while the reply
   streams in, an item selected, two expanded on their own, a reply and a result card collapsed);

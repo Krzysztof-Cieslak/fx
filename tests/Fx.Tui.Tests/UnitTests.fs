@@ -404,6 +404,59 @@ let tests =
                         Expect.equal screen.Lines [ "one"; "2"; "three" ] "updated in place"
                     }
 
+                    test "a terminal with wrap off keeps the cursor on the last column" {
+                        let screen = VtScreen(4, 1)
+                        screen.Write "abcd"
+                        Expect.equal screen.Cursor (0, 3) "on the last column"
+                        screen.Write "e"
+                        Expect.equal screen.Lines [ "abce" ] "the next character overwrites it"
+                        screen.Write "\u001b[K"
+                        Expect.equal screen.Lines [ "abc" ] "erasing the rest of the line erases it"
+                        screen.Write(Vt.moveTo 0 0 + "日本")
+                        Expect.equal screen.Lines [ "日本" ] "a wide character ends on the last column"
+                        screen.Write(Vt.moveTo 0 1 + "x")
+                        Expect.equal screen.Lines [ " x本" ] "half of a wide character overwritten blanks the other half"
+                    }
+
+                    test "a row as wide as the terminal keeps its last column" {
+                        let frame: Frame =
+                            {
+                                Width = 10
+                                Height = 4
+                                Rows =
+                                    [
+                                        [ Span.plain "0123456789" ]
+                                        [ Span.plain "│ 日本語 "; Span.create Style.reverse "│" ]
+                                        [ Span.create Style.reverse "12345678"; Span.plain "日" ]
+                                        [ Span.plain "short" ]
+                                    ]
+                                Cursor = None
+                            }
+
+                        let screen = VtScreen(10, 4)
+                        screen.Write Vt.enter
+                        screen.Write(Vt.diff None frame)
+                        Expect.equal screen.Lines (Frame.lines frame) "every column drawn"
+
+                        let next =
+                            { frame with
+                                Rows =
+                                    [
+                                        [ Span.plain "abcdefghij" ]
+                                        [ Span.plain "x" ]
+                                        [ Span.plain "123456789"; Span.plain "Z" ]
+                                        []
+                                    ]
+                            }
+
+                        screen.Write(Vt.diff (Some frame) next)
+
+                        Expect.equal
+                            screen.Lines
+                            (Frame.lines next)
+                            "redrawn rows keep their last column, shorter ones are cleared"
+                    }
+
                     test "styles are SGR codes of the 16 colours" {
                         Expect.equal
                             (Vt.sgr
