@@ -62,22 +62,6 @@ type EnvInfo =
 
     override this.ToString() = $"{this.Name} ({this.Provider})"
 
-/// How much of each turn the transcript shows.
-[<RequireQualifiedAccess>]
-type Verbosity =
-    /// The prompts, activity lines and result cards.
-    | Quiet
-    /// Also what the model wrote, and errors under the actions that failed.
-    | Normal
-    /// Also every cell's code and what each action returned.
-    | Verbose
-
-    override this.ToString() =
-        match this with
-        | Quiet -> "quiet"
-        | Normal -> "normal"
-        | Verbose -> "verbose"
-
 [<RequireQualifiedAccess>]
 type Phase =
     /// Connecting, creating or resuming the session (creating its environment can ask for grants).
@@ -318,6 +302,14 @@ type Model =
         /// While going through earlier prompts: which one (from the newest) and the text being typed.
         History: (int * string) option
         Verbosity: Verbosity
+        /// How the person chose to show single items, over the detail (kept until the session shown
+        /// changes).
+        Folds: Map<ItemId, Fold>
+        /// The item selected while the person selects items (`Shift+↑`).
+        Selection: ItemId option
+        /// The selection is to be brought into view when the model is next settled (`View.settle`):
+        /// it moved, or it was expanded or collapsed.
+        Reveal: bool
         /// Rows the transcript is scrolled up from its end (0: at the end, following new output).
         Scroll: int
         /// The transcript's rows when the model was last settled (`View.settle`): a scrolled view
@@ -366,6 +358,9 @@ module App =
             Editor = Editor.empty
             History = None
             Verbosity = Verbosity.Normal
+            Folds = Map.empty
+            Selection = None
+            Reveal = false
             Scroll = 0
             TranscriptRows = 0
             TranscriptRoom = 0
@@ -634,6 +629,9 @@ module App =
             Answering = model.Answering |> Set.filter (fun id -> id.StartsWith "grant/")
             Selected = 0
             Palette = None
+            Folds = Map.empty
+            Selection = None
+            Reveal = false
         }
 
     let private cycleDetail (model: Model) : Model =
@@ -834,6 +832,82 @@ module App =
             []
         )
 
+    // ---- items ----------------------------------------------------------------------------------
+
+    /// The transcript's items at the model's detail, in order.
+    let items (model: Model) : Item list =
+        Items.all model.Verbosity (Timeline.blocks model.Timeline)
+
+    /// The item selected, while the person selects items.
+    let selected (model: Model) : Item option =
+        match model.Selection with
+        | Some id -> items model |> List.tryFind (fun item -> item.Id = id)
+        | None -> None
+
+    let private selectItem (item: Item) (model: Model) : Model =
+        { model with
+            Selection = Some item.Id
+            Reveal = true
+        }
+
+    /// Selects the item above the one selected (the newest when none is, or it is gone), or below
+    /// it: past the newest, selecting ends. At the oldest it stays.
+    let private moveSelection (up: bool) (model: Model) : Model =
+        let all = items model
+        let shown = Items.shown model.Folds
+
+        let before, after =
+            match model.Selection with
+            | Some id ->
+                match List.tryFindIndex (fun (item: Item) -> item.Id = id) all with
+                | Some i -> List.take i all, List.skip (i + 1) all
+                | None -> all, []
+            | None -> all, []
+
+        let next =
+            if up then
+                before |> List.filter shown |> List.tryLast
+            else
+                after |> List.filter shown |> List.tryHead
+
+        match next, up with
+        | Some item, _ -> selectItem item model
+        | None, true when model.Selection.IsSome -> { model with Reveal = true }
+        | None, true -> notice "nothing to select yet" model
+        | None, false ->
+            { model with
+                Selection = None
+                Reveal = false
+            }
+
+    /// Selects the oldest item, or the newest.
+    let private selectEnd (oldest: bool) (model: Model) : Model =
+        let shown = items model |> List.filter (Items.shown model.Folds)
+
+        match (if oldest then List.tryHead shown else List.tryLast shown) with
+        | Some item -> selectItem item model
+        | None -> model
+
+    /// The item selected shown as the person chose.
+    let private foldSelected (fold: Fold) (model: Model) : Model =
+        match selected model with
+        | Some item ->
+            { model with
+                Folds = Map.add item.Id fold model.Folds
+                Reveal = true
+            }
+        | None -> model
+
+    /// The item selected expanded, or collapsed if it shows more than its line.
+    let private toggleSelected (model: Model) : Model =
+        match selected model with
+        | Some item ->
+            { model with
+                Folds = Items.toggle model.Folds item
+                Reveal = true
+            }
+        | None -> model
+
     let private edit (key: Key) (model: Model) : Model * Cmd list =
         let editor = model.Editor
         let set (editor: Editor) = { model with Editor = editor }, []
@@ -927,10 +1001,46 @@ module App =
         | KeyCode.Char "l", true, false -> Some(model, [ Cmd.Redraw ])
         | _ -> None
 
-    let private onKey (key: Key) (model: Model) : Model * Cmd list =
+    /// Keys while the person selects items: `↑` `↓` move (with any modifier), `Enter` or `Space`
+    /// expands or collapses, `→` expands and `←` collapses, `Home` `End` go to the oldest and the
+    /// newest, `Esc` ends it; scrolling, the detail and redrawing keep it. Any other key ends it
+    /// (`None`) and does what it does.
+    let private selecting (key: Key) (model: Model) : (Model * Cmd list) option =
+        match key.Code, key.Ctrl, key.Alt with
+        | KeyCode.Up, _, _ -> Some(moveSelection true model, [])
+        | KeyCode.Down, _, _ -> Some(moveSelection false model, [])
+        | KeyCode.Enter, false, false
+        | KeyCode.Char " ", false, false -> Some(toggleSelected model, [])
+        | KeyCode.Right, false, false -> Some(foldSelected Fold.Expanded model, [])
+        | KeyCode.Left, false, false -> Some(foldSelected Fold.Collapsed model, [])
+        | KeyCode.Home, false, false -> Some(selectEnd true model, [])
+        | KeyCode.End, false, false -> Some(selectEnd false model, [])
+        | KeyCode.Escape, false, false ->
+            Some(
+                { model with
+                    Selection = None
+                    Reveal = false
+                },
+                []
+            )
+        | KeyCode.PageUp, _, _
+        | KeyCode.PageDown, _, _
+        | KeyCode.WheelUp, _, _
+        | KeyCode.WheelDown, _, _
+        | KeyCode.Home, true, false
+        | KeyCode.End, true, false
+        | KeyCode.Char "o", true, false
+        | KeyCode.Char "l", true, false -> common key model
+        | _ -> None
+
+    /// A key, when nothing is selected.
+    let private keyed (key: Key) (model: Model) : Model * Cmd list =
         match model.Palette, key.Code, key.Ctrl with
         | Some palette, _, _ when not (key.Code = KeyCode.Char "c" && key.Ctrl) -> paletteKey palette key model
         | None, KeyCode.Char "p", true -> openPalette { model with ExitArmed = None }, []
+        // `Shift+↑` (or `Ctrl+↑`, `Alt+↑`, where the terminal passes them on) selects the newest item.
+        | None, KeyCode.Up, _ when key.Shift || key.Ctrl || key.Alt ->
+            moveSelection true { model with ExitArmed = None }, []
         | _ ->
 
             match common key model with
@@ -995,6 +1105,24 @@ module App =
                             []
                         | [] -> send PromptMode.Queue model
                     | _ -> edit key model
+
+    let private onKey (key: Key) (model: Model) : Model * Cmd list =
+        let selection =
+            match model.Palette, model.Selection with
+            | None, Some _ -> selecting key model
+            | _ -> None
+
+        match selection with
+        | Some result -> result
+        | None when model.Selection.IsSome ->
+            // Any other key ends the selection, then does what it does.
+            keyed
+                key
+                { model with
+                    Selection = None
+                    Reveal = false
+                }
+        | None -> keyed key model
 
     // ---- update ---------------------------------------------------------------------------------
 

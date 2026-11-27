@@ -5,7 +5,7 @@
                                                                                                 │ Context
   ◇ Cell     look for a speed option                                                      ✓ 0.5s│ 73,616 tokens
   Not yet: the request format has no speed option.                                              │ 7% used
-  ▸ 1 cell (2 lines)                                                             [Ctrl+O expand]│ $2.11 spent
+  ▸ 1 cell (2 lines)                                            [Ctrl+O expand · Shift+↑ select]│ $2.11 spent
                                                                                                 │ anthropic/claude-opus-5-5
   ✓ Done  Fast mode needs a speed option in ChatRequest                                         │
   ▣ fx · anthropic/claude-opus-5-5 · 10s · 100.0 tok/s                                          │

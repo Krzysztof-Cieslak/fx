@@ -2,7 +2,7 @@
  1 {fg=#dcdfe4 bg=#181921}  {fg=#7dcfff bg=#181921}◇{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Run     {fg=#dcdfe4 bg=#181921} dotnet test tests/Billing                 {fg=#f7768e bg=#181921}✗ {fg=#808496 bg=#181921}48s
  2 {fg=#dcdfe4 bg=#181921}      {fg=#f7768e bg=#181921}exit 1{fg=#dcdfe4 bg=#181921}                                                
  3 {fg=#dcdfe4 bg=#181921}  {fg=#7dcfff bg=#181921}◇{fg=#dcdfe4 bg=#181921} {fg=#dcdfe4 bg=#181921 bold}Cell    {fg=#dcdfe4 bg=#181921} rerun the tests                           {fg=#9ece6a bg=#181921}✓ {fg=#808496 bg=#181921}46s
- 4 {fg=#dcdfe4 bg=#181921}  {fg=#808496 bg=#181921}▸ 1 cell (3 lines){fg=#dcdfe4 bg=#181921}                         {fg=#808496 bg=#181921}[Ctrl+O expand]
+ 4 {fg=#dcdfe4 bg=#181921}  {fg=#808496 bg=#181921}▸ 1 cell (3 lines){fg=#dcdfe4 bg=#181921}        {fg=#808496 bg=#181921}[Ctrl+O expand · Shift+↑ select]
  5 {fg=#dcdfe4 bg=#181921}                                                            
  6 {fg=#dcdfe4 bg=#181921}  {fg=#9ece6a bg=#181921 bold}✓ Done  {fg=#dcdfe4 bg=#181921}Migrated 37 call sites to RetryPolicy.            
  7 {fg=#dcdfe4 bg=#181921}    {fg=#dcdfe4 bg=#181921 bold}Evidence  {fg=#dcdfe4 bg=#181921}dotnet test tests/Billing → 214 passed        

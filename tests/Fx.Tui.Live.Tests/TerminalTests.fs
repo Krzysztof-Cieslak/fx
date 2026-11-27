@@ -129,6 +129,15 @@ let tests =
                     out.WaitFor "› hello"
                     write pty "\r"
                     out.WaitFor "✗ Failed"
+                    // Shift+↑, as the terminal sends it, selects the newest item: the result card.
+                    let marked (lines: string list) =
+                        lines |> List.exists (fun line -> line.StartsWith "› ✗ Failed")
+
+                    write pty "\u001b[1;2A"
+                    out.WaitUntil("the result card selected", marked)
+                    out.WaitUntil("the keys while selecting", fun lines -> (List.last lines).Contains "↑↓ move")
+                    write pty "\u001b"
+                    out.WaitUntil("selecting done", fun lines -> not (marked lines))
                     sync (pty.Resize { Cols = 72; Rows = 20 })
                     out.Resize(72, 20)
                     // The status line's hints are written again at the new width.

@@ -111,8 +111,9 @@ module View =
             | None when not st.AwaitingRequests.IsEmpty -> [ s t.Warning "● needs input" ]
             | None -> [ s t.Muted "● idle" ]
 
-    /// The bottom row: the product, the workspace and the session on the left; the session's state,
-    /// whether the transcript is scrolled, and the keys that apply on the right (cut first).
+    /// The bottom row: the product, the workspace and the session on the left (the product alone
+    /// while selecting items); the session's state, whether the transcript is scrolled, and the keys
+    /// that apply on the right (cut first).
     let footer (model: Model) (sidebar: bool) : Row =
         let t = theme model
         let width = model.Width
@@ -149,22 +150,34 @@ module View =
             ]
             @ session
 
+        // While selecting items, the keys that do it matter more than where the session is.
+        let left =
+            if model.Selection.IsSome then
+                [ s (Style.withBold t.Text) model.Setup.Product ]
+            else
+                left
+
         let tl = model.Timeline
 
         let hints =
             match App.cards model with
             | _ when model.Palette.IsSome -> [ "↑↓ select"; "Enter run"; "Esc close" ]
+            | _ when model.Selection.IsSome ->
+                match App.selected model with
+                | Some item when Items.isOpen model.Folds item -> [ "↑↓ move"; "Enter collapse"; "Esc done" ]
+                | _ -> [ "↑↓ move"; "Enter expand"; "Esc done" ]
             | Card.Question _ :: _ -> [ "Enter answer"; "Esc interrupt" ]
             | _ :: _ -> [ "keys in [ ] answer"; "←→ Enter" ]
             | [] ->
                 if tl.State.Running.IsSome then
-                    [ "Enter steer"; "Tab queue"; "Esc interrupt" ]
+                    [ "Enter steer"; "Tab queue"; "Esc interrupt"; "Shift+↑ select" ]
                 else
                     [
                         "Enter send"
                         "Ctrl+P commands"
                         "Alt+Enter newline"
                         "Ctrl+O detail"
+                        "Shift+↑ select"
                         "Ctrl+C×2 exit"
                     ]
 
@@ -315,10 +328,29 @@ module View =
         | InputContent.JobFinished(job, note) ->
             paragraph width [ s t.Muted "↩ " ] t.Muted $"job {job} finished: {note}"
 
+    /// The most lines of what an action returned (and of a compaction's summary) the verbose detail
+    /// shows; an item expanded on its own shows them all.
+    let private verboseLines = 12
+
+    /// How much of an item shows, and how many lines of what it returned: by the detail, or as the
+    /// person chose (collapsed: as quiet shows it; expanded: as verbose, every line).
+    let private levelOf (verbosity: Verbosity) (fold: Fold option) : Verbosity * int =
+        match fold with
+        | Some Fold.Collapsed -> Verbosity.Quiet, verboseLines
+        | Some Fold.Expanded -> Verbosity.Verbose, Int32.MaxValue
+        | None -> verbosity, verboseLines
+
+    /// An item's rows shown as its first row alone (` …` says there is more).
+    let private firstRow (t: Theme) (width: int) (rows: Row list) : Row list =
+        match rows with
+        | first :: _ :: _ -> [ Row.fit width (first @ [ s t.Muted " …" ]) ]
+        | rows -> rows
+
     let private callRows
         (t: Theme)
         (width: int)
         (verbosity: Verbosity)
+        (bound: int)
         (now: int64)
         (live: bool)
         (first: bool)
@@ -371,10 +403,10 @@ module View =
                     | Some code -> yield! lines width 6 t.Muted code
                     | None -> ()
                     if call.Output <> "" && not call.IsError then
-                        yield! (Text.firstLines 12 call.Output |> List.collect (lines width 6 t.Muted))
+                        yield! (Text.firstLines bound call.Output |> List.collect (lines width 6 t.Muted))
                     elif call.IsError then
                         yield!
-                            (Text.firstLines 12 call.Output
+                            (Text.firstLines bound call.Output
                              |> List.skip 1
                              |> List.collect (lines width 6 t.Muted))
                 ]
@@ -395,14 +427,20 @@ module View =
                 | _ -> false)
             |> not)
 
-    /// The result card of spec §19.2: how the turn ended, its evidence and how to verify it.
-    let ending (t: Theme) (width: int) (turn: TurnView) (ended: TurnEnd) : Row list =
+    /// The result card of spec §19.2: how the turn ended, its evidence and how to verify it; `details`
+    /// adds the evidence's details for tools, with their kind.
+    let ending (t: Theme) (width: int) (turn: TurnView) (ended: TurnEnd) (details: bool) : Row list =
         match ended with
         | TurnEnd.Completed(TurnResult.Done(summary, evidence, verify)) ->
             [
                 yield! markdown t width [ indent 2; s (Style.withBold t.Success) "✓ Done  " ] summary
                 for e in evidence do
                     yield! markdown t width [ indent 4; s (bold t) "Evidence  " ] e.Summary
+
+                    match e.Detail with
+                    | Json.Null -> ()
+                    | detail when details -> yield! lines width 14 t.Muted (e.Kind + ": " + Json.serialize detail)
+                    | _ -> ()
                 match verify with
                 | Some verify -> yield! markdown t width [ indent 4; s (bold t) "Verify    " ] verify
                 | None -> ()
@@ -426,10 +464,50 @@ module View =
         | TurnEnd.Abandoned reason ->
             paragraph width [ indent 2; s (Style.withBold t.Error) "✗ Abandoned  " ] Style.plain reason
 
-    let private turnRows (model: Model) (turn: TurnView) : Row list =
+    /// Rows of the transcript, and the item they show if they show one.
+    type private Piece =
+        {
+            Item: ItemId option
+            Rows: Row list
+        }
+
+        override this.ToString() =
+            $"{this.Item} ({this.Rows.Length} rows)"
+
+    /// The rows of the item selected: a marker at the left of its first row and a bar at the left of
+    /// the others, in the place of their indent's first column.
+    let private mark (t: Theme) (rows: Row list) : Row list =
+        let at (marker: Span) (row: Row) : Row =
+            match row with
+            | first :: rest when first.Text.StartsWith ' ' ->
+                marker
+                :: { first with
+                       Text = first.Text.Substring 1
+                   }
+                :: rest
+            | row -> marker :: row
+
+        rows
+        |> List.mapi (fun i row ->
+            at
+                (if i = 0 then
+                     s (Style.withBold t.Accent) "›"
+                 else
+                     s t.Accent "│")
+                row)
+
+    let private turnPieces (model: Model) (turn: TurnView) : Piece list =
         let t = theme model
         let width = model.Width
         let verbosity = model.Verbosity
+        let fold (id: ItemId) = Map.tryFind id model.Folds
+        let plain (rows: Row list) = { Item = None; Rows = rows }
+
+        let item (id: ItemId) (rows: Row list) =
+            {
+                Item = Some id
+                Rows = if model.Selection = Some id then mark t rows else rows
+            }
 
         let live =
             turn.Ended.IsNone
@@ -442,41 +520,79 @@ module View =
                 | TurnItem.Call call when call.Ended.IsNone -> Some call.Id
                 | _ -> None)
 
+        // The cells whose code does not show (an item expanded on its own shows its code).
         let cells =
             turn.Items
             |> List.choose (fun item ->
                 match item with
-                | TurnItem.Call call -> call.Code
+                | TurnItem.Call call when
+                    fst (levelOf verbosity (fold (ItemId.Call(turn.Turn, call.Id))))
+                    <> Verbosity.Verbose
+                    ->
+                    call.Code
                 | _ -> None)
 
         let echoes = Timeline.echoes turn.Items
 
+        // What the model wrote: hidden when quiet (a draft unless verbose), unless the person chose
+        // how to show it; collapsed, its first row.
+        let reply (id: ItemId) (shown: bool) (rows: unit -> Row list) : Piece list =
+            match fold id with
+            | None when not shown -> []
+            | Some Fold.Collapsed -> [ item id (firstRow t width (rows ())) ]
+            | _ -> [ item id (rows ()) ]
+
         [
             for i in turn.Inputs do
-                yield! input t width i
+                yield plain (input t width i)
 
             // A painted panel has its own padding.
             if not turn.Inputs.IsEmpty && t.Panel = Color.Default then
-                yield Row.empty
+                yield plain [ Row.empty ]
 
-            for item in turn.Items do
-                match item with
-                | TurnItem.Said text when verbosity <> Verbosity.Quiet -> yield! markdown t width [ indent 2 ] text
-                | TurnItem.Said _ -> ()
-                | TurnItem.Superseded text when verbosity = Verbosity.Verbose ->
-                    yield! muted t (markdown t width [ indent 2 ] text)
-                | TurnItem.Superseded _ -> ()
-                | TurnItem.Call call -> yield! callRows t width verbosity model.Now live (Some call.Id = firstOpen) call
-                | TurnItem.Steered inputs ->
+            for id, entry in List.zip (Items.ids turn) turn.Items do
+                match id, entry with
+                | Some id, TurnItem.Said text ->
+                    yield! reply id (verbosity <> Verbosity.Quiet) (fun () -> markdown t width [ indent 2 ] text)
+                | Some id, TurnItem.Superseded text ->
+                    yield!
+                        reply id (verbosity = Verbosity.Verbose) (fun () ->
+                            muted t (markdown t width [ indent 2 ] text))
+                | Some id, TurnItem.Call call ->
+                    let level, bound = levelOf verbosity (fold id)
+                    yield item id (callRows t width level bound model.Now live (Some call.Id = firstOpen) call)
+                | Some id, TurnItem.Compacted summary ->
+                    let level, bound = levelOf verbosity (fold id)
+
+                    yield
+                        item
+                            id
+                            [
+                                Row.fit
+                                    width
+                                    [
+                                        indent 2
+                                        s t.Accent "◇"
+                                        p " "
+                                        s (bold t) (Text.pad 8 "Compact")
+                                        p " "
+                                        p "the earlier conversation is summarized"
+                                    ]
+
+                                if level = Verbosity.Verbose then
+                                    yield! (Text.firstLines bound summary |> List.collect (lines width 6 t.Muted))
+                            ]
+                | _, TurnItem.Steered inputs ->
                     for i in inputs do
                         match i.Content with
-                        | InputContent.Text text -> yield! paragraph width [ indent 2; s t.Accent "↳ " ] t.Accent text
-                        | _ -> yield! input t width i
-                | TurnItem.Asked request ->
+                        | InputContent.Text text ->
+                            yield plain (paragraph width [ indent 2; s t.Accent "↳ " ] t.Accent text)
+                        | _ -> yield plain (input t width i)
+                | _, TurnItem.Asked request ->
                     // The agent's question is often the reply just shown: it is not shown again.
                     if not (verbosity <> Verbosity.Quiet && Set.contains request.Request.Id echoes) then
-                        yield! markdown t width [ indent 2; s t.Warning "? " ] (Timeline.asks request)
-                | TurnItem.Settled resolved ->
+                        yield plain (markdown t width [ indent 2; s t.Warning "? " ] (Timeline.asks request))
+                | _, TurnItem.Settled resolved ->
                     let text =
                         match resolved.Resolution with
                         | Fx.Sessions.Resolution.Answered response ->
@@ -486,33 +602,26 @@ module View =
                         | Fx.Sessions.Resolution.Cancelled reason -> "withdrawn: " + reason
                         | Fx.Sessions.Resolution.Expired _ -> "expired"
 
-                    yield Row.fit width [ indent 4; s t.Muted ("· " + text) ]
-                | TurnItem.Interrupted by -> yield Row.fit width [ indent 2; s t.Warning ("⏹ interrupted by " + by) ]
-                | TurnItem.Compacted summary ->
-                    yield
-                        Row.fit
-                            width
-                            [
-                                indent 2
-                                s t.Accent "◇"
-                                p " "
-                                s (bold t) (Text.pad 8 "Compact")
-                                p " "
-                                p "the earlier conversation is summarized"
-                            ]
-
-                    if verbosity = Verbosity.Verbose then
-                        yield! (Text.firstLines 12 summary |> List.collect (lines width 6 t.Muted))
+                    yield plain [ Row.fit width [ indent 4; s t.Muted ("· " + text) ] ]
+                | _, TurnItem.Interrupted by ->
+                    yield plain [ Row.fit width [ indent 2; s t.Warning ("⏹ interrupted by " + by) ] ]
+                // Every other item has an id (`Items.ids`).
+                | None, _ -> ()
 
             if not cells.IsEmpty && verbosity <> Verbosity.Verbose then
                 let count = cells |> List.sumBy (fun code -> (Text.clean code).Split('\n').Length)
                 let noun = if cells.Length = 1 then "cell" else "cells"
+                let label = [ indent 2; s t.Muted $"▸ {cells.Length} {noun} ({count} lines)" ]
+                // Both ways to see the code, where they fit.
+                let both = [ s t.Muted "[Ctrl+O expand · Shift+↑ select]" ]
 
-                yield
-                    Row.spread
-                        width
-                        [ indent 2; s t.Muted $"▸ {cells.Length} {noun} ({count} lines)" ]
+                let hint =
+                    if Row.width label + 1 + Row.width both <= width then
+                        both
+                    else
                         [ s t.Muted "[Ctrl+O expand]" ]
+
+                yield plain [ Row.spread width label hint ]
 
             match model.Streaming with
             | Some writing when live && writing.Turn = turn.Turn && writing.Text.Trim() <> "" ->
@@ -524,13 +633,21 @@ module View =
                     else
                         rows
 
-                yield! rows
+                yield plain rows
             | _ -> ()
 
             match turn.Ended with
             | Some(ended, at) ->
-                yield Row.empty
-                yield! ending t width turn ended
+                let id = ItemId.Ending turn.Turn
+                yield plain [ Row.empty ]
+
+                let rows =
+                    match fold id with
+                    | Some Fold.Collapsed -> firstRow t width (ending t width turn ended false)
+                    | Some Fold.Expanded -> ending t width turn ended true
+                    | None -> ending t width turn ended (verbosity = Verbosity.Verbose)
+
+                yield item id rows
                 // Who answered, how long the turn took and how fast the model wrote.
                 let modelName =
                     match turn.Calls with
@@ -553,13 +670,18 @@ module View =
                     @ [ duration (at - turn.Started) ]
                     @ speed
 
-                yield Row.fit width [ indent 2; s t.Accent "▣ "; s t.Muted (String.concat " · " who) ]
+                yield
+                    plain
+                        [
+                            Row.fit width [ indent 2; s t.Accent "▣ "; s t.Muted (String.concat " · " who) ]
+                        ]
             | None -> ()
 
-            yield Row.empty
+            yield plain [ Row.empty ]
         ]
 
-    let transcript (model: Model) : Row list =
+    /// The transcript in pieces: the rows each item shows, and those between them.
+    let private pieces (model: Model) : Piece list =
         let t = theme model
         let width = model.Width
 
@@ -585,14 +707,35 @@ module View =
                 match block with
                 | Block.Earlier seq ->
                     [
-                        Row.fit width [ s t.Muted $"⋯ earlier events (to #{seq}) are not shown" ]
-                        Row.empty
+                        {
+                            Item = None
+                            Rows =
+                                [
+                                    Row.fit width [ s t.Muted $"⋯ earlier events (to #{seq}) are not shown" ]
+                                    Row.empty
+                                ]
+                        }
                     ]
-                | Block.Note text -> paragraph width [ s t.Muted "· " ] t.Muted text
-                | Block.Turn turn -> turnRows model turn)
+                | Block.Note text ->
+                    [
+                        {
+                            Item = None
+                            Rows = paragraph width [ s t.Muted "· " ] t.Muted text
+                        }
+                    ]
+                | Block.Turn turn -> turnPieces model turn)
 
-        let notes = if notes.IsEmpty then [] else notes @ [ Row.empty ]
-        notes @ body
+        if notes.IsEmpty then
+            body
+        else
+            {
+                Item = None
+                Rows = notes @ [ Row.empty ]
+            }
+            :: body
+
+    /// The transcript's rows.
+    let transcript (model: Model) : Row list = pieces model |> List.collect _.Rows
 
     // ---- what is asked --------------------------------------------------------------------------
 
@@ -945,6 +1088,8 @@ module View =
             Room: int
             /// The transcript's rows, with a row of margin above them.
             Transcript: Row list
+            /// Where each item's rows are in them: its first row and how many.
+            Items: (ItemId * int * int) list
         }
 
         override this.ToString() =
@@ -983,11 +1128,27 @@ module View =
         let room = room - asked.Length
         let pending = List.truncate (max 0 (room / 3)) pending
         let room = room - pending.Length
+        let pieces = pieces model
+
         // A row of margin under the warnings.
-        let all =
-            match transcript model with
-            | [] -> []
-            | rows -> Row.empty :: rows
+        let all, items =
+            match pieces |> List.collect _.Rows with
+            | [] -> [], []
+            | rows ->
+                let placed =
+                    pieces
+                    |> List.fold
+                        (fun (at: int, placed: (ItemId * int * int) list) piece ->
+                            let count = piece.Rows.Length
+
+                            match piece.Item with
+                            | Some id when count > 0 -> at + count, (id, at, count) :: placed
+                            | _ -> at + count, placed)
+                        (1, [])
+                    |> snd
+                    |> List.rev
+
+                Row.empty :: rows, placed
 
         {
             BannerRows = banner
@@ -998,6 +1159,7 @@ module View =
             CursorAt = (cursorRow, cursorColumn)
             Room = room
             Transcript = all
+            Items = items
         }
 
     /// How far the transcript can be scrolled up: until its first row is at the top.
@@ -1036,7 +1198,8 @@ module View =
 
         let cursor =
             match App.cards model with
-            | _ when model.Palette.IsSome -> None
+            // The palette and the selection have the keyboard.
+            | _ when model.Palette.IsSome || model.Selection.IsSome -> None
             | card :: _ when
                 (match card with
                  | Card.Question _ -> false
@@ -1260,10 +1423,30 @@ module View =
 
                 int (min (int64 (maxScroll column)) (max 1L moved))
 
+        // The selection brought into view (it moved, or changed its rows): all of it, or its first
+        // rows when it is taller than the room.
+        let scroll =
+            match model.Selection with
+            | Some selected when model.Reveal ->
+                match column.Items |> List.tryFind (fun (id, _, _) -> id = selected) with
+                | Some(_, first, count) ->
+                    let room = column.Room
+                    let top = total - room - scroll
+
+                    let wanted =
+                        if count >= room || first < top then total - room - first
+                        elif first + count > top + room then total - first - count
+                        else scroll
+
+                    max 0 (min (maxScroll column) wanted)
+                | None -> scroll
+            | _ -> scroll
+
         if
             scroll = model.Scroll
             && total = model.TranscriptRows
             && column.Room = model.TranscriptRoom
+            && not model.Reveal
         then
             model
         else
@@ -1271,6 +1454,7 @@ module View =
                 Scroll = scroll
                 TranscriptRows = total
                 TranscriptRoom = column.Room
+                Reveal = false
             }
 
     /// The model as the next frame shows it (`render` settles it before drawing): the scroll kept
@@ -1278,12 +1462,13 @@ module View =
     /// the transcript grows. The start screen has nothing to scroll.
     let settle (model: Model) : Model =
         if isStart model then
-            if model.Scroll = 0 && model.TranscriptRows = 0 then
+            if model.Scroll = 0 && model.TranscriptRows = 0 && not model.Reveal then
                 model
             else
                 { model with
                     Scroll = 0
                     TranscriptRows = 0
+                    Reveal = false
                 }
         else
             settleOn (layout { model with Width = columnWidth model }) model

@@ -30,6 +30,7 @@ to send, and a pure `view` that draws the model as a frame.
 | Key decoding: CSI, SS3, CSI u, modifyOtherKeys, Alt, bracketed paste, the mouse wheel (`Keys`) | `Fx.Tui/Keys.fs` |
 | The prompt editor (`Editor`) | `Fx.Tui/Editor.fs` |
 | The session as a client sees it: state and the merged log (`Timeline`) | `Fx.Tui/Timeline.fs` |
+| The detail (`Verbosity`), the transcript's items one selects, expands and collapses (`ItemId`, `Fold`, `Items`) | `Fx.Tui/Items.fs` |
 | Model, messages, commands, cards, `update` (`App`) | `Fx.Tui/App.fs` |
 | The screen (`View`) | `Fx.Tui/View.fs` |
 | The terminal capability (`Tty`, `ITty`) and its fake (`FakeTty`) | `Fx.Tui/Tty.fs` |
@@ -75,7 +76,7 @@ to send, and a pure `view` that draws the model as a frame.
   ◇ Run      dotnet test tests/Billing                                     ✗ 48s
       exit 1
   ◇ Cell     rerun the tests                                               ✓ 46s
-  ▸ 1 cell (3 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (3 lines)                            [Ctrl+O expand · Shift+↑ select]
 
   ✓ Done  Migrated 37 call sites to RetryPolicy.
     Evidence  dotnet test tests/Billing → 214 passed
@@ -103,7 +104,8 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   environment (name and provider) and the sandbox driver that confines it (`env/get`'s `sandbox`:
   `bubblewrap`, `seatbelt`, `none`).
 - **Footer**: the product, the workspace with its branch (`env/get`'s `branch`) and the session on
-  the left; the keys that apply (as many as fit beside the left side), whether the transcript is
+  the left (the product alone while selecting items, so their keys fit); the keys that apply (as many
+  as fit beside the left side), whether the transcript is
   scrolled, what the session used (the context the last call held, its share of the window, and the
   cost: `73.4K (7%) · $2.11`, unless the sidebar shows it) and the session's state (idle, the
   running turn, held, needs input, closed) on the right.
@@ -124,8 +126,8 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   error under a failed one, steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
   conversation is summarized; the summary in verbose), requests asked and settled, and the
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`;
-  `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The cells' code is folded into one line
-  (`▸ N cells (M lines)`).
+  `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The code of the cells not expanded is
+  folded into one line (`▸ N cells (M lines)`, with the keys that show it where they fit).
 - **Markdown**: what the model wrote, questions, and a result card's summary, evidence and check
   are Markdown (`Markdown.render`): headings, paragraphs, **strong**, *emphasis*, ~~strike~~
   (muted), `code`, links (their address after the text when it differs), lists (nested, ordered),
@@ -146,8 +148,30 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   (`session/streaming`), and the status line says when it writes a cell; the recorded reply replaces it
   (a compaction's summary streams too, and its recorded collapse replaces it).
 - **Verbosity** (`Ctrl+O` cycles): *quiet* (prompts, activity lines, result cards), *normal* (also what
-  the model wrote and errors; the default), *verbose* (also every cell's code and what each action
-  returned, a compaction's summary and drafts).
+  the model wrote and errors; the default), *verbose* (also every cell's code and the first 12 lines
+  of what each action returned, a compaction's summary, the evidence's details for tools and drafts).
+- **One item** (T133j): the transcript's items, an action (its activity line), what the model wrote,
+  a compaction and a result card, can be selected and expanded or collapsed on their own, over the
+  detail. `Shift+↑` selects the newest item (`Ctrl+↑` and `Alt+↑` too, where the terminal passes them
+  on: Windows Terminal takes `Alt+↑` for its panes, macOS `Ctrl+↑` for Mission Control); `↑` `↓` move
+  (past the newest, selecting ends), `Enter` or `Space` expands the item, or collapses it if it
+  shows more than its line, `→` expands and `←` collapses, `Home` `End` select the oldest and the
+  newest, and `Esc` ends selecting. Any other key ends it and does what it does (typing goes to the
+  prompt); scrolling, `Ctrl+O` and `Ctrl+L` keep it. While selecting, the item has the keyboard over
+  the prompt and the cards (their letters still answer: they end selecting).
+  - *Expanded*: an action with its code and all it returned (verbose's bound of 12 lines does not
+    apply), what the model wrote in full, a compaction with its whole summary, a result card with
+    its evidence's details. *Collapsed*: an action's line alone (its new kernel's line stays), the
+    first row of what the model wrote or of a result card (` …` says there is more), a compaction's
+    line. A reply chosen this way shows even when quiet hides the others.
+  - What was chosen is kept in the model by item (`ItemId`: a turn and the model's id for the call,
+    or the turn and the reply's or compaction's number in it, or the turn's result card), stable
+    while the transcript grows, so it stays as output arrives and streams, and when `Ctrl+O` changes
+    the detail of everything else; it goes with the session shown.
+  - The item selected has `›` at the left of its first row and a bar at the left of the others, and
+    is brought into view when the selection moves or the item changes (`View.settle`: all of it, or
+    its first rows when it is taller than the room); scrolling the view away leaves it there. The
+    footer shows the keys.
 - **Pending inputs**: steered prompts waiting for the next step and queued prompts, under the
   transcript, until a turn takes them.
 - **Status line**: what happens (starting, the running action or "thinking"/"writing", a notice);
@@ -202,7 +226,7 @@ core slot the host registers) picks it:
 | `Enter` | sends the prompt: **steered** into the running turn (delivered at its next step), or a new turn when idle; on the agent's question it is the answer |
 | `Tab` | sends the prompt **queued**: its own turn after the work in progress |
 | `Alt+Enter`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+J` | a new line in the prompt (Shift and Ctrl only where the terminal reports them) |
-| `Esc` | interrupts the running turn (the control path); with none running, goes back to the transcript's end |
+| `Esc` | interrupts the running turn (the control path); with none running, goes back to the transcript's end; while selecting items or in the palette, only ends that |
 | `Ctrl+C` | clears the prompt, else interrupts the running turn; pressed again within 3 s, exits |
 | `Ctrl+D` | exits when the prompt is empty |
 | `↑` `↓` | moves between the prompt's lines; past the first or last, goes through the prompts sent |
@@ -211,6 +235,8 @@ core slot the host registers) picks it:
 | `PgUp` `PgDn`, the mouse wheel (or a trackpad) | scrolls the transcript: a page (its rows on the screen but two, kept for context), three rows a notch |
 | `Ctrl+Home` `Ctrl+End` | goes to the transcript's top, its end |
 | `Ctrl+O` | cycles the detail (quiet, normal, verbose) |
+| `Shift+↑` (or `Ctrl+↑`, `Alt+↑`) | selects the transcript's newest item |
+| While selecting: `↑` `↓`, `Enter` `Space`, `→` `←`, `Home` `End`, `Esc` | moves (past the newest, ends), expands or collapses the item, expands it, collapses it, goes to the oldest and the newest, ends selecting |
 | `Ctrl+L` | draws everything again |
 | `Ctrl+P` | opens the command palette (`Esc` or `Ctrl+P` closes it) |
 | `/` at the start of the prompt | the commands it may name show above the prompt; `Tab` completes the first, `Enter` runs it |
@@ -312,15 +338,20 @@ terminal check's P/Invoke without a terminal).
   machine itself) at 80×24, 40×20 and 24×14 (starting, a finished turn, a running turn with steering
   and a queued prompt, the agent's question after a draft, the loop guard's question, permissions, a
   decision, wide characters and a failure, a compacted turn, verbose, scrolled up while the reply
-  streams in); questions shown once and drafts; keys and cards through `update`; scrolling (a page,
+  streams in, an item selected, two expanded on their own, a reply and a result card collapsed);
+  questions shown once and drafts; keys and cards through `update`; one item (selecting and moving,
+  expanding and collapsing a cell, a reply and a result card, what was chosen kept as output
+  arrives and streams and over `Ctrl+O`, brought into view only when it moves, other keys ending
+  it, a card open meanwhile, ids that stay as the transcript grows); scrolling (a page,
   the wheel, the top and the end, the view kept on its rows while output grows or shrinks and
   following it at the end); streaming; snapshots; resizes; the loop on a `FakeTty` (the wheel
-  through the decoder, a report cut between reads, new output while scrolled up).
+  through the decoder, a report cut between reads, new output while scrolled up, `Shift+↑` and
+  `Enter` expanding a cell).
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
   session started, a prompt to its result card, a permission given on the card, `/new` and `/sessions` back to it, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn
-  of cells to `✓ Done`; and the `fx` binary on a PTY (ConPTY on Windows): keys, a resize, Ctrl+C twice,
-  exit code 0 and the terminal given back.
+  of cells to `✓ Done`; and the `fx` binary on a PTY (ConPTY on Windows): keys, `Shift+↑` selecting
+  the result card, a resize, Ctrl+C twice, exit code 0 and the terminal given back.
 
 ## Left to later tasks
 

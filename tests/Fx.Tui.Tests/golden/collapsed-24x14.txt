@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: co…
+┃ how do I use opus by
+┃ default?
+
+  Set model.role.main in
+  ◇ Cell     che… ✓ 1.0s
+  ▸ 1 c… [Ctrl+O expand]
+
+  ✓ Done  Created ~/.fx/
+  ▣ fx · anthropic/clau…
+
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/billi… ● idle
+────────────────────────
+cursor 11,4

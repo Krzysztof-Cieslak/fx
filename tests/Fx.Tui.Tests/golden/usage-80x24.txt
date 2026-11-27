@@ -5,7 +5,7 @@
 
   ◇ Cell     look for a speed option                                      ✓ 0.5s
   Not yet: the request format has no speed option.
-  ▸ 1 cell (2 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (2 lines)                            [Ctrl+O expand · Shift+↑ select]
 
   ✓ Done  Fast mode needs a speed option in ChatRequest
   ▣ fx · anthropic/claude-opus-5-5 · 10s · 100.0 tok/s

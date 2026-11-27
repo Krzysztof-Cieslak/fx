@@ -7,7 +7,7 @@
   ◇ Cell     port the rules                                               ✓ 9.0s
   ◇ Compact  the earlier conversation is summarized
   ◇ Cell     run the tests                                                ✓ 3.0s
-  ▸ 3 cells (6 lines)                                            [Ctrl+O expand]
+  ▸ 3 cells (6 lines)                           [Ctrl+O expand · Shift+↑ select]
 
   ✓ Done  Ported the parser
   ▣ fx · anthropic/claude-sonnet-5-5 · 20s

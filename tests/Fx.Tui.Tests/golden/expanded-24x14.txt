@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: co…
+› ◇ Run      dotn… ✗ 48s
+│     exit 1
+│     Failed: 2, Passed:
+│     212
+  ◇ Cell     reru… ✓ 46s
+      // intent: rerun
+      the tests
+      const r = await fx
+      .shell.run("dotnet
+      test
+┃ ›
+┃ anthropic/claude-sonn…
+fx     ↑ ↑↓ move  ● idle
+────────────────────────
+cursor hidden

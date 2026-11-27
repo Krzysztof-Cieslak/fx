@@ -7,7 +7,7 @@
       ↻ new kernel: the previous kernel was killed by signal 9 (SIGKILL); names…
       ReferenceError: check is not defined
   The kernel restarted, so I will define check again.
-  ▸ 1 cell (2 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (2 lines)                            [Ctrl+O expand · Shift+↑ select]
 
 
 

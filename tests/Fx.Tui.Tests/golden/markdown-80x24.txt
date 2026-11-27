@@ -10,7 +10,7 @@
   • --model overrides it for one run
   • a trusted project's config for one project
   ◇ Cell     check the config                                             ✓ 1.0s
-  ▸ 1 cell (2 lines)                                             [Ctrl+O expand]
+  ▸ 1 cell (2 lines)                            [Ctrl+O expand · Shift+↑ select]
 
   ✓ Done  Created ~/.fx/config.json: fx uses Opus 5.5 by default
     Verify    fx variants explain model.role.main
