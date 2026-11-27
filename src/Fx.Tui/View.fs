@@ -472,7 +472,9 @@ module View =
         }
 
         override this.ToString() =
-            $"{this.Item} ({this.Rows.Length} rows)"
+            match this.Item with
+            | Some id -> $"{id} ({this.Rows.Length} rows)"
+            | None -> $"{this.Rows.Length} rows"
 
     /// The rows of the item selected: a marker at the left of its first row and a bar at the left of
     /// the others, in the place of their indent's first column.
