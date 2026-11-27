@@ -14,7 +14,9 @@ open Fx.Auth
 open Fx.Identity
 open Fx.Identity.Host
 open Fx.Grants
+open Fx.Grants.Host
 open Fx.Sessions
+open Fx.CodeAct
 open Fx.Host
 open Fx.Host.Tests.Support
 
@@ -439,6 +441,89 @@ let tests =
                 match wait (Commands.untrust opts p.Workspace) with
                 | Ok _ -> Expect.stringContains (explain ()) "edit.guard = \"warn\" (default)" "not read again"
                 | Error e -> failtest e
+
+            testCase
+                "auto approvals: a trusted project cannot turn them on; the host can, unless its policy forbids them"
+            <| fun () ->
+                let p = place "approval-modes"
+
+                p.Write(
+                    Path.Combine(Product.projectDirName, "config.json"),
+                    """{"variants": {"codeact.grants.mode": "auto"}}"""
+                )
+
+                let opts = options p (Model()) []
+
+                match wait (Commands.trust opts p.Workspace) with
+                | Ok _ -> ()
+                | Error e -> failtest e
+
+                // A cloned repository cannot stop the guard asking: the mode is privileged.
+                match waitFor 180.0 (Host.start opts) with
+                | Error issues ->
+                    Expect.isTrue
+                        (issues
+                         |> List.exists (fun i -> i.Contains "codeact.grants.mode" && i.Contains "privileged"))
+                        $"{issues}"
+                | Ok h ->
+                    stop h
+                    failtest "a project turned auto approvals on"
+
+                p.Write(Path.Combine(Product.projectDirName, "config.json"), "{}")
+
+                // The person running the host can (host config, or the command line).
+                hostConfig p """{"variants": {"codeact.grants.mode": "auto"}}"""
+                let h = start (options p (Model()) [])
+
+                try
+                    Expect.equal
+                        (Fx.Variants.Resolution.value GrantSlots.mode h.Resolution)
+                        GrantMode.Auto
+                        "the host's mode"
+                finally
+                    stop h
+
+                // Policy forbids it: the host does not start in auto, and its grants policy denies
+                // `approvals.auto` (no person turns it on: ProtocolTests).
+                File.WriteAllText(
+                    Path.Combine(p.Data, "policy.json"),
+                    """{"forbid": {"codeact.grants.mode": ["auto"]}}"""
+                )
+
+                match waitFor 180.0 (Host.start (options p (Model()) [])) with
+                | Error issues ->
+                    Expect.isTrue
+                        (issues
+                         |> List.exists (fun i -> i.Contains "codeact.grants.mode" && i.Contains "forbidden"))
+                        $"{issues}"
+                | Ok h ->
+                    stop h
+                    failtest "started in auto under a policy that forbids it"
+
+                hostConfig p "{}"
+                let h = start (options p (Model()) [])
+
+                try
+                    let query: GrantQuery =
+                        {
+                            Action = AutoApprovals.action
+                            Resource = "bubblewrap"
+                            Context =
+                                {
+                                    Session = Some "s1"
+                                    Run = None
+                                    Repo = None
+                                }
+                        }
+
+                    match wait (Eff.run h.Env (GrantsService.check h.Grants query)) with
+                    | Ok(GrantCheck.Denied reasons) ->
+                        Expect.isTrue
+                            (reasons |> List.exists (fun r -> r.Contains "does not allow auto approvals"))
+                            $"{reasons}"
+                    | other -> failtest $"{other}"
+                finally
+                    stop h
 
             testCase "fx variants lists every slot, the extensions' among them, and their schema"
             <| fun () ->

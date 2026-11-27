@@ -32,7 +32,7 @@ let private network =
 
 /// A person at the terminal: answers every grant request with `answer`, decides calls in doubt with
 /// `Decision` (`None`: nobody can), and keeps what was asked.
-type private Person(answer: GrantAnswer) =
+type private Person(answer: GrantAnswer, ?decide: GrantRequest -> GrantAnswer) =
     let asked = ResizeArray<GrantRequest>()
     let lines = ResizeArray<string>()
     let decided = ResizeArray<OutcomeUnknown>()
@@ -48,7 +48,14 @@ type private Person(answer: GrantAnswer) =
             Answer =
                 fun request ->
                     lock asked (fun () -> asked.Add request)
-                    Task.FromResult(Some answer)
+
+                    Task.FromResult(
+                        Some(
+                            match decide with
+                            | Some decide -> decide request
+                            | None -> answer
+                        )
+                    )
             Decide =
                 fun card ->
                     lock decided (fun () -> decided.Add card)
@@ -360,6 +367,145 @@ let tests =
                         "the decision's note reached the model"
                 finally
                     stop host
+            }
+
+            testTask
+                "auto approvals: commands the sandbox confines run unasked; a download and a write outside still ask; unsandboxed, every command asks" {
+                do! network.Force()
+
+                if OperatingSystem.IsWindows() then
+                    skiptest "no sandbox driver confines processes on Windows yet (T511): auto approvals never apply"
+
+                let outside = Scratch.directory "outside-auto"
+                let escaped = System.IO.Path.Combine(outside, "escaped.txt")
+
+                let attempt (line: string) (name: string) =
+                    $"let {name} = \"ran\"\ntry {{ await {g}.shell.run({Json.quote line}) }} catch (e) {{ {name} = \"refused\" }}"
+
+                let cells =
+                    [
+                        $"// intent: build\nconst made = await {g}.shell.run(\"mkdir made && touch made/a.txt\")\nmade.exitCode"
+                        "// intent: fetch\n"
+                        + attempt "curl -sS https://example.invalid/schema.json" "fetched"
+                        "// intent: write outside\n" + attempt ("echo x > '" + escaped + "'") "wrote"
+                        finish "Built; asked about the rest" "`${fetched} ${wrote}`"
+                    ]
+
+                // The person installs Bun, allows the build where it asks, and refuses the rest.
+                let decide (request: GrantRequest) : GrantAnswer =
+                    if
+                        request.Action.Value = "component.install"
+                        || request.Resource.StartsWith "mkdir "
+                        || request.Resource.StartsWith "touch "
+                    then
+                        always
+                    else
+                        {
+                            Effect = GrantEffect.Deny
+                            Scope = ScopeChoice.Once
+                            Resource = None
+                            Expires = None
+                            Reason = Some "not in this test"
+                        }
+
+                let runIn (name: string) (explicit: (string * Json) list) =
+                    let p = place name
+                    let model = Model()
+                    model.AddAll cells
+                    let person = Person(always, decide)
+
+                    let host =
+                        start (
+                            options
+                                p
+                                model
+                                ([
+                                    "model.role.main", Json.String modelId
+                                    "codeact.grants.mode", Json.String "auto"
+                                 ]
+                                 @ explicit)
+                        )
+
+                    try
+                        let outcome =
+                            run
+                                host
+                                person
+                                {
+                                    Prompt = "Build, fetch and write"
+                                    Session = None
+                                    Title = None
+                                }
+
+                        let confined =
+                            match HostSessions.entries host with
+                            | [ entry ] ->
+                                match wait (host.Env.Envs.Get entry.Environment CancellationToken.None) with
+                                | Some record -> record.Sandbox |> Option.exists _.Confines
+                                | None -> false
+                            | _ -> false
+
+                        let asked =
+                            person.Asked
+                            |> List.filter (fun r -> r.Action.Value <> "component.install")
+                            |> List.map (fun r -> r.Action.Value + " " + r.Resource)
+                            |> List.sort
+
+                        // What the step journal kept of the commands' approvals (audits).
+                        let approved =
+                            let steps = StepJournal.typed host.Stores.Log
+
+                            wait (Eff.run host.Env (EventLog.read steps (StepJournal.stream outcome.Session) 0L 1000))
+                            |> List.collect (fun recorded ->
+                                match recorded.Event with
+                                | StepEvent.HostCallStarted started ->
+                                    started.Approved |> List.map (fun a -> a.Resource + " " + string a.By)
+                                | _ -> [])
+
+                        p, outcome, person, confined, asked, approved
+                    finally
+                        stop host
+
+                // With the OS's driver (where it confines): the build runs unasked.
+                let p, outcome, person, confined, asked, approved = runIn "auto" []
+                Expect.equal (done' outcome person) "Built; asked about the rest" "done"
+                Expect.isTrue (System.IO.File.Exists(p.File "made/a.txt")) "built"
+                Expect.isFalse (System.IO.File.Exists escaped) "refused"
+
+                let refusedLater =
+                    [
+                        "fs.write " + Fx.Models.WorkspacePath.normalize escaped
+                        "shell.exec curl -sS https://example.invalid/schema.json"
+                    ]
+
+                if confined then
+                    Expect.equal asked refusedLater "the download and the write outside asked, nothing else"
+                    Expect.equal approved [ "mkdir made auto"; "touch made/a.txt auto" ] "journaled as auto approvals"
+
+                    Expect.contains
+                        person.Lines
+                        "  ✓ auto-approved  mkdir made, touch made/a.txt"
+                        "fx run says what ran unasked"
+                elif Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1" then
+                    failtest "a driver must confine here"
+                else
+                    Expect.equal
+                        asked
+                        (List.sort ([ "shell.exec mkdir made"; "shell.exec touch made/a.txt" ] @ refusedLater))
+                        "no driver confines: everything asks"
+
+                // The host turns sandboxing off: auto approvals never apply, every command asks.
+                let _, outcome, person, _, asked, approved =
+                    runIn "auto-unsandboxed" [ "sandbox.driver", Json.String "none" ]
+
+                Expect.equal (done' outcome person) "Built; asked about the rest" "done"
+
+                Expect.equal
+                    asked
+                    (List.sort ([ "shell.exec mkdir made"; "shell.exec touch made/a.txt" ] @ refusedLater))
+                    "every command asked"
+
+                Expect.isFalse (approved |> List.exists (fun a -> a.EndsWith " auto")) "nothing ran on auto approvals"
             }
 
             testTask

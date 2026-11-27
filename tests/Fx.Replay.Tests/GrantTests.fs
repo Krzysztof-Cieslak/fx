@@ -1,7 +1,8 @@
 /// Grants in recorded sessions (T127b's guard, docs/modules/replay.md): the guard asks the grants log
 /// before a cell runs a command; one request is allowed and one denied by a person. The guard's
 /// decisions are journaled (`Hands.Guard`), so replay answers them without a grants log or a person,
-/// and the session replays exactly.
+/// and the session replays exactly; so does a session whose commands ran on auto approvals (T134), with
+/// how each ran in the journal and on the receipts.
 module Fx.Replay.Tests.GrantTests
 
 open System
@@ -71,8 +72,110 @@ let private nextRequest (service: GrantsService<GrantsEnv>) : Task<GrantRequest>
         return found.Value
     }
 
-[<Tests>]
-let tests =
+let private grantsEnv () : GrantsEnv =
+    {
+        Clock = SystemClock.clock
+        Ids = SystemIds.create SystemClock.clock
+        Trace = Trace.none
+        Scope = Scope.root
+    }
+
+let private autoApprovals =
+    testTask "a session whose commands ran on auto approvals replays exactly, with how each ran" {
+        let env = grantsEnv ()
+        let grantsStore = InMemoryEventLog<Payload>()
+
+        let! service =
+            Eff.run env (GrantsService.start (GrantsSettings.create (GrantStoreLog.hostLocal grantsStore.Log)))
+
+        let grants = GrantsService.grants service
+
+        // The host's mode is auto, and a driver confines the hands.
+        let guard (variants: Fx.Variants.Variants) sessions (turn: TurnStart) hands =
+            eff {
+                let! settings = GrantSettings.ofVariants variants
+
+                return
+                    GrantGuard.attach
+                        { GrantSetup.create grants sessions turn { settings with Mode = GrantMode.Auto } with
+                            Sandbox = Some "bubblewrap"
+                        }
+                        hands
+            }
+
+        let f = createGuarded [] ran (Inherit []) None guard
+
+        try
+            f.Model.AddAll
+                [
+                    Say.cell "// intent: build\ncall r = shell.run [\"make test\"]\nr"
+                    Say.cell "// intent: fetch\ncall r = shell.run [\"curl -O https://example.com/a\"]\nr"
+                    Say.finish "Built and fetched"
+                ]
+
+            do! start f "s1"
+            do! prompt f "s1" "p1" "Build, then fetch"
+
+            // Only the download asks.
+            let! (asked: GrantRequest) = nextRequest service
+            Expect.equal asked.Resource "curl -O https://example.com/a" "the download"
+
+            match! Eff.run env (GrantsService.answer service alice asked.Id (answer GrantEffect.Allow None)) with
+            | Ok _ -> ()
+            | Error e -> failtest $"{e}"
+
+            let! ending = ended f "s1" 1
+            SessionTests.completed ending
+            do! close f
+
+            Expect.equal (GrantsService.snapshot service).State.Requests.Count 1 "one request in the grants log"
+
+            let guarded =
+                f.Store.Events(JournalLog.stream "s1")
+                |> List.map (EventLog.decode JournalLog.schema)
+                |> List.collect (fun r ->
+                    match r.Event with
+                    | JournalEvent.Recorded(_, entries) -> entries
+                    | _ -> [])
+                |> List.filter (fun e -> e.Op = Markers.Guard)
+                |> List.map (fun e -> string e.Outcome)
+
+            Expect.isTrue
+                (guarded |> List.exists (fun o -> o.Contains "\"auto\""))
+                $"auto approvals journaled: {guarded}"
+
+            Expect.isTrue
+                (guarded |> List.exists (fun o -> o.Contains "\"person\""))
+                $"a person's answer journaled: {guarded}"
+
+            let receipts =
+                f.Store.Events(ContextLog.stream "s1")
+                |> List.map (EventLog.decode ContextLog.schema)
+                |> List.choose (fun r ->
+                    match r.Event with
+                    | Fx.Prompt.ContextEvent.Returned receipt -> Some receipt.Approvals
+                    | _ -> None)
+                |> List.concat
+                |> List.map (fun a -> a.Resource + " " + string a.By)
+
+            Expect.contains receipts "make test auto" "the build's receipt"
+
+            Expect.isTrue
+                (receipts
+                 |> List.exists (fun r -> r.StartsWith "curl -O https://example.com/a person"))
+                $"the download's receipt: {receipts}"
+
+            let! report = replay f.Recording "s1"
+            dump f "s1" report
+            expectMatched report
+        finally
+            (f :> IDisposable).Dispose()
+
+            (Eff.run env (GrantsService.stop service)).Wait(TimeSpan.FromSeconds 30.0)
+            |> ignore
+    }
+
+let private peopleTests =
     testTask "a session whose commands were allowed and denied by people replays exactly" {
         let env: GrantsEnv =
             {
@@ -148,3 +251,6 @@ let tests =
             (Eff.run env (GrantsService.stop service)).Wait(TimeSpan.FromSeconds 30.0)
             |> ignore
     }
+
+[<Tests>]
+let tests = testList "grants" [ peopleTests; autoApprovals ]
