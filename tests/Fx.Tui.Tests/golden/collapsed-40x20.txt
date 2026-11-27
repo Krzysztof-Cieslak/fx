@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ how do I use opus by default?
 
@@ -9,6 +8,7 @@
 
   ✓ Done  Created ~/.fx/config.json: fx…
   ▣ fx · anthropic/claude-sonnet-5-5 · …
+
 
 
 

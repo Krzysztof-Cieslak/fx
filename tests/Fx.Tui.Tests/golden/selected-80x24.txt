@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ replace deprecated Http.retry with RetryPolicy in billing
 
@@ -20,8 +19,9 @@
 
 
 
+
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx                                     ↑↓ move · Enter expand · Esc done  ● idle
 ────────────────────────────────────────────────────────────────────────────────
 cursor hidden

@@ -1,5 +1,4 @@
 ────────────────────────
- ! runs unsandboxed: co…
 › ◇ Cell     reru… ✓ 46s
   ▸ 1 c… [Ctrl+O expand]
 
@@ -10,6 +9,7 @@
               test tests
               /Billing →
               214 passed
+    Verify    dotnet
 ┃ ›
 ┃ anthropic/claude-sonn…
 fx     ↑ ↑↓ move  ● idle
