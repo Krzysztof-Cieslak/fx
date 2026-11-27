@@ -177,15 +177,40 @@ let tests =
                 let forever =
                     "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c"
 
+                // At most 30 s: a statement still running then is interrupted and the test fails
+                // (disposing the database would wait for it).
+                let within (running: Task<'T>) =
+                    if not (running.Wait(TimeSpan.FromSeconds 30.0)) then
+                        Database.interrupt db
+                        running.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                        failtest "the statement was still running after 30 s"
+
+                    running.Result
+
                 let running =
                     Task.Run(fun () ->
                         Database.cancellable db cancellation.Token (fun () -> Database.query db forever [] ignore))
 
                 Thread.Sleep 100
                 cancellation.Cancel()
-                let result = running.WaitAsync(TimeSpan.FromSeconds 30.0).Result
+                let result = within running
                 Expect.equal (failed "cancelled" result).Code ErrorCode.Interrupt "interrupted"
                 Expect.equal (scalar db "SELECT 1" []) 1L "the connection still works"
+
+                // Cancelled after the check, just before the statement starts: SQLite forgets an
+                // interrupt that comes while nothing runs, the operation must not.
+                use late = new CancellationTokenSource()
+
+                let lately =
+                    within (
+                        Task.Run(fun () ->
+                            Database.cancellable db late.Token (fun () ->
+                                late.Cancel()
+                                Database.query db forever [] ignore))
+                    )
+
+                Expect.equal (failed "cancelled before it started" lately).Code ErrorCode.Interrupt "interrupted"
+                Expect.equal (scalar db "SELECT 1" []) 1L "the connection works after it"
 
                 let before =
                     Database.cancellable db cancellation.Token (fun () -> Database.query db "SELECT 1" [] ignore)
@@ -196,6 +221,22 @@ let tests =
                     Database.cancellable db CancellationToken.None (fun () -> Database.query db "SELECT 1" [] ignore)
 
                 Expect.equal uncancellable (Ok [ () ]) "runs"
+            }
+
+            test "a cancellable operation runs several statements and transactions" {
+                use db = Database.memory ()
+                use cancellation = new CancellationTokenSource()
+                exec db "CREATE TABLE t (x INTEGER)"
+
+                let written =
+                    Database.cancellable db cancellation.Token (fun () ->
+                        Database.transaction db TransactionKind.Immediate id (fun () ->
+                            Database.execute db "INSERT INTO t VALUES (1), (2)" []
+                            |> Result.bind (fun _ -> Database.query db "SELECT 1" [] (fun row -> row.Int64 0))))
+
+                Expect.equal written (Ok [ 1L ]) "committed; `SELECT 1` runs beside the statement held"
+                Expect.equal (scalar db "SELECT count(*) FROM t" []) 2L "the rows"
+                Expect.isFalse (Database.isInTransaction db) "no transaction left"
             }
 
             test "an interrupt with nothing running changes nothing" {

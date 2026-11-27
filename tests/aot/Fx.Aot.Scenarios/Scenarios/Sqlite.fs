@@ -585,42 +585,60 @@ let copies =
                     (fun _ -> "rows")
             ]))
 
+/// Waits at most 30 s for an operation running on the database. One still running then is
+/// interrupted, and the scenario fails: disposing the database would wait for it.
+let private within (db: Database) (running: Task<'T>) : 'T =
+    if not (running.Wait(TimeSpan.FromSeconds 30.0)) then
+        Database.interrupt db
+        running.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+        failwith "the statement was still running after 30 s"
+
+    running.Result
+
 let interrupt =
-    Scenario.task "sqlite-interrupt" (fun () ->
-        task {
-            use db = Database.memory ()
-            use cancellation = new CancellationTokenSource()
+    Scenario.lines "sqlite-interrupt" (fun () ->
+        use db = Database.memory ()
+        use cancellation = new CancellationTokenSource()
 
-            let forever =
-                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c"
+        let forever =
+            "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c"
 
-            let running =
-                Task.Run(fun () ->
-                    Database.cancellable db cancellation.Token (fun () -> Database.query db forever [] ignore))
+        let running =
+            Task.Run(fun () ->
+                Database.cancellable db cancellation.Token (fun () -> Database.query db forever [] ignore))
 
-            cancellation.CancelAfter(TimeSpan.FromMilliseconds 100.0)
-            let! cancelled = running.WaitAsync(TimeSpan.FromSeconds 30.0)
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds 100.0)
+        let cancelled = within db running
 
-            let before =
-                Database.cancellable db cancellation.Token (fun () -> Database.query db "SELECT 1" [] ignore)
+        // Cancelled after the check, before the statement starts: SQLite would forget an interrupt
+        // with nothing running.
+        use late = new CancellationTokenSource()
 
-            Database.interrupt db
+        let lately =
+            within
+                db
+                (Task.Run(fun () ->
+                    Database.cancellable db late.Token (fun () ->
+                        late.Cancel()
+                        Database.query db forever [] ignore)))
 
-            return
-                [
-                    "cancelled while running = " + show cancelled (fun _ -> "rows")
-                    "cancelled before = " + show before (fun _ -> "rows")
-                    "after an idle interrupt = "
-                    + show
-                        (Database.query db "SELECT 2" [] (fun row -> row.Int64 0))
-                        (List.map string >> String.concat ",")
-                    "uncancellable = "
-                    + show
-                        (Database.cancellable db CancellationToken.None (fun () ->
-                            Database.query db "SELECT 3" [] (fun row -> row.Int64 0)))
-                        (List.map string >> String.concat ",")
-                ]
-        })
+        let before =
+            Database.cancellable db cancellation.Token (fun () -> Database.query db "SELECT 1" [] ignore)
+
+        Database.interrupt db
+
+        [
+            "cancelled while running = " + show cancelled (fun _ -> "rows")
+            "cancelled before it starts = " + show lately (fun _ -> "rows")
+            "cancelled before = " + show before (fun _ -> "rows")
+            "after an idle interrupt = "
+            + show (Database.query db "SELECT 2" [] (fun row -> row.Int64 0)) (List.map string >> String.concat ",")
+            "uncancellable = "
+            + show
+                (Database.cancellable db CancellationToken.None (fun () ->
+                    Database.query db "SELECT 3" [] (fun row -> row.Int64 0)))
+                (List.map string >> String.concat ",")
+        ])
 
 let scenarios =
     [
