@@ -212,7 +212,7 @@ let extension = { Manifest = manifest
     pinned Bun it requires is installed in the components phase, and its launch's `${bin.bun}` is the
     installed Bun ([host.md](host.md#the-start-hoststart)). A first install of that Bun is never asked
     for while the host starts: without yolo approvals or a grant that allows it, `fx.exthost.bun` fails
-    with a warning that says how to allow it, and the next start uses it.
+    (a warning that says how to allow it only if a package runs on `bun`), and the next start uses it.
 
 ### The extension protocol
 
