@@ -439,7 +439,7 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
 | Mode | A call a person must decide |
 |---|---|
 | `ask` (default) | its requests are made at once (batched prompts), and the call waits for their answers |
-| `auto` | as `ask`, with auto approvals on (below): what a sandbox driver confines runs unasked |
+| `auto` | as `ask`, with auto approvals on (below): commands written plainly in the workspace run unasked, sandbox or not |
 | `deny` | refused at once, nothing recorded: unattended runs |
 | `off` | nothing is checked at all: sandboxed (`sandbox.driver` on) or throwaway environments |
 
@@ -471,11 +471,13 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
 
 ### Approval modes (spec §13.3; T134)
 
-Auto approvals run, without asking anyone, what a sandbox driver confines: a `shell.exec` need the
-rules leave to "no grant applies" (deny grants, policy rules and gates first, as for listed commands)
-whose command is **confined** (`GrantNeed.Confined`): written plainly in the workspace, as listed
-commands must be (no word the shell expands, every directory it may run in inside the workspace, no
-argument or input outside it or excluded from models), and not one of `codeact.grants.askCommands`.
+Auto approvals run, without asking anyone and **sandbox or not**, a `shell.exec` need the rules leave
+to "no grant applies" (deny grants, policy rules and gates first, as for listed commands) whose
+command stays in the workspace as far as the guard can see (`GrantNeed.InWorkspace`): written plainly,
+as listed commands must be (no word the shell expands, every directory it may run in inside the
+workspace, no argument or input outside it or excluded from models), and not one of
+`codeact.grants.askCommands`. This is opencode's experience: the agent's local commands run, what
+reaches outside the workspace asks.
 
 - **What still asks.** Writes outside the workspace or to protected paths (`fs.write`, also a
   redirection's), reads outside it, network bindings (`net.connect`), opaque lines, commands with an
@@ -488,27 +490,33 @@ argument or input outside it or excluded from models), and not one of `codeact.g
   apt, apk, dnf, yum, snap, winget, Chocolatey, Scoop) and PowerShell's (`Invoke-WebRequest`,
   `Install-Module`, …), and a shell's inline command line (`sh -c`, `bash -c`, `pwsh -c`, `cmd /c`).
   First installs of components ask through the installer as always.
-- **Opaque lines ask.** The sandbox confines an opaque line as much as a split one, but the guard cannot
-  see whether it names a download or reads outside the workspace for the model, so a person judges it.
-- **The network is the line.** A confining sandbox holds writes to the workspace and the environment's
-  own directories and hides credentials (sandbox.md), but leaves the network open unless the
-  environment's spec closes it: a confined command can still send what it reads. The ask list is a
-  guardrail of known spellings, not a boundary (a script the agent wrote, or a cell's own `fetch`, can
-  reach the network in any mode). Running auto-approved commands with the network off, and asking to
-  open it, waits for the egress proxy (spec §18).
-- **Where they hold** (`AutoApprovals.decide`, pure): never with `codeact.grants.mode = off` (nothing is
-  checked) or without a driver that confines (`GrantSetup.Sandbox`, the composition root's from the
-  environment's sandbox; `none`, Windows v1 and fallbacks: every command asks). Otherwise the grants
-  log's check of `approvals.auto` on the driver's id, in the session's context: a grant allows them (a
-  person's, for the session, the host or a repository: the TUI's switch,
-  `fx grants allow approvals.auto '*'`); a
-  deny grant or policy forbids them; with no grant they follow the mode (`auto` on, `ask` and `deny`
-  off); a policy that asks leaves them off. The host turns a policy file that forbids `auto` (or pins the
-  mode to another value) into a grants policy rule that denies `approvals.auto`
-  (`AutoApprovals.policyRules`), so no person turns them on either.
-- **Checked per call**, once and only when a need is confined: a switch applies to the next command, also
-  in the running turn. In `deny` mode with auto approvals on, what they cover runs and the rest is
-  refused.
+- **Opaque lines ask.** The guard cannot see whether one names a download or reads outside the
+  workspace for the model, so a person judges it.
+- **What it trusts without a sandbox** (the default since T137): the command's arguments stay in the
+  workspace, but the program runs with the user's rights. A build, a test runner or a script the agent
+  wrote can read the user's files, credentials included, and write anywhere the user can. Clients say
+  so (`approvals: auto · unsandboxed`, `fx run`'s line), and only the host's config, the command line
+  or a person turn the mode on.
+- **A sandbox makes it stronger.** With a driver that confines (sandbox.md "Opt-in"), what an
+  auto-approved command does is held to the environment's policy: writes to the workspace and the
+  environment's own directories, credentials hidden. The same commands run unasked either way.
+- **The network is the line.** Nothing closes it without a sandbox, and a confining sandbox leaves it
+  open unless the environment's spec closes it: an auto-approved command can send what it reads. The
+  ask list is a guardrail of known spellings, not a boundary (a script the agent wrote, or a cell's own
+  `fetch`, reaches the network in any mode). Auto-approved commands with the network closed, and asking
+  to open it, wait for the egress proxy (spec §18).
+- **Where they hold** (`AutoApprovals.decide`, pure): never with `codeact.grants.mode = off` (nothing
+  is checked). Otherwise the grants log's check of `approvals.auto` on the hands' driver
+  (`GrantSetup.Sandbox`: the composition root's, from the environment's sandbox; `none` when nothing
+  confines), in the session's context: a grant allows them (a person's, for the session, the host or a
+  repository: the TUI's switch, `fx grants allow approvals.auto '*'`); a deny grant or policy forbids
+  them; with no grant they follow the mode (`auto` on, `ask` and `deny` off); a policy that asks leaves
+  them off. Policy forbids them everywhere with a deny rule on `*` (the host makes one from a policy
+  file that forbids `auto` or pins the mode to another value: `AutoApprovals.policyRules`), or only
+  unsandboxed with a deny rule on `none`.
+- **Checked per call**, once and only when a need is in the workspace: a switch applies to the next
+  command, also in the running turn. In `deny` mode with auto approvals on, what they cover runs and the
+  rest is refused.
 
 | Slot | Default | |
 |---|---|---|
@@ -569,10 +577,10 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   substitutions at any depth flattened in order, and any line split or opaque, never a crash), host
   calls as grants (`PermissionTests`), the guard over the real grants service (listed, asked and
   answered, keys, a broader session grant, policy and deny grants, modes, batched requests, an
-  interrupted wait, timeouts, network; auto approvals: confined commands unasked and nothing in the
-  grants log, downloads and writes outside asking, no driver, a person's session grant and deny grant,
-  policy, the decision and the policy rules a policy file makes; `cd` and the ask list in
-  `PermissionTests`), and turns on the real session host for both surfaces (answered,
+  interrupted wait, timeouts, network; auto approvals: workspace commands unasked without a sandbox and
+  with one, nothing in the grants log, downloads, installs, opaque lines and writes outside asking, a
+  person's session grant and deny grant, policy everywhere and only unsandboxed, the decision and the
+  policy rules a policy file makes; `cd` and the ask list in `PermissionTests`), and turns on the real session host for both surfaces (answered,
   denied, refused by policy, a write outside the workspace, interrupts, steers, timeouts, mode deny, a
   host stopping and crashing mid-wait), with replay and determinism of the logs and requests.
 - **Replay**: the recorded logs render, through the render alone, to exactly the requests sent; the same
