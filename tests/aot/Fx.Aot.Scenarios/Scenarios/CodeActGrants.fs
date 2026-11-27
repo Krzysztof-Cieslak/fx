@@ -1,6 +1,7 @@
 /// The CodeAct grants guard (T127b, docs/modules/codeact.md "Grants"): the sh and PowerShell command
 /// parsers, host calls as grants, and the guard over the grants service on the fake clock (a listed
-/// command, a request answered and denied, a call's requests at once, mode deny, a cancelled wait).
+/// command, a request answered and denied, a call's requests at once, mode deny, a cancelled wait;
+/// T134's auto approvals: on with a confining driver, a person's switch, policy, no driver).
 module Fx.Aot.Scenarios.CodeActGrants
 
 open System
@@ -97,6 +98,7 @@ let private showNeeds (needs: CallNeeds) : string =
             + " "
             + Json.quote n.Resource
             + (if n.Listed then " listed" else "")
+            + (if n.Confined then " confined" else "")
             + " at "
             + Json.quote n.Place
             + " suggest "
@@ -116,6 +118,9 @@ let needs =
                 unix, call "t1-s1-1" "shell.run" [ Json.String "cat /etc/passwd > /tmp/x" ]
                 unix, call "t1-s1-1" "shell.run" [ Json.String "cd /tmp && echo x > y" ]
                 unix, call "t1-s1-1" "shell.run" [ Json.String "make"; Json.Object [ "cwd", Json.String "src/app" ] ]
+                unix, call "t1-s1-1" "shell.run" [ Json.String "cd src && dotnet test 2>&1 | tail -n 5" ]
+                unix, call "t1-s1-1" "shell.run" [ Json.String "env CI=1 timeout 60 curl -s https://example.com" ]
+                unix, call "t1-s1-1" "shell.run" [ Json.String "git push origin main; bash -c 'rm -rf x'" ]
                 unix, call "t1-s1-1" "fs.write" [ Json.String ".git/hooks/pre-commit"; Json.String "x" ]
                 unix, call "t1-s1-1" "fs.write" [ Json.String "../../x"; Json.String "x" ]
                 unix, call "t1-s1-1" "fs.read" [ Json.String "/etc/hosts" ]
@@ -174,9 +179,22 @@ type private Env =
 let private wait (task: Task<'T>) : 'T =
     task.WaitAsync(TimeSpan.FromMinutes 1.0).GetAwaiter().GetResult()
 
-let private showResult (result: Result<unit, HostCallError>) : string =
+let private showResult (result: Result<Fx.Prompt.Approval list, HostCallError>) : string =
     match result with
-    | Ok() -> "allowed"
+    | Ok [] -> "allowed"
+    | Ok approvals ->
+        let shown =
+            approvals
+            |> List.map (fun a ->
+                a.Action
+                + " "
+                + a.Resource
+                + " by "
+                + (match a.By with
+                   | Fx.Prompt.ApprovedBy.Auto -> "auto"
+                   | Fx.Prompt.ApprovedBy.Person _ -> "a person"))
+
+        "allowed (" + String.Join(", ", shown) + ")"
     | Error e -> string e
 
 /// The guard over the grants service on the fake clock. On a thread-pool thread (see grants-service).
@@ -285,6 +303,93 @@ let guard =
                         }
 
                 out.Add("mode deny: " + showResult (run (deny (shell "t1-s1-4" "mkdir c"))))
+
+                // Auto approvals (T134): the host's mode with a confining driver runs what it confines;
+                // without one, or in mode deny without auto, nothing runs unasked.
+                let autoWith (mode: GrantMode) (sandbox: string option) =
+                    GrantGuard.create<Env>
+                        { GrantSetup.create
+                              (GrantsService.grants service)
+                              (SessionLog.typed store.Log)
+                              turn
+                              { GrantSettings.defaults with
+                                  Mode = mode
+                              } with
+                            Sandbox = sandbox
+                        }
+                        (Workplace.create "/home/me/ws" Os.Linux)
+
+                let auto = autoWith GrantMode.Auto (Some "bubblewrap")
+
+                out.Add(
+                    "auto: "
+                    + showResult (run (auto (shell "t1-s1-6" "mkdir e && ls && dotnet test")))
+                )
+
+                out.Add(
+                    "auto, no driver: "
+                    + showResult (run ((autoWith GrantMode.Deny None) (shell "t1-s1-6" "mkdir e")))
+                )
+
+
+                // A person's switch: a session grant of approvals.auto, in mode deny.
+                let grant =
+                    run (
+                        GrantsService.grant
+                            service
+                            alice
+                            {
+                                Action = AutoApprovals.action
+                                Resource = "*"
+                                Effect = GrantEffect.Allow
+                                Scope = GrantScope.Session "s1"
+                                Expires = None
+                                Reason = Some "auto"
+                            }
+                    )
+
+                out.Add(
+                    "switched on: "
+                    + (match grant with
+                       | Ok _ -> "granted"
+                       | Error e -> string e)
+                )
+
+                out.Add(
+                    "switched, mode deny: "
+                    + showResult (run ((autoWith GrantMode.Deny (Some "bubblewrap")) (shell "t1-s1-7" "mkdir g")))
+                )
+
+                out.Add(
+                    "switched, a download in mode deny: "
+                    + showResult (
+                        run ((autoWith GrantMode.Deny (Some "bubblewrap")) (shell "t1-s1-8" "mkdir h; curl -O x"))
+                    )
+                )
+
+                for mode, sandbox, check in
+                    [
+                        GrantMode.Auto, Some "bubblewrap", Some(Ok(GrantCheck.MustAsk [ "no grant applies" ]))
+                        GrantMode.Ask, Some "bubblewrap", Some(Ok(GrantCheck.MustAsk [ "no grant applies" ]))
+                        GrantMode.Auto, None, None
+                        GrantMode.Off, Some "seatbelt", None
+                        GrantMode.Auto, Some "seatbelt", Some(Ok(GrantCheck.Denied [ "policy says no" ]))
+                        GrantMode.Ask, Some "seatbelt", Some(Ok(GrantCheck.Allowed(GrantId "g1")))
+                        GrantMode.Auto, Some "seatbelt", Some(Ok(GrantCheck.MustAsk [ "policy asks" ]))
+                    ] do
+                    out.Add($"decide {mode} {sandbox} -> {AutoApprovals.decide mode sandbox check}")
+
+                let policy: Fx.Variants.Policy =
+                    {
+                        Origin = "policy.json"
+                        Pins = []
+                        Forbids = [ "codeact.grants.mode", [ Json.String "auto" ] ]
+                    }
+
+                out.Add(
+                    "policy -> "
+                    + String.Join(", ", AutoApprovals.policyRules [ policy ] |> List.map string)
+                )
 
                 use cancel = new CancellationTokenSource()
 

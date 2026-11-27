@@ -143,6 +143,7 @@ type Session(id: string) =
                         ]
                     IsError = defaultArg error false
                     Restarted = restarted
+                    Approvals = []
                 }
         )
 

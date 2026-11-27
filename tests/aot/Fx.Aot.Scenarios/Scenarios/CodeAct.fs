@@ -270,7 +270,7 @@ let private sessionIn
                                         Os = os
                                         CommandEnv = Inherit []
                                         Interpreter = kernel
-                                        Guard = fun _ -> EffResult.ok ()
+                                        Guard = fun _ -> EffResult.ok []
                                         Snapshots = None
                                         Sandbox = None
                                     }
@@ -546,7 +546,7 @@ let private recovery () : Task<string list> =
                                                 Os = os
                                                 CommandEnv = Inherit []
                                                 Interpreter = kernel
-                                                Guard = fun _ -> EffResult.ok ()
+                                                Guard = fun _ -> EffResult.ok []
                                                 Snapshots = None
                                                 Sandbox = None
                                             }

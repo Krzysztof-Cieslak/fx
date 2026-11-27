@@ -412,7 +412,7 @@ let createIn
             Os = os
             CommandEnv = commandEnv
             Interpreter = ScriptProc.interpreter kernelOptions
-            Guard = fun _ -> EffResult.ok ()
+            Guard = fun _ -> EffResult.ok []
             Snapshots = None
             Sandbox = None
         }

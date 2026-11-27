@@ -60,6 +60,9 @@ type HostCallStarted =
         Binding: string
         /// Its arguments, bounded.
         Args: string
+        /// How it ran that no grant in force allowed: auto approvals, or a person's answer (absent in
+        /// entries written before they were kept).
+        Approved: Fx.Prompt.Approval list
     }
 
     override this.ToString() =
@@ -243,12 +246,16 @@ module StepCodecs =
             and! binding = Codec.field "binding" (fun c -> c.Binding) Codec.string
             and! args = Codec.field "args" (fun c -> c.Args) Codec.string
 
+            and! approved =
+                Fx.Prompt.ContextCodecs.approvals (fun (c: HostCallStarted) -> c.Approved)
+
             return
                 {
                     Call = call
                     Index = index
                     Binding = binding
                     Args = args
+                    Approved = approved |> Option.defaultValue []
                 }
         }
         |> Codec.named "HostCallStarted"
@@ -473,6 +480,7 @@ module StepJournal =
 type RunningAction(call: CallRef, key: string, cell: string option) =
     let gate = obj ()
     let mutable hostCalls = 0
+    let approvals = ResizeArray<Fx.Prompt.Approval>()
     let mutable printed = 0
     let mutable printedChars = 0
 
@@ -481,6 +489,18 @@ type RunningAction(call: CallRef, key: string, cell: string option) =
     member _.Key = key
     /// The cell's id in its kernel (cells only).
     member _.Cell = cell
+
+    /// Notes how its host calls ran that no grant in force allowed (the receipt keeps the first
+    /// `Receipt.MaxApprovals`).
+    member _.Approve(approved: Fx.Prompt.Approval list) =
+        lock gate (fun () ->
+            for approval in approved do
+                if approvals.Count < Fx.Prompt.Receipt.MaxApprovals then
+                    approvals.Add approval)
+
+    /// How its host calls ran that no grant in force allowed, in order.
+    member _.Approvals: Fx.Prompt.Approval list =
+        lock gate (fun () -> List.ofSeq approvals)
 
     /// The number of its next host call, from 1.
     member _.NextHostCall() =

@@ -1,5 +1,6 @@
 /// Host calls as grants (`Permissions`): what each core binding's calls need, on sh and PowerShell
-/// workplaces, with the allowlist, protected paths, working directories and opaque lines.
+/// workplaces, with the allowlist, protected paths, working directories and opaque lines, and which
+/// commands auto approvals may run (`Confined`, T134).
 module Fx.CodeAct.Tests.PermissionTests
 
 open Expecto
@@ -35,6 +36,19 @@ let private run (place: Workplace) (line: string) : string list =
 
 let private runIn (place: Workplace) (cwd: string) (line: string) : string list =
     show (needsOf place "shell.run" [ Json.String line; Json.Object [ "cwd", Json.String cwd ] ])
+
+/// What a line needs, with what auto approvals may run (`confined`).
+let private confined (place: Workplace) (line: string) : string list =
+    match needsOf place "shell.run" [ Json.String line ] with
+    | CallNeeds.Refused reason -> [ "refused: " + reason ]
+    | CallNeeds.Needs needs ->
+        needs
+        |> List.map (fun n ->
+            n.Action.Value
+            + " "
+            + n.Resource
+            + (if n.Listed then " (listed)" else "")
+            + (if n.Confined then " (confined)" else ""))
 
 let private single (needs: CallNeeds) : GrantNeed =
     match needs with
@@ -88,10 +102,108 @@ let tests =
                 Expect.equal
                     (run unix "cd /etc && cat passwd")
                     [ "shell.exec cat passwd" ]
-                    "after a change of directory"
+                    "after a change of directory outside"
 
                 Expect.equal (runIn unix "/tmp" "ls") [ "shell.exec ls" ] "run outside the workspace"
                 Expect.equal (runIn unix "sub" "ls") [ "shell.exec ls (listed)" ] "run in the workspace"
+            }
+
+            test "a cd to a plain path keeps the directories later commands may run in" {
+                Expect.equal (run unix "cd src && cat a.txt") [ "shell.exec cat a.txt (listed)" ] "into the workspace"
+                Expect.equal (run unix "cd src; cd lib; ls") [ "shell.exec ls (listed)" ] "deeper"
+                Expect.equal (run unix "cd .. && ls") [ "shell.exec ls" ] "above the workspace"
+                Expect.equal (run unix "cd && ls") [ "shell.exec ls" ] "home: unknown"
+                Expect.equal (run unix "cd - && ls") [ "shell.exec ls" ] "back: unknown"
+                Expect.equal (run unix "cd $DIR && ls") [ "shell.exec ls" ] "an expansion: unknown"
+
+                // A subshell's cd may have been undone: an argument is checked from every directory.
+                Expect.equal
+                    (run unix "(cd src && make) ; cat ../x")
+                    [ "shell.exec make"; "shell.exec cat ../x" ]
+                    "a subshell"
+
+                Expect.equal (run unix "pushd src && ls && popd") [ "shell.exec ls (listed)" ] "pushd and popd"
+
+                Expect.equal
+                    (run windows "Set-Location src; Get-ChildItem")
+                    [ "shell.exec Get-ChildItem (listed)" ]
+                    "PowerShell"
+
+                Expect.equal
+                    (run unix "cd src && echo hi > out.txt")
+                    [ "shell.exec cd src && echo hi > out.txt" ]
+                    "a relative redirection after cd: the whole line"
+            }
+
+            test "auto approvals may run commands written plainly in the workspace, not downloads or installs" {
+                Expect.equal
+                    (confined unix "mkdir a && dotnet test 2>&1 | tail -n 5")
+                    [
+                        "shell.exec mkdir a (confined)"
+                        "shell.exec dotnet test (confined)"
+                        "shell.exec tail -n 5 (listed) (confined)"
+                    ]
+                    "plain commands"
+
+                Expect.equal
+                    (confined unix "cd tests && dotnet test")
+                    [ "shell.exec dotnet test (confined)" ]
+                    "in a directory of the workspace"
+
+                Expect.equal (confined unix "curl -s https://x.org") [ "shell.exec curl -s https://x.org" ] "a download"
+
+                Expect.equal
+                    (confined unix "env CI=1 timeout 60 /usr/bin/curl x")
+                    [ "shell.exec env CI=1 timeout 60 /usr/bin/curl x" ]
+                    "past assignments, wrappers and a directory"
+
+                Expect.equal (confined unix "NO_COLOR=1 wget x") [ "shell.exec NO_COLOR=1 wget x" ] "an assignment"
+                Expect.equal (confined unix "git push origin main") [ "shell.exec git push origin main" ] "a push"
+                Expect.equal (confined unix "git status") [ "shell.exec git status (listed) (confined)" ] "git status"
+                Expect.equal (confined unix "npm install") [ "shell.exec npm install" ] "an install"
+
+                Expect.equal
+                    (confined unix "bun install --frozen-lockfile")
+                    [ "shell.exec bun install --frozen-lockfile" ]
+                    "bun"
+
+                Expect.equal
+                    (confined unix "dotnet add src/a.fsproj package Foo")
+                    [ "shell.exec dotnet add src/a.fsproj package Foo" ]
+                    "a package added"
+
+                Expect.equal
+                    (confined unix "bash -c 'rm -rf x'")
+                    [ "shell.exec bash -c rm -rf x" ]
+                    "a shell's inline line"
+
+                Expect.equal
+                    (confined unix "echo $(curl x)")
+                    [ "shell.exec curl x"; "shell.exec echo $(curl x)" ]
+                    "a substitution"
+
+                Expect.equal (confined unix "cat /etc/passwd") [ "shell.exec cat /etc/passwd" ] "an argument outside"
+                Expect.equal (confined unix "make $TARGET") [ "shell.exec make $TARGET" ] "an expansion"
+                Expect.equal (confined unix "cd .. && make") [ "shell.exec make" ] "run outside the workspace"
+
+                Expect.equal
+                    (confined unix "make > /tmp/log")
+                    [ "shell.exec make (confined)"; "fs.write /tmp/log" ]
+                    "a write outside still needs fs.write"
+
+                Expect.equal
+                    (confined unix "for f in *; do rm $f; done")
+                    [ "shell.exec for f in *; do rm $f; done" ]
+                    "an opaque line"
+
+                Expect.equal (confined windows "dotnet build") [ "shell.exec dotnet build (confined)" ] "PowerShell"
+
+                Expect.equal
+                    (confined windows "Invoke-WebRequest https://x.org -OutFile a")
+                    [ "shell.exec Invoke-WebRequest https://x.org -OutFile a" ]
+                    "a PowerShell download"
+
+                Expect.equal (confined windows "IWR x") [ "shell.exec IWR x" ] "any case"
             }
 
             test "a listed command that reads outside the workspace or an excluded file is not listed" {
@@ -371,6 +483,12 @@ let tests =
             test "the slots: privileged, with valid patterns" {
                 Expect.isTrue GrantSlots.mode.Privileged "mode"
                 Expect.isTrue GrantSlots.allowCommands.Privileged "allowed commands"
+                Expect.isTrue GrantSlots.askCommands.Privileged "commands auto approvals leave to people"
+
+                for pattern in GrantSlots.defaultAskCommands do
+                    Expect.equal (Pattern.validate ResourceKind.Command pattern) (Ok()) pattern
+
+                Expect.equal (GrantSlots.mode.Codec.Decode(Json.String "auto")) (Ok GrantMode.Auto) "auto is a mode"
                 Expect.isTrue GrantSlots.protectedPaths.Privileged "protected paths"
                 Expect.isFalse GrantSlots.timeoutMs.Privileged "a timeout only tightens"
 

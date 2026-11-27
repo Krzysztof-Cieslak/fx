@@ -49,6 +49,7 @@ let coding: Sim =
                 Pieces = [ Piece.output 60 (String.replicate 30 "ok " + "FAILED: 1 test") ]
                 IsError = true
                 Restarted = None
+                Approvals = []
             }
     )
     |> steer "Keep the old API too."
@@ -162,6 +163,7 @@ let private everyKind: Sim =
                     ]
                 IsError = false
                 Restarted = None
+                Approvals = []
             }
     )
 

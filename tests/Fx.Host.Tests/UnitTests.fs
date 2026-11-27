@@ -358,6 +358,7 @@ let tests =
                                         ]
                                     IsError = isError
                                     Restarted = restarted
+                                    Approvals = []
                                 }
 
                         let restart =

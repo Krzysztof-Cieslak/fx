@@ -10,6 +10,7 @@ open Fx.Envd
 open Fx.Interpreters
 open Fx.Sdk
 open Fx.Sessions
+open Fx.Prompt
 
 /// How a session's kernels start (spec §6.2): the interpreter, in the environment the kernel runs in.
 [<NoEquality; NoComparison>]
@@ -54,8 +55,9 @@ type Hands<'K> =
         CommandEnv: EnvVars
         Interpreter: Interpreter<'K>
         /// Checked before every host call, from cells and direct tools alike: `Error` refuses it (e.g.
-        /// `Denied`). `GrantGuard.attach` adds the grants log's checks for the turn.
-        Guard: HostCall -> Eff<'K, Result<unit, HostCallError>>
+        /// `Denied`); `Ok` lets it run, with what no grant in force allowed (`Approval`s: auto approvals
+        /// or a person's answer). `GrantGuard.attach` adds the grants log's checks for the turn.
+        Guard: HostCall -> Eff<'K, Result<Approval list, HostCallError>>
         /// The workspace's snapshots (envd's), if the environment has them: each step records the
         /// workspace before its actions, so a call in doubt after a crash shows what changed.
         Snapshots: Snapshots option
@@ -71,9 +73,9 @@ type Hands<'K> =
 [<NoEquality; NoComparison>]
 type Watch<'K> =
     {
-        /// Before a host call runs (after the guard allowed it): a number for `Called`, if it was
-        /// journaled.
-        Calling: HostCall -> Eff<'K, int option>
+        /// Before a host call runs (after the guard allowed it, with how): a number for `Called`, if it
+        /// was journaled.
+        Calling: HostCall -> Approval list -> Eff<'K, int option>
         Called: int -> Result<Value, HostCallError> -> Eff<'K, unit>
         Output: CellOutput -> Eff<'K, unit>
     }
@@ -103,7 +105,7 @@ module Watch =
     /// Sees nothing.
     let none<'K> : Watch<'K> =
         {
-            Calling = fun _ -> Eff.ret None
+            Calling = fun _ _ -> Eff.ret None
             Called = fun _ _ -> Eff.unit
             Output = fun _ -> Eff.unit
         }
@@ -253,7 +255,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     let mutable running: RunningCell option = None
 
     // The current turn's guard: a kernel outlives the turn that started it.
-    let mutable guard: HostCall -> Eff<'K, Result<unit, HostCallError>> =
+    let mutable guard: HostCall -> Eff<'K, Result<Approval list, HostCallError>> =
         fun _ -> EffResult.error (HostCallError.Denied "no turn is running in this session")
 
     let finishing: Finishing<'K> =
@@ -341,18 +343,19 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     /// The guard the kernel's host calls pass: the running turn's (its hands'), set before each action.
     member _.Guard
         with get () = lock gate (fun () -> guard)
-        and set (value: HostCall -> Eff<'K, Result<unit, HostCallError>>) = lock gate (fun () -> guard <- value)
+        and set (value: HostCall -> Eff<'K, Result<Approval list, HostCallError>>) =
+            lock gate (fun () -> guard <- value)
 
     /// A host call, from a cell or a direct tool: the guard, then the binding with the turn's settings.
     member _.Call
-        (guard: HostCall -> Eff<'K, Result<unit, HostCallError>>)
+        (guard: HostCall -> Eff<'K, Result<Approval list, HostCallError>>)
         : HostCall -> Eff<'K, Result<Value, HostCallError>> =
         fun call ->
             eff {
                 match! guard call with
                 | Error e -> return Error e
-                | Ok() ->
-                    let! journaled = watch.Calling call
+                | Ok approvals ->
+                    let! journaled = watch.Calling call approvals
                     let! result = HostBinding.dispatch (bindings (current ())) call
 
                     match journaled with

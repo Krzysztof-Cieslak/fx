@@ -188,7 +188,7 @@ let private record () : Task<string list> =
                 Os = os
                 CommandEnv = Inherit []
                 Interpreter = ScriptProc.interpreter kernelOptions
-                Guard = fun _ -> EffResult.ok ()
+                Guard = fun _ -> EffResult.ok []
                 Snapshots = None
                 Sandbox = None
             }

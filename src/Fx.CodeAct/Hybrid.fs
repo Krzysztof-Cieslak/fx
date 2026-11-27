@@ -15,6 +15,8 @@ type Executed =
         IsError: bool
         /// The cell ran in a new kernel (`Receipt.Restarted`).
         Restarted: KernelRestart option
+        /// How its host calls ran that no grant in force allowed (`Receipt.Approvals`).
+        Approvals: Approval list
     }
 
     override this.ToString() =
@@ -32,6 +34,7 @@ module Hybrid =
             Pieces = Receipts.failed message
             IsError = true
             Restarted = None
+            Approvals = []
         }
 
     /// A refused or failed host call, as the model reads it.
@@ -70,6 +73,7 @@ module Hybrid =
                         Pieces = Receipts.read file input.Offset input.Limit maxLines
                         IsError = false
                         Restarted = None
+                        Approvals = []
                     }
         }
 
@@ -173,6 +177,7 @@ module Hybrid =
                                         (before, following)
                                 IsError = false
                                 Restarted = None
+                                Approvals = []
                             }
         }
 
@@ -198,5 +203,6 @@ module Hybrid =
                             Pieces = Receipts.ran maxChars result
                             IsError = result.TimedOut
                             Restarted = None
+                            Approvals = []
                         }
         }

@@ -471,7 +471,7 @@ let localHands
         Os = os
         CommandEnv = Inherit []
         Interpreter = make root
-        Guard = fun _ -> EffResult.ok ()
+        Guard = fun _ -> EffResult.ok []
         Snapshots =
             Some(
                 GitSnapshots.create

@@ -385,8 +385,17 @@ module Markers =
     let openResult: Codec<Result<int64, Rejection>> =
         Values.result Codec.int64 Values.rejection
 
-    let guardResult: Codec<Result<unit, HostCallError>> =
-        Values.result Codec.unit KernelProtocol.Codecs.hostCallError
+    /// What the guard let run that no grant allowed: `null` when nothing, as journals wrote the
+    /// guard's `Ok` before approvals were kept (so they replay as they are).
+    let guardApprovals: Codec<Fx.Prompt.Approval list> =
+        Codec.option (Codec.list Fx.Prompt.ContextCodecs.approval)
+        |> Codec.map (Option.defaultValue []) (fun approvals ->
+            match approvals with
+            | [] -> None
+            | approvals -> Some approvals)
+
+    let guardResult: Codec<Result<Fx.Prompt.Approval list, HostCallError>> =
+        Values.result guardApprovals KernelProtocol.Codecs.hostCallError
 
     let handsResult: Codec<Result<HandsInfo, string>> =
         Values.result HandsInfo.codec Codec.string

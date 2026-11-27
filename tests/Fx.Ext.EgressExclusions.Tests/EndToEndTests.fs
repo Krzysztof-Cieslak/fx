@@ -282,6 +282,7 @@ let tests =
                                             ]
                                         IsError = false
                                         Restarted = None
+                                        Approvals = []
                                     }
                             )
                             Fx.Prompt.LogItem.Context(
@@ -295,6 +296,7 @@ let tests =
                                         Pieces = [ view "README.md" "hello" ]
                                         IsError = false
                                         Restarted = None
+                                        Approvals = []
                                     }
                             )
                         ]

@@ -3,6 +3,7 @@ namespace Fx.CodeAct
 open System
 open System.Security.Cryptography
 open System.Text
+open Fx.Contracts
 open Fx.Effects
 open Fx.Machines
 open Fx.Machines.Host
@@ -10,6 +11,7 @@ open Fx.Kernel
 open Fx.Sdk
 open Fx.Sessions
 open Fx.Grants
+open Fx.Prompt
 
 /// What a turn's grants guard works with. The composition root builds it for each turn's hands
 /// (`GrantGuard.attach`), with the variants of the turn's profile.
@@ -33,6 +35,9 @@ type GrantSetup =
         /// How bindings map to grants: `Permissions.core`, and the rules of other bindings (network
         /// bindings: `Permissions.connects`).
         Rules: BindingRule list
+        /// The sandbox driver that confines the hands' processes (`bubblewrap`, `seatbelt`); `None`
+        /// when none does (`none`, Windows v1, a fallback): then auto approvals never apply.
+        Sandbox: string option
     }
 
     override this.ToString() =
@@ -49,7 +54,91 @@ module GrantSetup =
             Repo = None
             Agent = "main"
             Rules = Permissions.core
+            Sandbox = None
         }
+
+/// Whether auto approvals hold (docs/modules/codeact.md, "Approval modes"): commands a sandbox driver
+/// confines to the workspace run without asking.
+[<RequireQualifiedAccess>]
+type AutoApprovals =
+    | On of because: string
+    | Off of because: string
+
+    override this.ToString() =
+        match this with
+        | On because -> "on: " + because
+        | Off because -> "off: " + because
+
+/// Auto approvals (docs/modules/codeact.md, "Approval modes"; spec §13): the guard does not ask a person
+/// about commands a sandbox driver confines to the workspace. A person turns them on with a grant of
+/// `approvals.auto` (session, repository or host: the TUI's switch, `fx grants allow`), the host with
+/// `codeact.grants.mode = auto`; a deny grant turns them off for its scope, and policy forbids them
+/// (a deny rule; the host makes one from a policy file that forbids `auto`). Never without a driver that
+/// confines.
+[<RequireQualifiedAccess>]
+module AutoApprovals =
+    /// The grant that turns auto approvals on for its scope; its resource is the confining driver.
+    let action = ActionName.create "approvals.auto"
+
+    /// What auto approvals are for the hands: the mode, the confining driver, and the grants log's
+    /// check of `approvals.auto` on it (`None` when there is no driver to check).
+    let decide
+        (mode: GrantMode)
+        (sandbox: string option)
+        (check: Result<GrantCheck, GrantError> option)
+        : AutoApprovals =
+        match mode, sandbox, check with
+        | GrantMode.Off, _, _ -> AutoApprovals.Off "codeact.grants.mode is off: nothing is checked"
+        | _, None, _
+        | _, _, None ->
+            AutoApprovals.Off "no sandbox driver confines this environment's processes, so every command asks"
+        | _, Some _, Some(Error e) -> AutoApprovals.Off $"the grants log could not be checked: {e.Message}"
+        | _, Some _, Some(Ok(GrantCheck.Denied reasons)) ->
+            AutoApprovals.Off("forbidden: " + String.concat "; " reasons)
+        | _, Some driver, Some(Ok(GrantCheck.Allowed grant)) ->
+            AutoApprovals.On $"a person turned them on (grant {grant.Value}); {driver} confines commands"
+        | GrantMode.Auto, Some driver, Some(Ok(GrantCheck.MustAsk reasons)) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.On $"codeact.grants.mode is auto; {driver} confines commands"
+        | _, Some _, Some(Ok(GrantCheck.MustAsk reasons)) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.Off "nobody turned them on"
+        | _, Some _, Some(Ok(GrantCheck.MustAsk reasons)) ->
+            AutoApprovals.Off("policy asks: " + String.concat "; " reasons)
+
+    /// The grants log's query for auto approvals in a context.
+    let query (driver: string) (context: GrantContext) : GrantQuery =
+        {
+            Action = action
+            Resource = driver
+            Context = context
+        }
+
+    /// The grants policy a host's variant policies make: one that forbids `auto` for
+    /// `codeact.grants.mode`, or pins the mode to another value, forbids auto approvals altogether (a
+    /// deny rule on `approvals.auto`), so no person turns them on either.
+    let policyRules (policies: Fx.Variants.Policy list) : PolicyRule list =
+        let slot = GrantSlots.mode.Id.Value
+        let auto = Json.String(string GrantMode.Auto)
+
+        policies
+        |> List.choose (fun policy ->
+            let forbids =
+                policy.Forbids
+                |> List.exists (fun (id, values) -> id = slot && List.contains auto values)
+
+            let pins =
+                policy.Pins |> List.exists (fun (id, value) -> id = slot && value <> auto)
+
+            if forbids || pins then
+                Some
+                    {
+                        Id = $"{policy.Origin}#{slot}"
+                        Action = action
+                        Resource = "*"
+                        Effect = PolicyEffect.Deny
+                        Reason = $"{policy.Origin} does not allow auto approvals ({slot})"
+                    }
+            else
+                None)
 
 /// How a wait for people ended.
 [<RequireQualifiedAccess>]
@@ -169,6 +258,27 @@ module GrantGuard =
         : Eff<'K, Result<GrantCheck, GrantError>> when 'K :> IScope =
         fun env -> setup.Grants.Check (query setup need) env.Scope.Cancellation
 
+    let private checkQuery
+        (setup: GrantSetup)
+        (query: GrantQuery)
+        : Eff<'K, Result<GrantCheck, GrantError>> when 'K :> IScope =
+        fun env -> setup.Grants.Check query env.Scope.Cancellation
+
+    /// Auto approvals for the setup's session now.
+    let auto (setup: GrantSetup) : Eff<'K, AutoApprovals> when 'K :> IScope =
+        match setup.Sandbox with
+        | None -> Eff.ret (AutoApprovals.decide setup.Settings.Mode None None)
+        | Some driver ->
+            let context =
+                {
+                    Session = Some setup.Turn.Session
+                    Run = None
+                    Repo = setup.Repo |> Option.map (fun repo -> { Repo = repo; Path = "" })
+                }
+
+            checkQuery setup (AutoApprovals.query driver context)
+            |> Eff.map (fun check -> AutoApprovals.decide setup.Settings.Mode (Some driver) (Some check))
+
     let private request
         (setup: GrantSetup)
         (ask: GrantAsk)
@@ -281,16 +391,21 @@ module GrantGuard =
                 return raise e
         }
 
-    /// Asks for what the call needs: checks first (nothing is recorded for a call the rules settle),
-    /// then requests what a person must decide, all at once, and waits for the answers.
+    /// Asks for what the call needs: checks first (nothing is recorded in the grants log for a call
+    /// the rules settle), lets auto approvals run what a sandbox confines, then requests what a person
+    /// must decide, all at once, and waits for the answers. `Ok` says what ran without a grant in
+    /// force: auto approvals, and the requests people answered.
     let private authorize<'K when 'K :> IClock and 'K :> IScopeWith<'K>>
         (setup: GrantSetup)
         (call: HostCall)
         (needs: GrantNeed list)
-        : Eff<'K, Result<unit, HostCallError>> =
+        : Eff<'K, Result<Approval list, HostCallError>> =
         eff {
-            let mutable result: Result<unit, HostCallError> option = None
+            let mutable result: Result<Approval list, HostCallError> option = None
             let asking = ResizeArray<GrantNeed * string list>()
+            let approved = ResizeArray<Approval>()
+            // Auto approvals, checked once for the call when a need could use them.
+            let mutable autoState: AutoApprovals option = None
 
             for need in needs do
                 if result.IsNone then
@@ -299,11 +414,30 @@ module GrantGuard =
                     | Ok(GrantCheck.Allowed _) -> ()
                     | Ok(GrantCheck.Denied reasons) -> result <- Some(Error(denied need reasons))
                     | Ok(GrantCheck.MustAsk reasons) when need.Listed && reasons = [ noGrant ] -> ()
+                    | Ok(GrantCheck.MustAsk reasons) when need.Confined && reasons = [ noGrant ] ->
+                        let! state =
+                            match autoState with
+                            | Some state -> Eff.ret state
+                            | None -> auto setup
+
+                        autoState <- Some state
+
+                        if state.IsOn then
+                            approved.Add
+                                {
+                                    Action = need.Action.Value
+                                    Resource = need.Resource
+                                    By = ApprovedBy.Auto
+                                }
+                        else
+                            asking.Add(need, reasons)
                     | Ok(GrantCheck.MustAsk reasons) -> asking.Add(need, reasons)
+
+            let approvedHere = List.ofSeq approved
 
             match result with
             | Some outcome -> return outcome
-            | None when asking.Count = 0 -> return Ok()
+            | None when asking.Count = 0 -> return Ok approvedHere
             | None when setup.Settings.Mode = GrantMode.Deny ->
                 let need, reasons = asking[0]
                 let why = String.concat "; " reasons
@@ -339,23 +473,39 @@ module GrantGuard =
                 | Some outcome ->
                     do! withdraw setup "another part of the call was refused" (pending |> Seq.map snd |> List.ofSeq)
                     return outcome
-                | None -> return! wait setup head (List.ofSeq pending)
+                | None ->
+                    match! wait setup head (List.ofSeq pending) with
+                    | Error e -> return Error e
+                    | Ok() ->
+                        // People answered: their requests, by key (what the grants log knows them by).
+                        let answered =
+                            pending
+                            |> Seq.map (fun (need, _) ->
+                                {
+                                    Action = need.Action.Value
+                                    Resource = need.Resource
+                                    By = ApprovedBy.Person(key setup.Turn call need)
+                                })
+                            |> List.ofSeq
+
+                        return Ok(approvedHere @ answered)
         }
 
     /// The guard for a turn's calls in a workplace.
     let create<'K when 'K :> IClock and 'K :> IScopeWith<'K>>
         (setup: GrantSetup)
         (place: Workplace)
-        : HostCall -> Eff<'K, Result<unit, HostCallError>> =
+        : HostCall -> Eff<'K, Result<Approval list, HostCallError>> =
         fun call ->
             match setup.Settings.Mode with
-            | GrantMode.Off -> EffResult.ok ()
+            | GrantMode.Off -> EffResult.ok []
             | GrantMode.Ask
+            | GrantMode.Auto
             | GrantMode.Deny ->
                 match Permissions.needs setup.Rules setup.Settings place call with
                 | CallNeeds.Refused reason ->
                     EffResult.error (HostCallError.Denied $"{call.Binding} was refused: {reason}.")
-                | CallNeeds.Needs [] -> EffResult.ok ()
+                | CallNeeds.Needs [] -> EffResult.ok []
                 | CallNeeds.Needs needs -> authorize setup call needs
 
     /// Hands whose host calls also pass the grants guard (after the hands' own guard), for a turn.
@@ -368,6 +518,9 @@ module GrantGuard =
                     eff {
                         match! hands.Guard call with
                         | Error e -> return Error e
-                        | Ok() -> return! grants call
+                        | Ok before ->
+                            match! grants call with
+                            | Error e -> return Error e
+                            | Ok approved -> return Ok(before @ approved)
                     }
         }

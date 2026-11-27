@@ -165,6 +165,7 @@ let private protocol () : string list =
                                 Pieces = [ Fx.Prompt.Piece.Text "exit 0" ]
                                 IsError = false
                                 Restarted = None
+                                Approvals = []
                             }
                     Meta =
                         {
