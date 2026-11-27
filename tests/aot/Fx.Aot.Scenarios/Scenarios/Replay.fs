@@ -190,6 +190,7 @@ let private record () : Task<string list> =
                 Interpreter = ScriptProc.interpreter kernelOptions
                 Guard = fun _ -> EffResult.ok ()
                 Snapshots = None
+                Sandbox = None
             }
 
         let wraps: Wraps<HostEnv, HandsEnv> =

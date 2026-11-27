@@ -527,6 +527,7 @@ module SessionReplay =
                                                         Some(Replay.snapshots segment Markers.Hands)
                                                     else
                                                         None
+                                                Sandbox = info.Sandbox
                                             })
                                 }
                     Catalog = settings.Catalog

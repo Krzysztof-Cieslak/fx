@@ -215,6 +215,9 @@ type HandsInfo =
         /// The interpreter provider whose launches are journaled (`LaunchInfo`), for an interpreter
         /// from a provider.
         Interpreter: string option
+        /// The sandbox's policy, when a driver confined the hands' processes: the prompt describes
+        /// it (`Instructions.sandbox`), so replay renders the same.
+        Sandbox: SandboxPolicy option
     }
 
     override this.ToString() =
@@ -242,6 +245,8 @@ module HandsInfo =
             and! interpreter =
                 Codec.optionalField "interpreter" (fun h -> h.Interpreter) Codec.string
 
+            and! sandbox = Codec.optionalField "sandbox" (fun h -> h.Sandbox) SandboxPolicy.codec
+
             return
                 {
                     Workspace = workspace
@@ -250,6 +255,7 @@ module HandsInfo =
                     Language = language
                     Snapshots = snapshots
                     Interpreter = interpreter
+                    Sandbox = sandbox
                 }
         }
 
@@ -271,6 +277,7 @@ module HandsInfo =
             Interpreter =
                 hands.Interpreter.Launches
                 |> Option.map (fun session -> (session 1).Provider.Id)
+            Sandbox = hands.Sandbox
         }
 
     /// The variables commands get, by name, with empty values (replay runs no command).

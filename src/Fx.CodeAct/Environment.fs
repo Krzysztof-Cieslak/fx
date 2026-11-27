@@ -121,4 +121,5 @@ module EnvHands =
                         | Ok() -> return! plan.Guard call
                     }
             Snapshots = Some handle.Client.Snapshots
+            Sandbox = if handle.Sandbox.Driver.Confines then Some policy else None
         }
