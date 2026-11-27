@@ -409,8 +409,8 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T206 done
-  class T113b,T132 inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -451,7 +451,7 @@ flowchart LR
 | T111 | envd core | T005, T104, T107 | §3, §9 | done | envd mode: exec/PTY with sequenced resumable output, fs ops (batch stat, read/write, apply-patch, search, watch), blob store, shadow-git snapshots, environment protocol. |
 | T112 | Env provider + local | T108, T111 | §9.1–9.2 | done | `EnvProvider` contract + `fx.env.local` built-in (embedded, in-process transport); provider conformance suite v1. |
 | T113 | Sandbox drivers | T108, T111 | §9.1 | done | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
-| T113b | envd paths beneath roots | T113 | §9.1, §18 | in-progress | envd's file operations take a root and resolve paths beneath it without following symbolic links (`openat2` `RESOLVE_BENEATH` on Linux, `O_NOFOLLOW_ANY` on macOS, reparse-point checks on Windows), so the bindings' sandbox check (`SandboxGuard`) cannot be raced by a sandboxed process swapping a directory for a link; the fs conformance suites cover links. |
+| T113b | envd paths beneath roots | T113 | §9.1, §18 | done | envd's file operations take a root and resolve paths beneath it without following symbolic links (`openat2` `RESOLVE_BENEATH` on Linux, `O_NOFOLLOW_ANY` on macOS, reparse-point checks on Windows), so the bindings' sandbox check (`SandboxGuard`) cannot be raced by a sandboxed process swapping a directory for a link; the fs conformance suites cover links. |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
 | T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | done | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
 | T115b | Bun extension host in the host | T115, T110, T123 | §6.3, §16.1, §16.4 | done | `fx.exthost.bun` among the built-ins (`Builtins.candidates`): its files (`ExthostBun.files`, carried in the binary) written into the data directory with hash checks (spec §16.4), the pinned Bun it requires installed in the bootstrap's components phase (`HostSettings.InstallComponents` on the host's installer; a first install is a person's grant), the installed Bun's path in its launch (`${bin.bun}`); a Bun package from host config loads through it; the built-ins test in `tests/Fx.Host.Tests` no longer leaves `Fx.Ext.ExthostBun` out; host tests with a fake installer, and the host's live tests on the pinned Bun. |

@@ -227,11 +227,13 @@ The privileged variant `sandbox.driver` (default `none`, T137) and the spec's `s
 2. **The bindings' file operations** run in envd, outside the sandbox: `SandboxGuard.check` runs before
    every host call (before the grants guard) and refuses what the policy refuses a process (`fs.read`,
    `fs.list`, `fs.stat` need read access; `fs.write` and `fs.patch` write access), as
-   `HostCallError.Denied`. Paths through a symbolic link inside a writable root are refused too (a
-   sandboxed process can make one to a denied path; read it with the shell, which runs in the sandbox).
-   A process that swaps a directory for a link between the check and envd's operation is not stopped:
-   resolving paths beneath their roots in envd (`openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`) is
-   follow-up work.
+   `HostCallError.Denied`. The check reads paths as written, and a sandboxed process can make a link
+   to a denied path wherever it may write: so the session's file operations resolve paths beneath the
+   policy's writable roots (`SandboxGuard.roots`, `EnvClient.beneath`), where envd follows no symbolic
+   link (T113b, envd.md "Paths beneath roots": `openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`, held
+   directory handles on Windows). A path through a link there fails (`InvalidPath`, "through a
+   symbolic link"; read it with the shell, which runs in the sandbox), however late the link appears:
+   swapping a directory for one between the check and envd's operation gets nowhere.
 
 Where no driver confines (the default, and Windows) only the second applies: the bindings keep to the
 policy (no reading the credential locations or the data directory, no writing outside the workspace's
@@ -353,7 +355,6 @@ natively (`--only sandbox-`).
 | Network allowlists (`allowlist:<name>`), credential injection, per-call attribution: the egress proxy | with the egress proxy (spec §18) |
 | Agents' `sandbox:` from their definitions into `KernelPlan.Sandbox`; child sessions | T213 |
 | Protected paths from goals (`protect: ["tests/**"]`): globs that name a directory become its path; others need a check of the diff | T212 |
-| envd resolving the bindings' paths beneath their roots (`openat2` `RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`), closing the link race of `SandboxGuard` | follow-up (T113b) |
 | The user's home on other machines (home-relative denied paths there), drivers probing over the environment protocol | T501 |
 | Choosing a sandbox per environment in the TUI | when people ask |
 | Sandboxed `Script` installs; sandboxing extension processes | T211; with the extension host |
