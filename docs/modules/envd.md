@@ -24,7 +24,7 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
                                                                  ▼
                                    EnvdServer handlers ── Envd (processes, output logs, watches)
                                                                  │
-                LocalFs, LocalFsOps, LocalShell, LocalTerminal, FileBlobStore, GitSnapshots
+      LocalFs, LocalFsOps, LocalBeneath, LocalShell, LocalTerminal, FileBlobStore, GitSnapshots
 ```
 
 ## Capabilities
@@ -33,6 +33,7 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
 |---|---|---|
 | Files (existing) | `FsRead`, `Fs` | `LocalFs`; `InMemoryFs`; proxy |
 | envd's file operations | `FsOps`, `IFsOps` | `LocalFsOps` (Fx.Envd.Live); `FsOpsOver.create` (generic, over any `FsRead`/`Fs`: the fake); proxy |
+| Files beneath roots (T113b) | `EnvdFiles` (`EnvdServices.Beneath roots`) | `LocalBeneath` (Fx.Envd.Live); proxy (`EnvClient.beneath roots`) |
 | Processes (existing) | `Shell` (pipes) | `LocalShell`; `ScriptedShell`; proxy |
 | Terminals (existing) | `Terminal` (`Fx.Pty`) | `LocalTerminal` (wrapped by `TerminalSetup`); proxy |
 | Blobs (existing) | `Blobs` | `FileBlobStore`; `InMemoryBlobs`; proxy; `BlobCache.over` |
@@ -68,6 +69,44 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
   first change starts a `Debounce` on the clock, then everything pending is one `WatchBatch`, coalesced
   per path (added then deleted drops out, deleted then added is modified). Renames are a deletion and
   an addition. An OS buffer overflow or more than 16384 pending changes sets `Overflow`: rescan.
+
+### Paths beneath roots (T113b)
+
+The file bindings of a session run in envd, outside the sandbox (sandbox.md), and a sandboxed process can
+make symbolic links wherever it may write. So the file capabilities can resolve paths **beneath roots**
+(`EnvdServices.Beneath roots`: `FsRead`, `Fs` and `FsOps` again): a path under one of the roots goes from
+the **outermost** root that contains it, one directory at a time, and **follows no symbolic link** on the
+way or at its end. The roots themselves, and paths outside every root, resolve as before. Sessions pass
+the sandbox's writable roots (`SandboxGuard.roots`): above them nothing a sandboxed process can change
+decides where a path leads.
+
+- **A link** on the way, or the entry itself for a read or a non-atomic write, fails with
+  `InvalidPath(path, "through a symbolic link: <link>")` (`Beneath.LinkReason`), however late it appears:
+  the walk holds what it opened, so swapping a directory for a link between a check and an operation
+  changes nothing. The link itself is an entry: `stat` and `list` report it as `symlink`, `delete` and
+  `move` act on the link, and an atomic write replaces it with a file (its target is untouched).
+- **Paths** are normalized lexically first (`a/link/../b` is `a/b`), as `LocalFs` does.
+- **Linux**: the root is opened (following links: it is trusted), then the directories with one
+  `openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS)` (Linux 5.6+); where that is
+  missing (`ENOSYS`, as under an older seccomp filter) or fails, one `openat(O_NOFOLLOW | O_DIRECTORY)` per
+  component, which also says which component is wrong. The entry is reached from its parent's
+  descriptor: `fstatat(AT_SYMLINK_NOFOLLOW)`, `openat(O_NOFOLLOW)`, `mkdirat`, `unlinkat`, `renameat`;
+  an atomic write creates its temporary file with `O_EXCL | O_NOFOLLOW` in the parent and renames it there.
+  `fstatat` goes through `syscall` (`newfstatat`), which glibc before 2.33 does not export.
+- **macOS**: the same calls, with `O_NOFOLLOW_ANY` (macOS 11+) for the directories in one call, and the
+  `$INODE64` symbols on x64. `openat`'s `mode` is variadic: on Apple arm64 it goes on the stack.
+- **Windows** has no descriptor-relative calls in its documented API: every directory from the root to the
+  entry's parent is opened without following reparse points (`FILE_FLAG_OPEN_REPARSE_POINT`), checked to
+  be a directory and not a reparse point (symbolic links, junctions), and held without
+  `FILE_SHARE_DELETE` until the operation is done, so nothing can rename or replace it meanwhile. Reads and
+  non-atomic writes open the entry itself without following it.
+- **The protocol**: `fs/stat`, `fs/list`, `fs/read`, `fs/write`, `fs/createDirectory`, `fs/delete`,
+  `fs/move` and `fs/patch` take `beneath` (absent or empty: none); `EnvClient.beneath roots client` sends
+  them with every request. `fs/search` and watches do not (no binding uses them).
+- **Tests**: the Fs and FsOps conformance suites pass beneath a root (directly, in process and through
+  `fx envd --stdio`, with and without the one-call walk), and `BeneathConformance` covers links: on the
+  way, deeper down, at the end, a directory swapped for a link between two calls, dot segments, and paths
+  outside the roots.
   `Close` drops what is pending and `Next` returns `None` from then on: the OS keeps reporting changes
   it saw before it stopped (on Windows even after `Dispose`), and a closed watch delivers none of them.
 
@@ -89,7 +128,7 @@ brackets; all definitions in `EnvProtocol`):
 
 | Group | Methods |
 |---|---|
-| Files | `fs/stat {paths}` → `{entries: [{entry}|{error}]}`; `fs/list`, `fs/read {path, offset, count?, channel}`, `fs/write {path, channel, atomic}`, `fs/createDirectory`, `fs/delete`, `fs/move` [`FsError`]; `fs/patch` [`PatchError`]; `fs/search` [`SearchError`] |
+| Files | `fs/stat {paths}` → `{entries: [{entry}|{error}]}`; `fs/list`, `fs/read {path, offset, count?, channel}`, `fs/write {path, channel, atomic}`, `fs/createDirectory`, `fs/delete`, `fs/move` [`FsError`]; `fs/patch` [`PatchError`]; `fs/search` [`SearchError`]. All but `fs/search` take `beneath` (roots, T113b) |
 | Watching | `watch/start {watch, root, recursive, debounceMs}` [`FsError`], `watch/stop {watch}`; envd → host: `watch/changed {watch, changes, overflow, closed}` |
 | Processes | `exec/start {program, cwd?, env, terminal?}` → `{id, pid}`; `exec/attach {id, out, err, channel}`; `exec/write {id, data}` (base64, at most 64 KiB); `exec/closeStdin`, `exec/resize`, `exec/kill`, `exec/wait` → `{exitCode}`, `exec/status`, `exec/list`, `exec/release` [`ExecError`: `notStarted`, `invalidSize`, `unknownProcess`] |
 | Blobs | `blobs/put {channel}` → `BlobRef`; `blobs/get {hash, offset?, count?, channel}` [`BlobError`]; `blobs/stat {hash}` → `{blob?}` |
@@ -236,8 +275,9 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
   `BaseEnvironment`: the host's variables without credentials). Reconnecting transports (WebSocket,
   Dialback) are T501 and T504.
 - **T113** (done, [sandbox.md](sandbox.md)): sandbox drivers wrap the processes the host starts for
-  agents; with bubblewrap they die with envd. Resolving the file operations' paths beneath their roots
-  (no symbolic links; the bindings check them before each call) is follow-up work (T113b).
+  agents; with bubblewrap they die with envd.
+- **T113b** (done): the file operations resolve paths beneath roots without following links ("Paths
+  beneath roots" above).
 - **T131** (done, [replay.md](replay.md)): capability calls journaled (process output as `Read`
   results). Recording terminals, and a deterministic `ScriptedTerminal` fake, come when sessions use them.
 - **T202**: ripgrep semantics for search; **T204**: anchored edits on `FsOps.ApplyPatch`; **T205**:
