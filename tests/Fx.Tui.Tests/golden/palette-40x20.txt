@@ -1,5 +1,4 @@
 ────────────────────────────────────────
-  ▸ 1 cell (3 lines)     [Ctrl+O expand]
 
   ✓ Done  Migrated 37 call sites to
           RetryPolicy.
@@ -16,6 +15,7 @@
 ┃  /new        Start a new session
 ┃  /detail     Show more or less of eac…
 ┃  /approvals  Ask for commands, or aut…
+┃  /yolo       Approve everything witho…
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
 fx · …/src/billing:main · sessio… ● idle

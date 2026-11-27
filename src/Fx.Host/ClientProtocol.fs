@@ -159,15 +159,15 @@ type EnvSummary =
     override this.ToString() =
         $"{this.Id} ({this.Provider}, {this.Phase})"
 
-/// `session/setApprovals`: a person turns auto approvals on or off for a session.
+/// `session/setApprovals`: a person switches a session to asking, auto approvals or yolo approvals.
 type SetApprovals =
     {
         Session: string
-        Auto: bool
+        Mode: ApprovalSwitch
     }
 
     override this.ToString() =
-        $"auto approvals {this.Auto} for {this.Session}"
+        $"approvals {this.Mode} for {this.Session}"
 
 /// An id, e.g. of an environment or a session token.
 type IdRef =
@@ -500,6 +500,14 @@ module ClientProtocol =
         |> Codec.describe "An environment: where sessions' hands are."
         |> Codec.named "EnvSummary"
 
+    let approvalSwitch: Codec<ApprovalSwitch> =
+        Codec.enum
+            [
+                ApprovalSwitch.Ask, "ask"
+                ApprovalSwitch.Auto, "auto"
+                ApprovalSwitch.Yolo, "yolo"
+            ]
+
     let approvalsView: Codec<ApprovalsView> =
         Codec.record {
             let! session =
@@ -509,7 +517,7 @@ module ClientProtocol =
                 Codec.field
                     "mode"
                     (fun (v: ApprovalsView) -> v.Mode)
-                    (Codec.enum [ "ask", "ask"; "auto", "auto"; "deny", "deny"; "off", "off" ])
+                    (Codec.enum [ "ask", "ask"; "auto", "auto"; "deny", "deny"; "yolo", "yolo" ])
 
             and! configured =
                 Codec.field "configured" (fun (v: ApprovalsView) -> v.Configured) Codec.string
@@ -529,18 +537,18 @@ module ClientProtocol =
                 }
         }
         |> Codec.describe
-            "How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, off), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why auto approvals are on or off."
+            "How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, yolo: everything runs without asking, sandbox or not), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why yolo approvals are on, or auto approvals on or off."
         |> Codec.named "ApprovalsView"
 
     let setApprovalsParams: Codec<SetApprovals> =
         Codec.record {
             let! session = Codec.field "session" (fun (p: SetApprovals) -> p.Session) sessionId
 
-            and! auto = Codec.field "auto" (fun (p: SetApprovals) -> p.Auto) Codec.bool
-            return { Session = session; Auto = auto }
+            and! mode = Codec.field "mode" (fun (p: SetApprovals) -> p.Mode) approvalSwitch
+            return { Session = session; Mode = mode }
         }
         |> Codec.describe
-            "A person turns auto approvals on or off for a session, sandbox or not: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto)."
+            "A person switches a session, sandbox or not: yolo (a session grant of approvals.yolo: everything runs without asking), auto (yolo off, a session grant of approvals.auto) or ask (both off). Off is a revocation, and a session deny grant where the host's mode would still turn them on."
         |> Codec.named "SetApprovals"
 
     let idRef: Codec<IdRef> =

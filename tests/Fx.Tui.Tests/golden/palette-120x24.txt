@@ -1,10 +1,9 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  I'll look at the call sites first.                                                  │
-  ◇ Read     src/Billing/Client.fs                                              ✓ 0.2s│ billing
-  ◆ Edit     src/Billing/Client.fs                                              ✓ 0.3s│
-  ◇ Run      dotnet test tests/Billing                                           ✗ 48s│ Context
-      exit 1                                                                          │ nothing yet
-  ◇ Cell     rerun the tests                                                     ✓ 46s│
+  ◇ Read     src/Billing/Client.fs                                              ✓ 0.2s│
+  ◆ Edit     src/Billing/Client.fs                                              ✓ 0.3s│ billing
+  ◇ Run      dotnet test tests/Billing                                           ✗ 48s│
+      exit 1                                                                          │ Context
+  ◇ Cell     rerun the tests                                                     ✓ 46s│ nothing yet
   ▸ 1 cell (3 lines)                                  [Ctrl+O expand · Shift+↑ select]│
                                                                                       │
   ✓ Done  Migrated 37 call sites to RetryPolicy.                                      │
@@ -20,6 +19,7 @@
 ┃  /new        Start a new session                                                    │
 ┃  /detail     Show more or less of each turn                                         │
 ┃  /approvals  Ask for commands, or auto-approve workspace ones                       │
+┃  /yolo       Approve everything without asking (Shift+Tab goes back to ask)         │
 ┃ ›                                                                                   │
 ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off                   │ …/src/billing:main
 fx · …/src/billing:main · session …00000000  ↑↓ select · Enter run · Esc close  ● idle│

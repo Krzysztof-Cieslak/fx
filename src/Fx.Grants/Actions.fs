@@ -50,6 +50,12 @@ module Actions =
                 all
                 "Run commands the named sandbox driver confines to the workspace without asking (auto approvals, spec §13)."
             def
+                "approvals.yolo"
+                ResourceKind.Name
+                all
+                "Run everything without asking, under the named sandbox driver or `none` (yolo approvals, spec §13)."
+
+            def
                 "component.install"
                 ResourceKind.Name
                 [ ScopeKind.Once; ScopeKind.Repo; ScopeKind.Host ]

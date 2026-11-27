@@ -27,6 +27,7 @@ open Fx.Store
 open Fx.Extensions
 open Fx.Host
 open Fx.Host.Tests.Support
+open Fx.CodeAct
 
 type private Listener = Fx.Transport.Http.LocalServer.Listener
 
@@ -640,7 +641,15 @@ let tests =
                     Expect.equal (before.Mode, before.Configured) ("ask", "ask") "asks by default"
                     Expect.isNone before.Sandbox "no driver confines"
 
-                    let after = owner.Call(ClientProtocol.setApprovals, { Session = "s1"; Auto = true })
+                    let after =
+                        owner.Call(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Auto
+                            }
+                        )
+
                     Expect.equal after.Mode "auto" "switched on, unsandboxed"
                     Expect.isNone after.Sandbox "still unsandboxed"
                     Expect.stringContains after.Reason "a person turned them on" "why"
@@ -653,13 +662,28 @@ let tests =
                     | other -> failtest $"{other}"
 
                     Expect.equal
-                        (owner.Call(ClientProtocol.setApprovals, { Session = "s1"; Auto = true })).Mode
+                        (owner.Call(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Auto
+                            }
+                        ))
+                            .Mode
                         "auto"
                         "again: no change"
 
                     Expect.equal (autoGrants h).Length 1 "one grant"
 
-                    let off = owner.Call(ClientProtocol.setApprovals, { Session = "s1"; Auto = false })
+                    let off =
+                        owner.Call(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Ask
+                            }
+                        )
+
                     Expect.equal off.Mode "ask" "switched off"
                     Expect.isEmpty (autoGrants h) "revoked"
 
@@ -693,7 +717,15 @@ let tests =
 
                     Expect.equal (viewer.Call(ClientProtocol.approvals, { Session = "s1" })).Mode "ask" "a viewer reads"
 
-                    match viewer.Try(ClientProtocol.setApprovals, { Session = "s1"; Auto = true }) with
+                    match
+                        viewer.Try(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Auto
+                            }
+                        )
+                    with
                     | Error(CallError.Failed(ClientError.Forbidden _)) -> ()
                     | other -> failtest $"a viewer switched: {other}"
 
@@ -724,7 +756,15 @@ let tests =
                     let view = owner.Call(ClientProtocol.approvals, { Session = "s2" })
                     Expect.equal (view.Configured, view.Mode) ("auto", "auto") "the host's mode, unsandboxed"
 
-                    let off = owner.Call(ClientProtocol.setApprovals, { Session = "s2"; Auto = false })
+                    let off =
+                        owner.Call(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s2"
+                                Mode = ApprovalSwitch.Ask
+                            }
+                        )
+
                     Expect.equal off.Mode "ask" "off for the session"
 
                     Expect.equal
@@ -732,7 +772,15 @@ let tests =
                         [ "deny", "session:s2" ]
                         "a deny grant"
 
-                    let on = owner.Call(ClientProtocol.setApprovals, { Session = "s2"; Auto = true })
+                    let on =
+                        owner.Call(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s2"
+                                Mode = ApprovalSwitch.Auto
+                            }
+                        )
+
                     Expect.equal on.Mode "auto" "on again"
                     Expect.isEmpty (autoGrants h) "the deny grant revoked"
                     owner.Close()
@@ -795,7 +843,15 @@ let tests =
                 try
                     let owner = embedded h
 
-                    match owner.Try(ClientProtocol.setApprovals, { Session = "s1"; Auto = true }) with
+                    match
+                        owner.Try(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Auto
+                            }
+                        )
+                    with
                     | Error(CallError.Failed(ClientError.Invalid [ reason ])) ->
                         Expect.stringContains reason "forbidden" "why"
                         Expect.stringContains reason "does not allow auto approvals" "the policy's rule"
@@ -815,6 +871,120 @@ let tests =
                 | Ok h ->
                     stop h
                     failtest "started in auto under a policy that forbids it"
+
+            testCase
+                "session/setApprovals yolo: a session grant of approvals.yolo, auto and ask switch it off; the host's mode; policy; installs"
+            <| fun () ->
+                let p, h = host "approvals-yolo" []
+
+                let grantsOf (h: Host) (action: string) =
+                    (GrantsService.list h.Grants false).Grants
+                    |> List.map _.Grant
+                    |> List.filter (fun g -> g.Action.Value = action)
+                    |> List.map (fun g -> string g.Effect, string g.Scope)
+
+                // What yolo approvals say of an install an environment's `Ensure` asks for.
+                let install (h: Host) (mode: GrantMode) (sessions: string list) =
+                    wait (
+                        Eff.run
+                            (Host.within h CancellationToken.None)
+                            (YoloInstalls.approval
+                                (GrantsService.grants h.Grants)
+                                mode
+                                (fun _ -> sessions)
+                                "environment:e1")
+                    )
+
+                let switch (owner: Client) (session: string) (mode: ApprovalSwitch) =
+                    owner.Call(ClientProtocol.setApprovals, { Session = session; Mode = mode })
+
+                try
+                    let owner = embedded h
+
+                    owner.Call(ClientProtocol.create, { Session = Some "s1"; Title = None })
+                    |> ignore
+
+                    Expect.isNone (install h GrantMode.Ask [ "s1" ]) "an install asks a person"
+
+                    let yolo = switch owner "s1" ApprovalSwitch.Yolo
+                    Expect.equal yolo.Mode "yolo" "switched on, unsandboxed"
+                    Expect.stringContains yolo.Reason "a person turned yolo on" "why"
+                    Expect.stringContains yolo.Reason "unsandboxed, with the user's rights" "and with what rights"
+                    Expect.equal (grantsOf h "approvals.yolo") [ "allow", "session:s1" ] "a session grant"
+
+                    Expect.isTrue
+                        (HostApprovals.notice yolo
+                         |> Option.exists (fun n -> n.StartsWith "approvals: yolo · unsandboxed"))
+                        "fx run says so"
+
+                    Expect.isSome (install h GrantMode.Ask [ "s1" ]) "the session's environment installs unasked"
+                    Expect.isNone (install h GrantMode.Ask [ "s9" ]) "another session's does not"
+
+                    let auto = switch owner "s1" ApprovalSwitch.Auto
+                    Expect.equal auto.Mode "auto" "down to auto"
+                    Expect.isEmpty (grantsOf h "approvals.yolo") "yolo revoked"
+                    Expect.equal (grantsOf h "approvals.auto") [ "allow", "session:s1" ] "auto granted"
+
+                    Expect.equal (switch owner "s1" ApprovalSwitch.Yolo).Mode "yolo" "up again"
+                    let ask = switch owner "s1" ApprovalSwitch.Ask
+                    Expect.equal ask.Mode "ask" "down to ask"
+                    Expect.isEmpty (grantsOf h "approvals.yolo" @ grantsOf h "approvals.auto") "both revoked"
+                    owner.Close()
+                finally
+                    stop h
+
+                // The host's mode is yolo: sessions it starts are yolo, and installs need nobody; a switch
+                // down is a session deny grant, up again revokes it.
+                let h = start (options p (Model()) [ "codeact.grants.mode", Json.String "yolo" ])
+
+                try
+                    let owner = embedded h
+
+                    owner.Call(ClientProtocol.create, { Session = Some "s2"; Title = None })
+                    |> ignore
+
+                    let view = owner.Call(ClientProtocol.approvals, { Session = "s2" })
+                    Expect.equal (view.Configured, view.Mode) ("yolo", "yolo") "the host's mode"
+                    Expect.stringContains view.Reason "codeact.grants.mode is yolo" "why"
+                    Expect.isSome (install h GrantMode.Yolo []) "installs, by the host's mode"
+
+                    Expect.equal (switch owner "s2" ApprovalSwitch.Auto).Mode "auto" "auto for the session"
+                    Expect.equal (grantsOf h "approvals.yolo") [ "deny", "session:s2" ] "a deny grant"
+                    Expect.equal (switch owner "s2" ApprovalSwitch.Ask).Mode "ask" "ask for the session"
+                    Expect.equal (switch owner "s2" ApprovalSwitch.Yolo).Mode "yolo" "yolo again"
+                    Expect.isEmpty (grantsOf h "approvals.yolo") "the deny grant revoked"
+                    owner.Close()
+                finally
+                    stop h
+
+                // A policy that forbids auto forbids yolo too: no person switches it on.
+                File.WriteAllText(
+                    Path.Combine(p.Data, "policy.json"),
+                    """{"forbid": {"codeact.grants.mode": ["auto"]}}"""
+                )
+
+                let h = start (options p (Model()) [])
+
+                try
+                    let owner = embedded h
+
+                    match
+                        owner.Try(
+                            ClientProtocol.setApprovals,
+                            {
+                                Session = "s1"
+                                Mode = ApprovalSwitch.Yolo
+                            }
+                        )
+                    with
+                    | Error(CallError.Failed(ClientError.Invalid [ reason ])) ->
+                        Expect.stringContains reason "does not allow yolo approvals" "the policy's rule"
+                    | other -> failtest $"switched on under a policy that forbids it: {other}"
+
+                    Expect.isEmpty (grantsOf h "approvals.yolo") "nothing granted"
+                    owner.Close()
+                finally
+                    stop h
 
             testCase
                 "over the local listener: the token file, a session token as the bearer, revocation ends connections"

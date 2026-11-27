@@ -3,7 +3,6 @@
 
 
 
-
   ┃ Commands                                                             esc
   ┃ ›
   ┃  /new        Start a new session
@@ -12,6 +11,7 @@
   ┃  /detail     Show more or less of each turn
   ┃  /theme      Change the colours
   ┃  /approvals  Ask for commands, or auto-approve workspace ones
+  ┃  /yolo       Approve everything without asking (Shift+Tab goes back to as…
   ┃  /exit       Leave (the session stays)
   ┃ ›
   ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off

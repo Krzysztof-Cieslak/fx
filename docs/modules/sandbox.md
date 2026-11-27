@@ -243,7 +243,9 @@ stronger. Where a driver confines (`EnvSandboxInfo.Confines`), what those comman
 page's policy (writes, credentials); with `none` they run with the user's rights, and clients say so
 (`approvals: auto · unsandboxed`). Neither holds the network, which stays open unless the spec closes it
 (and needs a driver to). The grant that turns them on names the driver (`approvals.auto`, `none` when
-nothing confines), so a policy can forbid them only unsandboxed.
+nothing confines), so a policy can forbid them only unsandboxed. **Yolo approvals** (`approvals.yolo`,
+the mode `yolo`) run everything unasked the same way: a confining driver holds them to this page's
+policy; with `none` nothing but deny grants and policy does.
 
 ## The drivers
 

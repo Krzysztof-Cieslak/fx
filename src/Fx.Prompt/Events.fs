@@ -58,15 +58,18 @@ type ApprovedBy =
     | Auto
     /// A person answered its grant request (the request's key in the grants log).
     | Person of request: string
+    /// Yolo approvals: nobody was asked, whatever it reached.
+    | Yolo
 
     override this.ToString() =
         match this with
         | Auto -> "auto"
         | Person request -> "person (" + request + ")"
+        | Yolo -> "yolo"
 
 /// How one of an action's host calls was let run without a grant that already allowed it
 /// (docs/modules/codeact.md, "Approval modes"): for people and audits (clients mark the action's
-/// activity line `auto` or `asked`); the render never reads it.
+/// activity line `auto`, `yolo` or `asked`); the render never reads it.
 type Approval =
     {
         /// The grant's action (`shell.exec`) and resource (`dotnet test`).
@@ -293,13 +296,17 @@ module ContextCodecs =
             and! person =
                 Codec.case1 "person" ApprovedBy.Person (Field.required "request" Codec.string)
 
+            and! yolo = Codec.case0 "yolo" ApprovedBy.Yolo
+
             return
                 fun by ->
                     match by with
                     | ApprovedBy.Auto -> auto
                     | ApprovedBy.Person request -> person request
+                    | ApprovedBy.Yolo -> yolo
         }
-        |> Codec.describe "Who let a host call run: auto approvals, or a person who answered its grant request."
+        |> Codec.describe
+            "Who let a host call run: auto approvals, a person who answered its grant request, or yolo approvals."
         |> Codec.named "ApprovedBy"
 
     let approval: Codec<Approval> =

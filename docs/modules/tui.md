@@ -120,9 +120,11 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   `approvals: auto · unsandboxed` (the auto-approved commands run with the user's rights); where the
   words do not fit, the mode alone. Switching auto on says once what it means: `approvals: auto ·
   unsandboxed: commands run unasked with your rights`, or `… confined by <driver>`. The TUI asks for it
-  when the environment is known (the host names its confining driver) and again when a grant of `approvals.auto` is made, or any grant is revoked or expires (the
+  when the environment is known (the host names its confining driver) and again when a grant of `approvals.auto` or `approvals.yolo` is made, or any grant is revoked or expires (the
   TUI follows the grants log already: another client or `fx grants` may switch it). `Shift+Tab` and
-  `/approvals` switch it (below).
+  `/approvals` switch it (below). Yolo shows in the error colour (`approvals: yolo · unsandboxed`), and
+  switching to it says `approvals: yolo · unsandboxed: everything runs unasked with your rights`, or
+  `… confined by <driver>`; its activity lines say `yolo`.
 - **Turn footer**: under each ended turn, `▣` with the product, the model its last call used, how
   long the turn took and how fast the model wrote (output tokens over the time its calls took).
 - **Sidebar** (terminals 120 columns wide or more, 34 of them): the session's title (the one it was
@@ -286,7 +288,8 @@ that names no command says so.
 | `/model provider/model` | sets `model.role.main` for the session from its next turn on (`session/overrides`) |
 | `/detail` | cycles the detail (as `Ctrl+O`) |
 | `/theme [auto\|dark\|light\|ansi16]` | changes the colours for this run (without a name: a picker) |
-| `/approvals [ask\|auto]` | asks for every command, or runs commands written plainly in the workspace without asking, sandbox or not (`session/setApprovals`: a person's session grant of `approvals.auto`; without a name it switches). Refused, with the host's reason, where policy forbids it; also during a turn (the next command) |
+| `/approvals [ask\|auto\|yolo]` | asks for every command, runs commands written plainly in the workspace without asking, or runs everything without asking, sandbox or not (`session/setApprovals`: a person's session grant of `approvals.auto` or `approvals.yolo`; without a name it switches between ask and auto, and from yolo back to ask, as `Shift+Tab` does: neither ever lands on yolo). Refused, with the host's reason, where policy forbids it; also during a turn (the next command) |
+| `/yolo` | as `/approvals yolo`: everything runs without asking (deny grants and policy still refuse) |
 | `/exit` | leaves; the session stays |
 
 Switching sessions ends the subscriptions of the one shown before the next starts (`TuiClient.run`),

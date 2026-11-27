@@ -29,7 +29,7 @@ type AutoApprovals =
 /// person about commands written plainly in the workspace (`GrantNeed.InWorkspace`), sandbox or not; a
 /// driver that confines makes them stronger (what it confines), never a condition. A person turns them
 /// on with a grant of `approvals.auto` (the TUI's switch for the session, `fx grants allow` for the
-/// host), the host with `codeact.grants.mode = auto`; a deny grant turns them off for its scope, and
+/// host), the host with `codeact.grants.mode = auto` (or `yolo`); a deny grant turns them off for its scope, and
 /// policy forbids them: a deny rule on `*`, or on `none` alone to forbid them only unsandboxed (the
 /// host makes the former from a policy file that forbids `auto`).
 [<RequireQualifiedAccess>]
@@ -52,12 +52,11 @@ module AutoApprovals =
                 $"{driver} confines commands"
 
         match mode, check with
-        | GrantMode.Off, _ -> AutoApprovals.Off "codeact.grants.mode is off: nothing is checked"
         | _, Error e -> AutoApprovals.Off $"the grants log could not be checked: {e.Message}"
         | _, Ok(GrantCheck.Denied reasons) -> AutoApprovals.Off("forbidden: " + String.concat "; " reasons)
         | _, Ok(GrantCheck.Allowed grant) -> AutoApprovals.On $"a person turned them on (grant {grant.Value}); {how}"
-        | GrantMode.Auto, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
-            AutoApprovals.On $"codeact.grants.mode is auto; {how}"
+        | (GrantMode.Auto | GrantMode.Yolo), Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.On $"codeact.grants.mode is {mode}; {how}"
         | _, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
             AutoApprovals.Off "nobody turned them on"
         | _, Ok(GrantCheck.MustAsk reasons) -> AutoApprovals.Off("policy asks: " + String.concat "; " reasons)
@@ -71,11 +70,14 @@ module AutoApprovals =
         }
 
     /// The grants policy a host's variant policies make: one that forbids `auto` for
-    /// `codeact.grants.mode`, or pins the mode to another value, forbids auto approvals altogether (a
-    /// deny rule on `approvals.auto`), so no person turns them on either.
+    /// `codeact.grants.mode`, or pins the mode to a value without auto approvals (`ask`, `deny`),
+    /// forbids auto approvals altogether (a deny rule on `approvals.auto`), so no person turns them on
+    /// either.
     let policyRules (policies: Fx.Variants.Policy list) : PolicyRule list =
         let slot = GrantSlots.mode.Id.Value
         let auto = Json.String(string GrantMode.Auto)
+        let yolo = Json.String(string GrantMode.Yolo)
+
 
         policies
         |> List.choose (fun policy ->
@@ -84,7 +86,8 @@ module AutoApprovals =
                 |> List.exists (fun (id, values) -> id = slot && List.contains auto values)
 
             let pins =
-                policy.Pins |> List.exists (fun (id, value) -> id = slot && value <> auto)
+                policy.Pins
+                |> List.exists (fun (id, value) -> id = slot && value <> auto && value <> yolo)
 
             if forbids || pins then
                 Some
@@ -97,6 +100,79 @@ module AutoApprovals =
                     }
             else
                 None)
+
+/// Yolo approvals (docs/modules/codeact.md, "Approval modes"; spec §13.3): everything a call needs
+/// runs without asking anyone, sandbox or not: commands of any kind, writes and reads outside the
+/// workspace or to protected paths, network bindings, calls nothing can name in a grant, and first
+/// installs of components. Only deny grants and policy still refuse. A person turns them on with a
+/// grant of `approvals.yolo` (the TUI's `/yolo` for the session, `fx grants allow` for the host), the
+/// host with `codeact.grants.mode = yolo`; a deny grant turns them off for its scope, and policy
+/// forbids them: a deny rule on `*`, or on `none` alone to forbid them only unsandboxed (the host
+/// makes the former from a policy file that forbids `yolo` or `auto`, or pins the mode to another
+/// value). They hold in the same states as auto approvals (`AutoApprovals.On` / `Off`).
+[<RequireQualifiedAccess>]
+module YoloApprovals =
+    /// The grant that turns yolo approvals on for its scope; its resource is the environment's sandbox
+    /// driver, `none` when nothing confines (component installs: always `none`).
+    let action = ActionName.create "approvals.yolo"
+
+    /// What yolo approvals are: the mode, the driver that runs the processes (`none`: nothing confines
+    /// them) and the grants log's check of `approvals.yolo` on it.
+    let decide (mode: GrantMode) (driver: string) (check: Result<GrantCheck, GrantError>) : AutoApprovals =
+        let how =
+            if driver = AutoApprovals.Unsandboxed then
+                "everything runs unasked and unsandboxed, with the user's rights"
+            else
+                $"everything runs unasked; {driver} confines commands"
+
+        match mode, check with
+        | _, Error e -> AutoApprovals.Off $"the grants log could not be checked: {e.Message}"
+        | _, Ok(GrantCheck.Denied reasons) -> AutoApprovals.Off("forbidden: " + String.concat "; " reasons)
+        | _, Ok(GrantCheck.Allowed grant) -> AutoApprovals.On $"a person turned yolo on (grant {grant.Value}); {how}"
+        | GrantMode.Yolo, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.On $"codeact.grants.mode is yolo; {how}"
+        | _, Ok(GrantCheck.MustAsk reasons) when reasons = [ string Because.NoGrant ] ->
+            AutoApprovals.Off "nobody turned yolo on"
+        | _, Ok(GrantCheck.MustAsk reasons) -> AutoApprovals.Off("policy asks: " + String.concat "; " reasons)
+
+    /// The grants log's query for yolo approvals in a context.
+    let query (driver: string) (context: GrantContext) : GrantQuery =
+        {
+            Action = action
+            Resource = driver
+            Context = context
+        }
+
+    /// The grants policy a host's variant policies make: one that forbids `yolo` or `auto` for
+    /// `codeact.grants.mode` (yolo approves more than auto), or pins the mode to another value, forbids
+    /// yolo approvals altogether (a deny rule on `approvals.yolo`), so no person turns them on either.
+    let policyRules (policies: Fx.Variants.Policy list) : PolicyRule list =
+        let slot = GrantSlots.mode.Id.Value
+        let auto = Json.String(string GrantMode.Auto)
+        let yolo = Json.String(string GrantMode.Yolo)
+
+        policies
+        |> List.choose (fun policy ->
+            let forbids =
+                policy.Forbids
+                |> List.exists (fun (id, values) ->
+                    id = slot && (List.contains yolo values || List.contains auto values))
+
+            let pins =
+                policy.Pins |> List.exists (fun (id, value) -> id = slot && value <> yolo)
+
+            if forbids || pins then
+                Some
+                    {
+                        Id = $"{policy.Origin}#{slot}/yolo"
+                        Action = action
+                        Resource = "*"
+                        Effect = PolicyEffect.Deny
+                        Reason = $"{policy.Origin} does not allow yolo approvals ({slot})"
+                    }
+            else
+                None)
+
 
 /// What a turn's grants guard works with. The composition root builds it for each turn's hands
 /// (`GrantGuard.attach`), with the variants of the turn's profile.
@@ -122,7 +198,8 @@ type GrantSetup =
         Rules: BindingRule list
         /// The sandbox driver that confines the hands' processes (`bubblewrap`, `seatbelt`), or
         /// `none` when nothing does (the default, Windows v1, a fallback): the resource auto
-        /// approvals are checked on (`approvals.auto`), so policy can forbid them unsandboxed only.
+        /// and yolo approvals are checked on (`approvals.auto`, `approvals.yolo`), so policy can forbid
+        /// them unsandboxed only.
         Sandbox: string
     }
 
@@ -267,17 +344,23 @@ module GrantGuard =
         : Eff<'K, Result<GrantCheck, GrantError>> when 'K :> IScope =
         fun env -> setup.Grants.Check query env.Scope.Cancellation
 
+    let private sessionContext (setup: GrantSetup) : GrantContext =
+        {
+            Session = Some setup.Turn.Session
+            Run = None
+            Repo = setup.Repo |> Option.map (fun repo -> { Repo = repo; Path = "" })
+        }
+
     /// Auto approvals for the setup's session now.
     let auto (setup: GrantSetup) : Eff<'K, AutoApprovals> when 'K :> IScope =
-        let context =
-            {
-                Session = Some setup.Turn.Session
-                Run = None
-                Repo = setup.Repo |> Option.map (fun repo -> { Repo = repo; Path = "" })
-            }
-
-        checkQuery setup (AutoApprovals.query setup.Sandbox context)
+        checkQuery setup (AutoApprovals.query setup.Sandbox (sessionContext setup))
         |> Eff.map (AutoApprovals.decide setup.Settings.Mode setup.Sandbox)
+
+    /// Yolo approvals for the setup's session now.
+    let yolo (setup: GrantSetup) : Eff<'K, AutoApprovals> when 'K :> IScope =
+        checkQuery setup (YoloApprovals.query setup.Sandbox (sessionContext setup))
+        |> Eff.map (YoloApprovals.decide setup.Settings.Mode setup.Sandbox)
+
 
     let private request
         (setup: GrantSetup)
@@ -392,9 +475,10 @@ module GrantGuard =
         }
 
     /// Asks for what the call needs: checks first (nothing is recorded in the grants log for a call
-    /// the rules settle), lets auto approvals run commands written plainly in the workspace, then requests what a person
+    /// the rules settle), lets auto approvals run commands written plainly in the workspace and yolo
+    /// approvals run the rest of what would ask, then requests what a person
     /// must decide, all at once, and waits for the answers. `Ok` says what ran without a grant in
-    /// force: auto approvals, and the requests people answered.
+    /// force: auto approvals, yolo approvals, and the requests people answered.
     let private authorize<'K when 'K :> IClock and 'K :> IScopeWith<'K>>
         (setup: GrantSetup)
         (call: HostCall)
@@ -435,9 +519,29 @@ module GrantGuard =
 
             let approvedHere = List.ofSeq approved
 
+            // Yolo approvals, checked once for the call when something would ask (or, in deny mode,
+            // be refused for want of a grant): all of it runs, nobody is asked.
+            let! yoloState =
+                match result with
+                | None when asking.Count > 0 -> yolo setup |> Eff.map Some
+                | _ -> Eff.ret None
+
             match result with
             | Some outcome -> return outcome
             | None when asking.Count = 0 -> return Ok approvedHere
+            | None when yoloState |> Option.exists _.IsOn ->
+                let byYolo =
+                    asking
+                    |> Seq.map (fun (need, _) ->
+                        {
+                            Action = need.Action.Value
+                            Resource = need.Resource
+                            By = ApprovedBy.Yolo
+                        })
+                    |> List.ofSeq
+
+                return Ok(approvedHere @ byYolo)
+
             | None when setup.Settings.Mode = GrantMode.Deny ->
                 let need, reasons = asking[0]
                 let why = String.concat "; " reasons
@@ -497,16 +601,25 @@ module GrantGuard =
         (place: Workplace)
         : HostCall -> Eff<'K, Result<Approval list, HostCallError>> =
         fun call ->
-            match setup.Settings.Mode with
-            | GrantMode.Off -> EffResult.ok []
-            | GrantMode.Ask
-            | GrantMode.Auto
-            | GrantMode.Deny ->
-                match Permissions.needs setup.Rules setup.Settings place call with
-                | CallNeeds.Refused reason ->
-                    EffResult.error (HostCallError.Denied $"{call.Binding} was refused: {reason}.")
-                | CallNeeds.Needs [] -> EffResult.ok []
-                | CallNeeds.Needs needs -> authorize setup call needs
+            match Permissions.needs setup.Rules setup.Settings place call with
+            | CallNeeds.Refused reason ->
+                // Nothing can name it in a grant, so nobody could be asked: only yolo approvals run it.
+                eff {
+                    match! yolo setup with
+                    | AutoApprovals.On _ ->
+                        return
+                            Ok
+                                [
+                                    {
+                                        Action = call.Binding
+                                        Resource = reason
+                                        By = ApprovedBy.Yolo
+                                    }
+                                ]
+                    | AutoApprovals.Off _ -> return Error(HostCallError.Denied $"{call.Binding} was refused: {reason}.")
+                }
+            | CallNeeds.Needs [] -> EffResult.ok []
+            | CallNeeds.Needs needs -> authorize setup call needs
 
     /// Hands whose host calls also pass the grants guard (after the hands' own guard), for a turn.
     let attach<'K when 'K :> IClock and 'K :> IScopeWith<'K>> (setup: GrantSetup) (hands: Hands<'K>) : Hands<'K> =

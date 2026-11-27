@@ -16,19 +16,20 @@ export interface Approval {
   by: ApprovedBy;
 }
 
-/** How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, off), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why auto approvals are on or off. */
+/** How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run commands written plainly in the workspace, sandbox or not, deny, yolo: everything runs without asking, sandbox or not), the host's codeact.grants.mode, the sandbox driver that confines them (none: they run with the user's rights), and why yolo approvals are on, or auto approvals on or off. */
 export interface ApprovalsView {
   session: string;
-  mode: "ask" | "auto" | "deny" | "off";
+  mode: "ask" | "auto" | "deny" | "yolo";
   configured: string;
   sandbox?: string;
   reason: string;
 }
 
-/** Who let a host call run: auto approvals, or a person who answered its grant request. */
+/** Who let a host call run: auto approvals, a person who answered its grant request, or yolo approvals. */
 export type ApprovedBy =
   | { kind: "auto" }
-  | { kind: "person"; request: string };
+  | { kind: "person"; request: string }
+  | { kind: "yolo" };
 
 export interface Attribution {
   principal: string;
@@ -856,11 +857,11 @@ export interface SessionView {
   state: SessionState;
 }
 
-/** A person turns auto approvals on or off for a session, sandbox or not: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto). */
+/** A person switches a session, sandbox or not: yolo (a session grant of approvals.yolo: everything runs without asking), auto (yolo off, a session grant of approvals.auto) or ask (both off). Off is a revocation, and a session deny grant where the host's mode would still turn them on. */
 export interface SetApprovals {
   /** From 1 to 128 characters. */
   session: string;
-  auto: boolean;
+  mode: "ask" | "auto" | "yolo";
 }
 
 /** What the model is writing in a running turn, as it writes it: text the reply adds, or a tool call it started. Not recorded: the complete reply arrives as a context event. */

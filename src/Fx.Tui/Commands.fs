@@ -15,8 +15,10 @@ type CommandAction =
     | Detail
     /// Pick the theme.
     | Theme
-    /// Switch between asking for commands and auto approvals.
+    /// Switch between asking for commands and auto approvals, or to yolo approvals.
     | Approvals
+    /// Yolo approvals: everything runs without asking.
+    | Yolo
     | Exit
 
     override this.ToString() =
@@ -27,6 +29,7 @@ type CommandAction =
         | Detail -> "detail"
         | Theme -> "theme"
         | Approvals -> "approvals"
+        | Yolo -> "yolo"
         | Exit -> "exit"
 
 /// A command of the palette (`Ctrl+P`) and of the prompt (`/name`): values, so later screens add
@@ -89,8 +92,15 @@ module Commands =
                 Name = "approvals"
                 Title = "Ask for commands, or auto-approve workspace ones"
                 Keys = Some "Shift+Tab"
-                Argument = Some "ask|auto"
+                Argument = Some "ask|auto|yolo"
                 Action = CommandAction.Approvals
+            }
+            {
+                Name = "yolo"
+                Title = "Approve everything without asking (Shift+Tab goes back to ask)"
+                Keys = None
+                Argument = None
+                Action = CommandAction.Yolo
             }
             {
                 Name = "exit"
