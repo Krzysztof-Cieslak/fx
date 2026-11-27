@@ -78,7 +78,7 @@ let cli: Subject =
                     case "grants --help" [ "grants"; "--help" ]
                     { case
                           "grants with a scope it does not offer"
-                          [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "repo" ] with
+                          [ "grants"; "allow"; "budget.raise"; "run1/tokens"; "--scope"; "host" ] with
                         MustSucceed = false
                     }
                 ]
