@@ -16,6 +16,15 @@ export interface Approval {
   by: ApprovedBy;
 }
 
+/** How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run what the sandbox confines, deny, off), the host's codeact.grants.mode, the confining sandbox driver, and why auto approvals are on or off. */
+export interface ApprovalsView {
+  session: string;
+  mode: "ask" | "auto" | "deny" | "off";
+  configured: string;
+  sandbox?: string;
+  reason: string;
+}
+
 /** Who let a host call run: auto approvals, or a person who answered its grant request. */
 export type ApprovedBy =
   | { kind: "auto" }
@@ -843,6 +852,13 @@ export interface SessionView {
   /** Integer. */
   seq: number;
   state: SessionState;
+}
+
+/** A person turns auto approvals on or off for a session: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto). */
+export interface SetApprovals {
+  /** From 1 to 128 characters. */
+  session: string;
+  auto: boolean;
 }
 
 /** What the model is writing in a running turn, as it writes it: text the reply adds, or a tool call it started. Not recorded: the complete reply arrives as a context event. */

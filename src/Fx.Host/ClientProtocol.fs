@@ -157,6 +157,36 @@ type EnvSummary =
     override this.ToString() =
         $"{this.Id} ({this.Provider}, {this.Phase})"
 
+/// How the grants guard decides a session's commands now (`session/approvals`; docs/modules/codeact.md,
+/// "Approval modes").
+type ApprovalsView =
+    {
+        Session: string
+        /// What happens to a command no grant covers: `ask` (a person is asked), `auto` (auto approvals
+        /// run what the sandbox confines to the workspace; the rest asks), `deny` (refused without
+        /// asking) or `off` (nothing is checked).
+        Mode: string
+        /// The host's `codeact.grants.mode` for the session.
+        Configured: string
+        /// The sandbox driver that confines the session's commands; none when no driver does (or its
+        /// environment is not ready).
+        Sandbox: string option
+        /// Why auto approvals are on or off, for people.
+        Reason: string
+    }
+
+    override this.ToString() = $"{this.Session}: {this.Mode}"
+
+/// `session/setApprovals`: a person turns auto approvals on or off for a session.
+type SetApprovals =
+    {
+        Session: string
+        Auto: bool
+    }
+
+    override this.ToString() =
+        $"auto approvals {this.Auto} for {this.Session}"
+
 /// An id, e.g. of an environment or a session token.
 type IdRef =
     {
@@ -484,6 +514,49 @@ module ClientProtocol =
         |> Codec.describe "An environment: where sessions' hands are."
         |> Codec.named "EnvSummary"
 
+    let approvalsView: Codec<ApprovalsView> =
+        Codec.record {
+            let! session =
+                Codec.field "session" (fun (v: ApprovalsView) -> v.Session) Codec.string
+
+            and! mode =
+                Codec.field
+                    "mode"
+                    (fun (v: ApprovalsView) -> v.Mode)
+                    (Codec.enum [ "ask", "ask"; "auto", "auto"; "deny", "deny"; "off", "off" ])
+
+            and! configured =
+                Codec.field "configured" (fun (v: ApprovalsView) -> v.Configured) Codec.string
+
+            and! sandbox =
+                Codec.optionalField "sandbox" (fun (v: ApprovalsView) -> v.Sandbox) Codec.string
+
+            and! reason = Codec.field "reason" (fun (v: ApprovalsView) -> v.Reason) Codec.string
+
+            return
+                {
+                    Session = session
+                    Mode = mode
+                    Configured = configured
+                    Sandbox = sandbox
+                    Reason = reason
+                }
+        }
+        |> Codec.describe
+            "How the grants guard decides a session's commands now: the mode (ask, auto: auto approvals run what the sandbox confines, deny, off), the host's codeact.grants.mode, the confining sandbox driver, and why auto approvals are on or off."
+        |> Codec.named "ApprovalsView"
+
+    let setApprovalsParams: Codec<SetApprovals> =
+        Codec.record {
+            let! session = Codec.field "session" (fun (p: SetApprovals) -> p.Session) sessionId
+
+            and! auto = Codec.field "auto" (fun (p: SetApprovals) -> p.Auto) Codec.bool
+            return { Session = session; Auto = auto }
+        }
+        |> Codec.describe
+            "A person turns auto approvals on or off for a session: a session grant of approvals.auto, or its revocation (and a deny grant where the host's mode is auto)."
+        |> Codec.named "SetApprovals"
+
     let idRef: Codec<IdRef> =
         Codec.record {
             let! id = Codec.field "id" (fun (r: IdRef) -> r.Id) (Codec.string |> Codec.nonEmpty)
@@ -642,6 +715,16 @@ module ClientProtocol =
         Method.define "session/subscribe" subscribeSession Codec.int64
         |> Method.withErrors clientError
 
+    /// How the grants guard decides the session's commands now (auto approvals on or off, and why).
+    let approvals =
+        Method.define "session/approvals" sessionRef approvalsView
+        |> Method.withErrors clientError
+
+    /// A person (owner) turns auto approvals on or off for the session; the view after it.
+    let setApprovals =
+        Method.define "session/setApprovals" setApprovalsParams approvalsView
+        |> Method.withErrors clientError
+
     /// One item of a subscription.
     let event = Notification.define "session/event" sessionEvent
 
@@ -713,6 +796,7 @@ module ClientProtocol =
         | "session/list"
         | "session/get"
         | "session/offers"
+        | "session/approvals"
         | "session/subscribe"
         | "session/context"
         | "identity/whoami"
@@ -721,6 +805,7 @@ module ClientProtocol =
         | "env/get" -> Role.Viewer
         | "identity/sessions"
         | "identity/revoke"
+        | "session/setApprovals"
         | "env/destroy" -> Role.Owner
         | _ -> Role.Collaborator
 
@@ -742,6 +827,8 @@ module ClientProtocol =
             contextEvent.Schema
             streaming.Schema
             envSummary.Schema
+            approvalsView.Schema
+            setApprovalsParams.Schema
             idRef.Schema
             clientError.Schema
             extCallError.Schema

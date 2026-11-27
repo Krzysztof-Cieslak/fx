@@ -28,6 +28,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="GitHead.fs" />
     <Compile Include="ClientProtocol.fs" />
+    <Compile Include="Approvals.fs" />
     <Compile Include="ClientServer.fs" />
     <Compile Include="Clients.fs" />
     <Compile Include="Live.fs" />

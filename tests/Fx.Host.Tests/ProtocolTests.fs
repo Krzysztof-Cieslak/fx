@@ -606,6 +606,187 @@ let tests =
                     stop h
 
             testCase
+                "session/approvals and session/setApprovals: a person's switch is a session grant; policy forbids it; viewers only read"
+            <| fun () ->
+                let p, h =
+                    host "approvals" [ Candidate.create Source.Builtin (Package.Native viewerProvider) ]
+
+                let sandboxOf (h: Host) (session: string) =
+                    match HostSessions.tryFind h session with
+                    | Some entry ->
+                        (wait (
+                            (Fx.Environments.EnvsHost.envs h.Environments).Get entry.Environment CancellationToken.None
+                        ))
+                        |> Option.bind _.Sandbox
+                        |> Option.filter _.Confines
+                        |> Option.map _.Driver
+                    | None -> None
+
+                let autoGrants (h: Host) =
+                    (GrantsService.list h.Grants false).Grants
+                    |> List.map _.Grant
+                    |> List.filter (fun g -> g.Action.Value = "approvals.auto")
+                    |> List.map (fun g -> string g.Effect, string g.Scope, g.By)
+
+                let mutable confined = false
+
+                try
+                    let owner = embedded h
+
+                    owner.Call(ClientProtocol.create, { Session = Some "s1"; Title = None })
+                    |> ignore
+
+                    let sandbox = sandboxOf h "s1"
+                    confined <- sandbox.IsSome
+
+                    if
+                        not confined
+                        && Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1"
+                        && not (OperatingSystem.IsWindows())
+                    then
+                        failtest "a driver must confine here"
+
+                    let before = owner.Call(ClientProtocol.approvals, { Session = "s1" })
+                    Expect.equal (before.Mode, before.Configured) ("ask", "ask") "asks by default"
+                    Expect.equal before.Sandbox sandbox "the confining driver"
+
+                    match owner.Try(ClientProtocol.setApprovals, { Session = "s1"; Auto = true }), sandbox with
+                    | Ok after, Some _ ->
+                        Expect.equal after.Mode "auto" "switched on"
+                        Expect.stringContains after.Reason "a person turned them on" "why"
+
+                        match autoGrants h with
+                        | [ effect, scope, by ] ->
+                            Expect.equal (effect, scope) ("allow", "session:s1") "a session grant"
+                            Expect.stringStarts by "user:" "by a person"
+                        | other -> failtest $"{other}"
+
+                        Expect.equal
+                            (owner.Call(ClientProtocol.setApprovals, { Session = "s1"; Auto = true })).Mode
+                            "auto"
+                            "again: no change"
+
+                        Expect.equal (autoGrants h).Length 1 "one grant"
+
+                        let off = owner.Call(ClientProtocol.setApprovals, { Session = "s1"; Auto = false })
+                        Expect.equal off.Mode "ask" "switched off"
+                        Expect.isEmpty (autoGrants h) "revoked"
+                    | Error(CallError.Failed(ClientError.Invalid [ reason ])), None ->
+                        Expect.stringContains reason "runs unsandboxed" "refused without a confining driver"
+                        Expect.isEmpty (autoGrants h) "nothing granted"
+                    | other, _ -> failtest $"{other}"
+
+                    // A viewer reads the mode, and cannot switch it.
+                    let events = ConcurrentQueue<SessionNotice>()
+                    let frames = ConnectionLimits.frames ConnectionLimits.defaults
+                    let clientEnd, serverEnd = InProcess.pair (1 <<< 20) frames frames
+
+                    ClientServer.serve h ConnectionFacts.inProcess serverEnd CancellationToken.None
+                    |> ignore
+
+                    let members = IdentityClient.members (SignIn.Provider("test-viewer", Json.Null))
+
+                    let peer =
+                        match
+                            waitFor
+                                60.0
+                                (Eff.run
+                                    (clientEnv CancellationToken.None)
+                                    (Rpc.connect (clientService events) members clientEnd))
+                        with
+                        | Ok peer -> peer
+                        | Error e -> failtest $"{e}"
+
+                    let viewer =
+                        {
+                            Peer = peer
+                            Events = events
+                            Lifetime = new CancellationTokenSource()
+                        }
+
+                    Expect.equal (viewer.Call(ClientProtocol.approvals, { Session = "s1" })).Mode "ask" "a viewer reads"
+
+                    match viewer.Try(ClientProtocol.setApprovals, { Session = "s1"; Auto = true }) with
+                    | Error(CallError.Failed(ClientError.Forbidden _)) -> ()
+                    | other -> failtest $"a viewer switched: {other}"
+
+                    match owner.Try(ClientProtocol.approvals, { Session = "nope" }) with
+                    | Error(CallError.Failed(ClientError.UnknownSession "nope")) -> ()
+                    | other -> failtest $"{other}"
+
+                    viewer.Close()
+                    owner.Close()
+                finally
+                    stop h
+
+                // The host's mode is auto (for sessions it starts: a session keeps its profile): switching
+                // off is a session deny grant; on again revokes it.
+                let h = start (options p (Model()) [ "codeact.grants.mode", Json.String "auto" ])
+
+                try
+                    let owner = embedded h
+
+                    Expect.equal
+                        (owner.Call(ClientProtocol.approvals, { Session = "s1" })).Configured
+                        "ask"
+                        "s1's profile"
+
+                    owner.Call(ClientProtocol.create, { Session = Some "s2"; Title = None })
+                    |> ignore
+
+                    let view = owner.Call(ClientProtocol.approvals, { Session = "s2" })
+                    Expect.equal view.Configured "auto" "the host's mode"
+                    Expect.equal view.Mode (if confined then "auto" else "ask") "auto only where a driver confines"
+
+                    if confined then
+                        let off = owner.Call(ClientProtocol.setApprovals, { Session = "s2"; Auto = false })
+                        Expect.equal off.Mode "ask" "off for the session"
+
+                        Expect.equal
+                            (autoGrants h |> List.map (fun (e, s, _) -> e, s))
+                            [ "deny", "session:s2" ]
+                            "a deny grant"
+
+                        let on = owner.Call(ClientProtocol.setApprovals, { Session = "s2"; Auto = true })
+                        Expect.equal on.Mode "auto" "on again"
+                        Expect.isEmpty (autoGrants h) "the deny grant revoked"
+
+                    owner.Close()
+                finally
+                    stop h
+
+                // A policy that forbids auto: no person switches it on either.
+                File.WriteAllText(
+                    Path.Combine(p.Data, "policy.json"),
+                    """{"forbid": {"codeact.grants.mode": ["auto"]}}"""
+                )
+
+                let h = start (options p (Model()) [])
+
+                try
+                    let owner = embedded h
+
+                    match owner.Try(ClientProtocol.setApprovals, { Session = "s1"; Auto = true }) with
+                    | Error(CallError.Failed(ClientError.Invalid [ reason ])) ->
+                        Expect.stringContains reason (if confined then "forbidden" else "runs unsandboxed") "why"
+                    | other -> failtest $"switched on under a policy that forbids it: {other}"
+
+                    Expect.isEmpty (autoGrants h) "nothing granted"
+                    Expect.equal (owner.Call(ClientProtocol.approvals, { Session = "s1" })).Mode "ask" "still asks"
+                    owner.Close()
+                finally
+                    stop h
+
+                // The host's mode cannot be auto under that policy at all.
+                match
+                    waitFor 180.0 (Host.start (options p (Model()) [ "codeact.grants.mode", Json.String "auto" ]))
+                with
+                | Error issues -> Expect.isTrue (issues |> List.exists (fun i -> i.Contains "forbidden")) $"{issues}"
+                | Ok h ->
+                    stop h
+                    failtest "started in auto under a policy that forbids it"
+
+            testCase
                 "over the local listener: the token file, a session token as the bearer, revocation ends connections"
             <| fun () ->
                 let p, h =
@@ -792,6 +973,7 @@ let tests =
                         ClientProtocol.list.Name
                         ClientProtocol.get.Name
                         ClientProtocol.offers.Name
+                        ClientProtocol.approvals.Name
                         ClientProtocol.subscribe.Name
                         ClientProtocol.context.Name
                         ClientProtocol.whoami.Name
@@ -821,6 +1003,7 @@ let tests =
                     [
                         ClientProtocol.sessions.Name
                         ClientProtocol.revoke.Name
+                        ClientProtocol.setApprovals.Name
                         ClientProtocol.envDestroy.Name
                     ] do
                     Expect.equal (ClientProtocol.leastRole name) Role.Owner name
