@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ 翻訳を確認して 👍🏽 — vérifie les traductions
 
@@ -19,9 +18,10 @@
 
 
 
+
   held: the last turn did not finish; a prompt goes on
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000004   Enter send · Ctrl+O detail  ● held
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

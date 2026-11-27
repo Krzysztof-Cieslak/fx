@@ -210,21 +210,23 @@ module Envs =
     let destroy<'R when 'R :> IEnvs and 'R :> IScope> (id: string) : Eff<'R, Result<EnvRecord, EnvError>> =
         fun env -> env.Envs.Destroy id env.Scope.Cancellation
 
-    /// What a person must be told about an environment while it exists, e.g. that it runs without a
-    /// sandbox (spec §9.1, §18: a persistent warning, the TUI's "unsandboxed" banner).
+    /// What a person must be told about an environment while it exists (spec §9.1, §18: a persistent
+    /// warning, the TUI's banner): that it runs unsandboxed although the host asked for a sandbox
+    /// (`auto` found none that runs here; its notes say why). The sandbox is opt-in (T137): an
+    /// environment the host left unsandboxed (`sandbox.driver = none`, the default, recorded without
+    /// notes) carries no warning; clients show `sandbox: off` instead.
     let warnings (record: EnvRecord) : string list =
         [
             match record.Sandbox with
-            | Some sandbox when sandbox.Confines -> ()
-            | Some sandbox ->
-                let why =
-                    match sandbox.Notes with
-                    | [] -> ""
-                    | notes -> " (" + String.Join("; ", notes) + ")"
-
-                $"runs unsandboxed: commands can read and change everything the user can{why}"
-            | None -> "runs unsandboxed: commands can read and change everything the user can"
+            | Some sandbox when not sandbox.Confines && not sandbox.Notes.IsEmpty ->
+                let why = String.Join("; ", sandbox.Notes)
+                $"runs unsandboxed: the sandbox the host asked for cannot run here ({why}); commands can read and change everything the user can"
+            | _ -> ()
         ]
+
+    /// The sandbox as clients name it: the confining driver, else `off` (`none` confines nothing).
+    let sandboxLabel (sandbox: EnvSandboxInfo) : string =
+        if sandbox.Confines then sandbox.Driver else "off"
 
 /// A connection the host holds to an environment's envd, for one attempt.
 [<NoEquality; NoComparison>]
@@ -766,11 +768,12 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                         |> List.tryFind (fun c -> c.Value.Id = SandboxDrivers.NoSandbox)
                     with
                     | None ->
-                        let why = String.Join("; ", notes)
+                        let why =
+                            match notes with
+                            | [] -> "the host's sandbox.driver is none"
+                            | notes -> "no driver confines processes here: " + String.Join("; ", notes)
 
-                        return
-                            Error
-                                $"sandbox: no driver confines processes here ({why}), and none (fx.sandbox.none) is not in effect"
+                        return Error $"sandbox: {why}, and none (fx.sandbox.none) is not in effect"
                     | Some none ->
                         match! probe none client site with
                         | Ok ready -> return Ok(sandbox none ready notes)
@@ -811,11 +814,16 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                             | Error unavailable ->
                                 return! unconfined [ $"{driver.Id} cannot sandbox here: {unavailable}" ]
                         }
+                    | Ok SandboxChoice.Off -> unconfined []
                     | Ok(SandboxChoice.Unconfined reason) -> unconfined [ reason ]
 
                 match chosen with
                 | Ok sandbox when network = NetworkAccess.Denied && not sandbox.Driver.Confines ->
-                    let why = String.Join("; ", sandbox.Info.Notes)
+                    let why =
+                        match sandbox.Info.Notes with
+                        | [] ->
+                            "the host's sandbox is off: a host turns it on with the privileged variant sandbox.driver (auto or a driver)"
+                        | notes -> String.Join("; ", notes)
 
                     return
                         Error

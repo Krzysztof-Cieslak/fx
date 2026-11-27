@@ -1,5 +1,4 @@
 ────────────────────────
- ! runs unsandboxed: co…
 
 ┃ Decision
 ┃ The host stopped while
@@ -9,6 +8,7 @@
 ┃   await fx.shell.run(…
 ┃ It printed:
 ┃   applying 0001
+┃   applying 0002
   ● turn 1 · waiting fo…
 ┃ ›
 ┃ anthropic/claude-sonn…

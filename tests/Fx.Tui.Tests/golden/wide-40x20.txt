@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ 翻訳を確認して 👍🏽 — vérifie les
 ┃ traductions
@@ -11,6 +10,7 @@
   ✗ Failed  the model call failed:
             overloaded
   ▣ fx · anthropic/claude-sonnet-5-5 · …
+
 
 
 

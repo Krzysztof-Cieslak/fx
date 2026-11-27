@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+┃ rerun the check
 
   ◇ Cell     rer… ✗ 0.4s
       ↻ new kernel: the…

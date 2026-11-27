@@ -1,5 +1,4 @@
 ────────────────────────
- ! runs unsandboxed: co…
 
 ┃ Permission  (1 of 2)
 ┃ Run make deploy
@@ -9,6 +8,7 @@
 ┃ [y] once
 ┃ [s] this session
 ┃ [a] always on this ho…
+┃ [n] deny
   ● turn 1 · waiting fo…
 ┃ ›
 ┃ anthropic/claude-sonn…

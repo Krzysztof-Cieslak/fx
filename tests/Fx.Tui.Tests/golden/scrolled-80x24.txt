@@ -1,7 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
-
-┃ replace deprecated Http.retry with RetryPolicy in billing
 
   I'll look at the call sites first.
   ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
@@ -19,9 +16,12 @@
 ┃ now update the changelog
 
   Updating CHANGELOG.md: the entry goes under *Unreleased*.
+
+  Then the version in `Directory.Build.props`, and the tests again.
+
   ⠴ turn 2 · writing 0.0s
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
-fx · …/src/billing:main · session …00000000          ↑ scrolled · PgDn  ● turn 2
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
+fx · …/src/billing:main · session …00000000    Enter steer · Tab queue  ● turn 2
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

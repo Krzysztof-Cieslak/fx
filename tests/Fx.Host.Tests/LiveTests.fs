@@ -362,7 +362,8 @@ let tests =
                     stop host
             }
 
-            testTask "fx run -p: a turn's commands and kernel run in the environment's sandbox" {
+            testTask
+                "fx run -p with sandbox.driver = auto: a turn's commands and kernel run in the environment's sandbox" {
                 do! network.Force()
 
                 if OperatingSystem.IsWindows() then
@@ -388,8 +389,19 @@ let tests =
 
                 // The person allows everything the grants log asks about (T127b): the write outside the
                 // workspace and the command the shell expands. So the sandbox alone keeps the file out.
+                // The host opts in to it (T137: off by default).
                 let person = Person always
-                let host = start (options p model [ "model.role.main", Json.String modelId ])
+
+                let host =
+                    start (
+                        options
+                            p
+                            model
+                            [
+                                "model.role.main", Json.String modelId
+                                "sandbox.driver", Json.String Fx.Environments.SandboxSlots.Auto
+                            ]
+                    )
 
                 try
                     let outcome =
@@ -720,9 +732,11 @@ let tests =
                 | Error errors -> failtest (String.concat "\n" errors)
             }
 
-            // T135: a session's kernel stays across turns (sandboxed where a driver confines), also while
-            // the host idles longer than its thread pool keeps idle threads (1 s in this project); a
-            // kernel that dies is logged with why, the next cell says so, and the session replays.
+            // T135: a session's kernel stays across turns (sandboxed where a driver confines: the host
+            // opts in, since bubblewrap's --die-with-parent is what ended kernels), also while the host
+            // idles longer than its thread pool keeps idle threads (1 s in this project); a kernel that
+            // dies is logged with why, the next cell says so, and the session replays (the prompt's
+            // sandbox section with it).
             testTask
                 "fx run -p: one kernel for the session: turn 2 uses a name from turn 1; a kernel that dies is logged with why; it replays" {
                 do! network.Force()
@@ -741,7 +755,14 @@ let tests =
                     ]
 
                 let person = Person always
-                let host = start (options p model [ "model.role.main", Json.String modelId ])
+
+                let selections =
+                    [
+                        "model.role.main", Json.String modelId
+                        "sandbox.driver", Json.String Fx.Environments.SandboxSlots.Auto
+                    ]
+
+                let host = start (options p model selections)
                 let mutable session = ""
 
                 try
@@ -872,7 +893,7 @@ let tests =
                     waitFor
                         300.0
                         (Commands.replay
-                            (options p (Model()) [])
+                            (options p (Model()) selections)
                             {
                                 Session = session
                                 Json = false

@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 
 
@@ -13,7 +12,7 @@
                                    █    █  █
 
   ┃ ›
-  ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+  ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 
   …/src/billing:main                                           Ctrl+P commands
 
@@ -22,6 +21,7 @@
 
 
 
+
 fx · …/src/billing:main · session …00000009   Enter send · Ctrl+O detail  ● idle
 ────────────────────────────────────────────────────────────────────────────────
-cursor 13,6
+cursor 12,6

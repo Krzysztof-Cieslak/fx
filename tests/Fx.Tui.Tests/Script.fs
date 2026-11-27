@@ -297,23 +297,29 @@ let setup: Setup =
         Theme = ThemeChoice.Auto
     }
 
-/// An environment no sandbox confines (Windows, or no bubblewrap): its warning is the banner.
+/// An environment the host left unsandboxed (the default, T137): `sandbox: off`, no banner.
 let env: EnvInfo =
     {
         Id = "env-1"
         Name = "default"
         Provider = "local"
         Phase = "ready"
-        Warnings = [ "runs unsandboxed: commands can read and change everything the user can" ]
+        Warnings = []
         Sandbox = Some "none"
         Branch = Some "main"
     }
 
 /// An environment bubblewrap confines: no banner.
-let confined: EnvInfo =
+let confined: EnvInfo = { env with Sandbox = Some "bubblewrap" }
+
+/// An environment the host asked to sandbox (`auto`) where no driver can run: its warning is the
+/// banner.
+let unconfined: EnvInfo =
     { env with
-        Warnings = []
-        Sandbox = Some "bubblewrap"
+        Warnings =
+            [
+                "runs unsandboxed: the sandbox the host asked for cannot run here (Windows has no sandbox driver yet (AppContainer: T511)); commands can read and change everything the user can"
+            ]
     }
 
 /// Folds messages into a model, keeping the commands it asked for.

@@ -1,9 +1,9 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ ship it
 
   ◇ Run      make deploy                                                  ⠋ 0.0s
+
 
 
 
@@ -21,7 +21,7 @@
 ┃ [y] once  [s] this session  [a] always on this host  [n] deny
   ● turn 1 · waiting for an answer
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000002         keys in [ ] answer  ● turn 1
 ────────────────────────────────────────────────────────────────────────────────
 cursor hidden

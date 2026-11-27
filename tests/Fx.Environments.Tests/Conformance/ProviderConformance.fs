@@ -183,10 +183,13 @@ let tests (subject: Subject) : Test =
                     Expect.equal lease.Provider subject.Provider.Kind "the lease's provider"
                     let sandbox = record.Sandbox |> Option.get
 
+                    // The host's default (T137): no sandbox, and nothing to warn about.
                     Expect.equal
-                        (Envs.warnings record).Length
-                        (if sandbox.Confines then 0 else 1)
-                        "the record says what sandboxes it; an unsandboxed environment carries one warning"
+                        (sandbox.Driver, sandbox.Confines)
+                        (SandboxDrivers.NoSandbox, false)
+                        "the record says what sandboxes it: off by default"
+
+                    Expect.isEmpty (Envs.warnings record) "no warning for the host's choice"
 
                     let listed = wait ((EnvsHost.envs host).List none)
                     Expect.equal (listed |> List.map (fun r -> r.Id)) [ record.Id ] "listed"

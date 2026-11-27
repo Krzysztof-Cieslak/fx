@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ port the parser
 
@@ -20,8 +19,9 @@
 
 
 
+
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000005   Enter send · Ctrl+O detail  ● idle
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

@@ -335,16 +335,24 @@ module Headless =
                         let id = entry.Session
                         running.Value <- Some id
 
-                        // What a person must know about the session's environment, once: e.g. that it
-                        // runs unsandboxed (spec §9.1, §19.5).
+                        // The session's environment and its sandbox, once, and what a person must know
+                        // about it: e.g. that the sandbox the host asked for cannot run (spec §9.1,
+                        // §19.5). The sandbox is opt-in (T137): off by default, quietly.
                         let! environment =
                             (Fx.Environments.EnvsHost.envs host.Environments).Get entry.Environment cancellation
 
-                        for warning in
-                            environment
-                            |> Option.map Fx.Environments.Envs.warnings
-                            |> Option.defaultValue [] do
-                            io.Show $"warning: {warning}"
+                        match environment with
+                        | Some record ->
+                            let sandbox =
+                                match record.Sandbox with
+                                | Some sandbox -> " · sandbox: " + Fx.Environments.Envs.sandboxLabel sandbox
+                                | None -> ""
+
+                            io.Show $"env: {record.Spec.Name} ({record.Spec.Provider}){sandbox}"
+
+                            for warning in Fx.Environments.Envs.warnings record do
+                                io.Show $"warning: {warning}"
+                        | None -> ()
 
                         let follow = following host id io watching.Token
                         let! before = HostSessions.state host id cancellation

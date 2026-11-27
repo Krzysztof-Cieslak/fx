@@ -1,5 +1,5 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
+  ~/.fx/config.json:
 
     { "variants": { "model.role.main": "
     anthropic/claude-opus-5-5" } }

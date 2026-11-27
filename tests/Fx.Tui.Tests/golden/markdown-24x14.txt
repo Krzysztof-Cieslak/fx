@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+  ✓ Done  Created ~/.fx/
           config.json:
           fx uses Opus
           5.5 by default

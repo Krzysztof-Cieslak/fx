@@ -122,16 +122,19 @@ let tests =
                     let t = tui host (SessionChoice.New(Some "first"))
                     t.WaitFor "session "
                     t.WaitFor "env: default"
-                    // The sandbox's driver under the prompt, and the environment's warnings (unsandboxed:
-                    // Windows, or no bubblewrap here) as the banner.
-                    t.WaitFor "sandbox: "
+                    // The sandbox under the prompt: off, the host's default (T137), with no banner.
+                    t.WaitFor "sandbox: off"
                     let environment = (HostSessions.entries host |> List.exactlyOne).Environment
 
                     let record =
                         wait ((Fx.Environments.EnvsHost.envs host.Environments).Get environment CancellationToken.None)
 
-                    for warning in record |> Option.map Fx.Environments.Envs.warnings |> Option.defaultValue [] do
-                        t.WaitFor("! " + warning.Substring(0, min 40 warning.Length))
+                    Expect.equal
+                        (record |> Option.map Fx.Environments.Envs.warnings)
+                        (Some [])
+                        "no warning: the sandbox is opt-in"
+
+                    Expect.isFalse (t.Tty.Text.Contains "! runs unsandboxed") "no banner"
 
                     t.Type "Hello there\r"
                     t.WaitFor "┃ Hello there"

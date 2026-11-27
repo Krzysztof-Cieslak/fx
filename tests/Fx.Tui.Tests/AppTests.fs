@@ -73,7 +73,8 @@ let tests =
                             "nocolor", ColorDepth.NoColor, ThemeChoice.Dark
                         ] do
                         test $"styles at {name}" {
-                            let model = Screens.finished 60 16
+                            // With the banner, so its style is drawn too.
+                            let model = Screens.unconfined 60 16
 
                             let model =
                                 { model with

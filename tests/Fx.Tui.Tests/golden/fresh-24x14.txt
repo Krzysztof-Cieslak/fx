@@ -1,9 +1,10 @@
 ────────────────────────
- ! runs unsandboxed: co…
 
-
-
-           fx
+       ████ █  █
+       █    █  █
+       ███   ██
+       █    █  █
+       █    █  █
 
   ┃ ›
   ┃ anthropic/claude-…
@@ -11,7 +12,6 @@
   …/s… Ctrl+P commands
 
 
-
 fx · …/src/billi… ● idle
 ────────────────────────
-cursor 6,6
+cursor 7,6

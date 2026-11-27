@@ -65,7 +65,7 @@ let tests =
 
                 // On the clock the loop's ticks read, so notices last as long as they would.
                 let start =
-                    { Screens.finished 60 18 with
+                    { Screens.unconfined 60 18 with
                         Now = (SystemClock.clock.Now()).UnixMicroseconds
                     }
 

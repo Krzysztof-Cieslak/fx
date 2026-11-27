@@ -1,5 +1,5 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
+  ◇ Run      dotnet test tests/Bi… ✗ 48s
       exit 1
   ◇ Cell     rerun the tests       ✓ 46s
   ▸ 1 cell (3 lines)     [Ctrl+O expand]

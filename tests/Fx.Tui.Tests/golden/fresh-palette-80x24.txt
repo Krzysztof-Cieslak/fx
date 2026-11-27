@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 
 
@@ -14,9 +13,10 @@
   ┃  /theme     Change the colours
   ┃  /exit      Leave (the session stays)
   ┃ ›
-  ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+  ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 
   …/src/billing:main                                           Ctrl+P commands
+
 
 
 

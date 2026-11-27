@@ -242,7 +242,8 @@ module View =
 
         Row.spread width left right
 
-    /// The environment's warnings (spec §18: running unsandboxed is a persistent warning).
+    /// The environment's warnings (spec §18: running unsandboxed when the host asked for a sandbox is
+    /// a persistent warning).
     let banner (model: Model) : Row list =
         let t = theme model
         let warn = t.Banner
@@ -1005,7 +1006,8 @@ module View =
         else
             [ Row.fit model.Width (indent 2 :: left) ]
 
-    /// The line under the prompt: the model, the environment and what confines it.
+    /// The line under the prompt: the model, the environment and what confines it (`off` for the
+    /// driver `none`, which confines nothing: the sandbox is opt-in, T137).
     let private info (model: Model) : Row =
         let t = theme model
 
@@ -1016,6 +1018,7 @@ module View =
                    [
                        $"env: {env.Name} ({env.Provider})"
                        match env.Sandbox with
+                       | Some "none" -> "sandbox: off"
                        | Some driver -> "sandbox: " + driver
                        | None -> ()
                    ]

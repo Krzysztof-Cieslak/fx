@@ -1,0 +1,17 @@
+────────────────────────
+ ! runs unsandboxed: th…
+          RetryPolicy.
+    Evidence  dotnet
+              test tests
+              /Billing →
+              214 passed
+    Verify    dotnet
+              test tests
+              /Billing
+  ▣ fx · anthropic/clau…
+
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/billi… ● idle
+────────────────────────
+cursor 11,4

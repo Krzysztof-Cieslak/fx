@@ -1,5 +1,5 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
+┃ migrate the database
 
   ? The host stopped during a cell
 

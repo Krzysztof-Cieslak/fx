@@ -96,7 +96,7 @@ type Theme =
         Decision: Style
         /// The header bar.
         Header: Style
-        /// A warning on every screen (runs unsandboxed).
+        /// A warning on every screen (a sandbox the host asked for cannot run).
         Banner: Style
         /// The selected option on a card.
         Selected: Style

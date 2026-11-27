@@ -1,5 +1,5 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
+  ◇ Cell     rerun the tests       ✓ 46s
   ▸ 1 cell (3 lines)     [Ctrl+O expand]
 
   ✓ Done  Migrated 37 call sites to

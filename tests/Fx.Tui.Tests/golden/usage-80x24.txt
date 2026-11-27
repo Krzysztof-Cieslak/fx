@@ -1,5 +1,4 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
 
 ┃ can fx use opus fast mode?
 
@@ -20,8 +19,9 @@
 
 
 
+
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000008           73.6K (7%) · $2.11  ● idle
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

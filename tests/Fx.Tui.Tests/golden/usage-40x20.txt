@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ can fx use opus fast mode?
 
@@ -11,6 +10,7 @@
   ✓ Done  Fast mode needs a speed option
           in ChatRequest
   ▣ fx · anthropic/claude-opus-5-5 · 10…
+
 
 
 

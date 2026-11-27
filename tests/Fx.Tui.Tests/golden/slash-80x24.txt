@@ -1,5 +1,5 @@
 ────────────────────────────────────────────────────────────────────────────────
- ! runs unsandboxed: commands can read and change everything the user can
+┃ replace deprecated Http.retry with RetryPolicy in billing
 
   I'll look at the call sites first.
   ◇ Read     src/Billing/Client.fs                                        ✓ 0.2s
@@ -21,7 +21,7 @@
    /theme       Change the colours  auto|dark|light|ansi16
    /exit        Leave (the session stays)
 ┃ › /
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000000   Enter send · Ctrl+O detail  ● idle
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,5

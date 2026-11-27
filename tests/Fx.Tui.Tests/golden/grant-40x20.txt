@@ -1,9 +1,9 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 
 ┃ ship it
 
   ◇ Run      make deploy          ⠋ 0.0s
+
 
 
 

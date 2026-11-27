@@ -621,7 +621,8 @@ let tests =
                 finally
                     stop host
 
-            testCase "sessions' environments get the host's sandbox; fx run warns once when it is none"
+            testCase
+                "the sandbox is opt-in: by default fx run says sandbox: off, without a warning; auto confines where a driver can and warns where none can"
             <| fun () ->
                 let sandboxOf (host: Host) (session: string) =
                     match HostSessions.entries host |> List.tryFind (fun e -> e.Session = session) with
@@ -634,6 +635,11 @@ let tests =
                 let warnings (lines: ResizeArray<string>) =
                     lines |> Seq.filter (fun l -> l.StartsWith "warning: ") |> List.ofSeq
 
+                let environment (lines: ResizeArray<string>) =
+                    match lines |> Seq.filter (fun l -> l.StartsWith "env: ") |> List.ofSeq with
+                    | [ line ] -> line
+                    | other -> failtest $"one environment line: {other}"
+
                 let request =
                     {
                         Prompt = "Look around"
@@ -641,36 +647,29 @@ let tests =
                         Title = None
                     }
 
-                // The host turns sandboxing off: the environment runs unsandboxed, and fx run says so once.
+                // The default: no sandbox, and nothing to warn about; the environment's line says so.
                 let p = place "unsandboxed"
                 hostConfig p withoutKernel
                 let lines = ResizeArray<string>()
-
-                let host =
-                    start (
-                        options
-                            p
-                            (Model())
-                            [ "model.role.main", Json.String modelId; "sandbox.driver", Json.String "none" ]
-                    )
+                let host = start (options p (Model()) [ "model.role.main", Json.String modelId ])
 
                 try
                     let outcome = run host request lines
                     let sandbox = sandboxOf host outcome.Session
-                    Expect.equal (sandbox.Driver, sandbox.Confines) ("none", false) "none"
-
-                    match warnings lines with
-                    | [ warning ] ->
-                        Expect.stringContains warning "runs unsandboxed" "the warning"
-                        Expect.stringContains warning "sandbox.driver = none" "why"
-                    | other -> failtest $"one warning: {other}"
+                    Expect.equal (sandbox.Driver, sandbox.Confines, sandbox.Notes) ("none", false, []) "off"
+                    Expect.isEmpty (warnings lines) "no warning"
+                    Expect.equal (environment lines) "env: default (local) · sandbox: off" "the environment's line"
                 finally
                     stop host
 
-                // The host's default: the OS's driver where it confines (bubblewrap, Seatbelt), else
-                // none with a warning saying why (Windows).
+                // The host's config opts in with auto: the OS's driver where it confines (bubblewrap,
+                // Seatbelt), else none with a warning saying why (Windows, or no bubblewrap here).
                 let p = place "sandboxed"
-                hostConfig p withoutKernel
+
+                hostConfig
+                    p
+                    """{"extensions": {"disabled": ["fx.interpreter.bun-ts"]}, "variants": {"sandbox.driver": "auto"}}"""
+
                 let lines = ResizeArray<string>()
                 let host = start (options p (Model()) [ "model.role.main", Json.String modelId ])
 
@@ -681,6 +680,11 @@ let tests =
                     if sandbox.Confines then
                         Expect.isEmpty (warnings lines) "no warning"
                         Expect.contains [ "bubblewrap"; "seatbelt" ] sandbox.Driver "the OS's driver"
+
+                        Expect.equal
+                            (environment lines)
+                            $"env: default (local) · sandbox: {sandbox.Driver}"
+                            "the environment's line names the driver"
                     else
                         if
                             Environment.GetEnvironmentVariable "SANDBOX_TESTS" = "1"
@@ -688,10 +692,70 @@ let tests =
                         then
                             failtest $"a driver must confine here: {sandbox}"
 
-                        Expect.equal (warnings lines).Length 1 "the unsandboxed warning, once"
+                        Expect.stringEnds (environment lines) "sandbox: off" "off"
 
-                        if OperatingSystem.IsWindows() then
-                            Expect.stringContains (warnings lines).Head "Windows" "Windows says why"
+                        match warnings lines with
+                        | [ warning ] ->
+                            Expect.stringContains warning "runs unsandboxed" "the warning"
+                            Expect.stringContains warning "the sandbox the host asked for cannot run here" "why"
+
+                            if OperatingSystem.IsWindows() then
+                                Expect.stringContains warning "Windows" "Windows says why"
+                        | other -> failtest $"the unsandboxed warning, once: {other}"
                 finally
                     stop host
+
+                // The command line requires a driver that cannot run here: the run fails, never falls back.
+                let elsewhere =
+                    if OperatingSystem.IsMacOS() then
+                        "bubblewrap"
+                    else
+                        "seatbelt"
+
+                let p = place "required"
+                hostConfig p withoutKernel
+                let lines = ResizeArray<string>()
+
+                let host =
+                    start (
+                        options
+                            p
+                            (Model())
+                            [
+                                "model.role.main", Json.String modelId
+                                "sandbox.driver", Json.String elsewhere
+                            ]
+                    )
+
+                try
+                    match waitFor 120.0 (Headless.run host request (quietIo lines) CancellationToken.None) with
+                    | Error e -> Expect.stringContains e elsewhere "the environment failed, saying why"
+                    | Ok outcome -> failtest $"ran unsandboxed: {outcome}"
+                finally
+                    stop host
+
+            testCase "a project cannot turn the sandbox on (or off): sandbox.driver is privileged"
+            <| fun () ->
+                let p = place "project-sandbox"
+                hostConfig p withoutKernel
+
+                p.Write(
+                    Path.Combine(Product.projectDirName, "config.json"),
+                    """{"variants": {"sandbox.driver": "auto"}}"""
+                )
+
+                let opts = options p (Model()) [ "model.role.main", Json.String modelId ]
+
+                match wait (Commands.trust opts p.Workspace) with
+                | Ok _ -> ()
+                | Error e -> failtest e
+
+                match wait (Host.start opts) with
+                | Error errors ->
+                    let text = String.concat "\n" errors
+                    Expect.stringContains text "sandbox.driver" "the slot"
+                    Expect.stringContains text "privileged" "why"
+                | Ok host ->
+                    stop host
+                    failtest "a trusted project's config selected a privileged slot"
         ]

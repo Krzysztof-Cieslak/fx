@@ -104,8 +104,9 @@ let private sandboxRequired () =
 let mutable private lastSandbox: EnvSandboxInfo option = None
 
 /// Hands in an environment of `fx.env.local` with envd embedded in this process, created on the
-/// fixture's workspace and opened through the host's `IEnvs`, as the composition root does; the
-/// session's agent has these sandbox overrides.
+/// fixture's workspace and opened through the host's `IEnvs`, as the composition root does, on a
+/// host that opted in to the sandbox (`sandbox.driver = auto`; off by default, T137); the session's
+/// agent has these sandbox overrides.
 let private localEnvironmentWith
     (overrides: SandboxOverrides)
     (exe: string)
@@ -121,7 +122,10 @@ let private localEnvironmentWith
     let log = InMemoryEventLog<EnvEvent>()
 
     let host =
-        Fx.Environments.Tests.Local.start (Fx.Environments.Tests.Local.settings dataDir) log.Log
+        Fx.Environments.Tests.Local.startWith
+            [ "sandbox.driver", Json.String Fx.Environments.SandboxSlots.Auto ]
+            (Fx.Environments.Tests.Local.settings dataDir)
+            log.Log
 
     cleanup.Add(fun () -> EnvsHost.stop host)
     let envs = EnvsHost.envs host

@@ -52,9 +52,10 @@ type EnvInfo =
         Name: string
         Provider: string
         Phase: string
-        /// What a person must be told while it exists: that it runs unsandboxed, …
+        /// What a person must be told while it exists: that it runs unsandboxed although the host
+        /// asked for a sandbox, …
         Warnings: string list
-        /// The sandbox driver that confines its processes, once it is ready.
+        /// The sandbox driver of its processes, once it is ready (`none`: off, the default).
         Sandbox: string option
         /// The branch its workspace has checked out.
         Branch: string option
