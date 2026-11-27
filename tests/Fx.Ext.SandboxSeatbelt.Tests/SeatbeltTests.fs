@@ -161,6 +161,16 @@ let profiles =
                     allowed.Rules
                     "(deny network-outbound (remote unix-socket (subpath \"/private/tmp\")))"
                     "not the SSH agent"
+
+                let tail = allowed.Rules |> List.rev |> List.take 2 |> List.rev
+
+                Expect.equal
+                    tail
+                    [
+                        $"(allow network-outbound (remote unix-socket (subpath {param allowed policy.Writable.Head})))"
+                        $"(allow network-outbound (remote unix-socket (subpath {param allowed policy.Temp.Value})))"
+                    ]
+                    "but the environment's own sockets, last (TMPDIR: .NET's named pipes)"
             }
 
             test "paths under macOS's top-level links name their real paths too" {

@@ -22,7 +22,10 @@ spec is [docs/modules/sandbox.md](../../docs/modules/sandbox.md).
    minus the roots inside it, so the longest root decides, as `SandboxPolicy.access` says.
 3. **Network**: nothing when denied (unix sockets included); when allowed, sockets, the services that
    resolve names and check certificates, and the routing table, but no unix socket under a denied
-   path or in `/private/tmp` (the user's SSH agent).
+   path or in `/private/tmp` (the user's SSH agent), except, last, in the environment's own writable
+   directories and `TMPDIR` (inside the denied data directory): .NET's named pipes, which MSBuild's
+   worker nodes talk over, are there. With the network denied no unix socket connects, those
+   included, so MSBuild's nodes and the compiler server cannot start.
 4. Last, renaming or deleting the directories between a writable root and a protected path, or the
    protected path, is refused: Seatbelt matches paths, and a rename would carry what is inside past
    its rules.
