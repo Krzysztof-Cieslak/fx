@@ -307,9 +307,14 @@ type Model =
         Folds: Map<ItemId, Fold>
         /// The item selected while the person selects items (`Shift+↑`).
         Selection: ItemId option
-        /// The selection is to be brought into view when the model is next settled (`View.settle`):
-        /// it moved, or it was expanded or collapsed.
-        Reveal: bool
+        /// The item to bring into view when the model is next settled (`View.settle`): the selection
+        /// moved, or an item was expanded or collapsed.
+        Reveal: ItemId option
+        /// The item each row of the screen showed when the model was last settled (rows from the
+        /// screen's top; the transcript's alone), for clicks.
+        ItemsAt: Map<int, ItemId>
+        /// The columns those rows had (the main column's: right of it is the sidebar).
+        ItemsWidth: int
         /// Rows the transcript is scrolled up from its end (0: at the end, following new output).
         Scroll: int
         /// The transcript's rows when the model was last settled (`View.settle`): a scrolled view
@@ -360,7 +365,9 @@ module App =
             Verbosity = Verbosity.Normal
             Folds = Map.empty
             Selection = None
-            Reveal = false
+            Reveal = None
+            ItemsAt = Map.empty
+            ItemsWidth = 0
             Scroll = 0
             TranscriptRows = 0
             TranscriptRoom = 0
@@ -631,7 +638,8 @@ module App =
             Palette = None
             Folds = Map.empty
             Selection = None
-            Reveal = false
+            Reveal = None
+            ItemsAt = Map.empty
         }
 
     let private cycleDetail (model: Model) : Model =
@@ -847,7 +855,7 @@ module App =
     let private selectItem (item: Item) (model: Model) : Model =
         { model with
             Selection = Some item.Id
-            Reveal = true
+            Reveal = Some item.Id
         }
 
     /// Selects the item above the one selected (the newest when none is, or it is gone), or below
@@ -872,12 +880,12 @@ module App =
 
         match next, up with
         | Some item, _ -> selectItem item model
-        | None, true when model.Selection.IsSome -> { model with Reveal = true }
+        | None, true when model.Selection.IsSome -> { model with Reveal = model.Selection }
         | None, true -> notice "nothing to select yet" model
         | None, false ->
             { model with
                 Selection = None
-                Reveal = false
+                Reveal = None
             }
 
     /// Selects the oldest item, or the newest.
@@ -894,7 +902,7 @@ module App =
         | Some item ->
             { model with
                 Folds = Map.add item.Id fold model.Folds
-                Reveal = true
+                Reveal = Some item.Id
             }
         | None -> model
 
@@ -904,9 +912,24 @@ module App =
         | Some item ->
             { model with
                 Folds = Items.toggle model.Folds item
-                Reveal = true
+                Reveal = Some item.Id
             }
         | None -> model
+
+    /// A click on the transcript: the item under it expanded, or collapsed if it shows more than its
+    /// line (and selected, while selecting).
+    let private click (column: int) (row: int) (model: Model) : Model =
+        match Map.tryFind row model.ItemsAt with
+        | Some id when column < model.ItemsWidth ->
+            match items model |> List.tryFind (fun item -> item.Id = id) with
+            | Some item ->
+                { model with
+                    Folds = Items.toggle model.Folds item
+                    Selection = model.Selection |> Option.map (fun _ -> id)
+                    Reveal = Some id
+                }
+            | None -> model
+        | _ -> model
 
     let private edit (key: Key) (model: Model) : Model * Cmd list =
         let editor = model.Editor
@@ -1013,13 +1036,14 @@ module App =
         | KeyCode.Char " ", false, false -> Some(toggleSelected model, [])
         | KeyCode.Right, false, false -> Some(foldSelected Fold.Expanded model, [])
         | KeyCode.Left, false, false -> Some(foldSelected Fold.Collapsed model, [])
+        | KeyCode.Click(column, row), _, _ -> Some(click column row model, [])
         | KeyCode.Home, false, false -> Some(selectEnd true model, [])
         | KeyCode.End, false, false -> Some(selectEnd false model, [])
         | KeyCode.Escape, false, false ->
             Some(
                 { model with
                     Selection = None
-                    Reveal = false
+                    Reveal = None
                 },
                 []
             )
@@ -1041,6 +1065,7 @@ module App =
         // `Shift+↑` (or `Ctrl+↑`, `Alt+↑`, where the terminal passes them on) selects the newest item.
         | None, KeyCode.Up, _ when key.Shift || key.Ctrl || key.Alt ->
             moveSelection true { model with ExitArmed = None }, []
+        | None, KeyCode.Click(column, row), _ -> click column row model, []
         | _ ->
 
             match common key model with
@@ -1120,7 +1145,7 @@ module App =
                 key
                 { model with
                     Selection = None
-                    Reveal = false
+                    Reveal = None
                 }
         | None -> keyed key model
 

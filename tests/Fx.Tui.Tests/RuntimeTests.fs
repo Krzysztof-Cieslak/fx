@@ -182,6 +182,10 @@ let tests =
                 tty.Type "\u001b"
                 waitFor tty "selecting done" (fun text -> not (text.Contains "› ◇ Cell"))
                 Expect.stringContains tty.Text "r.exitCode" "still expanded"
+                // A click on its line, as the terminal reports it (from 1), collapses it.
+                let row = tty.Lines |> List.findIndex (fun line -> line.Contains "◇ Cell")
+                tty.Type $"\u001b[<0;5;{row + 1}M\u001b[<0;5;{row + 1}m"
+                waitFor tty "the cell collapsed" (fun text -> not (text.Contains "r.exitCode"))
                 tty.Type "\u0003\u0003"
                 let final = running.WaitAsync(TimeSpan.FromSeconds 30.0).GetAwaiter().GetResult()
                 Expect.isTrue final.Quitting "quit"

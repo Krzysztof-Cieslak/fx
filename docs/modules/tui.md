@@ -158,7 +158,8 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   shows more than its line, `→` expands and `←` collapses, `Home` `End` select the oldest and the
   newest, and `Esc` ends selecting. Any other key ends it and does what it does (typing goes to the
   prompt); scrolling, `Ctrl+O` and `Ctrl+L` keep it. While selecting, the item has the keyboard over
-  the prompt and the cards (their letters still answer: they end selecting).
+  the prompt and the cards (their letters still answer: they end selecting). A click on an item
+  expands or collapses it as `Enter` would, without selecting (see the mouse below).
   - *Expanded*: an action with its code and all it returned (verbose's bound of 12 lines does not
     apply), what the model wrote in full, a compaction with its whole summary, a result card with
     its evidence's details. *Collapsed*: an action's line alone (its new kernel's line stays), the
@@ -184,8 +185,13 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   `Ctrl+End`, `Esc` with no turn running, or sending a prompt) it follows again.
 - **The mouse**: the TUI asks for mouse reports (`?1000h`, in SGR's encoding `?1006h`): in the
   alternate screen terminals keep no scrollback and would send the wheel as `↑` `↓`, which go through
-  the prompts sent. Only the wheel's vertical notches act (`KeyCode.WheelUp`/`WheelDown`, with their
-  modifiers); clicks, releases and the horizontal wheel are dropped. xterm's first encoding
+  the prompts sent. The wheel's vertical notches scroll (`KeyCode.WheelUp`/`WheelDown`, with their
+  modifiers), and a press of the first button (`KeyCode.Click`, its cell from 0) on an item of the
+  transcript expands or collapses it (T133j; `View.settle` keeps which item each row of the frame
+  showed, `ItemsAt`, and the main column's width, so the sidebar's columns are not the transcript's);
+  a click anywhere else, releases, the other buttons, drags and the horizontal wheel are dropped.
+  Handling clicks takes nothing from selecting text: the reports already took the mouse. xterm's
+  first encoding
   (`ESC [ M` and three characters) is read too, for terminals without SGR's (GNU screen 4, mosh
   before 1.4), so their reports never land in the prompt as text; a report cut between reads waits
   for its rest. On Windows the reports come as text in virtual terminal input mode (`LocalTty`'s),
@@ -342,11 +348,12 @@ terminal check's P/Invoke without a terminal).
   questions shown once and drafts; keys and cards through `update`; one item (selecting and moving,
   expanding and collapsing a cell, a reply and a result card, what was chosen kept as output
   arrives and streams and over `Ctrl+O`, brought into view only when it moves, other keys ending
-  it, a card open meanwhile, ids that stay as the transcript grows); scrolling (a page,
+  it, a card open meanwhile, ids that stay as the transcript grows, clicks on items and elsewhere,
+  the sidebar's columns); scrolling (a page,
   the wheel, the top and the end, the view kept on its rows while output grows or shrinks and
   following it at the end); streaming; snapshots; resizes; the loop on a `FakeTty` (the wheel
   through the decoder, a report cut between reads, new output while scrolled up, `Shift+↑` and
-  `Enter` expanding a cell).
+  `Enter` expanding a cell, a click collapsing it).
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
   session started, a prompt to its result card, a permission given on the card, `/new` and `/sessions` back to it, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn
@@ -361,4 +368,4 @@ terminal check's P/Invoke without a terminal).
 | More `/` commands (`/context`, `/compact`, `/env`, `/goal`), a model picker from the catalog, the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
-| Mouse clicks; asking the terminal for its background (OSC 11) | later |
+| Clicks on cards, the prompt and the footer; asking the terminal for its background (OSC 11) | later |

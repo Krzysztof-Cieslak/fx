@@ -102,7 +102,7 @@ let tests =
                     }
 
                     test
-                        "the mouse wheel: SGR reports with their modifiers, several in a read; other reports are not keys" {
+                        "the mouse wheel and clicks: SGR reports with their modifiers, several in a read; other reports are not keys" {
                         Expect.equal
                             (keys "\u001b[<64;10;5M\u001b[<65;10;5M\u001b[<64;1;1M")
                             ([ "WheelUp"; "WheelDown"; "WheelUp" ], "")
@@ -114,25 +114,36 @@ let tests =
                             "modifiers"
 
                         Expect.equal
+                            (keys "\u001b[<0;3;4M\u001b[<16;1;1M\u001b[<0;120;40M")
+                            ([ "Click(2,3)"; "Ctrl+Click(0,0)"; "Click(119,39)" ], "")
+                            "the first button's presses, from 0, with their modifiers"
+
+                        Expect.equal
                             (keys
-                                "\u001b[<0;3;4M\u001b[<0;3;4m\u001b[<66;3;4M\u001b[<67;3;4M\u001b[<96;3;4M\u001b[<64;3;4m")
+                                "\u001b[<0;3;4m\u001b[<1;3;4M\u001b[<2;3;4M\u001b[<32;3;4M\u001b[<66;3;4M\u001b[<67;3;4M\u001b[<96;3;4M\u001b[<64;3;4m\u001b[<0;3M")
                             ([
-                                "Unknown(\\e[<0;3;4M)"
                                 "Unknown(\\e[<0;3;4m)"
+                                "Unknown(\\e[<1;3;4M)"
+                                "Unknown(\\e[<2;3;4M)"
+                                "Unknown(\\e[<32;3;4M)"
                                 "Unknown(\\e[<66;3;4M)"
                                 "Unknown(\\e[<67;3;4M)"
                                 "Unknown(\\e[<96;3;4M)"
                                 "Unknown(\\e[<64;3;4m)"
+                                "Unknown(\\e[<0;3M)"
                              ],
                              "")
-                            "a click and its release, the horizontal wheel, motion, a release are not the wheel"
+                            "a release, other buttons, a drag, the horizontal wheel, motion and a report without its row are not keys"
 
                         Expect.equal
                             (keys "\u001b[M`!!\u001b[Ma!!x")
                             ([ "WheelUp"; "WheelDown"; "x" ], "")
                             "xterm's first encoding (terminals without SGR's)"
 
-                        Expect.equal (keys "\u001b[M !!") ([ "Unknown(\\e[M !!)" ], "") "a click in it"
+                        Expect.equal
+                            (keys "\u001b[M #%\u001b[M#!!")
+                            ([ "Click(2,4)"; "Unknown(\\e[M#!!)" ], "")
+                            "a click in it, and its release"
                     }
 
                     test "a mouse report cut between reads waits for its rest, also past the Escape wait" {
@@ -184,7 +195,7 @@ let tests =
                     }
 
                     test "reports are not keys" {
-                        let decoded, _ = Keys.decode "" "\u001b[<0;10;5M\u001b[?1;2c"
+                        let decoded, _ = Keys.decode "" "\u001b[<0;10;5m\u001b[?1;2c"
 
                         Expect.isTrue
                             (decoded

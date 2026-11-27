@@ -1408,8 +1408,9 @@ module View =
     /// The model settled on its column's layout: the scroll within the transcript, and, while
     /// scrolled up, moved by as many rows as the transcript gained or lost since the last frame, so the
     /// view stays on what it showed (output comes at the end); at the end (0) it follows the end.
-    let private settleOn (column: Column) (model: Model) : Model =
+    let private settleOn (width: int) (column: Column) (model: Model) : Model =
         let total = column.Transcript.Length
+        let room = column.Room
 
         let scroll =
             if model.Scroll <= 0 then
@@ -1423,14 +1424,13 @@ module View =
 
                 int (min (int64 (maxScroll column)) (max 1L moved))
 
-        // The selection brought into view (it moved, or changed its rows): all of it, or its first
-        // rows when it is taller than the room.
+        // An item brought into view (the selection moved, or an item changed its rows): all of it, or
+        // its first rows when it is taller than the room.
         let scroll =
-            match model.Selection with
-            | Some selected when model.Reveal ->
-                match column.Items |> List.tryFind (fun (id, _, _) -> id = selected) with
+            match model.Reveal with
+            | Some revealed ->
+                match column.Items |> List.tryFind (fun (id, _, _) -> id = revealed) with
                 | Some(_, first, count) ->
-                    let room = column.Room
                     let top = total - room - scroll
 
                     let wanted =
@@ -1440,21 +1440,37 @@ module View =
 
                     max 0 (min (maxScroll column) wanted)
                 | None -> scroll
-            | _ -> scroll
+            | None -> scroll
+
+        // The item on each row the frame shows (as `main` draws the transcript: under the banner,
+        // from the row `top` of the transcript), for clicks.
+        let itemsAt =
+            let top = max 0 (total - room - min scroll (maxScroll column))
+            let bottom = top + min room total
+
+            column.Items
+            |> List.collect (fun (id, first, count) ->
+                [ max first top .. min (first + count) bottom - 1 ]
+                |> List.map (fun index -> column.BannerRows.Length + index - top, id))
+            |> Map.ofList
 
         if
             scroll = model.Scroll
             && total = model.TranscriptRows
-            && column.Room = model.TranscriptRoom
-            && not model.Reveal
+            && room = model.TranscriptRoom
+            && model.Reveal.IsNone
+            && itemsAt = model.ItemsAt
+            && width = model.ItemsWidth
         then
             model
         else
             { model with
                 Scroll = scroll
                 TranscriptRows = total
-                TranscriptRoom = column.Room
-                Reveal = false
+                TranscriptRoom = room
+                Reveal = None
+                ItemsAt = itemsAt
+                ItemsWidth = width
             }
 
     /// The model as the next frame shows it (`render` settles it before drawing): the scroll kept
@@ -1462,16 +1478,23 @@ module View =
     /// the transcript grows. The start screen has nothing to scroll.
     let settle (model: Model) : Model =
         if isStart model then
-            if model.Scroll = 0 && model.TranscriptRows = 0 && not model.Reveal then
+            if
+                model.Scroll = 0
+                && model.TranscriptRows = 0
+                && model.Reveal.IsNone
+                && model.ItemsAt.IsEmpty
+            then
                 model
             else
                 { model with
                     Scroll = 0
                     TranscriptRows = 0
-                    Reveal = false
+                    Reveal = None
+                    ItemsAt = Map.empty
                 }
         else
-            settleOn (layout { model with Width = columnWidth model }) model
+            let width = columnWidth model
+            settleOn width (layout { model with Width = width }) model
 
     /// The model settled (`settle`) and the whole screen it shows: the main column, with the sidebar
     /// at its right on a wide terminal. The runtime draws with it and keeps the settled model.
@@ -1485,7 +1508,7 @@ module View =
             else
                 let mainWidth = columnWidth model
                 let column = layout { model with Width = mainWidth }
-                let model = settleOn column model
+                let model = settleOn mainWidth column model
                 let wide = hasSidebar model
                 let left = main { model with Width = mainWidth } wide column
 

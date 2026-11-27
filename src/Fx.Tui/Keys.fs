@@ -26,6 +26,8 @@ type KeyCode =
     | WheelUp
     /// The mouse wheel (or a trackpad) moved down one notch.
     | WheelDown
+    /// The first (left) mouse button pressed at a cell of the screen (from 0, the top left).
+    | Click of column: int * row: int
     | F of int
     /// Text pasted at once (bracketed paste): never acted on as keys.
     | Paste of string
@@ -51,6 +53,7 @@ type KeyCode =
         | PageDown -> "PageDown"
         | WheelUp -> "WheelUp"
         | WheelDown -> "WheelDown"
+        | Click(column, row) -> $"Click({column},{row})"
         | F n -> "F" + string n
         | Paste text -> $"Paste({text.Length})"
         | Unknown text -> "Unknown(" + text.Replace("\u001b", "\\e") + ")"
@@ -121,16 +124,18 @@ module Keys =
         | _ -> None
 
     /// A mouse report's button code (xterm's: the button in bits 0-1 and 6-7, Shift 4, Alt 8, Ctrl 16,
-    /// motion 32): the wheel's vertical notches (buttons 64 and 65) with their modifiers, anything
-    /// else (clicks, releases, the horizontal wheel, motion) as received.
-    let private mouse (button: int) (pressed: bool) (raw: string) : Key =
-        let wheel =
+    /// motion 32) at a cell (from 1, as reported): the wheel's vertical notches (buttons 64 and 65)
+    /// and the first button's press with their modifiers, anything else (other buttons, releases,
+    /// the horizontal wheel, motion) as received.
+    let private mouse (button: int) (pressed: bool) (column: int) (row: int) (raw: string) : Key =
+        let code =
             match button &&& ~~~(4 ||| 8 ||| 16) with
             | 64 when pressed -> Some KeyCode.WheelUp
             | 65 when pressed -> Some KeyCode.WheelDown
+            | 0 when pressed && column >= 1 && row >= 1 -> Some(KeyCode.Click(column - 1, row - 1))
             | _ -> None
 
-        match wheel with
+        match code with
         | Some code ->
             { key code with
                 Shift = button &&& 4 <> 0
@@ -141,8 +146,9 @@ module Keys =
 
     /// An SGR mouse report (`ESC [ < button ; column ; row M`, `m` for a release).
     let private sgrMouse (parameters: string) (final: char) (raw: string) : Key =
-        match parameters.Substring(1).Split(';') |> Array.tryHead |> Option.bind parseInt with
-        | Some button when final = 'M' || final = 'm' -> mouse button (final = 'M') raw
+        match parameters.Substring(1).Split(';') |> Array.map parseInt with
+        | [| Some button; Some column; Some row |] when final = 'M' || final = 'm' ->
+            mouse button (final = 'M') column row raw
         | _ -> key (KeyCode.Unknown raw)
 
     /// A CSI sequence's key (`ESC [ params final`).
@@ -287,7 +293,15 @@ module Keys =
                             rest <- text.Substring i
                             i <- n
                         else
-                            keys.Add(mouse (int text[i + 3] - 32) true (text.Substring(i, x10Length)))
+                            keys.Add(
+                                mouse
+                                    (int text[i + 3] - 32)
+                                    true
+                                    (int text[i + 4] - 32)
+                                    (int text[i + 5] - 32)
+                                    (text.Substring(i, x10Length))
+                            )
+
                             i <- i + x10Length
                     | '[' ->
                         match csiEnd text (i + 2) with
@@ -298,7 +312,7 @@ module Keys =
                             let raw = text.Substring(i, j - i + 1)
                             let parameters = text.Substring(i + 2, j - i - 2)
                             // A leading private marker (`<`, `?`) is a report (mouse, modes), not a key;
-                            // of the mouse, only the wheel is acted on.
+                            // of the mouse, only the wheel and the first button's presses are acted on.
                             if parameters.StartsWith "<" then
                                 keys.Add(sgrMouse parameters text[j] raw)
                             elif parameters.StartsWith "?" then
