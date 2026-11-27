@@ -44,7 +44,10 @@ to send, and a pure `view` that draws the model as a frame.
   (`Vt.diff`, in a synchronized update). Commands run one at a time in order on a worker; those sent
   before quitting go out before it returns. Keys come from the terminal through `Keys.decode`; a lone
   `ESC` waits 40 ms for the rest of a sequence. Ticks (100 ms while something moves, else 500 ms)
-  move the clock on and notice resizes.
+  move the clock on. The loop reads the terminal's size before it handles a batch with keys or a
+  tick (only the loop tells the model the size), so resizes are noticed on ticks, and keys typed
+  after a resize are handled at the new size even before a tick: the wheel scrolls the room the
+  person sees.
 - **The model folds the protocol's events.** The session's state is the session machine's own
   `evolve` over `session/subscribe`'s feed (a snapshot replaces what came before); the transcript is
   the session's events and its context events merged as `ContextLog.merge` merges them (a context
@@ -369,13 +372,15 @@ terminal check's P/Invoke without a terminal).
   the sidebar's columns); scrolling (a page,
   the wheel, the top and the end, the view kept on its rows while output grows or shrinks and
   following it at the end); streaming; snapshots; resizes; the loop on a `FakeTty` (the wheel
-  through the decoder, a report cut between reads, new output while scrolled up, `Shift+↑` and
-  `Enter` expanding a cell, a click collapsing it).
+  through the decoder, a report cut between reads, new output while scrolled up, the wheel right
+  after the terminal shrinks, `Shift+↑` and `Enter` expanding a cell, a click collapsing it).
 - `Fx.Tui.Live.Tests`: the TUI on an embedded host through the client protocol on a `FakeTty` (a
   session started, a prompt to its result card, a permission given on the card, `/new` and `/sessions` back to it, Ctrl+C twice); with the
   bun-ts kernel (network; required in CI) the first install's permission given on the card and a turn
   of cells to `✓ Done`; and the `fx` binary on a PTY (ConPTY on Windows): keys, `Shift+↑` selecting
-  the result card, a resize, Ctrl+C twice, exit code 0 and the terminal given back.
+  the result card, resizes (each waits for a whole frame at the new size: rows a frame of the old
+  size puts past the bottom land on the last row), the wheel on a short screen, Ctrl+C twice, exit
+  code 0 and the terminal given back.
 
 ## Left to later tasks
 

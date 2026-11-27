@@ -138,27 +138,45 @@ let tests =
                     out.WaitUntil("the keys while selecting", fun lines -> (List.last lines).Contains "↑↓ move")
                     write pty "\u001b"
                     out.WaitUntil("selecting done", fun lines -> not (marked lines))
+                    let footer (lines: string list) = List.last lines
+
+                    // A whole frame at the screen's size: the footer on the last row, the prompt's box
+                    // (its info line) right above it. Rows a frame of the size before puts past the
+                    // bottom all land on the last row, so a footer there alone proves nothing.
+                    let drawnAtSize (lines: string list) =
+                        (footer lines).Contains "● "
+                        && List.rev lines
+                           |> List.skip 1
+                           |> List.truncate 2
+                           |> List.exists (fun line -> line.Contains "env: default")
+
                     sync (pty.Resize { Cols = 72; Rows = 20 })
                     out.Resize(72, 20)
-                    // The status line's hints are written again at the new width.
-                    out.WaitFor "Enter send"
+                    out.WaitUntil("a frame at 72x20", drawnAtSize)
 
                     if not windows then
                         Expect.isTrue out.Screen.Mouse "mouse reports asked for (the wheel)"
 
                     // The wheel, as the terminal reports it, scrolls the transcript: a short screen, so
-                    // it is longer than its room; a notch up, then back down to its end.
+                    // it is longer than its room (the prompt above is cut); a notch up, then back down
+                    // to its end.
                     sync (pty.Resize { Cols = 72; Rows = 8 })
                     out.Resize(72, 8)
-                    let footer (lines: string list) = List.last lines
-                    out.WaitUntil("the short screen", fun lines -> lines.Length = 8 && (footer lines).Contains "● ")
+
+                    out.WaitUntil(
+                        "the short screen, the transcript cut",
+                        fun lines ->
+                            drawnAtSize lines
+                            && not (lines |> List.exists (fun line -> line.Contains "hello"))
+                    )
+
                     write pty "\u001b[<64;10;3M"
                     out.WaitUntil("the transcript scrolled up", fun lines -> (footer lines).Contains "↑")
                     write pty (String.replicate 3 "\u001b[<65;10;3M")
                     out.WaitUntil("the transcript's end again", fun lines -> not ((footer lines).Contains "↑"))
                     sync (pty.Resize { Cols = 72; Rows = 20 })
                     out.Resize(72, 20)
-                    out.WaitFor "Enter send"
+                    out.WaitUntil("a frame at 72x20 again", drawnAtSize)
                     write pty "\u0003"
                     out.WaitFor "again to exit"
                     write pty "\u0003"
