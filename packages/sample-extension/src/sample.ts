@@ -132,5 +132,7 @@ export function activate(): Activation {
   };
 }
 
-/** The sample as an extension. */
+/** The sample as an extension; the default export, so that the `bun` runtime loads this module as a package. */
 export const extension: Extension = { manifest, activate };
+
+export default extension;

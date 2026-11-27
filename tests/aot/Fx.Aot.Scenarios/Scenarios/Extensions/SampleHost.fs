@@ -275,6 +275,7 @@ let private ids (items: Contributed<'T> list) =
 
 /// Uses every contribution and method of the sample through the host and describes what happened.
 /// Failure details (exception types, remote messages) differ between runtimes, so they are left out.
+/// The report is the sample's: a runtime's host (`fx.exthost.bun`) may be loaded with it.
 let transcript (loaded: Loaded) : Task<string list> =
     task {
         let host = loaded.Host
@@ -282,7 +283,7 @@ let transcript (loaded: Loaded) : Task<string list> =
         let run (effect: Eff<HostEnv, 'T>) = within (Eff.run env effect)
         let lines = ResizeArray<string>()
 
-        for entry in host.Report do
+        for entry in host.Report |> List.filter (fun e -> e.Id = Sample.id) do
             lines.Add $"report: {entry.Id} {entry.Outcome}"
 
         let gates = ExtensionHost.contributions Sample.Points.greeting host

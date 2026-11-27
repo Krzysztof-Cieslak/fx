@@ -1,8 +1,9 @@
 /// The TypeScript sample extension (`packages/sample-extension`, written against `@fx/sdk`) as a process
 /// extension on the pinned Bun: bundled into one file with it, launched with `fx.runtime.bun`'s hardened
 /// launch (its flags, untrusted overrides, files and environment, with the owned directories under the
-/// package directory) by the host's `process` runtime from the F# sample's manifest. T115 replaces this
-/// with the `bun` runtime. Without the pinned Bun (offline) its tests are skipped locally and fail in CI.
+/// package directory) by the host's `process` runtime from the F# sample's manifest: the TypeScript SDK's
+/// server on its own (BunRuntime.fs loads the sample on the `bun` runtime). Without the pinned Bun
+/// (offline) its tests are skipped locally and fail in CI.
 module Fx.Extensions.Tests.TypeScriptSample
 
 open System
@@ -30,23 +31,13 @@ type Prepared =
 
     override this.ToString() = $"{this.Bun} {this.Bundle}"
 
-let private bundle (bun: string) : Task<string> =
+/// Bundles a module of the sample's package into one file with the pinned Bun (`bun build --target=bun`).
+let bundle (bun: string) (entry: string) (output: string) : Task<unit> =
     task {
         let package = Repo.path [ "packages"; "sample-extension" ]
 
-        let output =
-            Repo.path [ "artifacts"; "sample-extension"; $"sample-{Environment.ProcessId}.js" ]
-
         let info =
-            ProcessStartInfo(
-                bun,
-                [
-                    "build"
-                    Path.Combine(package, "src", "main.ts")
-                    "--target=bun"
-                    $"--outfile={output}"
-                ]
-            )
+            ProcessStartInfo(bun, [ "build"; entry; "--target=bun"; $"--outfile={output}" ])
 
         info.RedirectStandardOutput <- true
         info.RedirectStandardError <- true
@@ -67,8 +58,6 @@ let private bundle (bun: string) : Task<string> =
 
         if proc.ExitCode <> 0 then
             failwith $"bundling the TypeScript sample failed: {log}{errors}"
-
-        return output
     }
 
 let private prepared =
@@ -78,7 +67,10 @@ let private prepared =
             | Error reason -> return Error reason
             | Ok bun ->
                 try
-                    let! bundled = bundle bun
+                    let bundled =
+                        Repo.path [ "artifacts"; "sample-extension"; $"sample-{Environment.ProcessId}.js" ]
+
+                    do! bundle bun (Repo.path [ "packages"; "sample-extension"; "src"; "main.ts" ]) bundled
                     return Ok { Bun = bun; Bundle = bundled }
                 with e ->
                     return Error(e.GetType().Name + ": " + e.Message)

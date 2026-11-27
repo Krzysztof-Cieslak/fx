@@ -113,6 +113,14 @@ jobs:
           bun install --frozen-lockfile
           bun check --no-script
           bun test
+      # Its files in the binary and the sample on the bun runtime are checked in the os jobs
+      # (tests/Fx.Extensions.Tests), on the pinned Bun.
+      - name: Bun extension host type-checks and its unit tests pass
+        working-directory: packages/exthost-bun
+        run: |
+          bun install --frozen-lockfile
+          bun check --no-script
+          bun test
       - name: Restore tools
         if: env.CODE == 'true'
         run: dotnet tool restore
