@@ -236,6 +236,11 @@ Where no driver confines (the default, and Windows) only the second applies: the
 policy (no reading the credential locations or the data directory, no writing outside the workspace's
 writable roots), but commands are not confined.
 
+**Auto approvals** (spec §13.3, codeact.md "Approval modes"): the CodeAct guard runs commands unasked
+only where the environment's driver confines (`EnvSandboxInfo.Confines`); with `none` every command
+asks. They lean on what this page's policy holds (writes, credentials), not on the network, which stays
+open unless the spec closes it.
+
 ## The drivers
 
 | Driver | OS | How | Details |

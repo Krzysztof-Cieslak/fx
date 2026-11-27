@@ -321,7 +321,7 @@ never regenerated), one entry at a time per session (`JournalWriter`), every ent
 | `callStarted {call, tool, cell?, intent?, fingerprint, snapshot?}` | before the call does anything | `/started` |
 | `kernelLaunched {launch}` | before a kernel starts (key `kernel/<launch>`) | |
 | `kernelEnded {launch, how}` | when the host learns how a kernel ended, before the next launch (key `kernel/<launch>/ended`); `how` is `exited {code?, stderr}`, `notStarted {reason}`, `killed` or `hostStopped` (T135; `golden/step-events-kernel-ended-v1.jsonl` is what it wrote first) | |
-| `hostCallStarted {call, index, binding, args}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`) | `/host/<i>` |
+| `hostCallStarted {call, index, binding, args, approved?}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`); `approved`: how it ran that no grant in force allowed (auto approvals, a person's answer; T134, absent when none) | `/host/<i>` |
 | `hostCallEnded {call, index, failed, summary}` | after it | `/host/<i>/ended` |
 | `printed {call, text}` | as the running cell streams output (at most 64 entries and 16000 characters per call) | `/output/<j>` |
 | `valueKept {call, cell, value, type}` / `valueLost {call, cell, type, reason}` | after a cell returned a value | `/value` |
@@ -418,8 +418,10 @@ follow is **opaque**, and the whole line is one `shell.exec` for a person: contr
 here-documents and here-strings, process substitutions, arithmetic, script blocks, hashtables, type
 literals and member calls, `--%`, unclosed quotes, nesting deeper than 8, more than 256 commands; so is
 a line that redirects to a name the shell expands, to a relative path after a `cd`, or that needs more
-than 16 grants. A `cd` (and its PowerShell spellings) needs nothing itself, but later commands' working
-directory is then unknown.
+than 16 grants. A `cd` (and its PowerShell spellings) needs nothing itself; after a `cd` to a plain path
+later commands may run in any directory the line may be in (subshells and groups are flattened, so a
+`cd` in one may have been undone: the set only grows, and an argument is checked from each), and after
+any other `cd` (alone, to `-`, with an option or an expansion) their working directory is unknown.
 
 **Listed commands.** `codeact.grants.allowCommands` (privileged; default `pwd`, `ls`, `cat`, `head`,
 `tail`, `wc`, `grep`, `echo`, `git status` and their PowerShell counterparts: commands that read, write
@@ -437,8 +439,16 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
 | Mode | A call a person must decide |
 |---|---|
 | `ask` (default) | its requests are made at once (batched prompts), and the call waits for their answers |
+| `auto` | as `ask`, with auto approvals on (below): what a sandbox driver confines runs unasked |
 | `deny` | refused at once, nothing recorded: unattended runs |
 | `off` | nothing is checked at all: sandboxed (`sandbox.driver` on) or throwaway environments |
+
+- **What the guard says.** `Hands.Guard` gives `Ok` with the call's `Approval`s: each need that no
+  grant in force allowed and how it ran (`auto`, or `person` with the request's key; listed commands
+  and needs a grant covered are not repeated). `SessionKernel.Call` hands them to the step journal
+  (`hostCallStarted.approved`, for audits) and to the running action, whose receipt keeps the first 16
+  (`Receipt.Approvals`, for clients; the render never reads it, and it is written only when not empty).
+  The replay journal's guard result carries them (`null` when there are none, as before).
 
 - **Keys** derive from what asks: `<turn's start event>/<cell or tool call>/<action>/<digest of the
   resource>` (`GrantGuard.key`). A retried call is the same request with the same answer; the same
@@ -459,10 +469,52 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
   pending in the grants log (durable) until answered, timed out or withdrawn: what happens to the turn
   is recovery's (T128).
 
+### Approval modes (spec §13.3; T134)
+
+Auto approvals run, without asking anyone, what a sandbox driver confines: a `shell.exec` need the
+rules leave to "no grant applies" (deny grants, policy rules and gates first, as for listed commands)
+whose command is **confined** (`GrantNeed.Confined`): written plainly in the workspace, as listed
+commands must be (no word the shell expands, every directory it may run in inside the workspace, no
+argument or input outside it or excluded from models), and not one of `codeact.grants.askCommands`.
+
+- **What still asks.** Writes outside the workspace or to protected paths (`fs.write`, also a
+  redirection's), reads outside it, network bindings (`net.connect`), opaque lines, commands with an
+  expansion or a path outside the workspace, and `codeact.grants.askCommands` (privileged; matched
+  ignoring case after leading assignments and wrappers such as `env`, `sudo`, `nohup`, `time`,
+  `timeout`, `nice`, `xargs`, with the program's directory dropped): downloads and remote shells
+  (`curl`, `wget`, `ssh`, `scp`, `rsync`, `nc`, …), git's remotes (`git clone|fetch|pull|push|ls-remote`),
+  hosting CLIs (`gh`, `glab`), installs, adds and publishes of the package managers (npm, pnpm, yarn,
+  Bun, pip, uv, Poetry, Cargo, Go, `dotnet add package|tool install|nuget push`, gem, Bundler, Homebrew,
+  apt, apk, dnf, yum, snap, winget, Chocolatey, Scoop) and PowerShell's (`Invoke-WebRequest`,
+  `Install-Module`, …), and a shell's inline command line (`sh -c`, `bash -c`, `pwsh -c`, `cmd /c`).
+  First installs of components ask through the installer as always.
+- **Opaque lines ask.** The sandbox confines an opaque line as much as a split one, but the guard cannot
+  see whether it names a download or reads outside the workspace for the model, so a person judges it.
+- **The network is the line.** A confining sandbox holds writes to the workspace and the environment's
+  own directories and hides credentials (sandbox.md), but leaves the network open unless the
+  environment's spec closes it: a confined command can still send what it reads. The ask list is a
+  guardrail of known spellings, not a boundary (a script the agent wrote, or a cell's own `fetch`, can
+  reach the network in any mode). Running auto-approved commands with the network off, and asking to
+  open it, waits for the egress proxy (spec §18).
+- **Where they hold** (`AutoApprovals.decide`, pure): never with `codeact.grants.mode = off` (nothing is
+  checked) or without a driver that confines (`GrantSetup.Sandbox`, the composition root's from the
+  environment's sandbox; `none`, Windows v1 and fallbacks: every command asks). Otherwise the grants
+  log's check of `approvals.auto` on the driver's id, in the session's context: a grant allows them (a
+  person's, for the session, the host or a repository: the TUI's switch,
+  `fx grants allow approvals.auto '*'`); a
+  deny grant or policy forbids them; with no grant they follow the mode (`auto` on, `ask` and `deny`
+  off); a policy that asks leaves them off. The host turns a policy file that forbids `auto` (or pins the
+  mode to another value) into a grants policy rule that denies `approvals.auto`
+  (`AutoApprovals.policyRules`), so no person turns them on either.
+- **Checked per call**, once and only when a need is confined: a switch applies to the next command, also
+  in the running turn. In `deny` mode with auto approvals on, what they cover runs and the rest is
+  refused.
+
 | Slot | Default | |
 |---|---|---|
 | `codeact.grants.mode` | `ask` | privileged |
 | `codeact.grants.allowCommands` | the read-only commands above | privileged: a project can never loosen it |
+| `codeact.grants.askCommands` | downloads, remotes, installs and inline shell lines (above) | privileged |
 | `codeact.grants.protectedPaths` | `.git`, `.git/**`, the project's directory | privileged |
 | `codeact.grants.timeoutMs` | none | only tightens |
 
@@ -491,7 +543,7 @@ recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, t
 | `codeact.finish.evidence` | `optional` |
 | `codeact.journal.snapshots` | true |
 | `codeact.recall.maxBytes`, `codeact.recall.restore` | 1048576, 20 |
-| `codeact.grants.mode`, `.allowCommands`, `.protectedPaths`, `.timeoutMs` | see Grants |
+| `codeact.grants.mode`, `.allowCommands`, `.askCommands`, `.protectedPaths`, `.timeoutMs` | see Grants |
 | `codeact.compaction.mode`, `.threshold`, `.keep`, `.summaryTokens` | `auto`, 80 (percent of the window), 30 (percent), 8192 |
 
 Defaults are provisional until evals decide (spec §1, principle 7).
@@ -517,7 +569,10 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   substitutions at any depth flattened in order, and any line split or opaque, never a crash), host
   calls as grants (`PermissionTests`), the guard over the real grants service (listed, asked and
   answered, keys, a broader session grant, policy and deny grants, modes, batched requests, an
-  interrupted wait, timeouts, network), and turns on the real session host for both surfaces (answered,
+  interrupted wait, timeouts, network; auto approvals: confined commands unasked and nothing in the
+  grants log, downloads and writes outside asking, no driver, a person's session grant and deny grant,
+  policy, the decision and the policy rules a policy file makes; `cd` and the ask list in
+  `PermissionTests`), and turns on the real session host for both surfaces (answered,
   denied, refused by policy, a write outside the workspace, interrupts, steers, timeouts, mode deny, a
   host stopping and crashing mid-wait), with replay and determinism of the logs and requests.
 - **Replay**: the recorded logs render, through the render alone, to exactly the requests sent; the same
@@ -551,7 +606,7 @@ summary requests as the calls before them plus the instruction, the collapses, t
 calls), `codeact-recovery` (two restarts mid-cell, the decision, a rerun, `recall`; the
 card, the journal, the receipts, the session's events), and `codeact-shell-syntax`, `codeact-grant-needs`
 and `codeact-grant-guard` (the parsers, host calls as grants, the guard over the grants service on the
-fake clock), on all eight targets.
+fake clock, auto approvals and their decision), on all eight targets.
 
 ## Left for later
 
