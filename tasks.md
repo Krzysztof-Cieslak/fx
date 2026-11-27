@@ -30,7 +30,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
-- **Wave 10:** T129a Host composition + headless run, T212 Run kernel, T217 Eval harness, T608 Agent teams
+- **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T212 Run kernel, T217 Eval harness, T608 Agent teams
 - **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
 - **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
 - **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
@@ -111,6 +111,7 @@ flowchart LR
     T134["T134 Approval modes"]
     T135["T135 CodeAct: a kernel that stays"]
     T137["T137 Sandbox opt-in"]
+    T138["T138 Environments: chosen variables"]
   end
   subgraph P2["Phase 2 — Agent quality, UX, models, agents, goals, evals"]
     T201["T201 Values & references"]
@@ -287,6 +288,11 @@ flowchart LR
   T132a --> T134
   T127 --> T135
   T113 --> T137
+  T112 --> T138
+  T121 --> T138
+  T123 --> T138
+  T131 --> T138
+  T137 --> T138
   T117 --> T201
   T126 --> T201
   T008 --> T202
@@ -475,6 +481,7 @@ flowchart LR
 | T134 | Approval modes | T127b, T132a | §13, §19.4 | done | Dogfooding (T132): asking for every shell command is tiring. A mode (a variant slot, e.g. `grants.mode`: `ask`, `auto`) where commands that stay in the workspace run without asking, sandbox or not (T137 made the sandbox opt-in; one makes the mode stronger, clients say when it is off), closer to opencode; writes outside the workspace, network and installs still ask; policy can forbid the mode; the TUI shows the mode and can switch it. spec §13 updated; host tests with a scripted model. |
 | T135 | CodeAct: a kernel that stays | T127 | §6.9 | done | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
 | T137 | Sandbox opt-in | T113 | §9.1, §18 | done | Dogfooding (T132): the sandbox kept ordinary tools from working (NuGet could not read `~/.nuget/NuGet/NuGet.Config`, a credential location; Cargo, Yarn Berry and the MSBuild server write or read under `~`), and per-tool variables (T136, dropped) were a growing list of special cases; mainstream agents run without an OS sandbox, with permission prompts as the control. The sandbox becomes opt-in: `sandbox.driver` defaults to `none` (privileged: host config or the command line turn it on with `auto` or a driver; a project cannot); the default carries no warning (`sandbox: off` in the TUI and `fx run`), while a requested sandbox that cannot run still warns (`auto`) or fails the environment (a driver). Seatbelt lets the environment's own unix sockets through; the prompt describes the sandbox when one confines. spec §9.1, §18 and the docs say what each mode leaves open and what breaks. Host tests: the default, opting in, `auto`'s fallback, a project's config. Replaces T136. |
+| T138 | Environments: chosen variables | T112, T121, T123, T131, T137 | §9.4, §11, §13, §18 | todo | Dogfooding (T132): fx's agent cannot use `gh` or push, because the host scrubs credential-like variables (`GH_TOKEN`). A person chooses the variables an environment's commands get: the privileged slot `env.variables` (`host:<NAME>`, `secret:<name>` or a literal for plain names; `env.deny`), and an environment spec's `variables`, where a project's credentials need the person's consent (`env.credential`, `secret.read`, repo-scoped). Values are redacted from everything the model, logs and the journal see; names shown and recorded. Plan: [docs/plans/t138-env-variables.md](docs/plans/t138-env-variables.md). |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
