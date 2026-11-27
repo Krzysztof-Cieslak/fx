@@ -112,8 +112,8 @@ module View =
             | None -> [ s t.Muted "● idle" ]
 
     /// The bottom row: the product, the workspace and the session on the left (the product alone
-    /// while selecting items); the session's state, whether the transcript is scrolled, and the keys
-    /// that apply on the right (cut first).
+    /// while selecting items); the session's state, its approval mode, whether the transcript is
+    /// scrolled, and the keys that apply on the right (cut first).
     let footer (model: Model) (sidebar: bool) : Row =
         let t = theme model
         let width = model.Width
@@ -170,7 +170,7 @@ module View =
             | _ :: _ -> [ "keys in [ ] answer"; "←→ Enter" ]
             | [] ->
                 if tl.State.Running.IsSome then
-                    [ "Enter steer"; "Tab queue"; "Esc interrupt"; "Shift+↑ select" ]
+                    [ "Enter steer"; "Tab queue"; "Esc interrupt"; "Shift+↑ select"; "Shift+Tab approvals" ]
                 else
                     [
                         "Enter send"
@@ -178,6 +178,7 @@ module View =
                         "Alt+Enter newline"
                         "Ctrl+O detail"
                         "Shift+↑ select"
+                        "Shift+Tab approvals"
                         "Ctrl+C×2 exit"
                     ]
 
@@ -203,7 +204,21 @@ module View =
             else
                 [ s t.Muted (String.concat " · " parts + "  ") ]
 
-        let state = used @ state model
+        // How the session's commands are decided (`Shift+Tab` switches): auto approvals stand out,
+        // and so does a mode that asks nobody.
+        let approvals =
+            match model.Approvals with
+            | Some info ->
+                let style =
+                    match info.Mode with
+                    | "auto" -> t.Accent
+                    | "ask" -> t.Muted
+                    | _ -> t.Warning
+
+                [ s style ("approvals: " + info.Mode); s t.Muted "  " ]
+            | None -> []
+
+        let state = used @ approvals @ state model
 
         // Scrolled up: new output does not move the view (an arrow alone where the words would not
         // leave the product and the state room).
@@ -359,13 +374,23 @@ module View =
         : Row list =
         let marker = if call.Changes then s t.Warning "◆" else s t.Accent "◇"
 
+        // Whether it ran on auto approvals or on a person's answer (what no grant allowed already).
+        let approved =
+            let by (f: Fx.Prompt.ApprovedBy -> bool) =
+                call.Approvals |> List.exists (fun a -> f a.By)
+
+            if by (fun b -> b.IsPerson) then [ s t.Warning "asked " ]
+            elif by (fun b -> b.IsAuto) then [ s t.Muted "auto " ]
+            else []
+
         let status =
-            match call.Ended with
-            | Some ended when call.IsError -> [ s t.Error "✗ "; s t.Muted (duration (ended - call.Started)) ]
-            | Some ended -> [ s t.Success "✓ "; s t.Muted (duration (ended - call.Started)) ]
-            | None when live && first -> [ s t.Accent (spinner now + " "); s t.Muted (duration (now - call.Started)) ]
-            | None when live -> [ s t.Muted "…" ]
-            | None -> [ s t.Warning "not run" ]
+            approved
+            @ match call.Ended with
+              | Some ended when call.IsError -> [ s t.Error "✗ "; s t.Muted (duration (ended - call.Started)) ]
+              | Some ended -> [ s t.Success "✓ "; s t.Muted (duration (ended - call.Started)) ]
+              | None when live && first -> [ s t.Accent (spinner now + " "); s t.Muted (duration (now - call.Started)) ]
+              | None when live -> [ s t.Muted "…" ]
+              | None -> [ s t.Warning "not run" ]
 
         let left =
             [
@@ -403,6 +428,19 @@ module View =
                     match call.Code with
                     | Some code -> yield! lines width 6 t.Muted code
                     | None -> ()
+                    // What ran without a grant in force, and who let it.
+                    for approval in call.Approvals do
+                        let who =
+                            match approval.By with
+                            | Fx.Prompt.ApprovedBy.Auto -> "auto approvals"
+                            | Fx.Prompt.ApprovedBy.Person _ -> "a person"
+
+                        yield!
+                            lines
+                                width
+                                6
+                                t.Muted
+                                (Text.truncate (max 1 (width - 6)) $"{approval.Action} `{approval.Resource}` by {who}")
                     if call.Output <> "" && not call.IsError then
                         yield! (Text.firstLines bound call.Output |> List.collect (lines width 6 t.Muted))
                     elif call.IsError then

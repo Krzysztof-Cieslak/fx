@@ -65,6 +65,8 @@ type CallView =
         Output: string
         /// The cell ran in a new kernel: the names earlier cells declared are gone, and why.
         Restarted: KernelRestart option
+        /// How its host calls ran that no grant in force allowed: auto approvals, or a person's answer.
+        Approvals: Approval list
     }
 
     override this.ToString() = $"{this.Label} {this.Detail}"
@@ -292,6 +294,7 @@ module Timeline =
             IsError = false
             Output = ""
             Restarted = None
+            Approvals = []
         }
 
     let private atOf (meta: EventMeta) = meta.At.UnixMicroseconds
@@ -496,6 +499,7 @@ module Timeline =
                             IsError = receipt.IsError
                             Output = text
                             Restarted = receipt.Restarted
+                            Approvals = receipt.Approvals
                         }
 
                     match current, receipt.Call with

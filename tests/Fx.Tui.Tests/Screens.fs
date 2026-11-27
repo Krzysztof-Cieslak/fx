@@ -254,6 +254,66 @@ let restarted (width: int) (height: int) : Model =
 
     ready s width height msgs
 
+/// Auto approvals on (T134): commands the sandbox confined ran unasked, a download was asked about;
+/// the info line says so.
+let approvals (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q000000000000000B"
+
+    let auto (resource: string) : Fx.Prompt.Approval =
+        {
+            Action = "shell.exec"
+            Resource = resource
+            By = Fx.Prompt.ApprovedBy.Auto
+        }
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "build it and fetch the schema"
+            yield! s.Boundary 1
+            s.Advance 1.0
+            yield
+                s.Reply(
+                    1,
+                    [
+                        call "toolu_1" "bash" [ "command", Json.String "mkdir out && dotnet build" ]
+                        call "toolu_2" "bash" [ "command", Json.String "curl -O https://example.com/schema.json" ]
+                    ]
+                )
+            s.Advance 21.0
+            yield s.Receipt(1, "toolu_1", "bash", "exit 0", approvals = [ auto "mkdir out"; auto "dotnet build" ])
+            s.Advance 4.0
+            yield
+                s.Receipt(
+                    1,
+                    "toolu_2",
+                    "bash",
+                    "exit 0",
+                    approvals =
+                        [
+                            {
+                                Action = "shell.exec"
+                                Resource = "curl -O https://example.com/schema.json"
+                                By = Fx.Prompt.ApprovedBy.Person "session/s#3/toolu_2/shell.exec/0123456789abcdef"
+                            }
+                        ]
+                )
+            yield! s.Boundary 2
+            s.Advance 1.0
+            yield s.Reply(2, [ text "Built, and the schema is in the workspace." ])
+            yield
+                Msg.Approvals(
+                    {
+                        Mode = "auto"
+                        Configured = "ask"
+                        Reason = "a person turned them on (grant g1); bubblewrap confines commands"
+                    },
+                    false
+                )
+        ]
+
+    readyIn confined s width height msgs
+
 /// A reply in Markdown, and a result card whose summary and check are Markdown too.
 let private markdownTurn () : Session * Msg list =
     let s = Session "01JD2W7Z9Q0000000000000007"
@@ -430,6 +490,7 @@ let all: (string * (int -> int -> Model)) list =
         "wide", wide
         "compacted", compacted
         "restarted", restarted
+        "approvals", approvals
         "markdown", markdown
         "usage", usage
         "palette", palette
