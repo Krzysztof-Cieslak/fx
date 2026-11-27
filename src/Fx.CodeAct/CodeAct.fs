@@ -896,7 +896,8 @@ type CodeAct<'R, 'K
                         Instructions.recordedSurface transcript.Current
                         |> Option.defaultValue settings.Surface
 
-                    let sections = Instructions.sections surface interpreter hands.Sandbox
+                    let sections =
+                        Instructions.sections surface interpreter hands.Sandbox hands.Variables
 
                     let! transcript =
                         match Transcript.reconcile sections transcript with

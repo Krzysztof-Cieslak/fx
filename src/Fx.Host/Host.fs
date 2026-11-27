@@ -106,6 +106,37 @@ module Host =
             Idle = Some(TimeSpan.FromMinutes 5.0)
         }
 
+    let rec private redactJson (redaction: Redaction) (json: Json) : Json =
+        match json with
+        | Json.String text -> Json.String(Redaction.text redaction text)
+        | Json.Array items -> Json.Array(items |> List.map (redactJson redaction))
+        | Json.Object members ->
+            Json.Object(members |> List.map (fun (name, value) -> name, redactJson redaction value))
+        | other -> other
+
+    /// A model whose requests are cleaned of the credentials environments' commands got (T138: below
+    /// the hands' redaction, a second line), before the egress hooks and any wire see them. Exact
+    /// matches only: encoded copies are not found (T601).
+    let redactingLlm (redaction: unit -> Redaction) (inner: Llm) : Llm =
+        {
+            Stream =
+                fun request cancellation ->
+                    let current = redaction ()
+
+                    if current.IsEmpty then
+                        inner.Stream request cancellation
+                    else
+                        let cleaned =
+                            match
+                                Codec.decode ChatRequest.codec (redactJson current (ChatRequest.codec.Encode request))
+                            with
+                            | Ok cleaned -> cleaned
+                            | Error issues ->
+                                invalidOp ("a redacted model request does not read: " + Issue.renderAtMost 3 issues)
+
+                        inner.Stream cleaned cancellation
+        }
+
     /// The environment a host creates for its project when config names none: `fx.env.local` on the
     /// workspace, envd in the host's process (embedded mode) when it can run there.
     let defaultSpec (embedded: bool) (workspace: string) : EnvSpec =
@@ -445,6 +476,26 @@ module Host =
                     }
                     (SessionTokens())
 
+            // Service credentials: one store, chosen once (an error stops the host), and the methods
+            // and sources of the extensions in effect (spec §11.3–11.5). Before environments: their
+            // variables may name secrets (T138).
+            let! auth =
+                Eff.provide env2 (Setup.auth options extensions)
+                |> EffResult.mapError (fun e -> [ $"service credentials: {e}" ])
+
+            // The variables environments' commands get: the person's, the specs', consent and secrets.
+            let variablesFor =
+                EnvVariableConsent.resolver
+                    {
+                        Person = Setup.value VariableSlots.variables variants
+                        Deny = Setup.value VariableSlots.deny variants
+                        HostVariables = options.Variables
+                        Secrets = auth.Secrets
+                        Grants = GrantsService.grants grants
+                        Repo = HostRepo.id options.Workspace
+                        Config = config
+                    }
+
             // Environments.
             let! environments =
                 Eff.provide
@@ -470,16 +521,12 @@ module Host =
                             Components = components
                             StopTimeout = options.StopTimeout
                             Limits = Fx.Rpc.ConnectionLimits.defaults
+                            Variables = variablesFor
                         }
                         (EnvLog.typed stores.Log))
 
             cleanup.Push(fun () -> EnvsHost.stop environments :> Task)
 
-            // Service credentials: one store, chosen once (an error stops the host), and the methods
-            // and sources of the extensions in effect (spec §11.3–11.5).
-            let! auth =
-                Eff.provide env2 (Setup.auth options extensions)
-                |> EffResult.mapError (fun e -> [ $"service credentials: {e}" ])
 
             // Models: every request through the egress hooks; credentials only here.
             let providers = Setup.providers extensions
@@ -509,7 +556,7 @@ module Host =
             let env =
                 { env2 with
                     Envs = EnvsHost.envs environments
-                    Llm = ModelAccess.llm access
+                    Llm = redactingLlm (fun () -> EnvsHost.redaction environments) (ModelAccess.llm access)
                 }
 
             // Sessions.

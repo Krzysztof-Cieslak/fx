@@ -71,6 +71,11 @@ module Actions =
                 [ ScopeKind.Once; ScopeKind.Repo; ScopeKind.Host ]
                 "Send content to a model provider for the first time (spec §13.1)."
             def "secret.read" ResourceKind.Name all "Use a secret by name (spec §11)."
+            def
+                "env.credential"
+                ResourceKind.Name
+                [ ScopeKind.Once; ScopeKind.Repo; ScopeKind.Host ]
+                "Give an environment's commands a credential variable of the host, by name (spec §18): a project's environment spec asks."
             def "env.dotenv" ResourceKind.Path all "Load a project's `.env` file (spec §6.3)."
             def
                 "env.cost"

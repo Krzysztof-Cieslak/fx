@@ -5,6 +5,20 @@ open Fx.Prompt
 open Fx.Sdk
 open Fx.Variants
 
+/// A variable the hands' commands were asked to get (T138): set, or why not. Never its value.
+type HandsVariable =
+    {
+        Name: string
+        /// Why it is not set; `None` when it is.
+        Missing: string option
+    }
+
+    override this.ToString() =
+        match this.Missing with
+        | None -> this.Name
+        | Some reason -> $"{this.Name} (not set: {reason})"
+
+
 /// What the strategy tells the model (pure, deterministic): the prefix's instructions and tools
 /// sections, and the notes it adds to a call's suffix.
 [<RequireQualifiedAccess>]
@@ -90,9 +104,44 @@ module Instructions =
                 | NetworkAccess.Denied -> "- There is no network: downloads and other connections fail."
             ]
 
-    /// The prefix's sections: the instructions, the surface's tools, the interpreter's prompt, and
-    /// the sandbox's description when one confines the hands' processes.
-    let sections (surface: ActionSurface) (interpreter: string) (sandboxPolicy: SandboxPolicy option) : Block list =
+    /// What the variables a person chose for the environment's commands give the model (T138): which
+    /// are set (never their values, which are redacted), and which were asked for and left out.
+    let variables (chosen: HandsVariable list) : string =
+        let quoted (names: string list) =
+            names |> List.map (fun name -> "`" + name + "`") |> String.concat ", "
+
+        let set = chosen |> List.filter (fun v -> v.Missing.IsNone) |> List.map _.Name
+        let verb = if set.Length = 1 then "is" else "are"
+
+
+        let github =
+            set |> List.exists (fun name -> name = "GH_TOKEN" || name = "GITHUB_TOKEN")
+
+        String.concat
+            "\n"
+            [
+                if not set.IsEmpty then
+                    $"{quoted set} {verb} set for your commands (shell commands and terminals; not for a cell's own process), chosen by the user."
+
+                    if github then
+                        "- `gh` is authenticated, and `git` can push and fetch over HTTPS through it (`gh auth setup-git` if git asks for a password)."
+
+                    "- Credentials among them are replaced by `[redacted NAME]` in everything you read: never print, encode or copy them; use them through the tools that read them."
+                for variable in chosen do
+                    match variable.Missing with
+                    | Some reason ->
+                        $"- `{variable.Name}` was asked for but is not set ({reason}). If a step needs it, say so and leave it to the user."
+                    | None -> ()
+            ]
+
+    /// The prefix's sections: the instructions, the surface's tools, the interpreter's prompt, the
+    /// sandbox's description when one confines the hands' processes, and the chosen variables.
+    let sections
+        (surface: ActionSurface)
+        (interpreter: string)
+        (sandboxPolicy: SandboxPolicy option)
+        (chosen: HandsVariable list)
+        : Block list =
         Sections.ordered
             [
                 Sections.instructions text
@@ -109,6 +158,15 @@ module Instructions =
                         match sandboxPolicy with
                         | Some policy -> [ Piece.Text(sandbox policy) ]
                         | None -> []
+                }
+                {
+                    Id = "variables"
+                    Version = None
+                    Pieces =
+                        if chosen.IsEmpty then
+                            []
+                        else
+                            [ Piece.Text(variables chosen) ]
                 }
             ]
 

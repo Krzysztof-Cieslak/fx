@@ -19,6 +19,7 @@
     <Compile Include="Stores.fs" />
     <Compile Include="Streaming.fs" />
     <Compile Include="Setup.fs" />
+    <Compile Include="EnvConsent.fs" />
     <Compile Include="Host.fs" />
     <Compile Include="Activity.fs" />
     <Compile Include="GrantsCommand.fs" />

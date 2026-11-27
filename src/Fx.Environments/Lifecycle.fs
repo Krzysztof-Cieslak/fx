@@ -119,6 +119,9 @@ type EnvRecord =
         Sandbox: EnvSandboxInfo option
         /// Why it failed, was lost or detached.
         Reason: string option
+        /// The variables its commands were asked to get when envd last started, by name and source,
+        /// and what became of each (never values); empty when none were asked for.
+        Variables: EnvVariable list
     }
 
     /// Whether nothing more happens to it but destroying.
@@ -182,6 +185,8 @@ type EnvBootstrapped =
         Attempt: int
         Transport: TransportKind
         Machine: EnvMachine
+        /// The variables envd's commands were asked to get (T138): absent in events without any.
+        Variables: EnvVariable list
     }
 
     override this.ToString() =
@@ -307,7 +312,7 @@ type EnvCommand =
     | Resume of id: string
     | Destroy of id: string
     | Provisioned of id: string * attempt: int * result: Result<Lease, string>
-    | Bootstrapped of id: string * attempt: int * result: Result<TransportKind * EnvMachine, string>
+    | Bootstrapped of id: string * attempt: int * result: Result<TransportKind * EnvMachine * EnvVariable list, string>
     | Connected of id: string * attempt: int * result: Result<Platform, string>
     | Installed of id: string * attempt: int * result: Result<EnvInstallation, string>
     | Suspended of id: string * result: Result<unit, string>
@@ -415,6 +420,7 @@ module Lifecycle =
                     Components = []
                     Sandbox = None
                     Reason = None
+                    Variables = []
                 }
 
             {
@@ -448,6 +454,7 @@ module Lifecycle =
                     Step = Some Step.Connect
                     Transport = Some e.Transport
                     Machine = Some e.Machine
+                    Variables = e.Variables
                 })
         | EnvEvent.Connected e ->
             state
@@ -628,7 +635,7 @@ module Lifecycle =
             outcome
             |> result state id attempt Step.Bootstrap (fun _ ->
                 match outcome with
-                | Ok(transport, machine) ->
+                | Ok(transport, machine, variables) ->
                     [
                         EnvEvent.Bootstrapped
                             {
@@ -636,6 +643,7 @@ module Lifecycle =
                                 Attempt = attempt
                                 Transport = transport
                                 Machine = machine
+                                Variables = variables
                             }
                     ]
                 | Error _ -> [])
@@ -861,12 +869,27 @@ module Lifecycle =
             and! transport = Codec.field "transport" (fun e -> e.Transport) EnvSpec.transportKind
             and! machine = Codec.field "machine" (fun e -> e.Machine) EnvSpec.machine
 
+            // Added with chosen variables (T138): absent when none, so what version 1 wrote reads and
+            // writes the same.
+            and! variables =
+                Codec.fieldOf
+                    { Field.withDefault "variables" [] (Codec.list EnvVariables.codec) with
+                        Encode =
+                            fun variables ->
+                                if List.isEmpty variables then
+                                    None
+                                else
+                                    Some((Codec.list EnvVariables.codec).Encode variables)
+                    }
+                    (fun e -> e.Variables)
+
             return
                 {
                     Id = id
                     Attempt = attempt
                     Transport = transport
                     Machine = machine
+                    Variables = variables
                 }
         }
 

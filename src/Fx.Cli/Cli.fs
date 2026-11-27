@@ -269,12 +269,13 @@ let private parseGrants (args: string list) : Command =
             match args with
             | [] -> Grants(GrantsCommand.Grant(effect, action, pattern, scope, reason))
             | "--scope" :: "host" :: rest -> loop GrantsScope.Host reason rest
+            | "--scope" :: "repo" :: rest -> loop GrantsScope.Repo reason rest
             | "--scope" :: given :: rest when
                 given.StartsWith("session:", StringComparison.Ordinal)
                 && given.Length > "session:".Length
                 ->
                 loop (GrantsScope.Session(given.Substring "session:".Length)) reason rest
-            | "--scope" :: given :: _ -> failure $"--scope is host or session:<id>, not {given}" grantsUsage
+            | "--scope" :: given :: _ -> failure $"--scope is host, session:<id> or repo, not {given}" grantsUsage
             | "--reason" :: text :: rest when text.Trim() <> "" -> loop scope (Some text) rest
             | other :: _ -> failure $"unknown grants argument: {other}" grantsUsage
 

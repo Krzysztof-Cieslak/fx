@@ -297,6 +297,14 @@ module Commands =
                             let! scope =
                                 match scope with
                                 | GrantsScope.Host -> EffResult.ok Fx.Grants.GrantScope.Host
+                                | GrantsScope.Repo ->
+                                    EffResult.ok (
+                                        Fx.Grants.GrantScope.Repo
+                                            {
+                                                Repo = GrantsCommand.repo options.Workspace
+                                                Path = None
+                                            }
+                                    )
                                 | GrantsScope.Session id ->
                                     eff {
                                         let! indexed = SessionIndex.entries (SessionIndex.typed stores.Log)

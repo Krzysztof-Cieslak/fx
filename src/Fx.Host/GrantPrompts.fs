@@ -48,6 +48,10 @@ module GrantPrompts =
                 yield $"  (and {request.Evidence.Length - MaxEvidence} more)"
         ]
 
+    /// Whether the request lets an answer cover its repository (the project).
+    let offersRepo (request: GrantRequest) : bool =
+        List.contains ScopeKind.Repo request.Offer && request.Context.Repo.IsSome
+
     /// Whether the request lets an answer cover the whole host.
     let offersHost (request: GrantRequest) : bool =
         List.contains ScopeKind.Host request.Offer
@@ -59,6 +63,8 @@ module GrantPrompts =
                 "[y] once"
                 if offersSession request then
                     "[s] for this session"
+                if offersRepo request then
+                    "[r] always for this project"
                 if offersHost request then
                     "[a] always on this host"
                 "[N] no"
@@ -75,8 +81,8 @@ module GrantPrompts =
             Reason = reason
         }
 
-    /// The person's reply as an answer: `y` once, `s` for the session and `a` for the host (when
-    /// offered), anything else denies once.
+    /// The person's reply as an answer: `y` once, `s` for the session, `r` for the project and `a`
+    /// for the host (when offered), anything else denies once.
     let parse (request: GrantRequest) (reply: string) : GrantAnswer =
         match reply.Trim().ToLowerInvariant() with
         | "y"
@@ -84,6 +90,8 @@ module GrantPrompts =
         | "once" -> answer GrantEffect.Allow ScopeChoice.Once None
         | "s"
         | "session" when offersSession request -> answer GrantEffect.Allow ScopeChoice.Session None
+        | "r"
+        | "repo" when offersRepo request -> answer GrantEffect.Allow (ScopeChoice.Repo None) None
         | "a"
         | "always" when offersHost request -> answer GrantEffect.Allow ScopeChoice.Host None
         | _ -> answer GrantEffect.Deny ScopeChoice.Once (Some "denied at the terminal")

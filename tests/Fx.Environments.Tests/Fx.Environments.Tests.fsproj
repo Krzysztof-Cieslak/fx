@@ -4,6 +4,7 @@
     <Compile Include="Conformance\SandboxConformance.fs" />
     <Compile Include="Local.fs" />
     <Compile Include="SpecTests.fs" />
+    <Compile Include="VariablesTests.fs" />
     <Compile Include="LifecycleTests.fs" />
     <Compile Include="LocalTests.fs" />
     <Compile Include="SandboxTests.fs" />

@@ -584,6 +584,7 @@ let private protocolCodecs () : string list =
                 Warnings = [ "unsandboxed" ]
                 Sandbox = Some "none"
                 Branch = Some "main"
+                Variables = [ "GH_TOKEN" ]
             }
 
         for name in [ "session/get"; "session/prompt"; "identity/revoke"; "ext/x/y" ] do

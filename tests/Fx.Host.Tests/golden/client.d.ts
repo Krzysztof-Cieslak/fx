@@ -152,6 +152,8 @@ export interface EnvSummary {
   warnings: string[];
   sandbox?: string;
   branch?: string;
+  /** @default [] */
+  variables?: string[];
 }
 
 export interface EventRef {

@@ -10,10 +10,12 @@
   -->
   <ItemGroup>
     <Compile Include="HostEnvironment.fs" />
+    <Compile Include="Variables.fs" />
     <Compile Include="EnvSpecs.fs" />
     <Compile Include="Layout.fs" />
     <Compile Include="Lifecycle.fs" />
     <Compile Include="Sandbox.fs" />
+    <Compile Include="Redacting.fs" />
     <Compile Include="Envs.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -86,6 +86,9 @@ module EnvHands =
         : Hands<EnvHands> =
         let handle = EnvHandle.attenuate plan.Sandbox handle
         let policy = handle.Sandbox.Policy
+        // Below the recording taps: the journal, the context and the model only ever see redacted
+        // output (T138).
+        let client = Redacting.client handle.Redaction handle.Client
 
         let interpreterSession (launch: int) : InterpreterSession =
             {
@@ -107,7 +110,7 @@ module EnvHands =
             Env =
                 {
                     Clock = clock
-                    Client = handle.Client
+                    Client = client
                     Scope = scope
                 }
             Workspace = handle.Layout.Workspace
@@ -123,4 +126,16 @@ module EnvHands =
                     }
             Snapshots = Some handle.Client.Snapshots
             Sandbox = if handle.Sandbox.Driver.Confines then Some policy else None
+            Variables =
+                handle.Variables
+                |> List.map (fun variable ->
+                    {
+                        Name = variable.Name
+                        Missing =
+                            match variable.Outcome with
+                            | VariableOutcome.Passed
+                            | VariableOutcome.Granted _ -> None
+                            | VariableOutcome.Denied reason
+                            | VariableOutcome.Unavailable reason -> Some reason
+                    })
         }

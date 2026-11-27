@@ -88,6 +88,7 @@ module HostSlots =
         @ IdentitySlots.all
         @ AuthSlots.all
         @ Fx.Environments.SandboxSlots.all
+        @ Fx.Environments.VariableSlots.all
         @ Fx.Replay.RecordingSlots.all
         @ Fx.Tui.TuiSlots.all
         @ all

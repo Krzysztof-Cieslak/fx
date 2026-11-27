@@ -83,7 +83,7 @@ let toReady (id: string) =
     [
         request id
         EnvCommand.Provisioned(id, 1, Ok(lease id))
-        EnvCommand.Bootstrapped(id, 1, Ok(TransportKind.InProcess, machine))
+        EnvCommand.Bootstrapped(id, 1, Ok(TransportKind.InProcess, machine, []))
         EnvCommand.Connected(id, 1, Ok platform)
         EnvCommand.Installed(
             id,
@@ -118,7 +118,7 @@ let history: EnvEvent list =
             @ [
                 EnvCommand.Disconnected("a", 1, "the connection to envd ended (peer)")
                 EnvCommand.Attach "a"
-                EnvCommand.Bootstrapped("a", 2, Ok(TransportKind.Piped, machine))
+                EnvCommand.Bootstrapped("a", 2, Ok(TransportKind.Piped, machine, []))
                 EnvCommand.Connected("a", 2, Ok platform)
                 EnvCommand.Installed("a", 2, Ok { Components = []; Sandbox = None })
                 EnvCommand.Suspend "a"
@@ -192,7 +192,7 @@ let tests =
 
                 rejected
                     "environment.stale"
-                    (handle ready (EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine))))
+                    (handle ready (EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine, []))))
 
                 rejected "environment.stale" (handle ready (EnvCommand.Disconnected("a", 7, "old")))
 
@@ -203,10 +203,10 @@ let tests =
 
                 rejected
                     "environment.stale"
-                    (handle reattaching (EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine))))
+                    (handle reattaching (EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine, []))))
 
                 Expect.isOk
-                    (handle reattaching (EnvCommand.Bootstrapped("a", 2, Ok(TransportKind.Piped, machine))))
+                    (handle reattaching (EnvCommand.Bootstrapped("a", 2, Ok(TransportKind.Piped, machine, []))))
                     "current"
 
                 rejected "environment.unknown" (handle reattaching (EnvCommand.Attach "zzz"))
@@ -329,7 +329,7 @@ let tests =
                         toReady "ready"
                         @ [
                             EnvCommand.Attach "ready"
-                            EnvCommand.Bootstrapped("ready", 2, Ok(TransportKind.Piped, machine))
+                            EnvCommand.Bootstrapped("ready", 2, Ok(TransportKind.Piped, machine, []))
                         ]
                     )
 

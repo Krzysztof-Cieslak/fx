@@ -273,6 +273,7 @@ let private sessionIn
                                         Guard = fun _ -> EffResult.ok []
                                         Snapshots = None
                                         Sandbox = None
+                                        Variables = []
                                     }
                             )
                     Catalog = catalog
@@ -549,6 +550,7 @@ let private recovery () : Task<string list> =
                                                 Guard = fun _ -> EffResult.ok []
                                                 Snapshots = None
                                                 Sandbox = None
+                                                Variables = []
                                             }
                                     )
                             Catalog = fun _ -> None

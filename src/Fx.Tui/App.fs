@@ -59,6 +59,8 @@ type EnvInfo =
         Sandbox: string option
         /// The branch its workspace has checked out.
         Branch: string option
+        /// The names of the variables its commands got (never their values).
+        Variables: string list
     }
 
     override this.ToString() = $"{this.Name} ({this.Provider})"

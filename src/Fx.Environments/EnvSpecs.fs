@@ -58,7 +58,16 @@ module EnvSpecs =
                                     Issue.create $"expected an object (an environment spec), got {Json.describe other}"
                                 ]
 
-                    decoded
+                    // Variables are checked as config is read: a credential written as a literal or an
+                    // injection vector is an issue in the file, never a variable quietly left out.
+                    let checkedVariables =
+                        decoded
+                        |> Result.bind (fun spec ->
+                            match EnvVariables.check spec.Variables with
+                            | [] -> Ok spec
+                            | issues -> Error(issues |> List.map (Issue.under (key "variables"))))
+
+                    checkedVariables
                     |> Result.mapError (List.map (Issue.under (key name) >> Issue.under (key ConfigMember))))
             | Some(_, other) ->
                 Error

@@ -218,6 +218,9 @@ type HandsInfo =
         /// The sandbox's policy, when a driver confined the hands' processes: the prompt describes
         /// it (`Instructions.sandbox`), so replay renders the same.
         Sandbox: SandboxPolicy option
+        /// The variables chosen for the commands (T138), by name and why one is missing: the prompt
+        /// names them (`Instructions.variables`). Never values.
+        Variables: HandsVariable list
     }
 
     override this.ToString() =
@@ -247,6 +250,28 @@ module HandsInfo =
 
             and! sandbox = Codec.optionalField "sandbox" (fun h -> h.Sandbox) SandboxPolicy.codec
 
+            // Added with chosen variables (T138): absent when none, so earlier journals read the same.
+            and! variables =
+                let variable: Codec<HandsVariable> =
+                    Codec.record {
+                        let! name = Codec.field "name" (fun (v: HandsVariable) -> v.Name) Codec.string
+                        and! missing = Codec.optionalField "missing" (fun v -> v.Missing) Codec.string
+                        return { Name = name; Missing = missing }
+                    }
+
+                let variables = Codec.list variable
+
+                Codec.fieldOf
+                    { Field.withDefault "variables" [] variables with
+                        Encode =
+                            fun value ->
+                                if List.isEmpty value then
+                                    None
+                                else
+                                    Some(variables.Encode value)
+                    }
+                    (fun h -> h.Variables)
+
             return
                 {
                     Workspace = workspace
@@ -256,6 +281,7 @@ module HandsInfo =
                     Snapshots = snapshots
                     Interpreter = interpreter
                     Sandbox = sandbox
+                    Variables = variables
                 }
         }
 
@@ -278,6 +304,7 @@ module HandsInfo =
                 hands.Interpreter.Launches
                 |> Option.map (fun session -> (session 1).Provider.Id)
             Sandbox = hands.Sandbox
+            Variables = hands.Variables
         }
 
     /// The variables commands get, by name, with empty values (replay runs no command).
