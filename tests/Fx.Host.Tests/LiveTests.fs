@@ -1165,4 +1165,204 @@ let tests =
                 | Ok output -> Expect.equal output.ExitCode 0 $"replay matched:\n{output.Stdout}{output.Stderr}"
                 | Error errors -> failtest (String.concat "\n" errors)
             }
+            testTask "a variable the person chose reaches commands, and the model only ever sees it redacted" {
+                do! network.Force()
+                let p = place "live-variables"
+                let model = Model()
+                let secret = "fx-test-0123456789abcdef"
+
+                let commands =
+                    if OperatingSystem.IsWindows() then
+                        "if ($env:FX_TEST_TOKEN) { 'set' }", "$env:FX_TEST_TOKEN"
+                    else
+                        "test -n \"$FX_TEST_TOKEN\" && echo set", "echo \"token: $FX_TEST_TOKEN\""
+
+                model.AddAll
+                    [
+                        $"// intent: use the token\nconst a = await {g}.shell.run({Json.quote (fst commands)})\nconst b = await {g}.shell.run({Json.quote (snd commands)})\na.stdout + b.stdout"
+                        finish "Used it" "\"done\""
+                    ]
+
+                let person = Person always
+
+                let opts =
+                    options
+                        p
+                        model
+                        [
+                            "model.role.main", Json.String modelId
+                            "env.variables", Json.Object [ "FX_TEST_TOKEN", Json.String "host:FX_TEST_TOKEN" ]
+                        ]
+
+                let opts =
+                    { opts with
+                        Variables = opts.Variables @ [ "FX_TEST_TOKEN", secret ]
+                    }
+
+                let host = start opts
+
+                let outcome =
+                    try
+                        run
+                            host
+                            person
+                            {
+                                Prompt = "Use the token"
+                                Session = None
+                                Title = None
+                            }
+                    finally
+                        stop host
+
+                Expect.equal (done' outcome person) "Used it" "done"
+
+                Expect.isFalse
+                    (person.Asked |> List.exists (fun r -> r.Action.Value = "env.credential"))
+                    "the person's own: no consent"
+
+                Expect.exists
+                    person.Lines
+                    (fun line -> line.StartsWith "env: " && line.Contains "vars: FX_TEST_TOKEN")
+                    "fx run names it"
+
+                let bodies = model.Requests |> List.map Fx.Effects.HttpRequest.bodyText
+
+                Expect.isFalse
+                    (bodies |> List.exists (fun body -> body.Contains secret))
+                    "the value never reached the model"
+
+                Expect.stringContains bodies[1] "set" "the command saw it"
+                Expect.stringContains bodies[1] "[redacted FX_TEST_TOKEN]" "redacted output"
+                Expect.stringContains bodies[0] "`FX_TEST_TOKEN` is set for your commands" "the prompt says so"
+
+                // Replay is exact: the journal holds the redacted output, never the value.
+                match
+                    waitFor
+                        300.0
+                        (Commands.replay
+                            (options p (Model()) [])
+                            {
+                                Session = outcome.Session
+                                Json = false
+                                StallSeconds = 60
+                            })
+                with
+                | Ok output -> Expect.equal output.ExitCode 0 $"replay matched:\n{output.Stdout}{output.Stderr}"
+                | Error errors -> failtest (String.concat "\n" errors)
+
+                // Nowhere in the event store (the journal) or the blob store, not even in base64.
+                let paths = HostPaths.under p.Data
+
+                let stored =
+                    [
+                        yield! IO.Directory.EnumerateFiles(IO.Path.GetDirectoryName paths.Events |> nonNull)
+                        yield! IO.Directory.EnumerateFiles(paths.Blobs, "*", IO.SearchOption.AllDirectories)
+                    ]
+                    |> List.map (fun file ->
+                        use stream =
+                            new IO.FileStream(file, IO.FileMode.Open, IO.FileAccess.Read, IO.FileShare.ReadWrite)
+
+                        use reader = new IO.StreamReader(stream, Text.Encoding.Latin1)
+                        reader.ReadToEnd())
+                    |> String.concat "\n"
+
+                Expect.isTrue (stored.Contains "redacted FX_TEST_TOKEN") "the redacted output is stored"
+                Expect.isFalse (stored.Contains secret) "no value"
+
+                Expect.isFalse
+                    (stored.Contains(Convert.ToBase64String(Text.Encoding.UTF8.GetBytes secret)))
+                    "no value in base64"
+            }
+
+            testTask "a project's credential reaches commands only once a person allows it for that project" {
+                do! network.Force()
+
+                for allow in [ true; false ] do
+                    let p = place (if allow then "live-consent-yes" else "live-consent-no")
+                    let secret = "fx-test-0123456789abcdef"
+
+                    p.Write(
+                        IO.Path.Combine(Fx.Product.projectDirName, "config.json"),
+                        """{"environments": {"default": {"provider": "local", "variables": {"FX_TEST_TOKEN": "host:FX_TEST_TOKEN", "FX_PLAIN": "plain"}}}}"""
+                    )
+
+                    let model = Model()
+                    model.Add(finish "Nothing to do" "\"done\"")
+
+                    let decide (request: GrantRequest) : GrantAnswer =
+                        if request.Action.Value = "env.credential" then
+                            {
+                                Effect = if allow then GrantEffect.Allow else GrantEffect.Deny
+                                Scope = if allow then ScopeChoice.Repo None else ScopeChoice.Once
+                                Resource = None
+                                Expires = None
+                                Reason = None
+                            }
+                        else
+                            always
+
+                    let person = Person(always, decide)
+                    let opts = options p model [ "model.role.main", Json.String modelId ]
+
+                    let opts =
+                        { opts with
+                            Variables = opts.Variables @ [ "FX_TEST_TOKEN", secret ]
+                        }
+
+                    match waitFor 60.0 (Commands.trust opts p.Workspace) with
+                    | Ok _ -> ()
+                    | Error e -> failtest e
+
+                    let host = start opts
+
+                    try
+                        let outcome =
+                            run
+                                host
+                                person
+                                {
+                                    Prompt = "Nothing"
+                                    Session = None
+                                    Title = None
+                                }
+
+                        Expect.equal (done' outcome person) "Nothing to do" "done"
+
+                        match person.Asked |> List.filter (fun r -> r.Action.Value = "env.credential") with
+                        | [ request ] ->
+                            Expect.equal request.Resource "FX_TEST_TOKEN" "the variable"
+                            Expect.equal request.Offer [ ScopeKind.Once; ScopeKind.Repo ] "never the host"
+
+                            Expect.equal
+                                request.Context.Repo
+                                (Some
+                                    {
+                                        Repo = HostRepo.id p.Workspace
+                                        Path = ""
+                                    })
+                                "the project"
+                        | other -> failtest $"asked {other}"
+
+                        let record =
+                            match HostSessions.tryFind host outcome.Session with
+                            | Some entry ->
+                                match wait (host.Env.Envs.Get entry.Environment CancellationToken.None) with
+                                | Some record -> record
+                                | None -> failtest "no environment"
+                            | None -> failtest "not indexed"
+
+                        let names = Fx.Environments.Envs.variables record
+
+                        if allow then
+                            Expect.equal names [ "FX_PLAIN"; "FX_TEST_TOKEN" ] "granted"
+                        else
+                            Expect.equal names [ "FX_PLAIN" ] "denied: left out"
+
+                            Expect.exists
+                                person.Lines
+                                (fun line -> line.StartsWith "warning: FX_TEST_TOKEN")
+                                "fx run says it is not set"
+                    finally
+                        stop host
+            }
         ]

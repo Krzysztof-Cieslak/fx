@@ -415,6 +415,7 @@ let createIn
             Guard = fun _ -> EffResult.ok []
             Snapshots = None
             Sandbox = None
+            Variables = []
         }
 
     let overrides = selections |> List.map fst

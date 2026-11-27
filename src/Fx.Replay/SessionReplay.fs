@@ -528,6 +528,7 @@ module SessionReplay =
                                                     else
                                                         None
                                                 Sandbox = info.Sandbox
+                                                Variables = info.Variables
                                             })
                                 }
                     Catalog = settings.Catalog

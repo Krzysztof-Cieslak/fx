@@ -128,6 +128,7 @@ module TuiClient =
             Warnings = environment.Warnings
             Sandbox = environment.Sandbox
             Branch = environment.Branch
+            Variables = environment.Variables
         }
 
     let private approvalsOf (view: ApprovalsView) : ApprovalsInfo =

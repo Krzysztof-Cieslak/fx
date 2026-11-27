@@ -37,6 +37,52 @@ let private config =
                       "policy": { "idle": "suspend:15m", "ttl": "8h" } },
            "Bad": { "provider": "local", "sandbx": "none" } } }"""
 
+/// Chosen variables (T138), pure: precedence, `env.deny`, consent, checks, the record's JSON, and
+/// redaction of whole text, of pieces and of file ranges.
+let private chosenVariables () : string list =
+    let utf8 = UTF8Encoding(false)
+    let token = "ghp_0123456789abcdef"
+
+    [
+        let kept, denied =
+            EnvVariables.requests
+                (Map.ofList [ "GH_TOKEN", "host:GH_TOKEN"; "AWS_KEY", "host:AWS_KEY" ])
+                (Map.ofList [ "gh_token", "host:OTHER"; "RUST_LOG", "debug"; "NPM_TOKEN", "secret:npm" ])
+                VariableOrigin.ProjectSpec
+                [ "AWS_*" ]
+
+        for r in kept do
+            $"kept {r.Name} {r.Source.Reference} {r.Origin} credential={r.Credential} consent={r.NeedsConsent}"
+
+        for r in denied do
+            $"denied {r.Name}"
+
+        for issue in EnvVariables.check (Map.ofList [ "GH_TOKEN", "literal"; "NODE_OPTIONS", "x" ]) do
+            "issue " + escape (JsonPath.render issue.Path + ": " + issue.Message)
+
+        let record = EnvVariables.record (List.head kept) (VariableOutcome.Granted "g1")
+
+        Json.serializeCanonical (EnvVariables.codec.Encode record)
+
+        let redaction =
+            Redaction.create [ "GH_TOKEN", token; "SHORT_TOKEN", "0123456789ab" ]
+
+        Redaction.text redaction $"a {token} b ghp_0123456789abcdef0 c"
+
+        let mutable pending = [||]
+
+        for piece in [ "x ghp_01"; "23456789"; "abcdef y\n"; "ghp_" ] do
+            let ready, held = Redaction.step redaction pending (utf8.GetBytes piece)
+            pending <- held
+            $"ready {escape (utf8.GetString ready)} held {held.Length}"
+
+        $"flush {escape (utf8.GetString(Redaction.flush redaction pending))}"
+        let around = "=" + token + "="
+
+        "masked "
+        + utf8.GetString(Redaction.sameLength redaction (utf8.GetBytes around))
+    ]
+
 let private specs () : string list =
     [
         match EnvSpecs.parse config with
@@ -143,7 +189,7 @@ let private lifecycle () : string list =
         [
             request "a"
             EnvCommand.Provisioned("a", 1, Ok(lease "a"))
-            EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.InProcess, machine))
+            EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.InProcess, machine, []))
             EnvCommand.Connected("a", 1, Ok platform)
             EnvCommand.Installed(
                 "a",
@@ -154,7 +200,7 @@ let private lifecycle () : string list =
                         Sandbox = None
                     }
             )
-            EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine))
+            EnvCommand.Bootstrapped("a", 1, Ok(TransportKind.Piped, machine, []))
             EnvCommand.Disconnected("a", 1, "gone")
             EnvCommand.Attach "a"
             EnvCommand.Attach "a"
@@ -334,6 +380,7 @@ let private settings (dataDir: string) : EnvsSettings =
         Components = EnvComponents.none
         StopTimeout = TimeSpan.FromSeconds 10.0
         Limits = Fx.Rpc.ConnectionLimits.defaults
+        Variables = fun _ _ -> System.Threading.Tasks.Task.FromResult EnvVariables.none
     }
 
 let private hostEnv () : HostEnv =
@@ -494,6 +541,7 @@ let scenarios: Scenario list =
     [
         Scenario.lines "environments-specs" specs
         Scenario.lines "environments-lifecycle" lifecycle
+        Scenario.lines "environments-variables" chosenVariables
         Scenario.task "environments-local-in-process" (bounded (fun () -> session TransportKind.InProcess))
         Scenario.task "environments-local-piped" (bounded (fun () -> session TransportKind.Piped))
     ]

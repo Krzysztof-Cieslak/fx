@@ -15,6 +15,7 @@
     <Compile Include="LiveTests.fs" />
     <Compile Include="ProtocolTests.fs" />
     <Compile Include="GrantPromptTests.fs" />
+    <Compile Include="EnvConsentTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

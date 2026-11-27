@@ -26,7 +26,8 @@ type EmbeddedLaunch =
         /// `pwsh`, `powershell` or `sh`; `None`: envd's default (the `shell.windows` variant on
         /// Windows is passed here).
         Shell: string option
-        /// The variables of the processes envd starts: the host's, scrubbed (`HostEnvironment`).
+        /// The variables of the processes envd starts: the host's, scrubbed (`HostEnvironment`), with
+        /// the variables chosen for the environment (T138).
         Environment: (string * string) list
     }
 
@@ -61,6 +62,19 @@ module EnvComponents =
     /// No components.
     let none: EnvComponents = { Requires = []; For = fun _ -> None }
 
+/// What an environment's start asks the host for: the variables its commands get (T138).
+type EnvVariablesAsk =
+    {
+        Id: string
+        /// The attempt starting envd: a person's answer is for this attempt only.
+        Attempt: int
+        Spec: EnvSpec
+        Machine: EnvMachine
+    }
+
+    override this.ToString() =
+        $"variables for {this.Id} attempt {this.Attempt}"
+
 /// What the environments host needs from its composition root.
 [<NoEquality; NoComparison>]
 type EnvsSettings =
@@ -90,6 +104,10 @@ type EnvsSettings =
         /// How long a piped envd gets to exit once the host closed its input; then it is killed.
         StopTimeout: TimeSpan
         Limits: ConnectionLimits
+        /// Resolves the variables an environment's commands get, each time envd starts (the host: the
+        /// person's `env.variables`, the spec's `variables`, consent and secrets). The values extend
+        /// the scrubbed base; they are never persisted, only the record is.
+        Variables: EnvVariablesAsk -> CancellationToken -> Task<ResolvedVariables>
     }
 
     override this.ToString() = $"EnvsSettings({this.Stream})"
@@ -110,6 +128,11 @@ type EnvHandle =
         Installed: InstalledComponent list
         /// What confines its processes, and the policy `Client` applies.
         Sandbox: EnvSandbox
+        /// The credential values its commands got (T138): what the hands redact from everything the
+        /// environment hands a turn. Never persisted.
+        Redaction: Redaction
+        /// The variables its commands were asked to get, by name, and what became of each.
+        Variables: EnvVariable list
     }
 
     override this.ToString() =
@@ -222,7 +245,22 @@ module Envs =
                 let why = String.Join("; ", sandbox.Notes)
                 $"runs unsandboxed: the sandbox the host asked for cannot run here ({why}); commands can read and change everything the user can"
             | _ -> ()
+
+            // Variables asked for and left out (T138): denied, unanswered or without a value.
+            for variable in record.Variables do
+                match variable.Outcome with
+                | VariableOutcome.Denied reason
+                | VariableOutcome.Unavailable reason ->
+                    $"{variable.Name} ({variable.Source}, asked by the {variable.Origin}) is not set for commands: {reason}"
+                | _ -> ()
         ]
+
+    /// The names of the variables its commands got when envd last started (never values).
+    let variables (record: EnvRecord) : string list =
+        record.Variables |> List.filter _.Passed |> List.map _.Name
+
+    /// Where its variables came from and what became of each, a line each, for people.
+    let variableNotes (record: EnvRecord) : string list = EnvVariables.notes record.Variables
 
     /// The sandbox as clients name it: the confining driver, else `off` (`none` confines nothing).
     let sandboxLabel (sandbox: EnvSandboxInfo) : string =
@@ -241,6 +279,9 @@ type internal Live =
         Client: EnvClient option
         Installed: InstalledComponent list
         Sandbox: EnvSandbox option
+        /// The credentials this attempt's commands got.
+        Redaction: Redaction
+        Variables: EnvVariable list
     }
 
     override this.ToString() = $"Live(attempt {this.Attempt})"
@@ -307,6 +348,17 @@ type internal LiveTable() =
                 entries.Remove id |> ignore
                 Some live
             | _ -> None)
+
+    /// The credentials of every connection's attempt, together.
+    member _.Redaction: Redaction =
+        lock gate (fun () ->
+            {
+                Values =
+                    entries.Values
+                    |> Seq.collect _.Redaction.Values
+                    |> Seq.distinctBy snd
+                    |> List.ofSeq
+            })
 
     /// Removes every connection.
     member _.Clear() : Live list =
@@ -565,11 +617,27 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                     let layout = EnvLayout.create machine lease
                     let! shell = windowsShell machine
 
+                    let! cancellation = Eff.cancellation
+
+                    let! variables =
+                        Eff.ofTask (fun () ->
+                            settings.Variables
+                                {
+                                    Id = id
+                                    Attempt = attempt
+                                    Spec = spec
+                                    Machine = machine
+                                }
+                                cancellation)
+
+                    // The person's chosen variables extend the scrubbed base: envd passes them to the
+                    // commands it starts (kernels start with an allowlist, so they never see them).
                     let environment =
                         if machine.SameHost then
-                            HostEnvironment.scrub settings.HostEnvironment
+                            EnvVariables.extend (HostEnvironment.scrub settings.HostEnvironment) variables.Values
                         else
                             []
+
 
                     let! started =
                         match transport with
@@ -620,6 +688,8 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                                 Client = None
                                 Installed = []
                                 Sandbox = None
+                                Redaction = Redaction.create variables.Secrets
+                                Variables = variables.Record
                             }
 
                         match live.Register(id, entry) with
@@ -631,7 +701,10 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                             | Some previous -> do! Eff.ofTask (fun () -> stopLive previous)
                             | None -> ()
 
-                            return [ EnvCommand.Bootstrapped(id, attempt, Ok(transport, machine)) ]
+                            return
+                                [
+                                    EnvCommand.Bootstrapped(id, attempt, Ok(transport, machine, variables.Record))
+                                ]
         }
 
     let connect (id: string) (attempt: int) : Eff<'R, EnvCommand list> =
@@ -660,7 +733,12 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
             | _ -> return [ EnvCommand.Connected(id, attempt, Error "envd is not running") ]
         }
 
-    let runSetup (shell: Shell) (workspace: string) (commands: string list) : Eff<'R, Result<unit, string>> =
+    let runSetup
+        (redaction: Redaction)
+        (shell: Shell)
+        (workspace: string)
+        (commands: string list)
+        : Eff<'R, Result<unit, string>> =
         fun env ->
             task {
                 let mutable failure = None
@@ -672,7 +750,8 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                         match! shell.Run command env.Scope.Cancellation with
                         | Error e -> failure <- Some $"setup: {e}"
                         | Ok output when output.ExitCode <> 0 ->
-                            let errors = (Output.stderrText output).Trim()
+                            // Redacted before it is cut, so no part of a credential stays.
+                            let errors = (Redaction.text redaction (Output.stderrText output)).Trim()
 
                             let tail =
                                 if errors.Length > 500 then
@@ -872,9 +951,15 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                             }
 
                         match!
-                            runSetup (EnvSandbox.shell sandbox setupPolicy) entry.Layout.Workspace spec.Setup.Run
+                            runSetup
+                                entry.Redaction
+                                (EnvSandbox.shell sandbox setupPolicy)
+                                entry.Layout.Workspace
+                                spec.Setup.Run
                         with
-                        | Error e -> return [ EnvCommand.Installed(id, attempt, Error e) ]
+                        | Error e ->
+                            // A setup command's errors are recorded: never with a credential in them.
+                            return [ EnvCommand.Installed(id, attempt, Error(Redaction.text entry.Redaction e)) ]
                         | Ok() ->
                             live.Update(
                                 id,
@@ -1157,6 +1242,8 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
                     Layout = entry.Layout
                     Installed = entry.Installed
                     Sandbox = sandbox
+                    Redaction = entry.Redaction
+                    Variables = entry.Variables
                 }
         | _ -> None
 
@@ -1228,6 +1315,10 @@ type EnvsHost<'R when 'R :> IClock and 'R :> ITrace and 'R :> IIds and 'R :> IVa
 
     member _.Snapshot() : Snapshot<EnvsState> = snapshot ()
 
+    /// The credentials the commands of running environments got (T138): what model requests are
+    /// cleaned of too.
+    member _.Redaction: Redaction = live.Redaction
+
     /// Stops the actor, then closes every connection (envd stops; leases stay, for the next host).
     member _.StopAsync() : Task<unit> =
         task {
@@ -1273,5 +1364,8 @@ module EnvsHost =
 
     /// The `Envs` capability it serves.
     let envs (host: EnvsHost<'R>) : Envs = host.Envs
+
+    /// The credentials the commands of running environments got (`Redaction`).
+    let redaction (host: EnvsHost<'R>) : Redaction = host.Redaction
 
     let stop (host: EnvsHost<'R>) : Task<unit> = host.StopAsync()

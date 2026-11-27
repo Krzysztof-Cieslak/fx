@@ -61,7 +61,7 @@ let tests =
                                              "Bad": {"provider": "local"}, "x": {"name": "x", "provider": "local"}, "y": 3}}""")
                     [
                         "$.environments.dev.workspace.source: expected one of \"existing\", \"mount\", \"git\", \"upload\", \"snapshot\", got string \"nfs\""
-                        "$.environments.dev.sandbx: unknown field; known fields are \"name\", \"provider\", \"config\", \"transport\", \"sandbox\", \"network\", \"workspace\", \"components\", \"setup\", \"policy\""
+                        "$.environments.dev.sandbx: unknown field; known fields are \"name\", \"provider\", \"config\", \"transport\", \"sandbox\", \"network\", \"workspace\", \"components\", \"setup\", \"policy\", \"variables\""
                         "$.environments.Bad.name: expected a string matching /^[a-z][a-z0-9_-]*$/, got string \"Bad\""
                         "$.environments.x.name: the environment's name is its key: leave \"name\" out"
                         "$.environments.y: expected an object (an environment spec), got number 3"

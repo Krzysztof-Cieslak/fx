@@ -64,6 +64,9 @@ type Hands<'K> =
         /// The policy processes start under, when a sandbox driver confines them (spec §9.1): the
         /// prompt tells the model what the sandbox keeps from it (`Instructions.sandbox`).
         Sandbox: SandboxPolicy option
+        /// The variables a person chose for the environment's commands (T138), by name: the prompt
+        /// says which are set and which were left out (`Instructions.variables`).
+        Variables: HandsVariable list
     }
 
     override this.ToString() = $"hands ({this.Workspace})"

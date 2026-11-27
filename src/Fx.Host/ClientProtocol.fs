@@ -152,6 +152,8 @@ type EnvSummary =
         /// The branch its workspace has checked out (`env/get`, once it is ready and a git
         /// checkout).
         Branch: string option
+        /// The names of the variables its commands got (T138), never their values.
+        Variables: string list
     }
 
     override this.ToString() =
@@ -477,6 +479,9 @@ module ClientProtocol =
             and! branch =
                 Codec.optionalField "branch" (fun (e: EnvSummary) -> e.Branch) Codec.string
 
+            and! variables =
+                Codec.defaultField "variables" (fun (e: EnvSummary) -> e.Variables) [] (Codec.list Codec.string)
+
             return
                 {
                     Id = id
@@ -489,6 +494,7 @@ module ClientProtocol =
                     Warnings = warnings
                     Sandbox = sandbox
                     Branch = branch
+                    Variables = variables
                 }
         }
         |> Codec.describe "An environment: where sessions' hands are."

@@ -354,6 +354,7 @@ module ClientServer =
             Warnings = Envs.warnings record
             Sandbox = record.Sandbox |> Option.map _.Driver
             Branch = None
+            Variables = Envs.variables record
         }
 
     let private envHandlers (host: Host) (client: ClientState) : Handler<HostEnv> list =

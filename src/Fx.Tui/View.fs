@@ -1081,6 +1081,8 @@ module View =
                        | Some "none" -> "sandbox: off"
                        | Some driver -> "sandbox: " + driver
                        | None -> ()
+                       if not env.Variables.IsEmpty then
+                           "vars: " + String.concat ", " env.Variables
                    ]
                | None -> [])
 

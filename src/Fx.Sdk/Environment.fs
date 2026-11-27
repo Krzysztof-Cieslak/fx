@@ -187,6 +187,11 @@ type EnvSpec =
         Components: ComponentsSpec
         Setup: SetupSpec
         Policy: EnvPolicy
+        /// The variables the environment's commands get (spec §9.4 `variables`), by name: `host:<NAME>`
+        /// (the host's own variable), `secret:<name>` (an fx secret) or a literal value (only for names
+        /// that do not look like credentials). The host decides what applies: a project's credentials
+        /// need a person's consent (docs/modules/environments.md, "Variables").
+        Variables: Map<string, string>
     }
 
     override this.ToString() =
@@ -625,6 +630,23 @@ module EnvSpec =
         |> Codec.strict
         |> Codec.named "EnvPolicy"
 
+    /// The `variables` member: names to `host:<NAME>`, `secret:<name>` or a literal value. Absent
+    /// reads as none, and none is not written, so specs recorded before it read and write as they did.
+    let variablesField: FieldSpec<Map<string, string>> =
+        let values =
+            Codec.stringMap Codec.string
+            |> Codec.describe
+                "Variables the environment's commands get, by name: \"host:<NAME>\" (the host's variable), \"secret:<name>\" (an fx secret) or a literal value (not for names that look like credentials)."
+
+        { Field.withDefault "variables" Map.empty values with
+            Encode =
+                fun value ->
+                    if Map.isEmpty value then
+                        None
+                    else
+                        Some(values.Encode value)
+        }
+
     /// An environment spec with its name; config files give the name as the member's key
     /// (`EnvSpecs.ofConfig` in the core).
     let codec: Codec<EnvSpec> =
@@ -664,6 +686,8 @@ module EnvSpec =
 
             and! setup' = Codec.defaultField "setup" (fun s -> s.Setup) noSetup setup
             and! policy' = Codec.defaultField "policy" (fun s -> s.Policy) noPolicy policy
+            and! variables' = Codec.fieldOf variablesField (fun s -> s.Variables)
+
 
             return
                 {
@@ -677,6 +701,7 @@ module EnvSpec =
                     Components = components'
                     Setup = setup'
                     Policy = policy'
+                    Variables = variables'
                 }
         }
         |> Codec.strict
@@ -696,6 +721,7 @@ module EnvSpec =
             Components = defaultComponents
             Setup = noSetup
             Policy = noPolicy
+            Variables = Map.empty
         }
 
     /// The same spec with an existing workspace at a path.

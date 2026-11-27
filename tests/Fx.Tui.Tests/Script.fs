@@ -317,6 +317,7 @@ let env: EnvInfo =
         Warnings = []
         Sandbox = Some "none"
         Branch = Some "main"
+        Variables = []
     }
 
 /// An environment bubblewrap confines: no banner.

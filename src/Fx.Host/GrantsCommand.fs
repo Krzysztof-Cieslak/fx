@@ -4,17 +4,20 @@ open System
 open Fx
 open Fx.Grants
 
-/// Where a grant `fx grants` makes applies: the whole host, or one session. Requests on this host
-/// name no repository yet, so a repository grant would never apply: the command does not offer one.
+/// Where a grant `fx grants` makes applies: the whole host, one session, or the project in the
+/// current directory (requests that name a repository: an environment's credentials, T138).
 [<RequireQualifiedAccess>]
 type GrantsScope =
     | Host
     | Session of session: string
+    /// The project of the directory `fx` runs in.
+    | Repo
 
     override this.ToString() =
         match this with
         | Host -> "host"
         | Session session -> "session:" + session
+        | Repo -> "repo"
 
 /// What `fx grants` asks for: a person (the OS user, signed in through `local-os-user`) lists, makes
 /// or revokes grants on this host's grants log (spec §13: only people grant).
@@ -39,10 +42,14 @@ module GrantsCommand =
     let usage: string list =
         [
             "grants list [--all]"
-            "grants allow <action> <pattern> [--scope host|session:<id>] [--reason <text>]"
-            "grants deny <action> <pattern> [--scope host|session:<id>] [--reason <text>]"
+            "grants allow <action> <pattern> [--scope host|session:<id>|repo] [--reason <text>]"
+            "grants deny <action> <pattern> [--scope host|session:<id>|repo] [--reason <text>]"
             "grants revoke <id> [--reason <text>]"
         ]
+
+    /// The repository a project's requests name, and repository grants apply to: the project's
+    /// directory (the host's workspace), without a final separator.
+    let repo (workspace: string) : string = HostRepo.id workspace
 
     /// An action's name as a person typed it.
     let actionName (text: string) : Result<ActionName, string> =
@@ -108,16 +115,20 @@ module GrantsCommand =
             "'" + word.Replace("'", "'\\''") + "'"
 
     /// The command that allows a request's action on exactly its resource on this whole host, if the
-    /// request offers that scope: what a person runs to approve it beforehand (a headless run).
+    /// request offers that scope, else for its repository (run in the project's directory), if it
+    /// offers that: what a person runs to approve it beforehand (a headless run).
     let allowing (request: GrantRequest) : string option =
+        let command =
+            Product.binaryName
+            + " grants allow "
+            + request.Action.Value
+            + " "
+            + quote (Pattern.exact request.Resource)
+
         if List.contains ScopeKind.Host request.Offer then
-            Some(
-                Product.binaryName
-                + " grants allow "
-                + request.Action.Value
-                + " "
-                + quote (Pattern.exact request.Resource)
-            )
+            Some command
+        elif List.contains ScopeKind.Repo request.Offer && request.Context.Repo.IsSome then
+            Some(command + " --scope repo")
         else
             None
 

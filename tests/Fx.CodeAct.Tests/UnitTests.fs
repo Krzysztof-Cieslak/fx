@@ -261,11 +261,11 @@ let tests =
             }
 
             test "a conversation keeps the surface its frame recorded" {
-                let sections = Instructions.sections ActionSurface.Hybrid "interpreter" None
+                let sections = Instructions.sections ActionSurface.Hybrid "interpreter" None []
                 Expect.equal (Instructions.recordedSurface sections) (Some ActionSurface.Hybrid) "hybrid"
 
                 Expect.equal
-                    (Instructions.recordedSurface (Instructions.sections ActionSurface.CellsOnly "x" None))
+                    (Instructions.recordedSurface (Instructions.sections ActionSurface.CellsOnly "x" None []))
                     (Some ActionSurface.CellsOnly)
                     "cells-only"
 
@@ -291,7 +291,7 @@ let tests =
                     }
 
                 let sections =
-                    Instructions.sections ActionSurface.Hybrid "interpreter" (Some policy)
+                    Instructions.sections ActionSurface.Hybrid "interpreter" (Some policy) []
 
                 Expect.equal
                     (sections |> List.map (fun s -> s.Id))

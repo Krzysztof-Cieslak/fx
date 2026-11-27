@@ -348,7 +348,12 @@ module Headless =
                                 | Some sandbox -> " · sandbox: " + Fx.Environments.Envs.sandboxLabel sandbox
                                 | None -> ""
 
-                            io.Show $"env: {record.Spec.Name} ({record.Spec.Provider}){sandbox}"
+                            let variables =
+                                match Fx.Environments.Envs.variables record with
+                                | [] -> ""
+                                | names -> " · vars: " + String.concat ", " names
+
+                            io.Show $"env: {record.Spec.Name} ({record.Spec.Provider}){sandbox}{variables}"
 
                             for warning in Fx.Environments.Envs.warnings record do
                                 io.Show $"warning: {warning}"

@@ -285,6 +285,17 @@ let tests =
                     ))
                     "host, said"
 
+                Expect.equal
+                    (parsed [ "allow"; "env.credential"; "GH_TOKEN"; "--scope"; "repo" ])
+                    (Fx.Host.GrantsCommand.Grant(
+                        Fx.Grants.GrantEffect.Allow,
+                        "env.credential",
+                        "GH_TOKEN",
+                        Fx.Host.GrantsScope.Repo,
+                        None
+                    ))
+                    "the project in the current directory"
+
                 Expect.equal (parsed [ "revoke"; "01G" ]) (Fx.Host.GrantsCommand.Revoke("01G", None)) "revoke"
 
                 Expect.equal
@@ -295,7 +306,8 @@ let tests =
                 for bad in
                     [
                         [ "grants"; "allow"; "component.install" ]
-                        [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "repo" ]
+                        [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "repos" ]
+
                         [ "grants"; "allow"; "component.install"; "bun@*"; "--scope"; "session:" ]
                         [ "grants"; "allow"; "component.install"; "bun@*"; "--bogus" ]
                         [ "grants"; "revoke" ]

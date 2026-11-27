@@ -161,6 +161,7 @@ let settings (dataDir: string) : EnvsSettings =
         Components = EnvComponents.none
         StopTimeout = TimeSpan.FromSeconds 10.0
         Limits = Fx.Rpc.ConnectionLimits.defaults
+        Variables = fun _ _ -> Task.FromResult EnvVariables.none
     }
 
 let start (settings: EnvsSettings) (log: EventLog<EnvEvent>) : EnvsHost<ProviderConformance.HostEnv> =

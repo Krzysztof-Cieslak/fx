@@ -191,6 +191,7 @@ let private record () : Task<string list> =
                 Guard = fun _ -> EffResult.ok []
                 Snapshots = None
                 Sandbox = None
+                Variables = []
             }
 
         let wraps: Wraps<HostEnv, HandsEnv> =
