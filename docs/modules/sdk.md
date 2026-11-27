@@ -251,5 +251,4 @@ await runStdio([{
 | What | Task |
 |---|---|
 | Host capabilities in `IExtensionEnv` beyond the clock, attenuated to the manifest's `capabilities` (`IVariants` reads of an extension's slots, …), and over the protocol for extension processes (`host/*` requests from the process, in both SDKs); `IPackages`; reading contributions from extension code | T109b |
-| The `bun` runtime in the host: `fx.exthost.bun` among the built-ins, its files written with hash checks, the pinned Bun installed for it | T115b |
 | Publishing the packages to nuget.org and npm | with the first release |

@@ -234,7 +234,8 @@ let cachedFetch: Fetch =
                             Task.FromResult(Ok())
                         else
                             task {
-                                let partial = cached + ".partial-" + string Environment.ProcessId
+                                // Unique: tests in this process may download the same file at once.
+                                let partial = cached + ".partial-" + string (Guid.NewGuid())
 
                                 match! live.Download { request with Destination = partial } cancellation with
                                 | Error e -> return Error e

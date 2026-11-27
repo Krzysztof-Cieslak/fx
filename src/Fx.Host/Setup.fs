@@ -180,24 +180,44 @@ module Setup =
             StderrBytes = 4096
         }
 
-    /// Loads the built-ins (and the options' extensions) in the bootstrap order of spec §16.1. The
-    /// built-ins are all in the binary; extension processes from host config are not loaded yet, so
-    /// the components phase has nothing to install (an extension that requires components fails).
+    let private settings (options: HostOptions) (config: HostConfig) : HostSettings<HostEnv> =
+        { ExtensionHost.settings (trust config) (BasicExtensionEnv.forManifest options.Clock) (processSettings options) with
+            Catalog = Builtins.catalog
+            Disabled = config.Host.Disabled
+        }
+
+    /// The built-ins (their bundled packages under the data directory's `extensions`) and the
+    /// options' extensions.
+    let candidates (options: HostOptions) (exclusions: Eff<IExtensionEnv, ExclusionSettings>) : Candidate list =
+        Builtins.candidates options.Paths.Extensions exclusions @ options.Extensions
+
+    /// The bootstrap's first phase (spec §16.1): the built-ins and the options' extensions that are in
+    /// the binary (native, then declarative). Commands such as `fx variants` stop here; the variant
+    /// registry, grants and the component plan are made from what it loaded. Nothing is written and
+    /// no process starts.
     let bootstrap
         (options: HostOptions)
         (config: HostConfig)
         (exclusions: Eff<IExtensionEnv, ExclusionSettings>)
         : Eff<HostEnv, Fx.Extensions.Host> =
-        let settings: HostSettings<HostEnv> =
-            { ExtensionHost.settings
-                  (trust config)
-                  (BasicExtensionEnv.forManifest options.Clock)
-                  (processSettings options) with
-                Catalog = Builtins.catalog
-                Disabled = config.Host.Disabled
-            }
+        ExtensionHost.bootstrapInBinary (settings options config) (candidates options exclusions)
 
-        ExtensionHost.bootstrap settings (Builtins.candidates exclusions @ options.Extensions)
+    /// The bootstrap's later phases on what `bootstrap` loaded: the components phase (`install`: the
+    /// host's installer), then extension processes (`fx.exthost.bun` among them), then extensions on
+    /// contributed runtimes (`bun`).
+    let bootstrapRest
+        (options: HostOptions)
+        (config: HostConfig)
+        (exclusions: Eff<IExtensionEnv, ExclusionSettings>)
+        (install: Manifest -> Eff<HostEnv, Result<InstalledComponent list, string>>)
+        (host: Fx.Extensions.Host)
+        : Eff<HostEnv, Fx.Extensions.Host> =
+        ExtensionHost.bootstrapRest
+            { settings options config with
+                InstallComponents = install
+            }
+            host
+            (candidates options exclusions)
 
     /// What went wrong loading extensions, one line each (activated and skipped ones are fine).
     let problems (extensions: Fx.Extensions.Host) : string list =

@@ -97,12 +97,141 @@ let private done' (outcome: RunOutcome) (person: Person) : string =
         let shown = String.concat "\n" person.Lines
         failtest $"{other}\n{shown}"
 
+/// Runs the pinned Bun in `dir`; its standard output, or a failed test.
+let private runBun (bun: string) (dir: string) (args: string list) : Task<string> =
+    task {
+        let info = Diagnostics.ProcessStartInfo(bun, args)
+        info.RedirectStandardOutput <- true
+        info.RedirectStandardError <- true
+        info.UseShellExecute <- false
+        info.WorkingDirectory <- dir
+        info.Environment["DO_NOT_TRACK"] <- "1"
+
+        use proc =
+            match Diagnostics.Process.Start info with
+            | null -> failtest $"{bun} did not start"
+            | p -> p
+
+        let out = proc.StandardOutput.ReadToEndAsync()
+        let err = proc.StandardError.ReadToEndAsync()
+        do! proc.WaitForExitAsync()
+        let! output = out
+        let! errors = err
+
+        if proc.ExitCode <> 0 then
+            let command = String.concat " " args
+            failtest $"bun {command} failed: {output}{errors}"
+
+        return output
+    }
+
+/// A package for the `bun` runtime: `tests.hello`, a TypeScript extension on @fx/sdk with one method,
+/// bundled into `extension.js` in `dir`; and its manifest, as the TypeScript SDK encodes it.
+let private helloPackage (bun: string) (dir: string) : Task<Fx.Sdk.Manifest> =
+    task {
+        IO.Directory.CreateDirectory dir |> ignore
+
+        let sdk =
+            Fx.Kernel.Tests.Repo.path [ "packages"; "sdk"; "src"; "index.ts" ]
+            |> fun path -> path.Replace('\\', '/')
+
+        let source = IO.Path.Combine(dir, "hello.ts")
+
+        IO.File.WriteAllText(
+            source,
+            String.concat
+                "\n"
+                [
+                    $"import {{ Codec, Declare, ExtMethod, Manifest, Runtimes, ok, type Extension }} from \"{sdk}\";"
+                    "const greet = ExtMethod.define(\"greet\", Codec.record({ name: Codec.string }), Codec.string).describe(\"Greets.\");"
+                    "export const manifest: Manifest = { ...Manifest.create(\"tests.hello\", \"1.0.0\", Runtimes.bun), rpc: { methods: [Declare.method(greet)] } };"
+                    "const extension: Extension = { manifest, activate: () => ({ contributions: [], methods: [greet.handle((p) => ok(`hello, ${p.name}`))] }) };"
+                    "export default extension;"
+                ]
+        )
+
+        IO.File.WriteAllText(
+            IO.Path.Combine(dir, "print.ts"),
+            $"import {{ Manifest }} from \"{sdk}\";\nimport {{ manifest }} from \"./hello.ts\";\nconsole.log(Manifest.codec.encodeText(manifest));\n"
+        )
+
+        let! _ =
+            runBun bun dir [ "build"; "hello.ts"; "--target=bun"; "--outfile=extension.js" ]
+
+        let! printed = runBun bun dir [ "print.ts" ]
+
+        return
+            match Fx.Sdk.Manifest.parse (printed.Trim()) with
+            | Ok manifest -> manifest
+            | Error issues -> failtest $"the manifest: {issues}"
+    }
+
 [<Tests>]
 let tests =
     testSequenced
     <| testList
         "Host on bun-ts"
         [
+            testTask
+                "fx.exthost.bun starts on the Bun the host installs, and a Bun package from host config loads through it" {
+                do! network.Force()
+
+                let! bun =
+                    task {
+                        match! Fx.Kernel.Tests.PinnedBun.executable () with
+                        | Ok bun -> return bun
+                        | Error reason -> return failtest reason
+                    }
+
+                let p = place "live-exthost"
+                let packageDir = IO.Path.Combine(p.Workspace, "..", "hello")
+                let! manifest = helloPackage bun packageDir
+
+                let opts =
+                    { options p (Model()) [] with
+                        Extensions =
+                            [
+                                Fx.Extensions.Candidate.create
+                                    Fx.Extensions.Source.HostConfig
+                                    (Fx.Extensions.Package.Manifest(manifest, Some packageDir))
+                            ]
+                    }
+
+                // Allowed beforehand: the host installs Bun at the start without asking anyone.
+                match!
+                    Commands.grants
+                        opts
+                        (GrantsCommand.Grant(GrantEffect.Allow, "component.install", "bun@*", GrantsScope.Host, None))
+                with
+                | Ok _ -> ()
+                | Error errors -> failtest (String.concat "\n" errors)
+
+                let host = start opts
+
+                try
+                    Expect.isEmpty
+                        (host.Warnings
+                         |> List.filter (fun w -> w.Contains "exthost" || w.Contains "tests.hello"))
+                        "no warnings about either"
+
+                    let active = Fx.Extensions.Registry.active host.Extensions.State
+                    Expect.contains active "fx.exthost.bun" "the Bun extension host"
+                    Expect.contains active "tests.hello" "the package on the bun runtime"
+
+                    let! greeting =
+                        Eff.run
+                            host.Env
+                            (Fx.Extensions.ExtensionHost.call
+                                host.Extensions
+                                "tests.hello"
+                                "greet"
+                                (Json.Object [ "name", Json.String "fx" ]))
+
+                    Expect.equal greeting (Ok(Json.String "hello, fx")) "its method, through the Bun extension host"
+                finally
+                    stop host
+            }
+
             testTask
                 "fx run -p: Bun is installed once a person approves, TypeScript cells act, a restart continues the session" {
                 do! network.Force()

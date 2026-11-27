@@ -63,18 +63,31 @@ module Components =
     /// The holder name of an extension.
     let extensionHolder (id: string) = "extension:" + id
 
-    /// The components phase of the extension bootstrap (spec §16.1): installs what an admitted
-    /// extension's manifest requires. Fits `HostSettings.InstallComponents`.
-    let installFor<'R when 'R :> IComponents and 'R :> IScope> (manifest: Manifest) : Eff<'R, Result<unit, string>> =
-        ensure
-            {
-                Holder = extensionHolder manifest.Id
-                Requires = manifest.Requires
+    /// The components phase of the extension bootstrap (spec §16.1) with these components: installs
+    /// what an admitted extension's manifest requires, held by `extension:<id>`, and says where they are.
+    let installWith<'R when 'R :> IScope>
+        (components: Components)
+        (manifest: Manifest)
+        : Eff<'R, Result<InstalledComponent list, string>> =
+        fun env ->
+            task {
+                match!
+                    components.Ensure
+                        {
+                            Holder = extensionHolder manifest.Id
+                            Requires = manifest.Requires
+                        }
+                        env.Scope.Cancellation
+                with
+                | Ok installed -> return Ok installed
+                | Error e -> return Error $"components: {e}"
             }
-        |> Eff.map (fun result ->
-            match result with
-            | Ok _ -> Ok()
-            | Error e -> Error $"components: {e}")
+
+    /// `installWith` the environment's components. Fits `HostSettings.InstallComponents`.
+    let installFor<'R when 'R :> IComponents and 'R :> IScope>
+        (manifest: Manifest)
+        : Eff<'R, Result<InstalledComponent list, string>> =
+        fun env -> installWith env.Components manifest env
 
 /// Runs an installer as an actor and serves `Components` from it.
 module ComponentInstaller =

@@ -246,6 +246,7 @@ let tests =
                                 "egress.exclusions"
                                 "interpreter.bun-ts"
                                 "runtime.bun"
+                                "exthost.bun"
                                 "auth.standard"
                                 "store.keyring"
                                 "store.file"
@@ -261,11 +262,7 @@ let tests =
                         let packages =
                             Directory.GetDirectories(Fx.Kernel.Tests.Repo.path [ "extensions" ])
                             |> Array.map (fun dir -> Path.GetFileName dir)
-                            // fx.exthost.bun joins the built-ins with T115b (its files extracted, its Bun installed at the start).
-                            |> Array.filter (fun name ->
-                                name <> "Fx.Ext.Sample"
-                                && name <> "Fx.Ext.ModelCanonical"
-                                && name <> "Fx.Ext.ExthostBun")
+                            |> Array.filter (fun name -> name <> "Fx.Ext.Sample" && name <> "Fx.Ext.ModelCanonical")
 
                         Expect.equal
                             packages.Length

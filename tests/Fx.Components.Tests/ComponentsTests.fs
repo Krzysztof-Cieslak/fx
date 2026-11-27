@@ -44,7 +44,7 @@ let tests =
                         Requires = [ { Id = "bun"; Version = "^1.4" } ]
                     }
 
-                Expect.equal (runIn (env (Ok [])) (Components.installFor manifest)) (Ok()) "installed"
+                Expect.equal (runIn (env (Ok [])) (Components.installFor manifest)) (Ok []) "installed"
 
                 Expect.equal
                     (List.ofSeq requests)

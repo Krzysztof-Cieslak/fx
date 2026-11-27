@@ -3,6 +3,7 @@
 module Fx.Extensions.Tests.BootstrapTests
 
 open System
+open System.IO
 open System.Threading.Tasks
 open Expecto
 open Fx.Contracts
@@ -78,7 +79,7 @@ let declarative (id: string) (ws: string list) : Manifest =
         Contributions = ws |> List.map (fun w -> Declare.value words w w)
     }
 
-let settingsWith (install: Manifest -> Eff<HostEnv, Result<unit, string>>) : HostSettings<HostEnv> =
+let settingsWith (install: Manifest -> Eff<HostEnv, Result<InstalledComponent list, string>>) : HostSettings<HostEnv> =
     { SampleHost.settings with
         Catalog = Catalog.create (ContributionType.info words :: Sample.Points.all)
         InstallComponents = install
@@ -120,7 +121,7 @@ let tests =
                     eff {
                         installed.Add manifest.Id
                         log.Add("install " + manifest.Id)
-                        return Ok()
+                        return Ok []
                     }
 
                 let candidates =
@@ -235,6 +236,69 @@ let tests =
                     "outcomes"
 
                 Expect.isEmpty (wordsOf host) "nothing from h"
+            }
+
+            test "an extension process's launch names the commands of the components installed for it" {
+                let spawned = ResizeArray<ProcSpec>()
+
+                let shell: Shell =
+                    {
+                        Run = fun _ _ -> invalidOp "spawn only"
+                        Spawn =
+                            fun spec token ->
+                                spawned.Add spec
+                                SampleHost.memoryShell.Spawn spec token
+                    }
+
+                let peer = Path.Combine(Path.GetTempPath(), "runtimes", "peer", "bin", "peer")
+
+                let installedPeer: InstalledComponent =
+                    {
+                        Id = "peer"
+                        Version = SemVer.tryParse "1.0.0" |> Option.get
+                        Dir = Path.Combine(Path.GetTempPath(), "runtimes", "peer")
+                        Bin = [ "peer", peer ]
+                        Env = []
+                    }
+
+                let manifest (exe: string) =
+                    let manifest = SampleHost.processManifest ()
+
+                    { manifest with
+                        Requires = [ { Id = "peer"; Version = "1" } ]
+                        Launch = manifest.Launch |> Option.map (fun launch -> { launch with Exe = exe })
+                    }
+
+                let load (exe: string) =
+                    let env = hostEnv shell
+
+                    (within (
+                        Eff.run
+                            env
+                            (ExtensionHost.bootstrap
+                                (settingsWith (fun _ -> EffResult.ok [ installedPeer ]))
+                                [ fromManifest Source.Builtin (manifest exe) ])
+                    ))
+                        .GetAwaiter()
+                        .GetResult()
+
+                let host = load "${bin.peer}"
+                Expect.equal (report host) [ $"{Sample.id} [process] activated" ] "activated"
+
+                match List.ofSeq spawned with
+                | [ { Program = Exec(exe, _) } ] -> Expect.equal exe peer "the installed command"
+                | other -> failtest (string other)
+
+                stop host
+
+                let host = load "${bin.node}"
+
+                Expect.equal
+                    (report host)
+                    [
+                        $"{Sample.id} [process] failed: its launch names ${{bin.node}}, a command that none of the components it requires exports"
+                    ]
+                    "a command none exports"
             }
 
             test "without an installer, extensions that require components fail closed" {

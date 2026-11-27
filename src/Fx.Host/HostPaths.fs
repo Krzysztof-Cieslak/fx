@@ -26,6 +26,9 @@ type HostPaths =
         /// The component installer's root (the same `runtimes` directory environments on this machine
         /// use: `EnvLayout`).
         Runtimes: string
+        /// The bundled packages' directories (`<id>`), their files written from the binary with hash
+        /// checks (spec §16.4).
+        Extensions: string
         /// The owner-only directory of the file credential store (`LocalPrivateFiles`).
         Credentials: string
         /// The local listener's token, in an owner-only file (`TokenFile`).
@@ -57,6 +60,7 @@ module HostPaths =
             Trust = Path.Combine(data, "trust.json")
             MachineId = Path.Combine(data, "machine-id")
             Runtimes = Path.Combine(data, "runtimes")
+            Extensions = Path.Combine(data, "extensions")
             Credentials = Path.Combine(data, "credentials")
             ListenerToken = Path.Combine(data, "listener.token")
             ListenerInfo = Path.Combine(data, "listener.json")

@@ -103,7 +103,7 @@ let private withoutKernel (place: Place) =
 
     File.WriteAllText(
         Path.Combine(place.Data, "config.json"),
-        """{"extensions": {"disabled": ["fx.interpreter.bun-ts"]}}"""
+        """{"extensions": {"disabled": ["fx.interpreter.bun-ts", "fx.exthost.bun"]}}"""
     )
 
 [<Tests>]

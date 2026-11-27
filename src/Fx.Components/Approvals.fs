@@ -66,6 +66,14 @@ module Approvals =
         + "/"
         + string request.Attempt
 
+    /// What the grants log's rules say about an install, without asking anyone (`Grants.check`).
+    let query (context: GrantContext) (request: ApprovalRequest) : GrantQuery =
+        {
+            Action = componentInstall
+            Resource = request.Spec.Id + "@" + string request.Spec.Version
+            Context = context
+        }
+
     /// What an install asks the grants log.
     let ask (requester: Requester) (context: GrantContext) (request: ApprovalRequest) : GrantAsk =
         let spec = request.Spec
