@@ -100,10 +100,17 @@ module EnvProtocol =
 
     // ---- Params and results ---------------------------------------------------------------------
 
-    let private pathParams: Codec<string> =
+    /// The roots a request's paths resolve beneath (`EnvdServices.Beneath`, T113b); absent or empty:
+    /// none, paths resolve as the OS resolves them.
+    let private beneathField (get: 'T -> string list) =
+        Codec.defaultField "beneath" get [] (Codec.list Codec.string)
+
+    /// `{path, beneath?}`.
+    let private pathParams: Codec<string * string list> =
         Codec.record {
-            let! p = Codec.field "path" id Codec.string
-            return p
+            let! p = Codec.field "path" fst Codec.string
+            and! roots = beneathField snd
+            return p, roots
         }
 
     let private idParams: Codec<string> =
@@ -118,20 +125,21 @@ module EnvProtocol =
             return c
         }
 
-    /// `fs/stat`: `{paths}` → `{entries: [{entry} | {error}]}`.
+    /// `fs/stat`: `{paths, beneath?}` → `{entries: [{entry} | {error}]}`.
     let fsStat =
         Method.define
             "fs/stat"
             (Codec.record {
-                let! paths = Codec.field "paths" id (Codec.list Codec.string)
-                return paths
+                let! paths = Codec.field "paths" fst (Codec.list Codec.string)
+                and! roots = beneathField snd
+                return paths, roots
             })
             (Codec.record {
                 let! entries = Codec.field "entries" id (Codec.list EnvCodecs.entryResult)
                 return entries
             })
 
-    /// `fs/list`: `{path}` → `{entries}`.
+    /// `fs/list`: `{path, beneath?}` → `{entries}`.
     let fsList =
         Method.define
             "fs/list"
@@ -142,23 +150,27 @@ module EnvProtocol =
             })
         |> Method.withErrors EnvCodecs.fsError
 
-    /// `fs/read`: `{path, offset, count?, channel}` → the reply; the content goes over the channel.
-    /// Without `count`, the whole file from `offset`.
+    /// `fs/read`: `{path, offset, count?, channel, beneath?}` → the reply; the content goes over the
+    /// channel. Without `count`, the whole file from `offset`.
     let fsRead =
         Method.define
             "fs/read"
             (Codec.record {
                 let! p =
-                    Codec.field "path" (fun (p: string, _: int64, _: int option, _: uint32) -> p) Codec.string
+                    Codec.field
+                        "path"
+                        (fun (p: string, _: int64, _: int option, _: uint32, _: string list) -> p)
+                        Codec.string
 
                 and! offset =
-                    Codec.defaultField "offset" (fun (_, o, _, _) -> o) 0L (Codec.int64 |> Codec.atLeast 0L)
+                    Codec.defaultField "offset" (fun (_, o, _, _, _) -> o) 0L (Codec.int64 |> Codec.atLeast 0L)
 
                 and! count =
-                    Codec.optionalField "count" (fun (_, _, c, _) -> c) (Codec.int |> Codec.atLeast 0)
+                    Codec.optionalField "count" (fun (_, _, c, _, _) -> c) (Codec.int |> Codec.atLeast 0)
 
-                and! channel = Codec.field "channel" (fun (_, _, _, c) -> c) Rpc.channelId
-                return p, offset, count, channel
+                and! channel = Codec.field "channel" (fun (_, _, _, c, _) -> c) Rpc.channelId
+                and! roots = beneathField (fun (_, _, _, _, r) -> r)
+                return p, offset, count, channel, roots
             })
             (Codec.record {
                 let! offset = Codec.field "offset" (fun (r: ReadReply) -> r.Offset) Codec.int64
@@ -174,15 +186,18 @@ module EnvProtocol =
             })
         |> Method.withErrors EnvCodecs.fsError
 
-    /// `fs/write`: `{path, channel, atomic}`; the content comes over the channel.
+    /// `fs/write`: `{path, channel, atomic, beneath?}`; the content comes over the channel.
     let fsWrite =
         Method.define
             "fs/write"
             (Codec.record {
-                let! p = Codec.field "path" (fun (p: string, _: uint32, _: bool) -> p) Codec.string
-                and! channel = Codec.field "channel" (fun (_, c, _) -> c) Rpc.channelId
-                and! atomic = Codec.defaultField "atomic" (fun (_, _, a) -> a) false Codec.bool
-                return p, channel, atomic
+                let! p =
+                    Codec.field "path" (fun (p: string, _: uint32, _: bool, _: string list) -> p) Codec.string
+
+                and! channel = Codec.field "channel" (fun (_, c, _, _) -> c) Rpc.channelId
+                and! atomic = Codec.defaultField "atomic" (fun (_, _, a, _) -> a) false Codec.bool
+                and! roots = beneathField (fun (_, _, _, r) -> r)
+                return p, channel, atomic, roots
             })
             Codec.unit
         |> Method.withErrors EnvCodecs.fsError
@@ -199,9 +214,12 @@ module EnvProtocol =
         Method.define
             "fs/move"
             (Codec.record {
-                let! source = Codec.field "source" (fun (s: string, _: string) -> s) Codec.string
-                and! destination = Codec.field "destination" snd Codec.string
-                return source, destination
+                let! source =
+                    Codec.field "source" (fun (s: string, _: string, _: string list) -> s) Codec.string
+
+                and! destination = Codec.field "destination" (fun (_, d, _) -> d) Codec.string
+                and! roots = beneathField (fun (_, _, r) -> r)
+                return source, destination, roots
             })
             Codec.unit
         |> Method.withErrors EnvCodecs.fsError
@@ -210,8 +228,9 @@ module EnvProtocol =
         Method.define
             "fs/patch"
             (Codec.record {
-                let! patches = Codec.field "patches" id (Codec.list EnvCodecs.filePatch)
-                return patches
+                let! patches = Codec.field "patches" fst (Codec.list EnvCodecs.filePatch)
+                and! roots = beneathField snd
+                return patches, roots
             })
             (Codec.record {
                 let! files = Codec.field "files" id (Codec.list EnvCodecs.patchedFile)

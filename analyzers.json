@@ -113,6 +113,16 @@
       "reason": "FsOps interpreter: ranged reads (seek) and atomic writes (a temporary file renamed over the target, keeping its Unix mode)."
     },
     {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.Envd.Live/Native/Posix.fs", "src/Fx.Envd.Live/Native/Windows.fs"],
+      "reason": "The P/Invoke layer of envd's files beneath roots (T113b): descriptor-relative calls on Linux and macOS (openat2 through syscall, openat, fstatat, readdir; `openat` picks the declaration for the platform's variadic calling convention) and CreateFileW on Windows."
+    },
+    {
+      "codes": ["EFF004", "EFF008"],
+      "files": ["src/Fx.Envd.Live/BeneathPosix.fs", "src/Fx.Envd.Live/BeneathWindows.fs"],
+      "reason": "FsOps/Fs interpreters beneath roots (T113b): paths under a sandbox's writable roots resolved without following symbolic links, through descriptors (Linux, macOS) or held directory handles (Windows); reads and writes go through the handles they open."
+    },
+    {
       "codes": ["EFF004"],
       "files": ["src/Fx.Envd.Live/LocalWatch.fs"],
       "reason": "FsOps.Watch interpreter: the only FileSystemWatcher; its events go into a ChangeQueue that the clock debounces."

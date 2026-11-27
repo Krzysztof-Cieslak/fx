@@ -113,6 +113,14 @@ let services (shell: Shell) (fs: InMemoryFs) (retain: int) (spill: Spill option)
         FsRead = fs.FsRead
         Fs = fs.Fs
         FsOps = FsOpsOver.create fs.FsRead fs.Fs
+        // InMemoryFs has no links: beneath roots, its paths resolve as they do anywhere.
+        Beneath =
+            fun _ ->
+                {
+                    FsRead = fs.FsRead
+                    Fs = fs.Fs
+                    FsOps = FsOpsOver.create fs.FsRead fs.Fs
+                }
         Shell = shell
         Terminal =
             {

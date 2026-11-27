@@ -52,6 +52,49 @@ let private suites (reach: Reach) : Test list =
                 Release = session.Close
             })
 
+        // Beneath a root, the files behave as they do anywhere, except for links (T113b).
+        FsConformance.tests $"{name}, beneath the root" (fun () ->
+            let root = Scratch.directory ()
+            let session = openSession reach root
+            let client = EnvClient.beneath [ root ] session.Client
+
+            {
+                Read = client.FsRead
+                Fs = client.Fs
+                Root = root
+                Release = session.Close
+            })
+
+        FsOpsConformance.tests $"{name}, beneath the root" (fun () ->
+            let root = Scratch.directory ()
+            let session = openSession reach root
+            let client = EnvClient.beneath [ root ] session.Client
+
+            {
+                Read = client.FsRead
+                Fs = client.Fs
+                Ops = client.FsOps
+                Root = root
+                Watches = true
+                Release = session.Close
+            })
+
+        BeneathConformance.tests name (fun root outside ->
+            let session = openSession reach root
+            let client = EnvClient.beneath [ root ] session.Client
+
+            {
+                Files =
+                    {
+                        FsRead = client.FsRead
+                        Fs = client.Fs
+                        FsOps = client.FsOps
+                    }
+                Root = root
+                Outside = outside
+                Release = session.Close
+            })
+
         BlobsConformance.tests name (fun () ->
             let session = openSession reach (Scratch.directory ())
             sessions.Track(session.Client.Blobs, session)
@@ -97,6 +140,67 @@ let conformance =
                     Ops = LocalFsOps.create SystemClock.clock (SystemIds.create SystemClock.clock)
                     Root = root
                     Watches = true
+                    Release = ignore
+                })
+
+            FsConformance.tests "LocalBeneath" (fun () ->
+                let root = Scratch.directory ()
+
+                let files =
+                    LocalBeneath.files SystemClock.clock (SystemIds.create SystemClock.clock) [ root ]
+
+                {
+                    Read = files.FsRead
+                    Fs = files.Fs
+                    Root = root
+                    Release = ignore
+                })
+
+            FsOpsConformance.tests "LocalBeneath" (fun () ->
+                let root = Scratch.directory ()
+
+                let files =
+                    LocalBeneath.files SystemClock.clock (SystemIds.create SystemClock.clock) [ root ]
+
+                {
+                    Read = files.FsRead
+                    Fs = files.Fs
+                    Ops = files.FsOps
+                    Root = root
+                    Watches = true
+                    Release = ignore
+                })
+
+            BeneathConformance.tests "LocalBeneath" (fun root outside ->
+                {
+                    Files = LocalBeneath.files SystemClock.clock (SystemIds.create SystemClock.clock) [ root ]
+                    Root = root
+                    Outside = outside
+                    Release = ignore
+                })
+
+            // One openat per component, where openat2 (Linux) is missing.
+            FsOpsConformance.tests "LocalBeneath, walking" (fun () ->
+                let root = Scratch.directory ()
+
+                let files =
+                    LocalBeneath.filesWith false SystemClock.clock (SystemIds.create SystemClock.clock) [ root ]
+
+                {
+                    Read = files.FsRead
+                    Fs = files.Fs
+                    Ops = files.FsOps
+                    Root = root
+                    Watches = true
+                    Release = ignore
+                })
+
+            BeneathConformance.tests "LocalBeneath, walking" (fun root outside ->
+                {
+                    Files =
+                        LocalBeneath.filesWith false SystemClock.clock (SystemIds.create SystemClock.clock) [ root ]
+                    Root = root
+                    Outside = outside
                     Release = ignore
                 })
 

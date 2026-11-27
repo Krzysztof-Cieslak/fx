@@ -197,6 +197,7 @@ module EnvdMain =
                             FsRead = LocalFs.read
                             Fs = LocalFs.write
                             FsOps = LocalFsOps.create clock ids
+                            Beneath = LocalBeneath.files clock ids
                             Shell = localShell
                             Terminal = TerminalSetup.wrap (LocalPlatform.terminalDefaults shell) localTerminal
                             Blobs = blobStore.Blobs

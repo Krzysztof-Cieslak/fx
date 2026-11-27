@@ -1,14 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    envd's imperative shell: the live interpreters it adds (ranged reads and atomic writes, watching,
+    envd's imperative shell: the live interpreters it adds (ranged reads and atomic writes, paths beneath roots, watching,
     spill files, platform detection) and its composition root (EnvdMain: the services from the real
     interpreters, the state directory, `envd` on stdio). Only composition roots (the binary, tests)
     reference this project; each file that touches the world has its own reviewed entry in
     analyzers.json. Spec: docs/modules/envd.md.
   -->
   <ItemGroup>
+    <Compile Include="Native/Posix.fs" />
+    <Compile Include="Native/Windows.fs" />
     <Compile Include="LocalWatch.fs" />
     <Compile Include="LocalFsOps.fs" />
+    <Compile Include="Beneath.fs" />
+    <Compile Include="BeneathPosix.fs" />
+    <Compile Include="BeneathWindows.fs" />
+    <Compile Include="LocalBeneath.fs" />
     <Compile Include="LocalSpill.fs" />
     <Compile Include="LocalPlatform.fs" />
     <Compile Include="EnvdMain.fs" />
