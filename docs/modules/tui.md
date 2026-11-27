@@ -110,8 +110,11 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   (idle, the running turn, held, needs input, closed) on the right.
 - **Approval mode** (spec §13.3, T134): `approvals: ask|auto|deny|off` in the footer, from
   `session/approvals` (`auto` in the accent colour; `deny` and `off`, which ask nobody, as warnings).
-  The TUI asks for it when the environment is known (its sandbox decides whether auto approvals can
-  hold) and again when a grant of `approvals.auto` is made, or any grant is revoked or expires (the
+  Where no driver confines the commands (the default) auto says so as a warning:
+  `approvals: auto · unsandboxed` (the auto-approved commands run with the user's rights); where the
+  words do not fit, the mode alone. Switching auto on says once what it means: `approvals: auto ·
+  unsandboxed: commands run unasked with your rights`, or `… confined by <driver>`. The TUI asks for it
+  when the environment is known (the host names its confining driver) and again when a grant of `approvals.auto` is made, or any grant is revoked or expires (the
   TUI follows the grants log already: another client or `fx grants` may switch it). `Shift+Tab` and
   `/approvals` switch it (below).
 - **Turn footer**: under each ended turn, `▣` with the product, the model its last call used, how
@@ -274,7 +277,7 @@ that names no command says so.
 | `/model provider/model` | sets `model.role.main` for the session from its next turn on (`session/overrides`) |
 | `/detail` | cycles the detail (as `Ctrl+O`) |
 | `/theme [auto\|dark\|light\|ansi16]` | changes the colours for this run (without a name: a picker) |
-| `/approvals [ask\|auto]` | asks for every command, or runs what the sandbox confines without asking (`session/setApprovals`: a person's session grant of `approvals.auto`; without a name it switches). Refused, with the host's reason, where no driver confines the environment or policy forbids it; also during a turn (the next command) |
+| `/approvals [ask\|auto]` | asks for every command, or runs commands written plainly in the workspace without asking, sandbox or not (`session/setApprovals`: a person's session grant of `approvals.auto`; without a name it switches). Refused, with the host's reason, where policy forbids it; also during a turn (the next command) |
 | `/exit` | leaves; the session stays |
 
 Switching sessions ends the subscriptions of the one shown before the next starts (`TuiClient.run`),
@@ -345,8 +348,8 @@ terminal check's P/Invoke without a terminal).
 ## Testing
 
 - `Fx.Tui.Tests`: approval modes (golden renders of a turn whose commands ran on auto approvals and one
-  a person allowed, at 80, 40 and 24 columns and verbose; `Shift+Tab` and `/approvals` switching, a
-  refusal's reason, the mode asked for with the environment and after grants of auto approvals); the
+  a person allowed, unsandboxed at 80, 40 and 24 columns and verbose, and confined by bubblewrap;
+  `Shift+Tab` and `/approvals` switching, the note without a sandbox and with one, a refusal's reason, the mode asked for with the environment and after grants of auto approvals); the
   start screen (the wordmark, the first prompt to the transcript, golden
   renders with and without the palette); commands (parsing, the palette's search, `Ctrl+P`, `/model`, `/theme`, `/new`
   and `/sessions`, completion, golden renders of the palette and of `/` suggestions); usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any

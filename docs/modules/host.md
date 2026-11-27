@@ -141,9 +141,10 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   profile, [codeact.md](codeact.md#grants-spec-13-18-t127b)): commands, writes outside the workspace
   or to protected paths, reads outside it and network bindings ask the grants log; its slots
   (`codeact.grants.*`) are in `HostSlots.core`. The guard's `Sandbox` is the environment's driver when
-  it confines (`EnvSandbox.Info`), so auto approvals ([codeact.md](codeact.md#approval-modes-spec-133-t134))
-  never apply where nothing confines; the grants log gets a policy rule that denies `approvals.auto`
-  from a policy file that forbids `codeact.grants.mode = auto` or pins the mode to another value
+  it confines (`EnvSandbox.Info`), `none` otherwise: auto approvals
+  ([codeact.md](codeact.md#approval-modes-spec-133-t134)) hold sandbox or not, and are checked on it, so
+  a grants policy rule on `none` forbids them only unsandboxed; the grants log gets a policy rule that
+  denies `approvals.auto` from a policy file that forbids `codeact.grants.mode = auto` or pins the mode to another value
   (`AutoApprovals.policyRules`). A session keeps the profile it started with: a host restarted with
   another mode changes new sessions' (a person switches an existing session's with
   `session/setApprovals`). The hands are recorded (`Wraps`: their clock, files,
@@ -189,8 +190,8 @@ ClientProtocol.prompt …`). The TypeScript types are generated from the codecs
 | `session/overrides` | `{session, key, set: {slot: value}, unset: [slot]}` → `{after, count}` (`invalid` with the resolution's issues) | collaborator |
 | `session/close`, `session/reopen` | `{session, key}` → `{after, count}` (closing ends the session's grants) | collaborator |
 | `session/offers` | `{session}` → the open requests this client can answer | viewer |
-| `session/approvals` | `{session}` → `ApprovalsView` `{session, mode: ask \| auto \| deny \| off, configured, sandbox?, reason}`: what the grants guard does with the session's commands now (`configured` is `codeact.grants.mode` of the session's profile; `sandbox` the driver that confines its environment; `reason` why auto approvals are on or off) (T134) | viewer |
-| `session/setApprovals` | `{session, auto}` → `ApprovalsView`: a person turns auto approvals on (a session grant of `approvals.auto` by the caller, after revoking the session's deny grants) or off (revoking the session's allow grants, and a session deny grant where they would still hold); `invalid` with the reason where they cannot hold (mode `off`, no driver that confines, policy) (`HostApprovals`, T134) | owner |
+| `session/approvals` | `{session}` → `ApprovalsView` `{session, mode: ask \| auto \| deny \| off, configured, sandbox?, reason}`: what the grants guard does with the session's commands now (`configured` is `codeact.grants.mode` of the session's profile; `sandbox` the driver that confines its environment, absent when none does: its commands run with the user's rights; `reason` why auto approvals are on or off) (T134) | viewer |
+| `session/setApprovals` | `{session, auto}` → `ApprovalsView`: a person turns auto approvals on (a session grant of `approvals.auto` by the caller, after revoking the session's deny grants) or off (revoking the session's allow grants, and a session deny grant where they would still hold); allowed sandbox or not; `invalid` with the reason where they cannot hold (mode `off`, policy) (`HostApprovals`, T134) | owner |
 | `session/subscribe` | `{session, after}` → runs until cancelled, sending `session/event` `{session, item}` (`SessionFeed`: replay after `after`, a snapshot first if far behind, then live) | viewer |
 | `session/context` | `{session, after}` → runs until cancelled, sending `session/contextEvent` `{session, item}` (a context event with its envelope, after `after` of the context log, then live) and `session/streaming` `{session, turn, fresh, text, tool?}` as the running turn's model writes (T130) | viewer |
 | `grants/*` | `GrantsProtocol` ([grants.md](grants.md)); answering, granting and revoking need an owner who is a person (`notAPerson` otherwise) | viewer / owner |
@@ -282,7 +283,9 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    The environment is shown once on standard error with its sandbox (`env: default (local) ·
    sandbox: off` by default, or the driver that confines it), then its warnings (`warning: …`): a
    sandbox the host asked for (`auto`) that cannot run here says so and why (Windows; bubblewrap that
-   cannot run, with what to do). A driver the host names that cannot run fails the run.
+   cannot run, with what to do). A driver the host names that cannot run fails the run. With auto
+   approvals on, one line says what runs unasked and with what rights (`HostApprovals.notice`:
+   `approvals: auto · unsandboxed: …` without a driver, `approvals: auto · <driver>: …` with one).
 3. Grant requests of the run (its session's, e.g. a command a cell runs, and those of no session, e.g.
    installing Bun the first time) are put to the person at the terminal (`GrantPrompts`): the summary,
    the action and resource, and the evidence (which turn and call asked, the command line, an install's
@@ -366,9 +369,10 @@ do; nothing is ever approved for them:
    (`fx run --variant codeact.grants.mode=deny …`) or in host config (`<data directory>/config.json`:
    `{"variants": {"codeact.grants.mode": "deny"}}`), never by a project's config or a session
    override, and policy may pin or forbid it. `deny` refuses what no grant allows without asking
-   anyone (the unattended choice); `auto` runs unasked what a sandbox driver confines to the
-   workspace (downloads, installs, writes outside the workspace still ask, so without a terminal they
-   fail "not answered"; with `none` every command asks); `off` checks nothing and is only for
+   anyone (the unattended choice); `auto` runs unasked commands written plainly in the
+   workspace, sandbox or not (downloads, installs, writes outside the workspace still ask, so without a
+   terminal they fail "not answered"; unsandboxed, the commands run with the user's rights, and the run
+   says so once: `approvals: auto · unsandboxed: …`); `off` checks nothing and is only for
    sandboxed or throwaway environments. The sandbox applies either way. Auto approvals are also a
    grant: `fx grants allow approvals.auto '*'` turns them on for every session of this host (with
    `deny`, what they cover runs and the rest is refused).
@@ -424,8 +428,9 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   extension's method, revocation ending connections; with the bun-ts kernel (network): a client answers
   the first install's grant request while `session/create` waits, then a turn finishes; the generated
   types; the least roles; `session/approvals` and `session/setApprovals` (a person's switch is a session
-  grant and its revocation; refused without a confining driver; with the host's mode `auto`, off is a
-  session deny grant; a policy that forbids it; viewers read, cannot switch).
+  grant and its revocation, without a sandbox too; with the host's mode `auto`, off is a session deny
+  grant; with `sandbox.driver = auto`, the confining driver and why; a policy that forbids it; viewers
+  read, cannot switch).
 - `LiveTests` (the network for Bun; cached in `artifacts/host-tests/downloads`; skipped offline,
   required in CI): `fx run -p` with TypeScript cells on bun-ts, Bun installed by the host's installer
   after the person approves; a restart that continues the session without asking again; a turn the
@@ -444,9 +449,11 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   in this project, so a kernel that died with the thread that started it would die here, T135), then a
   kernel that kills itself: its cell's receipt and the journal say how (SIGKILL, exit code 137), the next
   cell's receipt and `fx run`'s activity say why a new kernel started, and `fx replay` matches; auto
-  approvals (T134) with the OS's driver: a build's commands unasked (journaled as auto approvals, `fx run`'s
-  `✓ auto-approved` line), a download and a write outside the workspace asked, and with
-  `sandbox.driver = none` every command asked.
+  approvals (T134) without a sandbox and with `sandbox.driver = auto`: a build's commands and a script in
+  the workspace unasked (journaled as auto approvals, `fx run`'s `✓ auto-approved` line and its one
+  `approvals: auto` line, `· unsandboxed` without a driver), a download, a write outside the workspace and
+  the first install asked; unsandboxed the script writes outside the workspace with the user's rights,
+  sandboxed it cannot.
 - `GrantPromptTests`: what the terminal shows of a grant request, replies as answers, what a run shows
   when nobody can answer (the `fx grants allow` command for requests that offer host scope, quoted for
   the shell, the resource escaped as an exact pattern).

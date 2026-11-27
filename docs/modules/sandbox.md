@@ -63,8 +63,9 @@ sandbox, with permission prompts as the control, and Windows v1 runs unsandboxed
 user's rights: they can read the user's credentials (SSH keys, cloud and registry tokens, the
 keyring's session bus, and the product's own credentials file in its data directory), write anywhere
 the user can, and use the network. What guards them is the grants log: permission prompts for
-commands, writes outside the workspace, the network and installs (T127b; approval modes, T134), and
-content exclusions at egress. "Credentials live only on the host" (spec §18) then means that the model
+commands, writes outside the workspace, the network and installs (T127b; with auto approvals on,
+T134, commands written plainly in the workspace run unasked, with those rights), and content
+exclusions at egress. "Credentials live only on the host" (spec §18) then means that the model
 never receives them through the product (configuration refers to secrets, egress hooks run on every
 request), not that an agent's processes cannot read files. The file bindings keep to the
 environment's policy as a guardrail (`SandboxGuard`, below), but a command does not.
@@ -236,10 +237,13 @@ Where no driver confines (the default, and Windows) only the second applies: the
 policy (no reading the credential locations or the data directory, no writing outside the workspace's
 writable roots), but commands are not confined.
 
-**Auto approvals** (spec §13.3, codeact.md "Approval modes"): the CodeAct guard runs commands unasked
-only where the environment's driver confines (`EnvSandboxInfo.Confines`); with `none` every command
-asks. They lean on what this page's policy holds (writes, credentials), not on the network, which stays
-open unless the spec closes it.
+**Auto approvals** (spec §13.3, codeact.md "Approval modes"): the CodeAct guard runs commands written
+plainly in the workspace unasked, sandbox or not; the sandbox does not gate them, it makes them
+stronger. Where a driver confines (`EnvSandboxInfo.Confines`), what those commands do is held to this
+page's policy (writes, credentials); with `none` they run with the user's rights, and clients say so
+(`approvals: auto · unsandboxed`). Neither holds the network, which stays open unless the spec closes it
+(and needs a driver to). The grant that turns them on names the driver (`approvals.auto`, `none` when
+nothing confines), so a policy can forbid them only unsandboxed.
 
 ## The drivers
 
