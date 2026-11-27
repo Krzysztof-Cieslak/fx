@@ -172,17 +172,22 @@ let load () : Task<Loaded> =
         let exthost = exthostRoot ()
         let! sample = samplePackage bun
 
-        let launched =
-            { manifest with
-                Launch = manifest.Launch |> Option.map (fun launch -> { launch with Exe = bun })
-            }
-
         let env =
             hostEnv (LocalShell.create (LocalShell.defaultShell ()) AppContext.BaseDirectory)
 
+        // The pinned Bun stands for the installed component: the launch's `${bin.bun}` is its path.
+        let installed: InstalledComponent =
+            {
+                Id = RuntimeBun.runtime.Component.Id
+                Version = SemVer.tryParse ExthostBun.requires.Head.Version |> Option.get
+                Dir = Path.GetDirectoryName bun |> nonNull
+                Bin = [ "bun", bun ]
+                Env = []
+            }
+
         let settings =
             { settings with
-                InstallComponents = fun _ -> EffResult.ok ()
+                InstallComponents = fun _ -> EffResult.ok [ installed ]
             }
 
         let! host =
@@ -192,7 +197,7 @@ let load () : Task<Loaded> =
                     (ExtensionHost.bootstrap
                         settings
                         [
-                            Candidate.create Source.Builtin (Package.Manifest(launched, Some exthost))
+                            Candidate.create Source.Builtin (Package.Manifest(manifest, Some exthost))
                             Candidate.create
                                 Source.Builtin
                                 (Package.Manifest(

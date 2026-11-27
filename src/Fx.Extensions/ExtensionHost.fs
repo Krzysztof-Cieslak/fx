@@ -102,8 +102,9 @@ type HostSettings<'R> =
         Catalog: Catalog
         /// The environment each extension's code runs in, attenuated to its manifest.
         EnvFor: Manifest -> IExtensionEnv
-        /// Installs the components an admitted extension requires (spec §6.1; the installer is T110).
-        InstallComponents: Manifest -> Eff<'R, Result<unit, string>>
+        /// Installs the components an admitted extension requires (spec §6.1) and says where they are:
+        /// an extension process's launch names their commands (`${bin.<name>}`).
+        InstallComponents: Manifest -> Eff<'R, Result<InstalledComponent list, string>>
         Process: ProcessRuntime.ProcessSettings
         /// Extensions disabled in host config. Policy extensions cannot be disabled.
         Disabled: string list
@@ -205,7 +206,7 @@ module ExtensionHost =
             InstallComponents =
                 fun manifest ->
                     if manifest.Requires.IsEmpty then
-                        EffResult.ok ()
+                        EffResult.ok []
                     else
                         EffResult.error "this host has no component installer yet"
             Process = processes
@@ -331,6 +332,7 @@ module ExtensionHost =
         (settings: HostSettings<'R>)
         (work: Work)
         (candidate: Candidate)
+        (installed: InstalledComponent list)
         (env: IExtensionEnv)
         : Eff<'R, Result<Activation * Eff<IExtensionEnv, unit>, string>> =
         fun (hostEnv: 'R) ->
@@ -364,7 +366,13 @@ module ExtensionHost =
                     | None -> return Error "a process extension needs its package directory"
                     | Some root ->
                         match!
-                            ProcessRuntime.start settings.Process settings.Trust.ProjectTrusted manifest root hostEnv
+                            ProcessRuntime.start
+                                settings.Process
+                                settings.Trust.ProjectTrusted
+                                manifest
+                                root
+                                installed
+                                hostEnv
                         with
                         | Error reason -> return Error reason
                         | Ok running ->
@@ -411,11 +419,12 @@ module ExtensionHost =
         (work: Work)
         (phase: Phase)
         (candidate: Candidate)
+        (installed: InstalledComponent list)
         : Eff<'R, unit> =
         eff {
             let manifest = Package.manifest candidate.Package
             let env = settings.EnvFor manifest
-            let! started = start settings work candidate env
+            let! started = start settings work candidate installed env
 
             match started with
             | Error reason -> failed work manifest.Id phase reason
@@ -475,11 +484,114 @@ module ExtensionHost =
         | Some entry -> entry.Status = Status.Admitted
         | None -> false
 
+    /// The candidates for this host: those for another placement, and those disabled in host config
+    /// (policy extensions cannot be), are left out, and reported as skipped if `reporting`.
+    let private including (settings: HostSettings<'R>) (work: Work) (reporting: bool) (candidates: Candidate list) =
+        candidates
+        |> List.filter (fun candidate ->
+            let manifest = Package.manifest candidate.Package
+
+            let skipped (reason: string) =
+                if reporting then
+                    report work manifest.Id (phaseOf manifest) (Outcome.Skipped reason)
+
+                false
+
+            if string manifest.Placement <> settings.Trust.Placement then
+                skipped $"it runs in the {manifest.Placement}"
+            elif List.contains manifest.Id settings.Disabled && candidate.Source <> Source.Policy then
+                skipped "disabled in host config"
+            else
+                true)
+
+    let private inPhase (phase: Phase) (candidates: Candidate list) =
+        candidates
+        |> List.filter (fun c -> phaseOf (Package.manifest c.Package) = phase)
+
+    /// The bootstrap's first phase (spec §16.1): the native extensions among the candidates, then the
+    /// declarative ones, each admitted, then activated, in the order given. Candidates that are not
+    /// for this host are reported as skipped; the rest wait for `bootstrapRest` with the same
+    /// candidates, which a host runs once what the components phase needs (grants, the installer) runs
+    /// on what this phase loaded.
+    let bootstrapInBinary<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
+        (settings: HostSettings<'R>)
+        (candidates: Candidate list)
+        : Eff<'R, Host> =
+        eff {
+            let work = Work(empty settings.Catalog)
+            let included = including settings work true candidates
+
+            let natives, declaratives =
+                inPhase Phase.InBinary included
+                |> List.partition (fun c ->
+                    match c.Package with
+                    | Package.Native _ -> true
+                    | Package.Manifest _ -> false)
+
+            for candidate in natives @ declaratives do
+                let! admitted = admit settings work Phase.InBinary candidate
+
+                if admitted then
+                    do! activate settings work Phase.InBinary candidate []
+
+            return work.Snapshot()
+        }
+
+    /// The bootstrap's later phases (spec §16.1), on what `bootstrapInBinary` loaded from the same
+    /// candidates: the process and hosted extensions are admitted, then the components each one
+    /// requires are installed (`InstallComponents`; if that fails, the extension fails), then
+    /// extension processes start (their launches name the installed components' commands), then
+    /// extensions whose runtime an extension contributes activate.
+    ///
+    /// Extension processes stay connected for as long as this effect's scope.
+    let bootstrapRest<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
+        (settings: HostSettings<'R>)
+        (host: Host)
+        (candidates: Candidate list)
+        : Eff<'R, Host> =
+        eff {
+            let work = Work host
+            let included = including settings work false candidates
+
+            // 2. Admit the rest, then install the components they require.
+            let later = inPhase Phase.Process included @ inPhase Phase.Hosted included
+
+            for candidate in later do
+                let! _ = admit settings work (phaseOf (Package.manifest candidate.Package)) candidate
+                ()
+
+            let installed = Dictionary<string, InstalledComponent list>(StringComparer.Ordinal)
+
+            for candidate in later do
+                let manifest = Package.manifest candidate.Package
+
+                if isAdmitted work manifest.Id && not manifest.Requires.IsEmpty then
+                    match! settings.InstallComponents manifest with
+                    | Ok components -> installed[manifest.Id] <- components
+                    | Error reason -> failed work manifest.Id Phase.Components reason
+
+            // 3. Extension processes. 4. Extensions on contributed runtimes.
+            for phase in [ Phase.Process; Phase.Hosted ] do
+                for candidate in inPhase phase included do
+                    let id = (Package.manifest candidate.Package).Id
+
+                    if isAdmitted work id then
+                        let components =
+                            match installed.TryGetValue id with
+                            | true, components -> components
+                            | _ -> []
+
+                        do! activate settings work phase candidate components
+
+            return work.Snapshot()
+        }
+
     /// Loads the candidates in the bootstrap order (spec §16.1): native, then declarative; then the
     /// components the rest require; then extension processes; then extensions whose runtime an
     /// extension contributes. Within a phase, candidates load in the order given. Every candidate is
     /// admitted (trust, pins, versions, conflicts) before any of its code runs. The result records
     /// the registry's events, which replay to its state, and what became of each candidate.
+    /// `bootstrapInBinary`, then `bootstrapRest`.
     ///
     /// Extension processes stay connected for as long as this effect's scope.
     let bootstrap<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
@@ -487,63 +599,8 @@ module ExtensionHost =
         (candidates: Candidate list)
         : Eff<'R, Host> =
         eff {
-            let work = Work(empty settings.Catalog)
-            let trust = settings.Trust
-
-            let included =
-                candidates
-                |> List.filter (fun candidate ->
-                    let manifest = Package.manifest candidate.Package
-                    let phase = phaseOf manifest
-
-                    if string manifest.Placement <> trust.Placement then
-                        report work manifest.Id phase (Outcome.Skipped $"it runs in the {manifest.Placement}")
-                        false
-                    elif List.contains manifest.Id settings.Disabled && candidate.Source <> Source.Policy then
-                        report work manifest.Id phase (Outcome.Skipped "disabled in host config")
-                        false
-                    else
-                        true)
-
-            let inPhase (phase: Phase) =
-                included |> List.filter (fun c -> phaseOf (Package.manifest c.Package) = phase)
-
-            let natives, declaratives =
-                inPhase Phase.InBinary
-                |> List.partition (fun c ->
-                    match c.Package with
-                    | Package.Native _ -> true
-                    | Package.Manifest _ -> false)
-
-            // 1. In the binary: native, then declarative.
-            for candidate in natives @ declaratives do
-                let! admitted = admit settings work Phase.InBinary candidate
-
-                if admitted then
-                    do! activate settings work Phase.InBinary candidate
-
-            // 2. Admit the rest, then install the components they require.
-            let later = inPhase Phase.Process @ inPhase Phase.Hosted
-
-            for candidate in later do
-                let! _ = admit settings work (phaseOf (Package.manifest candidate.Package)) candidate
-                ()
-
-            for candidate in later do
-                let manifest = Package.manifest candidate.Package
-
-                if isAdmitted work manifest.Id && not manifest.Requires.IsEmpty then
-                    match! settings.InstallComponents manifest with
-                    | Ok() -> ()
-                    | Error reason -> failed work manifest.Id Phase.Components reason
-
-            // 3. Extension processes. 4. Extensions on contributed runtimes.
-            for phase in [ Phase.Process; Phase.Hosted ] do
-                for candidate in inPhase phase do
-                    if isAdmitted work (Package.manifest candidate.Package).Id then
-                        do! activate settings work phase candidate
-
-            return work.Snapshot()
+            let! host = bootstrapInBinary settings candidates
+            return! bootstrapRest settings host candidates
         }
 
     /// The contributions of a type in effect: active extensions in admission order, each in the order

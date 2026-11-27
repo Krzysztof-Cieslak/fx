@@ -206,8 +206,13 @@ let extension = { Manifest = manifest
     manifest's (id and version) and activates it in that extension's environment. A package that
     cannot be loaded fails its activation with the reason (`the package has no extension.js`, `its
     module does not load (SyntaxError)`: the thrown value's name, its message only on standard error).
-  - Loading it in the host (files written with hash checks, the pinned Bun installed in the components
-    phase and its path in the launch's `${bin.bun}`, the built-ins) is T115b.
+  - in the host it is a built-in (`Builtins.candidates`): its files are written into
+    `<data>/extensions/fx.exthost.bun` with hash checks before the bootstrap's later phases
+    (`Bundled.extract`: a file whose SHA-256 is not the content's is written again and read back), the
+    pinned Bun it requires is installed in the components phase, and its launch's `${bin.bun}` is the
+    installed Bun ([host.md](host.md#the-start-hoststart)). A first install of that Bun is never asked
+    for while the host starts: without yolo approvals or a grant that allows it, `fx.exthost.bun` fails
+    with a warning that says how to allow it, and the next start uses it.
 
 ### The extension protocol
 
@@ -251,14 +256,20 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 1. **in-binary:** native extensions, then declarative ones, each in the order given. Each is admitted,
    then activated, before the next, so types a native extension defines are known to those after it.
 2. **components:** process and hosted extensions are admitted (all trust checks), then the components
-   each admitted one requires are installed (`HostSettings.InstallComponents`: `Components.installFor`
-   from `Fx.Components`, [components.md](components.md); the default settings have no installer, so
-   extensions that require components fail closed).
-3. **process:** extension processes start and activate.
+   each admitted one requires are installed (`HostSettings.InstallComponents`, e.g.
+   `Components.installFor` from `Fx.Components`, [components.md](components.md); the default settings
+   have no installer, so extensions that require components fail closed). It answers where they are.
+3. **process:** extension processes start and activate. A launch's `${bin.<name>}` is a command of a
+   component installed for that extension (`LaunchContext.Bin`); one that none of them exports fails
+   the extension (`its launch names ${bin.node}, a command that none of the components it requires
+   exports`).
 4. **hosted:** extensions whose runtime an extension contributes (now available) activate.
 
 - Candidates for another placement, and those disabled in host config, are skipped (policy extensions
   cannot be disabled).
+- `bootstrap` is `bootstrapInBinary` (phase 1; it reports the skipped ones) then `bootstrapRest`
+  (phases 2–4) with the same candidates. A host runs what the components phase needs between them
+  (grants and the installer, made from what phase 1 loaded): [host.md](host.md#the-start-hoststart).
 - The result (`Host`) has the registry's state and events, the activated extensions, the catalog and a
   report per candidate (`activated`, `rejected` with the rejection, `failed` with the reason, `skipped`).
   The same candidates give the same events.
@@ -278,9 +289,10 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
 | Project files do not configure a runtime before trust | a launch's `untrustedOverrides` apply until the project is trusted (`LaunchContext.ProjectTrusted`, `RuntimeSpec.launch`) |
 | Code cannot add undeclared contributions | activation must match the manifest (`extension.mismatch`) |
 
-Left to later tasks: deciding project trust and reading pins from host config (T106/T129), bundled
-packages extracted with hash checks (T115b; `fx.runtime.bun` is declarative, so its package is its
-manifest, a value in the binary, with nothing to extract), sandboxing extension
+Bundled packages with files are written into the data directory with hash checks before they start
+(`fx.exthost.bun`; `fx.runtime.bun` is declarative, so its package is its manifest, a value in the
+binary, with nothing to write). Left to later tasks: deciding project trust and reading pins from host
+config (T106/T129), sandboxing extension
 processes with the sandbox drivers ([sandbox.md](sandbox.md); Windows v1 runs them unsandboxed), restarting crashed extension processes.
 
 ## Left to later tasks
@@ -289,8 +301,7 @@ processes with the sandbox drivers ([sandbox.md](sandbox.md); Windows v1 runs th
 |---|---|
 | Recording the registry's events in the event store (the static list of built-ins, the bootstrap and `ext/<id>/<name>` on the client protocol are the host's: [host.md](host.md)) | with host-config extensions |
 | Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
-| `Components.installFor` as `InstallComponents` for extensions from host config (the host plans the lockfile and installs environments' components: [host.md](host.md)) | with host-config extensions |
-| `fx.exthost.bun` in the host: its files written into the data directory with hash checks, the pinned Bun installed in the components phase and its path in the launch, the built-ins | T115b |
+| Extensions from host config (process and Bun packages, pins); the host's components phase installs what they require already ([host.md](host.md)) | with host-config extensions |
 | Disabling and pinning from host config and policy; variants selecting extensions (`IVariants`) and profiles recording extension versions (spec §15) | T106 |
 
 ## Transport parity

@@ -61,6 +61,7 @@
     <ProjectReference Include="..\..\extensions\Fx.Ext.EgressExclusions\Fx.Ext.EgressExclusions.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.InterpreterBunTs\Fx.Ext.InterpreterBunTs.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.RuntimeBun\Fx.Ext.RuntimeBun.fsproj" />
+    <ProjectReference Include="..\..\extensions\Fx.Ext.ExthostBun\Fx.Ext.ExthostBun.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.AuthStandard\Fx.Ext.AuthStandard.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.StoreKeyring\Fx.Ext.StoreKeyring.fsproj" />
     <ProjectReference Include="..\..\extensions\Fx.Ext.StoreFile\Fx.Ext.StoreFile.fsproj" />

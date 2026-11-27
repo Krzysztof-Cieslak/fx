@@ -25,6 +25,7 @@ let private context (windows: bool) : LaunchContext =
             ]
         IsWindows = windows
         ProjectTrusted = false
+        Bin = []
     }
 
 let private spec: LaunchSpec =
@@ -125,6 +126,36 @@ let tests =
                 Expect.equal (exe "bun") "bun" "bare"
                 Expect.equal (exe "bin/tool") (Path.Combine(root, "bin/tool")) "relative"
                 Expect.equal (exe "/usr/bin/tool") "/usr/bin/tool" "absolute"
+            }
+
+            test "${bin.<name>} is a command of a component the extension requires; one that none exports is refused" {
+                let bun = Path.Combine(Path.GetTempPath(), "runtimes", "bun", "bin", "bun")
+
+                let installed =
+                    { context false with
+                        Bin = [ "bun", bun ]
+                    }
+
+                match
+                    Launch.procSpec
+                        installed
+                        { spec with
+                            Exe = "${bin.bun}"
+                            Args = [ "${root}/main.ts" ]
+                        }
+                with
+                | Ok proc ->
+                    Expect.equal
+                        proc.Program
+                        (Exec(bun, [ "--no-project-config=" + root + "/empty"; root + "/main.ts" ]))
+                        "the installed path"
+                | Error reason -> failtest reason
+
+                match Launch.procSpec (context false) { spec with Exe = "${bin.bun}" } with
+                | Error reason -> Expect.stringContains reason "${bin.bun}" "names the command"
+                | Ok proc -> failtest (string proc)
+
+                Expect.isError (Launch.procSpec installed { spec with Args = [ "${bin.node}" ] }) "in an argument too"
             }
 
             test "the working directory: owned, or the workspace if there is one" {

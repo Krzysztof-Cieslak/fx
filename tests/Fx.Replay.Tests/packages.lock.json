@@ -247,6 +247,13 @@
           "Fx.Sdk": "[0.0.0, )"
         }
       },
+      "fx.ext.exthostbun": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )",
+          "Fx.Sdk": "[0.0.0, )"
+        }
+      },
       "fx.ext.identitylocalosuser": {
         "type": "Project",
         "dependencies": {
@@ -380,6 +387,7 @@
           "Fx.Ext.AuthStandard": "[0.0.0, )",
           "Fx.Ext.EgressExclusions": "[0.0.0, )",
           "Fx.Ext.EnvLocal": "[0.0.0, )",
+          "Fx.Ext.ExthostBun": "[0.0.0, )",
           "Fx.Ext.IdentityLocalOsUser": "[0.0.0, )",
           "Fx.Ext.InterpreterBunTs": "[0.0.0, )",
           "Fx.Ext.ModelAnthropic": "[0.0.0, )",

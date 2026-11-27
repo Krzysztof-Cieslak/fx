@@ -52,6 +52,7 @@ One per user: `FX_HOME` if set (absolute), else `~/.<product>` (Unix) or `%LOCAL
 | `trust.json` | the trusted projects |
 | `machine-id` | the host's stable machine id (identity.md), random, created once |
 | `runtimes/` | the component installer's root (the same `runtimes` environments on this machine use) |
+| `extensions/<id>/` | bundled packages' files, written from the binary with hash checks at each start (`fx.exthost.bun`: its TypeScript, `fx.runtime.bun`'s config files, its owned `home`, `cache`, `tmp`) |
 | `credentials/` | the file credential store's owner-only files (`LocalPrivateFiles`), when it is the store in use |
 | `environments/` | `fx.env.local`'s leases and envd's state |
 | `listener.token` | the local listener's token, owner-only (`TokenFile`), new each `fx serve` |
@@ -81,13 +82,16 @@ In this order; any expected failure is an `Error` with every line, and what star
 
 1. The data directory and its lock (`another host is running on …`).
 2. Trust, host config, policy, and the project's config once trusted (`Setup.readConfig`).
-3. **Extensions** (`Setup.bootstrap`, spec §16.1): the static list (`Builtins.candidates`: env.local,
-   sandbox.bubblewrap, sandbox.seatbelt, sandbox.none (the confining drivers first: `auto` takes the
-   first that confines on an environment's OS), identity.local-os-user, store.keyring, store.file,
-   store.ephemeral, auth.standard, model.anthropic, model.openai, egress.exclusions,
-   interpreter.bun-ts, runtime.bun) plus `HostOptions.Extensions`,
-   through `ExtensionHost.bootstrap` with the host's catalog (models, identity, grants, service
-   credentials) and host config's disabled list. Failed or rejected ones become warnings.
+3. **Extensions in the binary** (`Setup.bootstrap`, the bootstrap's first phase, spec §16.1): the
+   static list (`Builtins.candidates`: env.local, sandbox.bubblewrap, sandbox.seatbelt, sandbox.none
+   (the confining drivers first: `auto` takes the first that confines on an environment's OS),
+   identity.local-os-user, store.keyring, store.file, store.ephemeral, auth.standard, model.anthropic,
+   model.openai, egress.exclusions, interpreter.bun-ts, runtime.bun, exthost.bun) plus
+   `HostOptions.Extensions`, through `ExtensionHost.bootstrapInBinary` with the host's catalog
+   (models, identity, grants, service credentials) and host config's disabled list. Failed or rejected
+   ones become warnings. The registry, grants and components below are made from what this phase loads;
+   the process and hosted extensions (`fx.exthost.bun`, packages on `bun`) load at the end of step 7,
+   so their slots, grant actions and component definitions are not read.
 4. **The variant registry**: `HostSlots.core` (the variants module's, the render's, CodeAct's,
    identity's, service credentials', the sandbox's (`SandboxSlots`, privileged: `sandbox.driver`,
    `sandbox.writable`, `sandbox.denied`) and the host's) plus the contributed slots; then the host's resolution. Content
@@ -100,6 +104,18 @@ In this order; any expected failure is an `Error` with every line, and what star
    memory) with `Approvals.viaGrants` (a first install is a grant request a person answers) and a small
    probe environment (`Host.probeEnvironment`). Environments on this machine get the lockfile's
    requirements installed when they are created.
+
+   Then **the bootstrap's later phases** (`Setup.bootstrapRest`): bundled packages' files written into
+   `extensions/<id>` with hash checks (`Bundled.extract`; one that cannot be written is a warning);
+   the components phase, where each admitted extension's `requires` is planned from the definitions in
+   effect (`Host.planFor`) and installed by the same installer, held by `extension:<id>`
+   (`Components.installWith`); extension processes, their launches' `${bin.<name>}` the installed
+   commands (`fx.exthost.bun` on the installed Bun); then extensions on contributed runtimes. Installs
+   for extensions never ask (`ExtensionInstalls`: nobody is attached while the host starts): an
+   install already in `runtimes/` is found, yolo approvals or a grant the rules give at once
+   (`fx grants allow component.install bun@*`) approve one, anything else refuses it, and the extension
+   fails with a warning that says how to allow it; the next start tries again. Failures become
+   warnings.
 8. **Identity**: the machine id, `PeerCredentials.currentAccount`, session tokens and the
    authenticator over the contributed identity providers.
 9. **Environments**: `EnvsHost` on `environments/host` with the contributed providers and sandbox
@@ -484,7 +500,7 @@ never sent, which stops at the first install's approval (no terminal), withdraws
 | What | Task |
 |---|---|
 | `auth/*` over the client protocol (status, list, logout; logins forwarded to a capable client); browser logins on the command line (a loopback listener) | T509 |
-| Extensions from host config (process and Bun extensions, pins), installing their components in the bootstrap's components phase; `fx.exthost.bun` among the built-ins | T115b, with host-config extensions |
+| Extensions from host config (process and Bun packages, pins: `HostOptions.Extensions` stands for them); their slots, grant actions and component definitions (the registry and grants are made before they load) | with host-config extensions |
 | Persisting the installer's journal in the event store; the project's lockfile (`.fx/`), frozen-lockfile checks | with T211 |
 | Machine retry delays and store page sizes as slots | when tuned |
 | Choosing an environment per session (the picker) | later (after T130) |

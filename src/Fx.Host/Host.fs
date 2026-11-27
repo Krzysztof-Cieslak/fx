@@ -90,6 +90,56 @@ module YoloInstalls =
                 | None -> return! otherwise request
             }
 
+/// Installs an extension asks for in the bootstrap's components phase (holder `extension:<id>`) never
+/// wait for a person: nobody is attached while the host starts. They are approved by yolo approvals (the
+/// host's mode or a host grant of `approvals.yolo`) or by a grant of `component.install` that the
+/// rules give without asking; otherwise they are refused, the extension fails with a warning that says
+/// how to approve, and the next start tries again. An install already in the install root (a session's
+/// kernel installed the same Bun) is found and asks nothing. Other holders go to `otherwise`.
+[<RequireQualifiedAccess>]
+module ExtensionInstalls =
+    [<Literal>]
+    let private ExtensionHolder = "extension:"
+
+    /// Approves extensions' installs without asking anyone, or leaves other holders' to `otherwise`.
+    let approve<'R when 'R :> IScope>
+        (grants: Grants)
+        (mode: GrantMode)
+        (otherwise: ApprovalRequest -> Eff<'R, ApprovalAnswer>)
+        : ApprovalRequest -> Eff<'R, ApprovalAnswer> =
+        fun request ->
+            if not (request.Holder.StartsWith(ExtensionHolder, StringComparison.Ordinal)) then
+                otherwise request
+            else
+                eff {
+                    match! YoloInstalls.approval grants mode (fun _ -> []) request.Holder with
+                    | Some because -> return Approved("yolo approvals: " + because)
+                    | None ->
+                        let query =
+                            Approvals.query
+                                {
+                                    Session = None
+                                    Run = None
+                                    Repo = None
+                                }
+                                request
+
+                        let! check = fun (env: 'R) -> grants.Check query env.Scope.Cancellation
+                        let spec = request.Spec
+                        let extension = request.Holder.Substring ExtensionHolder.Length
+
+                        match check with
+                        | Ok(GrantCheck.Allowed grant) -> return Approved("grant " + grant.Value)
+                        | Ok(GrantCheck.Denied reasons) -> return Rejected(String.concat "; " reasons)
+                        | Ok(GrantCheck.MustAsk _) ->
+                            return
+                                Rejected(
+                                    $"the first install of {spec.Id} {spec.Version} for {extension} needs a person's approval, and nobody can be asked while the host starts: "
+                                    + $"approve it when a session's kernel installs it, or allow it beforehand with `{Product.binaryName} grants allow component.install {spec.Id}@*`; the next start uses it"
+                                )
+                        | Error e -> return Rejected(string e)
+                }
+
 /// A running host (spec §3, the "brain"): its stores, the extensions in effect, the variant registry
 /// and its resolution, the grants log, service credentials, identity, environments, model access and
 /// the session host with the CodeAct strategy. Built by `Host.start`, released by `Host.stop`. One per data directory: the
@@ -260,13 +310,32 @@ module Host =
         |> HostEnvironment.scrub
         |> Exactly
 
+    /// The component definitions in effect (components are privileged: only the binary, host config
+    /// and policy define them).
+    let private definitions (extensions: Fx.Extensions.Host) : Component list =
+        ExtensionHost.contributions ComponentDefinitions.contributionType extensions
+        |> List.map _.Value
+
+    /// What `by` (e.g. `extension <id>`) requires, planned for this machine from the definitions in
+    /// effect: an extension's components, installed in the bootstrap's components phase.
+    let planFor
+        (target: TargetTriple)
+        (extensions: Fx.Extensions.Host)
+        (by: string)
+        (requires: ComponentRef list)
+        : Result<Lockfile, string> =
+        Planner.plan
+            PlanSettings.defaults
+            (definitions extensions)
+            (requires |> List.map (fun r -> { Ref = r; By = by }))
+            [ target ]
+        |> Result.mapError (fun errors -> errors |> List.map string |> String.concat "; ")
+
     /// The components environments get: planned for this machine from the definitions in effect
     /// (components are privileged: only the binary, host config and policy define them) and the
     /// requirements of every interpreter in effect.
     let plan (target: TargetTriple) (extensions: Fx.Extensions.Host) : Result<Lockfile, string> =
-        let catalog =
-            ExtensionHost.contributions ComponentDefinitions.contributionType extensions
-            |> List.map _.Value
+        let catalog = definitions extensions
 
         let requires =
             ExtensionHost.contributions InterpreterProviders.contributionType extensions
@@ -428,9 +497,12 @@ module Host =
             let exclusions: Eff<IExtensionEnv, ExclusionSettings> =
                 fun e -> ContentExclusions.ofVariants exclusionsFrom.Value e
 
-            let! extensions = Setup.bootstrap options config exclusions
-            cleanup.Push(fun () -> Eff.run env0 (ExtensionHost.stop extensions) :> Task)
-            let! registry = Setup.registry extensions
+            // The bootstrap's first phase (in the binary); the variant registry, grants and the
+            // components are made from what it loads, then the later phases run (below).
+            let! inBinary = Setup.bootstrap options config exclusions
+            let loaded = ref inBinary
+            cleanup.Push(fun () -> Eff.run env0 (ExtensionHost.stop loaded.Value) :> Task)
+            let! registry = Setup.registry inBinary
             let! resolution = Setup.resolve registry config
             let variants = Variants.ofResolution resolution
             exclusionsFrom.Value <- variants
@@ -450,12 +522,12 @@ module Host =
 
             cleanup.Push(fun () -> Task.Run stores.Close)
             let env2 = { env1 with Blobs = stores.Blobs }
-            let warnings = ResizeArray<string>(Setup.problems extensions)
+            let warnings = ResizeArray<string>(Setup.problems inBinary)
 
             // The grants log, with the vocabulary and policy of the extensions in effect.
             let! actions =
                 Actions.withContributed (
-                    ExtensionHost.contributions GrantActions.contributionType extensions
+                    ExtensionHost.contributions GrantActions.contributionType inBinary
                     |> List.map _.Value
                 )
 
@@ -468,10 +540,10 @@ module Host =
                             // A policy file that forbids auto approvals as the host's mode forbids
                             // them as a person's grant too.
                             Policy =
-                                (ExtensionHost.contributions GrantPolicy.rules extensions |> List.map _.Value)
+                                (ExtensionHost.contributions GrantPolicy.rules inBinary |> List.map _.Value)
                                 @ AutoApprovals.policyRules config.Policies
                                 @ YoloApprovals.policyRules config.Policies
-                            Gates = ExtensionHost.contributions GrantPolicy.gates extensions
+                            Gates = ExtensionHost.contributions GrantPolicy.gates inBinary
                         })
 
             cleanup.Push(fun () -> Eff.run env2 (GrantsService.stop grants) :> Task)
@@ -489,64 +561,106 @@ module Host =
 
             // Components: planned for this machine, installed into the host's install root when an
             // environment on it needs them; the first install of each is a grant (spec §6.1, §13), which
-            // yolo approvals give.
+            // yolo approvals give. Installs for extensions (the bootstrap's components phase, below)
+            // never ask: nobody is attached while the host starts.
             let lockfile =
-                match plan options.Target extensions with
+                match plan options.Target inBinary with
                 | Ok lockfile -> Some lockfile
                 | Error reason ->
                     warnings.Add $"components could not be planned ({reason}): kernels will not start"
                     None
 
-            let! components =
-                match lockfile with
-                | None -> Eff.ret EnvComponents.none
-                | Some lockfile ->
-                    eff {
-                        let! hostGrants = GrantSettings.ofVariants variants
+            let newId () = string (options.Ids.NewId())
 
-                        let sessionsOf (environment: string) =
-                            entries.Values
-                            |> Seq.filter (fun entry -> entry.Environment = environment)
-                            |> Seq.map _.Session
-                            |> List.ofSeq
+            let! installer =
+                eff {
+                    let! hostGrants = GrantSettings.ofVariants variants
 
-                        let approve =
-                            Approvals.viaGrants
-                                (GrantsService.grants grants)
-                                {
-                                    Principal = "system"
-                                    Agent = None
-                                    Extension = None
-                                }
-                                {
-                                    Session = None
-                                    Run = None
-                                    Repo = None
-                                }
-                            |> YoloInstalls.approve (GrantsService.grants grants) hostGrants.Mode sessionsOf
+                    let sessionsOf (environment: string) =
+                        entries.Values
+                        |> Seq.filter (fun entry -> entry.Environment = environment)
+                        |> Seq.map _.Session
+                        |> List.ofSeq
 
-                        let settings =
-                            { InstallerSettings.create paths.Runtimes Name approve with
-                                ProbeEnv = probeEnvironment options.Variables
-                            }
-
-                        let! installer =
-                            Eff.provide
-                                env2
-                                (ComponentInstaller.start settings (InMemoryEventLog<InstallerEvent>()).Log)
-
-                        cleanup.Push(fun () -> Eff.run env2 (Actor.stop installer) :> Task)
-
-                        let installs =
-                            ComponentInstaller.components installer lockfile options.Target (fun () ->
-                                string (options.Ids.NewId()))
-
-                        return
+                    let approve =
+                        Approvals.viaGrants
+                            (GrantsService.grants grants)
                             {
-                                Requires = lockfile.Requires
-                                For = fun machine -> if machine.SameHost then Some installs else None
+                                Principal = "system"
+                                Agent = None
+                                Extension = None
                             }
+                            {
+                                Session = None
+                                Run = None
+                                Repo = None
+                            }
+                        |> YoloInstalls.approve (GrantsService.grants grants) hostGrants.Mode sessionsOf
+                        |> ExtensionInstalls.approve (GrantsService.grants grants) hostGrants.Mode
+
+                    let settings =
+                        { InstallerSettings.create paths.Runtimes Name approve with
+                            ProbeEnv = probeEnvironment options.Variables
+                        }
+
+                    let! installer =
+                        Eff.provide env2 (ComponentInstaller.start settings (InMemoryEventLog<InstallerEvent>()).Log)
+
+                    cleanup.Push(fun () -> Eff.run env2 (Actor.stop installer) :> Task)
+                    return installer
+                }
+
+            let components =
+                match lockfile with
+                | None -> EnvComponents.none
+                | Some lockfile ->
+                    let installs = ComponentInstaller.components installer lockfile options.Target newId
+
+                    {
+                        Requires = lockfile.Requires
+                        For = fun machine -> if machine.SameHost then Some installs else None
                     }
+
+            // Extensions, the later phases (spec §16.1): bundled packages' files written with hash
+            // checks, the components each extension requires installed for it (planned from the
+            // definitions in effect), extension processes (`fx.exthost.bun` on the installed Bun),
+            // then extensions on contributed runtimes. What fails becomes a warning.
+            let! unwritten =
+                Eff.provide
+                    env2
+                    (eff {
+                        let failures = ResizeArray<string>()
+
+                        for package in Builtins.bundled paths.Extensions do
+                            if not (List.contains package.Id config.Host.Disabled) then
+                                match! Bundled.extract package with
+                                | Ok() -> ()
+                                | Error e -> failures.Add $"{package.Id}: its files could not be written ({e})"
+
+                        return List.ofSeq failures
+                    })
+
+            warnings.AddRange unwritten
+
+            let installFor (manifest: Manifest) : Eff<HostEnv, Result<InstalledComponent list, string>> =
+                match planFor options.Target inBinary ("extension " + manifest.Id) manifest.Requires with
+                | Error reason -> EffResult.error $"components could not be planned: {reason}"
+                | Ok lockfile ->
+                    Components.installWith
+                        (ComponentInstaller.components installer lockfile options.Target newId)
+                        manifest
+
+            let! extensions =
+                Eff.provide env2 (Setup.bootstrapRest options config exclusions installFor inBinary)
+
+            loaded.Value <- extensions
+
+            warnings.AddRange(
+                Setup.problems
+                    { extensions with
+                        Report = extensions.Report |> List.skip inBinary.Report.Length
+                    }
+            )
 
             // Identity.
             let! machine = machineId paths.MachineId |> EffResult.mapError List.singleton
