@@ -28,7 +28,7 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
 - **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
-- **Wave 8:** T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
+- **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
 - **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T212 Run kernel, T217 Eval harness, T608 Agent teams
 - **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
@@ -78,6 +78,7 @@ flowchart LR
     T113b["T113b envd paths beneath roots"]
     T114["T114 fx.runtime.bun"]
     T115["T115 fx.exthost.bun"]
+    T115b["T115b Bun extension host in the host"]
     T116["T116 Kernel protocol"]
     T117["T117 bun-ts kernel"]
     T118["T118 Canonical model"]
@@ -217,6 +218,9 @@ flowchart LR
   T110 --> T114
   T109 --> T115
   T114 --> T115
+  T115 --> T115b
+  T110 --> T115b
+  T123 --> T115b
   T101 --> T116
   T107 --> T116
   T109 --> T117
@@ -403,8 +407,8 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T135,T137,T138,T206 done
-  class T115,T132 inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T114,T115,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T135,T137,T138,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -447,7 +451,8 @@ flowchart LR
 | T113 | Sandbox drivers | T108, T111 | §9.1 | done | `fx.sandbox.bubblewrap`, `fx.sandbox.seatbelt`, `fx.sandbox.none` (+ persistent Windows warning); per-agent overrides (read-only workspace). |
 | T113b | envd paths beneath roots | T113 | §9.1, §18 | todo | envd's file operations take a root and resolve paths beneath it without following symbolic links (`openat2` `RESOLVE_BENEATH` on Linux, `O_NOFOLLOW_ANY` on macOS, reparse-point checks on Windows), so the bindings' sandbox check (`SandboxGuard`) cannot be raced by a sandboxed process swapping a directory for a link; the fs conformance suites cover links. |
 | T114 | fx.runtime.bun | T009, T110 | §6.2–6.3 | done | Bun `RuntimeSpec` with pinned digests for all targets and hardened `LaunchSpec` as data; installed through the component installer. |
-| T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | in-progress | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
+| T115 | fx.exthost.bun | T109, T114 | §6.3, §16.1 | done | `ExtensionRuntime "bun"`: TS extension host speaking the extension protocol; TS sample extension passes parity tests. |
+| T115b | Bun extension host in the host | T115, T110, T123 | §6.3, §16.1, §16.4 | todo | `fx.exthost.bun` among the built-ins (`Builtins.candidates`): its files (`ExthostBun.files`, carried in the binary) written into the data directory with hash checks (spec §16.4), the pinned Bun it requires installed in the bootstrap's components phase (`HostSettings.InstallComponents` on the host's installer; a first install is a person's grant), the installed Bun's path in its launch (`${bin.bun}`); a Bun package from host config loads through it; host tests with a fake installer, and the host's live tests on the pinned Bun. |
 | T116 | Kernel protocol | T101, T107 | §6.4 | done | Kernel protocol spec (`cell/*`, `value/*`, `host/call`, `finish`, `recall`) + kernel conformance suite v1 (runs on all OSes). |
 | T117 | bun-ts kernel | T109, T111, T114, T116 | §6.3–6.5 | done | `fx.interpreter.bun-ts`: persistent cells, transpile, bounded output, host bridge (`fx.*` stubs from codecs), `fx.finish`; passes kernel conformance. |
 | T118 | Canonical model | T101, T101b, T108 | §10.2–10.3 | done | Canonical chat model (typed parts, `ProviderState`), `ChatWire` contract, typed errors, wire-conformance harness over recorded streams. |
