@@ -1,5 +1,4 @@
 ────────────────────────
- ! runs unsandboxed: co…
 › ◇ Run      dotn… ✗ 48s
 │     exit 1
 │     Failed: 2, Passed:
@@ -10,6 +9,7 @@
       const r = await fx
       .shell.run("dotnet
       test
+      tests/Billing")
 ┃ ›
 ┃ anthropic/claude-sonn…
 fx     ↑ ↑↓ move  ● idle

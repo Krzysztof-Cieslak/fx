@@ -1,5 +1,4 @@
 ────────────────────────────────────────
- ! runs unsandboxed: commands can read …
 › ◇ Run      dotnet test tests/Bi… ✗ 48s
 │     exit 1
 │     Failed: 2, Passed: 212
@@ -16,6 +15,7 @@
     Evidence  dotnet test tests/Billing
               → 214 passed
     Verify    dotnet test tests/Billing
+  ▣ fx · anthropic/claude-sonnet-5-5 · …
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
 fx    ↑ scrolled · PgDn  ↑↓ move  ● idle

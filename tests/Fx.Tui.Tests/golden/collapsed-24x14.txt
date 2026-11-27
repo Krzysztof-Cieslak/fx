@@ -1,5 +1,5 @@
 ────────────────────────
- ! runs unsandboxed: co…
+
 ┃ how do I use opus by
 ┃ default?
 
