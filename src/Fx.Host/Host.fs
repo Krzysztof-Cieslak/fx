@@ -55,6 +55,7 @@ type Host
         lockfile: Lockfile option,
         warnings: string list,
         streams: Streams,
+        profileOf: string -> Eff<HostEnv, Variants>,
         stop: unit -> Task
     ) =
     member _.Options = options
@@ -82,6 +83,8 @@ type Host
     member _.Warnings = warnings
     /// What the model writes in running turns, as it writes it (for clients that follow a session).
     member _.Streams = streams
+    /// The variants of a session's profile (by its id), as its turns read them.
+    member internal _.ProfileOf(profile: string) : Eff<HostEnv, Variants> = profileOf profile
     member internal _.StopAll() = stop ()
 
     override _.ToString() = $"Host({options.Paths.Data})"
@@ -725,6 +728,7 @@ module Host =
                     lockfile,
                     List.ofSeq warnings,
                     streams,
+                    profileOf,
                     release
                 )
         }

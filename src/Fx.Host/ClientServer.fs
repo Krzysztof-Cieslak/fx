@@ -206,6 +206,23 @@ module ClientServer =
                     return result
                 })
 
+            Handler.request ClientProtocol.approvals (fun _ p ->
+                effResult {
+                    let! _ = caller host client ClientProtocol.approvals.Name
+                    do! known host p.Session
+                    let! view = HostApprovals.view host p.Session
+                    return view
+                })
+
+            // A person's switch: a grant (or its revocation), so its least role is the owner's.
+            Handler.request ClientProtocol.setApprovals (fun _ p ->
+                effResult {
+                    let! by = caller host client ClientProtocol.setApprovals.Name
+                    do! known host p.Session
+                    let! view = HostApprovals.set host by p.Session p.Auto
+                    return view
+                })
+
             Handler.request ClientProtocol.close (fun _ p ->
                 effResult {
                     let! result =
