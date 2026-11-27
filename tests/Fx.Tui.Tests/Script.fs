@@ -125,7 +125,16 @@ type Session(id: string) =
                 }
         )
 
-    member this.Receipt(step: int, call: string, name: string, text: string, ?error: bool, ?restarted: KernelRestart) =
+    member this.Receipt
+        (
+            step: int,
+            call: string,
+            name: string,
+            text: string,
+            ?error: bool,
+            ?restarted: KernelRestart,
+            ?approvals: Approval list
+        ) =
         this.Context(
             ContextEvent.Returned
                 {
@@ -143,7 +152,7 @@ type Session(id: string) =
                         ]
                     IsError = defaultArg error false
                     Restarted = restarted
-                    Approvals = []
+                    Approvals = defaultArg approvals []
                 }
         )
 

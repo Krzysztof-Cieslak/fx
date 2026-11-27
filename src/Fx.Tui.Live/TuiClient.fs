@@ -130,6 +130,13 @@ module TuiClient =
             Branch = environment.Branch
         }
 
+    let private approvalsOf (view: ApprovalsView) : ApprovalsInfo =
+        {
+            Mode = view.Mode
+            Configured = view.Configured
+            Reason = view.Reason
+        }
+
     let private infoOf (entry: SessionEntry) : SessionInfo =
         {
             Id = entry.Session
@@ -283,6 +290,16 @@ module TuiClient =
                 match! Rpc.call peer ClientProtocol.list () with
                 | Ok entries -> inbox.Post(Msg.Sessions(entries |> List.map infoOf))
                 | Error e -> inbox.Post(Msg.Sent("sessions", Error(string e)))
+            | Cmd.Approvals session ->
+                match! Rpc.call peer ClientProtocol.approvals { Session = session } with
+                | Ok view -> inbox.Post(Msg.Approvals(approvalsOf view, false))
+                | Error _ -> ()
+            | Cmd.SetApprovals(session, auto) ->
+                match! Rpc.call peer ClientProtocol.setApprovals { Session = session; Auto = auto } with
+                | Ok view -> inbox.Post(Msg.Approvals(approvalsOf view, true))
+                | Error(CallError.Failed(ClientError.Invalid reasons)) ->
+                    inbox.Post(Msg.Sent("approvals", Error(String.concat "; " reasons)))
+                | Error e -> inbox.Post(Msg.Sent("approvals", Error(string e)))
             // Switching sessions is the loop's (`run`).
             | Cmd.NewSession
             | Cmd.OpenSession _

@@ -105,6 +105,15 @@ let tests =
                         Golden.expect "usage-130x24.txt" (Screens.render (Screens.usage 130 24))
                     }
 
+                    test "verbose shows what ran on auto approvals and what a person allowed" {
+                        let model =
+                            { Screens.approvals 80 24 with
+                                Verbosity = Verbosity.Verbose
+                            }
+
+                        Golden.expect "approvals-verbose-80x24.txt" (Screens.render model)
+                    }
+
                     test "verbose shows a reply the text-only nudge superseded" {
                         let model =
                             { Screens.question 80 24 with
@@ -1035,6 +1044,126 @@ let tests =
 
                         let _, cmds = play model (typing "bill" @ [ key KeyCode.Enter ])
                         Expect.equal cmds [ Cmd.OpenSession "s-old" ] "opened"
+                    }
+
+                    test "Shift+Tab and /approvals switch auto approvals; the host's answer shows" {
+                        let s, model = ready ()
+
+                        let _, cmds =
+                            play
+                                model
+                                [
+                                    Msg.Key
+                                        { Keys.key KeyCode.Tab with
+                                            Shift = true
+                                        }
+                                ]
+
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, true) ] "on: nothing said yet, so it asks"
+
+                        let auto: ApprovalsInfo =
+                            {
+                                Mode = "auto"
+                                Configured = "ask"
+                                Reason = "a person turned them on"
+                            }
+
+                        let model, _ = play model [ Msg.Approvals(auto, true) ]
+                        Expect.equal model.Approvals (Some auto) "kept"
+                        Expect.stringContains (screen model) "approvals: auto" "the info line and the notice"
+
+                        let _, cmds =
+                            play
+                                model
+                                [
+                                    Msg.Key
+                                        { Keys.key KeyCode.Tab with
+                                            Shift = true
+                                        }
+                                ]
+
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "off"
+
+                        let _, cmds = play model (typing "/approvals ask" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "/approvals ask"
+                        let _, cmds = play model (typing "/approvals" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [ Cmd.SetApprovals(s.Id, false) ] "/approvals switches"
+                        let model, cmds = play model (typing "/approvals sure" @ [ key KeyCode.Enter ])
+                        Expect.equal cmds [] "nothing sent"
+                        Expect.stringContains (screen model) "no approval mode sure" "said so"
+
+                        // Refused (no sandbox, policy): the host's reason shows.
+                        let model, _ =
+                            play model [ Msg.Sent("approvals", Error "invalid: auto approvals need a sandbox driver") ]
+
+                        Expect.stringContains (screen model) "auto approvals need a sandbox" "why"
+                    }
+
+                    test "the mode is asked for with the environment, and again when a grant of auto approvals changes" {
+                        let s, _ = ready ()
+
+                        let info: SessionInfo =
+                            {
+                                Id = s.Id
+                                Title = None
+                                Environment = "env-1"
+                                Workspace = setup.Workspace
+                            }
+
+                        let model, cmds =
+                            play (App.init setup 80 24 start) [ Msg.Started info; Msg.Env confined ]
+
+                        Expect.equal cmds [ Cmd.Approvals s.Id ] "with the environment"
+
+                        let granted: Grant =
+                            {
+                                Id = GrantId "g1"
+                                Action = ActionName.create "approvals.auto"
+                                Resource = "*"
+                                Effect = GrantEffect.Allow
+                                Scope = GrantScope.Session s.Id
+                                By = "user:local-os-user:alice"
+                                At = start
+                                Expires = None
+                                Reason = None
+                                Origin = GrantOrigin.Direct "tui"
+                            }
+
+                        let notice (seq: int64) (event: GrantEvent) : Msg = Msg.Grant { Seq = seq; Event = event }
+                        let model, cmds = play model [ notice 1L (GrantEvent.Granted granted) ]
+                        Expect.equal cmds [ Cmd.Approvals s.Id ] "a grant of auto approvals"
+
+                        let model, cmds =
+                            play
+                                model
+                                [
+                                    notice
+                                        2L
+                                        (GrantEvent.Revoked
+                                            {
+                                                Grant = GrantId "g1"
+                                                By = "user:local-os-user:alice"
+                                                At = start
+                                                Reason = None
+                                            })
+                                ]
+
+                        Expect.equal cmds [ Cmd.Approvals s.Id ] "a revocation"
+
+                        let _, cmds =
+                            play
+                                model
+                                [
+                                    notice
+                                        3L
+                                        (GrantEvent.Granted
+                                            { granted with
+                                                Id = GrantId "g2"
+                                                Action = ActionName.create "shell.exec"
+                                            })
+                                ]
+
+                        Expect.equal cmds [] "other grants"
                     }
 
                     test "Tab completes a command; an unknown one says so" {

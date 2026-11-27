@@ -63,6 +63,20 @@ type EnvInfo =
 
     override this.ToString() = $"{this.Name} ({this.Provider})"
 
+/// How the grants guard decides the session's commands (`session/approvals`; docs/modules/codeact.md,
+/// "Approval modes").
+type ApprovalsInfo =
+    {
+        /// `ask`, `auto` (auto approvals run what the sandbox confines), `deny` or `off`.
+        Mode: string
+        /// The host's `codeact.grants.mode` for the session.
+        Configured: string
+        /// Why auto approvals are on or off.
+        Reason: string
+    }
+
+    override this.ToString() = "approvals " + this.Mode
+
 [<RequireQualifiedAccess>]
 type Phase =
     /// Connecting, creating or resuming the session (creating its environment can ask for grants).
@@ -140,6 +154,8 @@ type Msg =
     | Disconnected of reason: string
     /// The host's sessions (`session/list`), for the session picker.
     | Sessions of SessionInfo list
+    /// How the session's commands are decided now (`session/approvals`), after a switch if `switched`.
+    | Approvals of ApprovalsInfo * switched: bool
 
     override this.ToString() =
         match this with
@@ -160,6 +176,7 @@ type Msg =
         | AnswerFailed(card, reason) -> card + " not answered: " + reason
         | Disconnected reason -> "disconnected: " + reason
         | Sessions sessions -> $"sessions ({sessions.Length})"
+        | Approvals(info, _) -> string info
 
 /// What the TUI asks of the host, as data: the shell sends it over the client protocol.
 [<RequireQualifiedAccess>]
@@ -176,6 +193,10 @@ type Cmd =
     | OpenSession of id: string
     /// Ask for the host's sessions (they arrive as `Msg.Sessions`).
     | ListSessions
+    /// Ask how the session's commands are decided (it arrives as `Msg.Approvals`).
+    | Approvals of session: string
+    /// A person turns auto approvals on or off for the session (`session/setApprovals`).
+    | SetApprovals of session: string * auto: bool
     /// Draw everything again (the screen may have been changed by someone else).
     | Redraw
     | Quit
@@ -187,6 +208,8 @@ type Cmd =
         | NewSession -> "new session"
         | OpenSession id -> "open " + id
         | ListSessions -> "list sessions"
+        | Approvals session -> "approvals of " + session
+        | SetApprovals(session, auto) -> $"auto approvals {auto} for {session}"
         | Interrupt(_, key) -> $"interrupt ({key})"
         | Answer(_, key, request, _) -> $"answer {request} ({key})"
         | AnswerGrant(request, answer) -> $"grant {request.Value}: {answer}"
@@ -334,6 +357,8 @@ type Model =
         Palette: Palette option
         /// The option selected in the first card.
         Selected: int
+        /// How the session's commands are decided, once the host said.
+        Approvals: ApprovalsInfo option
         Quitting: bool
     }
 
@@ -377,6 +402,7 @@ module App =
             Count = 0
             Answering = Set.empty
             Selected = 0
+            Approvals = None
             Quitting = false
             Palette = None
         }
@@ -641,6 +667,7 @@ module App =
             Selection = None
             Reveal = None
             ItemsAt = Map.empty
+            Approvals = None
         }
 
     let private cycleDetail (model: Model) : Model =
@@ -659,6 +686,28 @@ module App =
             ThemeChoice.Light, "light"
             ThemeChoice.Ansi16, "ansi16"
         ]
+
+    /// Asks the host to turn auto approvals on or off for the session: a person's grant.
+    let private setApprovals (auto: bool) (model: Model) : Model * Cmd list =
+        match model.Session with
+        | Some session ->
+            notice
+                (if auto then
+                     "approvals: switching to auto…"
+                 else
+                     "approvals: switching to ask…")
+                model,
+            [ Cmd.SetApprovals(session.Id, auto) ]
+        | None -> error "the session has not started yet" model, []
+
+    /// Switches between asking and auto approvals (`Shift+Tab`, `/approvals`).
+    let private switchApprovals (model: Model) : Model * Cmd list =
+        let auto =
+            match model.Approvals with
+            | Some info -> info.Mode = "auto"
+            | None -> false
+
+        setApprovals (not auto) model
 
     /// Runs a command with what was typed after its name.
     let private run (command: TuiCommand) (argument: string) (model: Model) : Model * Cmd list =
@@ -714,6 +763,12 @@ module App =
                 },
                 []
             | None -> error $"no theme {argument}: auto, dark, light or ansi16" model, []
+        | CommandAction.Approvals ->
+            match argument.ToLowerInvariant() with
+            | "" -> switchApprovals model
+            | "auto" -> setApprovals true model
+            | "ask" -> setApprovals false model
+            | other -> error $"no approval mode {other}: ask or auto" model, []
         | CommandAction.Exit -> { model with Quitting = true }, [ Cmd.Quit ]
 
     /// The commands a `/` prompt being typed may name, best first.
@@ -1121,6 +1176,7 @@ module App =
                         match slash model with
                         | Some result -> result
                         | None -> send PromptMode.Steer model
+                    | KeyCode.Tab, false, false, true -> switchApprovals model
                     | KeyCode.Tab, false, false, false ->
                         // On a `/` prompt, Tab completes the command's name.
                         match slashes model with
@@ -1218,7 +1274,12 @@ module App =
                 Phase = Phase.Stopped reason
             },
             []
-        | Msg.Env env -> { model with Env = Some env }, []
+        | Msg.Env env ->
+            // Its sandbox decides whether auto approvals can hold.
+            { model with Env = Some env },
+            (match model.Session with
+             | Some session -> [ Cmd.Approvals session.Id ]
+             | None -> [])
         | Msg.Session item ->
             let timeline = Timeline.session item model.Timeline
 
@@ -1272,7 +1333,27 @@ module App =
                 GrantsSeq = pending.Seq
             },
             []
-        | Msg.Grant n -> grant n model, []
+        | Msg.Grant n ->
+            // A grant of auto approvals made, revoked or expired (here, by `fx grants` or another
+            // client): ask how the session's commands are decided now.
+            let refresh =
+                match n.Event, model.Session with
+                | GrantEvent.Granted granted, Some session when
+                    granted.Action.Value = "approvals.auto" && n.Seq > model.GrantsSeq
+                    ->
+                    [ Cmd.Approvals session.Id ]
+                | (GrantEvent.Revoked _ | GrantEvent.Expired _), Some session when n.Seq > model.GrantsSeq ->
+                    [ Cmd.Approvals session.Id ]
+                | _ -> []
+
+            grant n model, refresh
+        | Msg.Approvals(info, switched) ->
+            let model = { model with Approvals = Some info }
+
+            if switched then
+                notice $"approvals: {info.Mode}" model, []
+            else
+                model, []
         | Msg.Sent(_, Ok()) -> model, []
         | Msg.Sent(what, Error reason) -> error $"{what}: {reason}" model, []
         | Msg.AnswerFailed(card, reason) ->

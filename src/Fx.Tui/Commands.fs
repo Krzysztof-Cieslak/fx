@@ -15,6 +15,8 @@ type CommandAction =
     | Detail
     /// Pick the theme.
     | Theme
+    /// Switch between asking for commands and auto approvals.
+    | Approvals
     | Exit
 
     override this.ToString() =
@@ -24,6 +26,7 @@ type CommandAction =
         | Model -> "model"
         | Detail -> "detail"
         | Theme -> "theme"
+        | Approvals -> "approvals"
         | Exit -> "exit"
 
 /// A command of the palette (`Ctrl+P`) and of the prompt (`/name`): values, so later screens add
@@ -81,6 +84,13 @@ module Commands =
                 Keys = None
                 Argument = Some "auto|dark|light|ansi16"
                 Action = CommandAction.Theme
+            }
+            {
+                Name = "approvals"
+                Title = "Ask for commands, or auto-approve sandboxed ones"
+                Keys = Some "Shift+Tab"
+                Argument = Some "ask|auto"
+                Action = CommandAction.Approvals
             }
             {
                 Name = "exit"

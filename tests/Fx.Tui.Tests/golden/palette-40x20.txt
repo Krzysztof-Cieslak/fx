@@ -1,5 +1,4 @@
 ────────────────────────────────────────
-  ◇ Cell     rerun the tests       ✓ 46s
   ▸ 1 cell (3 lines)     [Ctrl+O expand]
 
   ✓ Done  Migrated 37 call sites to
@@ -11,11 +10,12 @@
 
 ┃ Commands                         esc
 ┃ › se
-┃  /sessions  Switch to another session
-┃  /model     Use another model from th…
-┃  /exit      Leave (the session stays)
-┃  /new       Start a new session
-┃  /detail    Show more or less of each…
+┃  /sessions   Switch to another session
+┃  /model      Use another model from t…
+┃  /exit       Leave (the session stays)
+┃  /new        Start a new session
+┃  /detail     Show more or less of eac…
+┃  /approvals  Ask for commands, or aut…
 ┃ ›
 ┃ anthropic/claude-sonnet-5-5 · env: de…
 fx · …/src/billing:main · sessio… ● idle
