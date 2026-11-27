@@ -144,8 +144,11 @@ prompts only where someone can answer (`Headless.prompts`). Tests replace them w
   envd's file operations and the sandboxed shell; terminals refused), the guard with its decisions, and
   each kernel launch with what it starts from (replay.md); `session.record` is in `HostSlots.core`
   (`RecordingSlots.all`). Every process of a session (commands, the kernel) runs
-  in its environment's sandbox ([sandbox.md](sandbox.md)): bubblewrap on Linux, Seatbelt on macOS,
-  none on Windows; the agent's overrides come with agents (T213, `KernelPlan.Sandbox`).
+  in its environment's sandbox ([sandbox.md](sandbox.md)), which is **off by default** (T137:
+  `sandbox.driver = none`; a host turns it on with `auto`, which takes bubblewrap on Linux and
+  Seatbelt on macOS, or a driver's id); the agent's overrides come with agents (T213,
+  `KernelPlan.Sandbox`). When a driver confines them, the prompt describes it (`Hands.Sandbox`,
+  `Instructions.sandbox`).
 - Hands are per turn, the **kernel is per session**: it lives in the hands' environment with the
   host's scope, across turns, until it dies, is killed or the host stops (codeact.md, T135). How each
   kernel ended is journaled (`kernelEnded`); the cell in the new kernel says why, and `fx run` shows it
@@ -268,9 +271,10 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    fails at once with what the turn would have said (`no model is configured for the main role`,
    `the model call would fail: unavailable: anthropic: no credentials: …`), before the session's
    environment installs anything (Bun is a 50 MiB download).
-   The environment's warnings are shown once (`warning: …` on standard error): an environment no
-   sandbox driver confines runs unsandboxed, and says why (Windows; `sandbox.driver = none`; bubblewrap
-   that cannot run here, with what to do).
+   The environment is shown once on standard error with its sandbox (`env: default (local) ·
+   sandbox: off` by default, or the driver that confines it), then its warnings (`warning: …`): a
+   sandbox the host asked for (`auto`) that cannot run here says so and why (Windows; bubblewrap that
+   cannot run, with what to do). A driver the host names that cannot run fails the run.
 3. Grant requests of the run (its session's, e.g. a command a cell runs, and those of no session, e.g.
    installing Bun the first time) are put to the person at the terminal (`GrantPrompts`): the summary,
    the action and resource, and the evidence (which turn and call asked, the command line, an install's
@@ -356,6 +360,17 @@ do; nothing is ever approved for them:
    override, and policy may pin or forbid it. `deny` refuses what no grant allows without asking
    anyone (the unattended choice); `off` checks nothing and is only for sandboxed or throwaway
    environments. The sandbox applies either way.
+4. **The sandbox** is off by default ([sandbox.md](sandbox.md) "Opt-in"): the run's commands and kernel
+   have the user's rights (they can read the user's credentials, the product's own credentials file
+   included, write anywhere the user can and use the network), and the grants above are the guard.
+   To confine them, turn it on in host config (`{"variants": {"sandbox.driver": "auto"}}`) or on the
+   command line (`--variant sandbox.driver=auto`, or `bubblewrap`/`seatbelt` to fail rather than run
+   unsandboxed where it cannot run); a project's config cannot. With it on, tools that keep state
+   under `~` (NuGet's packages, Cargo's registry, the MSBuild server) or read a config on the
+   credential list (`~/.nuget/NuGet/NuGet.Config`, `~/.yarnrc.yml`) fail, as do changes to
+   `.git/config` and hooks (`git config`, `git push -u`) and commits in a linked worktree: list a
+   tool's directory in the privileged `sandbox.writable` (a credential location stays unreadable), or
+   run such steps without the sandbox.
 
 ## Native AOT
 
@@ -386,7 +401,9 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   headless run installs by without asking, listed and revoked; `fx grants`' refusals (a bad or unknown
   action, an unknown session or grant, a running host); `fx run` failing on a missing model or missing
   credentials before anything is asked or installed; a request left pending by a host that stopped
-  while it asked, put to the next run's person.
+  while it asked, put to the next run's person; the sandbox (T137): off by default (`env: … · sandbox:
+  off`, no warning), `auto` from host config confining or warning, a driver the command line names that
+  cannot run failing the run, a trusted project's config refused for selecting `sandbox.driver`.
 - `ProtocolTests`: in process, create, prompt, subscribe, reconnect after a sequence number, a restart;
   least roles with a viewer's identity provider, grants answered over the protocol; over a Unix socket
   or named pipe and over loopback: the token file, a wrong token, a session token as the bearer, an
@@ -406,7 +423,7 @@ never sent, which stops at the first install's approval (no terminal), withdraws
   long turn compacting (spec §5) beside a cell when the provider's count reached the threshold of the
   catalog's window and when a cell asks (`fx.history.compact`): two `◇ compacted` lines, each summary
   request the call before it on the Messages API's wire plus the instruction, and `fx replay` matching;
-  one kernel for a session's turns (sandboxed where a driver confines): a name declared in turn 1 used
+  one kernel for a session's turns (with `sandbox.driver = auto`, sandboxed where a driver confines): a name declared in turn 1 used
   in turn 2 after the host idled longer than its thread pool keeps idle threads (`ThreadTimeoutMs` is 1 s
   in this project, so a kernel that died with the thread that started it would die here, T135), then a
   kernel that kills itself: its cell's receipt and the journal say how (SIGKILL, exit code 137), the next

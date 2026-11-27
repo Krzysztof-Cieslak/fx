@@ -105,7 +105,8 @@ hands refuse terminals.
 - Each session gets its own CodeAct instance, with the session's journal in its configuration: the
   store's logs (`Record.log`: appends by the digest of what they wrote, reads by how much they saw),
   `Profile` (each slot's first read), `Hands` (the hands' description, `HandsInfo`: workspace, OS,
-  language, whether there are snapshots, the commands' variables by name, the interpreter provider; their
+  language, whether there are snapshots, the commands' variables by name, the interpreter provider, the
+  sandbox's policy when one confines them (the prompt describes it; an optional member); their
   environment, guard, snapshots and kernel launches wrapped).
 - **Grants.** The hands' guard (`Hands.Guard`) is journaled as one call with its decision: the sandbox's
   path checks and T127b's grants guard (`GrantGuard.attach`), which checks the grants log, opens requests

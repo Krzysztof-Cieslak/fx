@@ -2,8 +2,11 @@
 
 The bundled Linux sandbox driver (spec §9.1, §16.4): every process an agent starts in an environment
 (commands, terminals, kernels, setup) runs inside [bubblewrap](https://github.com/containers/bubblewrap)
-with a seccomp filter. A native extension built on the public SDK only; the module spec is
-[docs/modules/sandbox.md](../../docs/modules/sandbox.md).
+with a seccomp filter. Opt-in (T137): a host turns it on with the privileged variant
+`sandbox.driver = "auto"` (or `"bubblewrap"` to require it); by default no sandbox applies. A native
+extension built on the public SDK only; the module spec is
+[docs/modules/sandbox.md](../../docs/modules/sandbox.md), whose "Known limits" says what stops working
+in it.
 
 ## What a process gets
 
@@ -76,8 +79,8 @@ that requires bubblewrap fails the environment.
   (`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which CI does).
 - **Older Debian kernels**: `sudo sysctl -w kernel.unprivileged_userns_clone=1`.
 - **Containers** usually forbid user namespaces: run the container with
-  `--security-opt seccomp=unconfined --security-opt apparmor=unconfined`, or set the privileged
-  variant `sandbox.driver = "none"` (and rely on the container).
+  `--security-opt seccomp=unconfined --security-opt apparmor=unconfined`, or leave the privileged
+  variant `sandbox.driver` at its default, `none` (and rely on the container).
 
 ## Limits
 

@@ -108,7 +108,7 @@ let probe (site: SandboxSite) : Eff<ISandboxEnv, Result<SandboxReady, SandboxUna
                             Reason = $"{Profile.SandboxExec} is missing"
                             Remedy =
                                 Some
-                                    "Seatbelt's sandbox-exec ships with macOS; set the privileged variant sandbox.driver to none to run unsandboxed"
+                                    "Seatbelt's sandbox-exec ships with macOS; set the privileged variant sandbox.driver back to none (its default) to run unsandboxed"
                         }
             | Ok _ ->
                 let roots =
@@ -167,7 +167,9 @@ let probe (site: SandboxSite) : Eff<ISandboxEnv, Result<SandboxReady, SandboxUna
                                 {
                                     Reason =
                                         $"sandbox-exec refused this driver's profile (exit {output.ExitCode}): {(Output.stderrText output).Trim()}"
-                                    Remedy = Some "set the privileged variant sandbox.driver to none to run unsandboxed"
+                                    Remedy =
+                                        Some
+                                            "set the privileged variant sandbox.driver back to none (its default) to run unsandboxed"
                                 }
                     | Error e ->
                         return

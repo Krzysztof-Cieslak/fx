@@ -1,7 +1,7 @@
 # Module spec: the TUI (`src/Fx.Tui`, `src/Fx.Tui.Live`, `fx`, `fx attach`)
 
 Spec: §3 (clients; embedded mode: host, envd and TUI in one process), §17 (the client protocol),
-§18 (unsandboxed is a persistent warning), §19.1–19.5 (a turn in the TUI, the grants view, sessions
+§18 (a requested sandbox that cannot run is a persistent warning), §19.1–19.5 (a turn in the TUI, the grants view, sessions
 that persist across disconnects), §20 (an Elm-style F# TUI). Task: T130.
 Code: [`src/Fx.Tui`](../../src/Fx.Tui) (the pure core), [`src/Fx.Tui.Live`](../../src/Fx.Tui.Live)
 (the terminal, the client, the composition roots); `fx` and `fx attach` in [`src/Fx.Cli`](../../src/Fx.Cli).
@@ -66,8 +66,6 @@ to send, and a pure `view` that draws the model as a frame.
 ## A turn on the screen (spec §19.2)
 
 ```
- ! runs unsandboxed: commands can read and change everything the user can
-
 ┃ replace deprecated Http.retry with RetryPolicy in billing
 
   I'll look at the call sites first.
@@ -84,7 +82,7 @@ to send, and a pure `view` that draws the model as a frame.
   ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s
 
 ┃ › _
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: none
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline  ● idle
 ```
 
@@ -102,7 +100,8 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   `light`), the panel's background to the screen's edge with a row of padding above and below.
 - **Prompt box**: the prompt being typed, and under it its info line: the main model, the
   environment (name and provider) and the sandbox driver that confines it (`env/get`'s `sandbox`:
-  `bubblewrap`, `seatbelt`, `none`).
+  `bubblewrap`, `seatbelt`; the driver `none` shows as `off`, the host's default: the sandbox is
+  opt-in, T137).
 - **Footer**: the product, the workspace with its branch (`env/get`'s `branch`) and the session on
   the left (the product alone while selecting items, so their keys fit); the keys that apply (as many
   as fit beside the left side), whether the transcript is
@@ -116,8 +115,9 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   the window used), what the session cost, the model; the workspace and its branch at the bottom.
   What it shows comes from the replies' `used` (context events), so `fx attach` shows it too.
 - **Banner**: the environment's warnings (`env/get`), every one on every screen while it exists:
-  "runs unsandboxed" on Windows (no sandbox in v1) and wherever no sandbox driver confines it
-  (`Envs.warnings`, T113).
+  "runs unsandboxed" when the host asked for a sandbox (`auto`) that cannot run here (Windows, no
+  bubblewrap; `Envs.warnings`, T113). The default, no sandbox, has no banner, only `sandbox: off` in
+  the info line (T137); the `unconfined` golden screens keep the banner.
 - **Transcript**: each turn's prompts (panels), what the model wrote, one activity line per action
   (`◇` reads and runs, `◆` changes; `Cell` with its `// intent:` line, `Read`, `Edit`, `Run`), its
   status (a spinner and the time while it runs, `✓`/`✗` and how long it took), a cell that ran in a new
