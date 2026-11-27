@@ -111,7 +111,9 @@ hands refuse terminals.
 - **Grants.** The hands' guard (`Hands.Guard`) is journaled as one call with its decision: the sandbox's
   path checks and T127b's grants guard (`GrantGuard.attach`), which checks the grants log, opens requests
   and waits for people's answers inside it. Replay answers the decision without a grants log or a person,
-  in the recorded order (`Gate.Ordered`: it ended when people answered).
+  in the recorded order (`Gate.Ordered`: it ended when people answered). An allowed call's decision
+  carries how it ran that no grant allowed (`Approval`s: auto approvals, or a person's answer by request
+  key, T134), written `null` when there are none as before, so older journals replay as they are.
 - **Kernel launches.** An interpreter from a provider (`Interpreter.ofProvider`) exposes what each launch
   starts from (`Interpreter.Launches`, the `InterpreterSession`); before each launch the recorder journals
   it (`Kernel.Launch`, a `LaunchInfo`: the provider's id, the installed components, the assets root, the

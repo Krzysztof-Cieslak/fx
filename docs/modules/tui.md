@@ -106,8 +106,14 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   the left (the product alone while selecting items, so their keys fit); the keys that apply (as many
   as fit beside the left side), whether the transcript is
   scrolled, what the session used (the context the last call held, its share of the window, and the
-  cost: `73.4K (7%) · $2.11`, unless the sidebar shows it) and the session's state (idle, the
-  running turn, held, needs input, closed) on the right.
+  cost: `73.4K (7%) · $2.11`, unless the sidebar shows it), the approval mode and the session's state
+  (idle, the running turn, held, needs input, closed) on the right.
+- **Approval mode** (spec §13.3, T134): `approvals: ask|auto|deny|off` in the footer, from
+  `session/approvals` (`auto` in the accent colour; `deny` and `off`, which ask nobody, as warnings).
+  The TUI asks for it when the environment is known (its sandbox decides whether auto approvals can
+  hold) and again when a grant of `approvals.auto` is made, or any grant is revoked or expires (the
+  TUI follows the grants log already: another client or `fx grants` may switch it). `Shift+Tab` and
+  `/approvals` switch it (below).
 - **Turn footer**: under each ended turn, `▣` with the product, the model its last call used, how
   long the turn took and how fast the model wrote (output tokens over the time its calls took).
 - **Sidebar** (terminals 120 columns wide or more, 34 of them): the session's title (the one it was
@@ -123,7 +129,9 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   status (a spinner and the time while it runs, `✓`/`✗` and how long it took), a cell that ran in a new
   kernel (`↻ new kernel: <why>; names from earlier cells are gone`, from the receipt's `restarted`, in
   every verbosity; in full when verbose; T135), the first line of an
-  error under a failed one, steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
+  error under a failed one, `auto` before the status of an action whose commands ran on auto approvals
+  and `asked` before one a person allowed (the receipt's `approvals`; verbose lists each, with who let
+  it run), steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
   conversation is summarized; the summary in verbose), requests asked and settled, and the
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`;
   `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The code of the cells not expanded is
@@ -231,6 +239,7 @@ core slot the host registers) picks it:
 |---|---|
 | `Enter` | sends the prompt: **steered** into the running turn (delivered at its next step), or a new turn when idle; on the agent's question it is the answer |
 | `Tab` | sends the prompt **queued**: its own turn after the work in progress |
+| `Shift+Tab` | switches auto approvals for the session (no card open; as `/approvals`) |
 | `Alt+Enter`, `Shift+Enter`, `Ctrl+Enter`, `Ctrl+J` | a new line in the prompt (Shift and Ctrl only where the terminal reports them) |
 | `Esc` | interrupts the running turn (the control path); with none running, goes back to the transcript's end; while selecting items or in the palette, only ends that |
 | `Ctrl+C` | clears the prompt, else interrupts the running turn; pressed again within 3 s, exits |
@@ -265,6 +274,7 @@ that names no command says so.
 | `/model provider/model` | sets `model.role.main` for the session from its next turn on (`session/overrides`) |
 | `/detail` | cycles the detail (as `Ctrl+O`) |
 | `/theme [auto\|dark\|light\|ansi16]` | changes the colours for this run (without a name: a picker) |
+| `/approvals [ask\|auto]` | asks for every command, or runs what the sandbox confines without asking (`session/setApprovals`: a person's session grant of `approvals.auto`; without a name it switches). Refused, with the host's reason, where no driver confines the environment or policy forbids it; also during a turn (the next command) |
 | `/exit` | leaves; the session stays |
 
 Switching sessions ends the subscriptions of the one shown before the next starts (`TuiClient.run`),
@@ -293,7 +303,8 @@ shows as sending and is not sent twice; one the host refuses can be given again.
 
 The TUI uses `session/create` (or `session/list` to resume), `env/get`, `session/subscribe`,
 `session/context`, `session/prompt`, `session/interrupt`, `session/answer`, `grants/pending`,
-`grants/subscribe`, `grants/answer`, and `session/overrides` for `/model` (host.md). T130 added:
+`grants/subscribe`, `grants/answer`, `session/overrides` for `/model`, and `session/approvals` and
+`session/setApprovals` for the approval mode (host.md, T134). T130 added:
 
 | Method | Params → result | Least role |
 |---|---|---|
@@ -333,7 +344,10 @@ terminal check's P/Invoke without a terminal).
 
 ## Testing
 
-- `Fx.Tui.Tests`: the start screen (the wordmark, the first prompt to the transcript, golden
+- `Fx.Tui.Tests`: approval modes (golden renders of a turn whose commands ran on auto approvals and one
+  a person allowed, at 80, 40 and 24 columns and verbose; `Shift+Tab` and `/approvals` switching, a
+  refusal's reason, the mode asked for with the environment and after grants of auto approvals); the
+  start screen (the wordmark, the first prompt to the transcript, golden
   renders with and without the palette); commands (parsing, the palette's search, `Ctrl+P`, `/model`, `/theme`, `/new`
   and `/sessions`, completion, golden renders of the palette and of `/` suggestions); usage (a turn's speed, the footer's usage, the sidebar at 130 columns); Markdown (inlines, blocks, an unclosed fence, no row wider than asked at any
   width, highlighting, golden renders of a sample at 80, 40 and 24 columns and its styles in the dark

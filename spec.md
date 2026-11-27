@@ -901,6 +901,16 @@ type GrantEvent = Requested of GrantRequest | Granted of Grant   // a grant from
 - **`GrantStore` is an extension point**; default host-local (a stream of the host's event store); a repo-policy store can use the same API.
 - Agents can only **request** grants (`IGrants`: check, request, await, withdraw); people answer, grant and revoke through the client protocol (`grants/*`), or beforehand on the host's machine with `fx grants` as the OS user who owns the host. A request nobody can answer (a headless run without a terminal) is withdrawn by the host, never answered on a person's behalf, and requests are keyed by what asks (a call, an install attempt), so it is asked again next time. Module spec: `docs/modules/grants.md`.
 
+### 13.3 Approval modes
+
+Asking a person about every command is tiring (T132's dogfooding), and where a sandbox driver confines processes (§9.1, §18) much of what is asked is already contained. The CodeAct grants guard (`docs/modules/codeact.md`, "Approval modes") therefore has **auto approvals**: a command it can see stays in the workspace (written plainly: nothing the shell expands, every argument and input in the workspace and not excluded from models, a known working directory in it) runs without asking anyone when a driver that confines the environment's processes is in effect.
+
+- **Still asked** (or refused): writes outside the workspace and to protected paths (`.git`, hooks, the project's directory: `fs.write` needs), reads outside it, network bindings (`net.connect`), first installs (`component.install`), lines the parser does not split (opaque: the sandbox would confine them too, but the guard cannot see what they reach over the network), and `codeact.grants.askCommands` (privileged): downloads, remote shells, git's remotes, hosting CLIs, package installs and publishes, a shell's inline command line. Deny grants, policy rules and gates apply first: auto approvals cover only what nothing but "no grant applies" stands in the way of.
+- **Why not every command:** the sandbox confines writes and hides credentials, but the network stays open by default (§9.4 `network`), so a confined command can still send what it reads elsewhere; the list of commands that ask is a guardrail of known spellings, not a boundary (a script can reach the network too, as a cell can). An environment with `network: none` closes it; auto approvals with the network closed for the commands they allow (and asking to reopen it) need the egress proxy (§18).
+- **Never without a confining driver:** with `none` (Windows v1, `sandbox.driver = none`, an `auto` fallback) auto approvals never apply, every command asks, and clients say why.
+- **Who turns them on:** the host (`codeact.grants.mode = auto`, a privileged variant: host config or the command line, never a project or a session override), or a person for a scope with a grant of `approvals.auto` (the session from the TUI's switch, the host with `fx grants allow`, a repository once requests name one); a deny grant turns them off for its scope. Policy forbids them: a grants policy rule, or a policy file that forbids `auto` for the mode (the host makes it a deny rule on `approvals.auto`).
+- **Recorded:** what ran on auto approvals is never silent: the guard says how each call ran (auto approvals, or a person's answer by request key), the step journal keeps it on each host call, receipts carry it for clients (the TUI's activity lines say `auto` or `asked`), and the replay journal has it with the guard's decision.
+
 ---
 
 ## 14. Judgments (optional research capability)
@@ -1086,6 +1096,7 @@ and RunStatus =
 
 - **Decisions panel:** open, settled, **Conflicted** and **history-lost** decisions; scope (Session / Repo + path) and branch filters; history, why, findings, criteria; promote; resolve conflicts; uncommitted-ledger indicator.
 - **Grants view:** compact permission prompts (*once / session / repo / host*); active grants with revoke; batched pending requests.
+- **Approval mode** (§13.3): the footer shows how the session's commands are decided (`ask`, `auto`, `deny`, `off`); `Shift+Tab` or `/approvals` switches auto approvals for the session (a person's grant, refused with the reason where no driver confines or policy forbids them); activity lines say which commands ran on auto approvals and which a person allowed.
 
 ### 19.5 Features
 
