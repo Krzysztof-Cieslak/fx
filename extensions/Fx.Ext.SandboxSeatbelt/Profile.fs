@@ -227,6 +227,11 @@ let render (request: SandboxRequest) : Rendered =
                 // The user's SSH agent (`/private/tmp/com.apple.launchd.*/Listeners`) and other
                 // programs' sockets in the shared temporary directory.
                 "(deny network-outbound (remote unix-socket (subpath \"/private/tmp\")))"
+                // The environment's own sockets, though its directories are inside the denied data
+                // directory: .NET's named pipes are in TMPDIR (MSBuild's nodes talk over them).
+                yield!
+                    policy.Writable @ Option.toList policy.Temp
+                    |> List.map (fun own -> $"(allow network-outbound (remote unix-socket {anyOf (subpaths own)}))")
             ]
         else
             []
