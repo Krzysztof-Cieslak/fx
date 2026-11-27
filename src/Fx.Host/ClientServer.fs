@@ -219,7 +219,11 @@ module ClientServer =
                 effResult {
                     let! by = caller host client ClientProtocol.setApprovals.Name
                     do! known host p.Session
-                    let! view = HostApprovals.set host by p.Session p.Auto
+
+                    let! view =
+                        HostApprovals.set host by p.Session p.Auto
+                        |> EffResult.mapError ClientError.Invalid
+
                     return view
                 })
 

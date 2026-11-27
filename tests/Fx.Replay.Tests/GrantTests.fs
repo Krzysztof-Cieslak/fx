@@ -90,16 +90,14 @@ let private autoApprovals =
 
         let grants = GrantsService.grants service
 
-        // The host's mode is auto, and a driver confines the hands.
+        // The host's mode is auto; nothing confines the hands (the default).
         let guard (variants: Fx.Variants.Variants) sessions (turn: TurnStart) hands =
             eff {
                 let! settings = GrantSettings.ofVariants variants
 
                 return
                     GrantGuard.attach
-                        { GrantSetup.create grants sessions turn { settings with Mode = GrantMode.Auto } with
-                            Sandbox = Some "bubblewrap"
-                        }
+                        (GrantSetup.create grants sessions turn { settings with Mode = GrantMode.Auto })
                         hands
             }
 

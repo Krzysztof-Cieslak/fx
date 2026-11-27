@@ -170,7 +170,13 @@ module View =
             | _ :: _ -> [ "keys in [ ] answer"; "←→ Enter" ]
             | [] ->
                 if tl.State.Running.IsSome then
-                    [ "Enter steer"; "Tab queue"; "Esc interrupt"; "Shift+↑ select"; "Shift+Tab approvals" ]
+                    [
+                        "Enter steer"
+                        "Tab queue"
+                        "Esc interrupt"
+                        "Shift+↑ select"
+                        "Shift+Tab approvals"
+                    ]
                 else
                     [
                         "Enter send"
@@ -209,13 +215,29 @@ module View =
         let approvals =
             match model.Approvals with
             | Some info ->
+                // Without a sandbox, auto approvals run commands with the user's rights: say so.
+                let unsandboxed = info.Mode = "auto" && info.Sandbox.IsNone
+
                 let style =
                     match info.Mode with
+                    | "auto" when unsandboxed -> t.Warning
                     | "auto" -> t.Accent
                     | "ask" -> t.Muted
                     | _ -> t.Warning
 
-                [ s style ("approvals: " + info.Mode); s t.Muted "  " ]
+                let full =
+                    [ s style ("approvals: " + info.Mode) ]
+                    @ (if unsandboxed then [ s t.Warning " · unsandboxed" ] else [])
+                    @ [ s t.Muted "  " ]
+
+                // The mode alone where the words would not leave the product and the state room.
+                if
+                    Row.width full + Row.width (state model) + Text.width model.Setup.Product + 2
+                    <= width
+                then
+                    full
+                else
+                    [ s style info.Mode; s t.Muted "  " ]
             | None -> []
 
         let state = used @ approvals @ state model

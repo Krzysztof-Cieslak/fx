@@ -11,7 +11,7 @@
   ┃  /model      Use another model from the next turn on
   ┃  /detail     Show more or less of each turn
   ┃  /theme      Change the colours
-  ┃  /approvals  Ask for commands, or auto-approve sandboxed ones
+  ┃  /approvals  Ask for commands, or auto-approve workspace ones
   ┃  /exit       Leave (the session stays)
   ┃ ›
   ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off

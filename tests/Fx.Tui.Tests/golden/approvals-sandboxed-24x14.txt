@@ -1,0 +1,17 @@
+────────────────────────
+
+┃ build it and fetch
+┃ the schema
+
+  ◇ Run       auto ✓ 21s
+  ◇ Run   … asked ✓ 4.0s
+  Built, and the schema
+  is in the workspace.
+
+
+  ⠋ turn 1 · thinking 0…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/s… auto  ● turn 1
+────────────────────────
+cursor 11,4

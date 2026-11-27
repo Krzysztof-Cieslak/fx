@@ -21,7 +21,7 @@
 
   ⠋ turn 1 · thinking 0.0s
 ┃ ›
-┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: bubblewrap
-fx · …/src/billing:main · session …0000000B            approvals: auto  ● turn 1
+┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
+fx · …/src/billing:main · session …0000… approvals: auto · unsandboxed  ● turn 1
 ────────────────────────────────────────────────────────────────────────────────
 cursor 21,4

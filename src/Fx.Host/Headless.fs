@@ -354,6 +354,13 @@ module Headless =
                                 io.Show $"warning: {warning}"
                         | None -> ()
 
+                        // Auto approvals, once: what runs without asking, and with what rights (T134).
+                        let! approvals = Eff.run (Host.within host cancellation) (HostApprovals.view host id)
+
+                        match HostApprovals.notice approvals with
+                        | Some line -> io.Show line
+                        | None -> ()
+
                         let follow = following host id io watching.Token
                         let! before = HostSessions.state host id cancellation
                         let key = $"{id}/prompt/{before.Seq}"

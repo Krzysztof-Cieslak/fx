@@ -67,10 +67,14 @@ type EnvInfo =
 /// "Approval modes").
 type ApprovalsInfo =
     {
-        /// `ask`, `auto` (auto approvals run what the sandbox confines), `deny` or `off`.
+        /// `ask`, `auto` (auto approvals run commands written plainly in the workspace), `deny` or
+        /// `off`.
         Mode: string
         /// The host's `codeact.grants.mode` for the session.
         Configured: string
+        /// The sandbox driver that confines the session's commands; `None`: they run with the user's
+        /// rights (the default).
+        Sandbox: string option
         /// Why auto approvals are on or off.
         Reason: string
     }
@@ -1350,10 +1354,14 @@ module App =
         | Msg.Approvals(info, switched) ->
             let model = { model with Approvals = Some info }
 
-            if switched then
-                notice $"approvals: {info.Mode}" model, []
-            else
-                model, []
+            match switched, info.Mode, info.Sandbox with
+            // What auto approvals mean without a sandbox, in one line.
+            | true, "auto", None ->
+                notice "approvals: auto · unsandboxed: commands run unasked with your rights" model, []
+            | true, "auto", Some driver ->
+                notice $"approvals: auto · commands run unasked, confined by {driver}" model, []
+            | true, mode, _ -> notice $"approvals: {mode}" model, []
+            | false, _, _ -> model, []
         | Msg.Sent(_, Ok()) -> model, []
         | Msg.Sent(what, Error reason) -> error $"{what}: {reason}" model, []
         | Msg.AnswerFailed(card, reason) ->

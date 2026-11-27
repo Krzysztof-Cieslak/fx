@@ -134,6 +134,7 @@ module TuiClient =
         {
             Mode = view.Mode
             Configured = view.Configured
+            Sandbox = view.Sandbox
             Reason = view.Reason
         }
 
