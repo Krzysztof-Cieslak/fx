@@ -238,6 +238,78 @@ let tests =
                 Expect.equal written kept "and writes the same"
             }
 
+            test "the step journal's job events read back as they were first written" {
+                let call = ref' 1 2 1 "call-1" 1
+
+                let jobs =
+                    [
+                        StepEvent.JobStarted
+                            {
+                                Job = "j1"
+                                Name = "build"
+                                Command = "dotnet build"
+                                Cwd = Some "src"
+                                Call = Some call
+                            }
+                        StepEvent.JobStarted
+                            {
+                                Job = "j2"
+                                Name = "gh pr checks --watch"
+                                Command = "gh pr checks --watch"
+                                Cwd = None
+                                Call = None
+                            }
+                        StepEvent.JobEnded
+                            {
+                                Job = "j1"
+                                How = JobEnd.Exited 1
+                                Bytes = Some 2048L
+                            }
+                        StepEvent.JobEnded
+                            {
+                                Job = "j2"
+                                How = JobEnd.Killed
+                                Bytes = Some 0L
+                            }
+                        StepEvent.JobEnded
+                            {
+                                Job = "j3"
+                                How = JobEnd.Failed "could not start /bin/sh: not found"
+                                Bytes = None
+                            }
+                        StepEvent.JobEnded
+                            {
+                                Job = "j4"
+                                How = JobEnd.Lost
+                                Bytes = None
+                            }
+                        StepEvent.JobEnded
+                            {
+                                Job = "j5"
+                                How = JobEnd.Reported "`make` exited with code 0; it printed nothing."
+                                Bytes = None
+                            }
+                    ]
+
+                let written =
+                    jobs
+                    |> List.map (fun e -> Json.serializeCanonical (StepCodecs.event.Encode e) + "\n")
+                    |> String.concat ""
+
+                let kept = Golden.kept "step-events-jobs-v1.jsonl" written
+
+                let read =
+                    kept.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.map (fun line ->
+                        match Codec.decodeText StepCodecs.event line with
+                        | Ok event -> event
+                        | Error issues -> failtest (Issue.render issues))
+                    |> List.ofArray
+
+                Expect.equal read jobs "every job event reads back"
+                Expect.equal written kept "and writes the same"
+            }
+
             test "a kernel's end in words: signals, exit codes, its standard error" {
                 Expect.equal
                     (KernelEnds.describe Fx.Sdk.Os.Linux (KernelEnd.Exited(Some 137, "")))

@@ -321,11 +321,75 @@ let ran: Fx.Effects.Command -> CancellationToken -> Task<Result<Output, ShellErr
 
         Task.FromResult(Ok(ScriptedShell.output 0 $"ran {script}\n" ""))
 
-/// A host process: its session host and the recorded strategy.
+/// The processes of background jobs (T143) in recorded tests: a `Script` that starts with `job ` (other
+/// commands run as the fixture's commands do) prints `ran <script>`, then ends with exit code 0, at once
+/// or, for `job held …`, once the test releases it (`Release`); killed, it ends with -1. Deterministic:
+/// no OS process.
+[<Sealed>]
+type JobProcs() =
+    let gates =
+        ConcurrentDictionary<string, TaskCompletionSource>(StringComparer.Ordinal)
+
+    let mutable pid = 5000
+
+    let gateOf (script: string) =
+        gates.GetOrAdd(script, fun _ -> TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
+
+    /// Lets a held job end.
+    member _.Release(script: string) =
+        (gateOf script).TrySetResult() |> ignore
+
+    member _.Spawn(script: string) : Proc =
+        let gate = obj ()
+        let mutable printed = false
+        let mutable killed = false
+
+        let ended =
+            if script.StartsWith("job held", StringComparison.Ordinal) then
+                (gateOf script).Task
+            else
+                Task.CompletedTask
+
+        {
+            Pid = Interlocked.Increment(&pid)
+            Write = fun _ _ -> Task.FromResult()
+            CloseStdin = fun () -> Task.FromResult()
+            Read =
+                fun cancellation ->
+                    task {
+                        let first =
+                            lock gate (fun () ->
+                                let first = not printed
+                                printed <- true
+                                first)
+
+                        if first then
+                            return Some(Stdout(Encoding.UTF8.GetBytes $"ran {script}\n"))
+                        else
+                            do! ended.WaitAsync cancellation
+                            return None
+                    }
+            Wait =
+                fun cancellation ->
+                    task {
+                        do! ended.WaitAsync cancellation
+                        return if lock gate (fun () -> killed) then -1 else 0
+                    }
+            Kill =
+                fun () ->
+                    lock gate (fun () -> killed <- true)
+                    (gateOf script).TrySetResult() |> ignore
+                    Task.FromResult()
+        }
+
+    override _.ToString() = "JobProcs"
+
+/// A host process: its session host, the recorded strategy and the background jobs.
 type Process =
     {
         Host: SessionHost<HostEnv>
         Strategy: RecordedCodeAct<HostEnv, HandsEnv>
+        Jobs: LiveJobs<HandsEnv>
     }
 
     override _.ToString() = "Process"
@@ -338,6 +402,8 @@ type Fixture =
         Blobs: TrackedBlobs
         Fs: InMemoryFs
         Model: Model
+        /// The processes of background jobs.
+        JobProcs: JobProcs
         Variants: Variants
         /// The models' catalog the strategy (and replay) knows.
         Catalog: ModelRef -> ModelInfo option
@@ -365,6 +431,7 @@ type Fixture =
 
             try
                 (this.Process.Strategy.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
+                (this.Process.Jobs.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
             with _ ->
                 ()
 
@@ -395,6 +462,7 @@ let createIn
 
     fs.AddDirectory workspace
     let model = Model()
+    let jobProcs = JobProcs()
 
     let env: HostEnv =
         {
@@ -412,7 +480,17 @@ let createIn
                     FsRead = fs.FsRead
                     Fs = fs.Fs
                     FsOps = FsOpsOver.create fs.FsRead fs.Fs
-                    Shell = ScriptProc.shell commands
+                    Shell =
+                        let shell = ScriptProc.shell commands
+
+                        { shell with
+                            Spawn =
+                                fun spec cancellation ->
+                                    match spec.Program with
+                                    | Program.Script script when script.StartsWith("job ", StringComparison.Ordinal) ->
+                                        Task.FromResult(Ok(jobProcs.Spawn script))
+                                    | _ -> shell.Spawn spec cancellation
+                        }
                     Scope = Scope.root
                 }
             Workspace = workspace
@@ -423,6 +501,8 @@ let createIn
             Snapshots = None
             Sandbox = None
             Variables = []
+            // Each host process gives its own (`start`).
+            Jobs = Jobs.none
         }
 
     let overrides = selections |> List.map fst
@@ -446,6 +526,29 @@ let createIn
     let start () : Process =
         let recorder = Recording.recorder store.Log blobs.Blobs SystemClock.clock
 
+        // The process's background jobs tell the session host when they end.
+        let host: SessionHost<HostEnv> option ref = ref None
+
+        let notify (notice: JobNotice) : Task<unit> =
+            task {
+                match host.Value with
+                | Some host ->
+                    let! _ =
+                        Eff.run
+                            env
+                            (SessionHost.send
+                                host
+                                notice.Session
+                                (JobNotices.key notice.Job)
+                                JobNotices.by
+                                (JobNotices.command notice))
+
+                    ()
+                | None -> ()
+            }
+
+        let jobs = LiveJobs<HandsEnv>(notify)
+
         let strategy =
             Recording.codeact
                 recorder
@@ -456,16 +559,22 @@ let createIn
                     Steps = StepJournal.typed store.Log
                     Blobs = Some blobs.Blobs
                     Profile = fun _ -> Eff.ret variants
-                    Hands = fun turn -> guard variants sessions turn hands |> Eff.map Ok
+                    Hands = fun turn -> guard variants sessions turn { hands with Jobs = jobs.Jobs } |> Eff.map Ok
                     Catalog = catalog
                 }
 
-        let host =
+        let started =
             (Eff.run env (SessionHost.create sessions snapshots.Store strategy.Runner settings))
                 .GetAwaiter()
                 .GetResult()
 
-        { Host = host; Strategy = strategy }
+        host.Value <- Some started
+
+        {
+            Host = started
+            Strategy = strategy
+            Jobs = jobs
+        }
 
     {
         Env = env
@@ -473,6 +582,7 @@ let createIn
         Blobs = blobs
         Fs = fs
         Model = model
+        JobProcs = jobProcs
         Variants = variants
         Catalog = catalog
         Process = start ()
@@ -588,6 +698,7 @@ let restart (f: Fixture) : Task =
     task {
         do! run f (SessionHost.stop f.Host)
         do! f.Process.Strategy.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
+        do! f.Process.Jobs.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
         f.Process <- f.Start()
     }
 
@@ -596,6 +707,7 @@ let close (f: Fixture) : Task =
     task {
         do! run f (SessionHost.stop f.Host)
         do! f.Process.Strategy.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
+        do! f.Process.Jobs.Close().WaitAsync(TimeSpan.FromSeconds 60.0)
     }
 
 let driver: DriverEnv =

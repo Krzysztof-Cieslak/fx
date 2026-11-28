@@ -192,6 +192,7 @@ let private record () : Task<string list> =
                 Snapshots = None
                 Sandbox = None
                 Variables = []
+                Jobs = Jobs.none
             }
 
         let wraps: Wraps<HostEnv, HandsEnv> =

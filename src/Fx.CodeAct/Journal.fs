@@ -162,6 +162,55 @@ type KernelEnded =
     override this.ToString() =
         $"kernel launch {this.Launch} {this.How}"
 
+/// A background job of the session (T143), journaled before its process starts: its number goes on
+/// after the host restarted, and a job started and never ended was lost with the host.
+type JobStarted =
+    {
+        /// Its id in the session: `j<n>`, numbered on from the journal's.
+        Job: string
+        Name: string
+        Command: string
+        /// The working directory the cell asked for, as it asked (the workspace when absent).
+        Cwd: string option
+        /// The call whose cell started it.
+        Call: CallRef option
+    }
+
+    override this.ToString() = $"job {this.Job} started ({this.Name})"
+
+/// How a background job ended, as the strategy learned it (T143).
+[<RequireQualifiedAccess>]
+type JobEnd =
+    /// Its process exited with this code.
+    | Exited of code: int
+    /// `jobs.kill` stopped it.
+    | Killed
+    /// It did not start, or its output could not be read (why, for people).
+    | Failed of reason: string
+    /// The host stopped while it ran (a host does not take over the jobs of the one before it).
+    | Lost
+    /// The session was told that it ended before a cell saw it: the notice's note.
+    | Reported of note: string
+
+    override this.ToString() =
+        match this with
+        | Exited code -> $"exited ({code})"
+        | Killed -> "killed"
+        | Failed reason -> $"failed: {reason}"
+        | Lost -> "lost"
+        | Reported _ -> "reported"
+
+/// A background job of the session ended.
+type JobEnded =
+    {
+        Job: string
+        How: JobEnd
+        /// The bytes of output it wrote, when known.
+        Bytes: int64 option
+    }
+
+    override this.ToString() = $"job {this.Job} {this.How}"
+
 /// What the step journal records (spec §5: step results journaled): facts kept forever, in the
 /// stream `steps/<session>`. A call's start is journaled before it runs; its end is its receipt in the
 /// context log (`Returned`), so a call with a start and no receipt was in flight when the host stopped.
@@ -178,6 +227,11 @@ type StepEvent =
     | ValueLost of LostValue
     /// A kernel ended, and how: journaled before the launch that replaces it (T135).
     | KernelEnded of KernelEnded
+    /// A background job is about to start (T143).
+    | JobStarted of JobStarted
+    /// A background job ended, journaled when the strategy learns it: a cell saw it, its notice reached
+    /// a turn, or the host restarted while it ran.
+    | JobEnded of JobEnded
 
     override this.ToString() =
         match this with
@@ -189,6 +243,8 @@ type StepEvent =
         | ValueKept kept -> string kept
         | ValueLost lost -> string lost
         | KernelEnded ended -> string ended
+        | JobStarted started -> string started
+        | JobEnded ended -> string ended
 
 /// The JSON of the step journal: version 1 of what `steps/<session>` keeps (never change an old
 /// event's JSON without a new version and an upcaster; `tests/Fx.CodeAct.Tests/golden/step-events-v1.jsonl`
@@ -368,6 +424,61 @@ module StepCodecs =
         }
         |> Codec.named "KernelEnded"
 
+    let jobStarted: Codec<JobStarted> =
+        Codec.record {
+            let! job = Codec.field "job" (fun (j: JobStarted) -> j.Job) Codec.string
+            and! name = Codec.field "name" (fun j -> j.Name) Codec.string
+            and! command = Codec.field "command" (fun j -> j.Command) Codec.string
+            and! cwd = Codec.optionalField "cwd" (fun j -> j.Cwd) Codec.string
+            and! call = Codec.optionalField "call" (fun j -> j.Call) callRef
+
+            return
+                {
+                    Job = job
+                    Name = name
+                    Command = command
+                    Cwd = cwd
+                    Call = call
+                }
+        }
+        |> Codec.named "JobStarted"
+
+    let jobEnd: Codec<JobEnd> =
+        Codec.union "kind" {
+            let! exited = Codec.case1 "exited" JobEnd.Exited (Field.required "code" Codec.int)
+            and! killed = Codec.case0 "killed" JobEnd.Killed
+
+            and! failed =
+                Codec.case1 "failed" JobEnd.Failed (Field.required "reason" Codec.string)
+
+            and! lost = Codec.case0 "lost" JobEnd.Lost
+
+            and! reported =
+                Codec.case1 "reported" JobEnd.Reported (Field.required "note" Codec.string)
+
+            return
+                fun e ->
+                    match e with
+                    | JobEnd.Exited code -> exited code
+                    | JobEnd.Killed -> killed
+                    | JobEnd.Failed reason -> failed reason
+                    | JobEnd.Lost -> lost
+                    | JobEnd.Reported note -> reported note
+        }
+        |> Codec.named "JobEnd"
+
+    let jobEnded: Codec<JobEnded> =
+        Codec.record {
+            let! job = Codec.field "job" (fun (j: JobEnded) -> j.Job) Codec.string
+            and! how = Codec.field "how" (fun j -> j.How) jobEnd
+
+            and! bytes =
+                Codec.optionalField "bytes" (fun j -> j.Bytes) (Codec.int64 |> Codec.atLeast 0L)
+
+            return { Job = job; How = how; Bytes = bytes }
+        }
+        |> Codec.named "JobEnded"
+
     let event: Codec<StepEvent> =
         Codec.union "kind" {
             let! launched =
@@ -383,6 +494,8 @@ module StepCodecs =
             and! kept = Codec.caseOf "valueKept" StepEvent.ValueKept keptValue
             and! lost = Codec.caseOf "valueLost" StepEvent.ValueLost lostValue
             and! ended = Codec.caseOf "kernelEnded" StepEvent.KernelEnded kernelEnded
+            and! jobBegan = Codec.caseOf "jobStarted" StepEvent.JobStarted jobStarted
+            and! jobFinished = Codec.caseOf "jobEnded" StepEvent.JobEnded jobEnded
 
             return
                 fun e ->
@@ -395,9 +508,11 @@ module StepCodecs =
                     | StepEvent.ValueKept k -> kept k
                     | StepEvent.ValueLost l -> lost l
                     | StepEvent.KernelEnded e -> ended e
+                    | StepEvent.JobStarted j -> jobBegan j
+                    | StepEvent.JobEnded j -> jobFinished j
         }
         |> Codec.describe
-            "What a session's step journal records: kernel launches and how kernels ended, calls before they run, their host calls and output, and cells' values for recall."
+            "What a session's step journal records: kernel launches and how kernels ended, calls before they run, their host calls and output, cells' values for recall, and background jobs' starts and ends."
         |> Codec.named "StepEvent"
 
 /// Where the strategy journals the steps of a session's turns (spec §5, crash recovery;
@@ -459,7 +574,17 @@ module StepJournal =
     let MaxPrintedChars = 16000
 
     /// The bindings whose calls only read: not journaled (their calls change nothing to be in doubt about).
-    let readOnly: string list = [ "fs.read"; "fs.list"; "fs.stat"; "recall" ]
+    let readOnly: string list =
+        [
+            "fs.read"
+            "fs.list"
+            "fs.stat"
+            "recall"
+            "jobs.list"
+            "jobs.status"
+            "jobs.output"
+            "jobs.wait"
+        ]
 
     /// The last kernel launch a journal records (0: none), and how it ended if the journal says.
     let lastKernel (events: Recorded<StepEvent> list) : int * KernelEnd option =

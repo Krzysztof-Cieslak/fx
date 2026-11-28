@@ -140,4 +140,6 @@ module EnvHands =
                             | VariableOutcome.Denied reason
                             | VariableOutcome.Unavailable reason -> Some reason
                     })
+            // The composition root gives the host's jobs (`LiveJobs`), which outlive the turn's hands.
+            Jobs = Jobs.none
         }

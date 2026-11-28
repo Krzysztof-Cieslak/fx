@@ -445,6 +445,29 @@ let createOn<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> ICloc
         }
 
     let start () : Process =
+        // The process's background jobs: they tell the session host when they end, and die with it.
+        let host: SessionHost<HostEnv> option ref = ref None
+
+        let notify (notice: JobNotice) : Task<unit> =
+            task {
+                match host.Value with
+                | Some host ->
+                    let! _ =
+                        Eff.run
+                            env
+                            (SessionHost.send
+                                host
+                                notice.Session
+                                (JobNotices.key notice.Job)
+                                JobNotices.by
+                                (JobNotices.command notice))
+
+                    ()
+                | None -> ()
+            }
+
+        let jobs = LiveJobs<'K>(notify)
+
         let codeact =
             CodeAct.create
                 {
@@ -453,17 +476,25 @@ let createOn<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> ICloc
                     Steps = StepJournal.typed store.Log
                     Blobs = Some blobs.Blobs
                     Profile = fun _ -> Eff.ret variants
-                    Hands = fun _ -> Eff.ret (Ok hands)
+                    Hands = fun _ -> Eff.ret (Ok { hands with Jobs = jobs.Jobs })
                     Catalog = catalog
                 }
 
-        let host =
+        let started =
             (Eff.run env (SessionHost.create sessions snapshots.Store codeact.Runner settings)).GetAwaiter().GetResult()
 
+        host.Value <- Some started
+
         {
-            Host = host
+            Host = started
             Kernel = codeact.Kernel
-            Close = fun () -> codeact.Close()
+            Close =
+                fun () ->
+                    task {
+                        do! codeact.Close()
+                        do! jobs.Close()
+                    }
+                    :> Task
         }
 
     {
@@ -517,6 +548,8 @@ let localHands
             )
         Sandbox = None
         Variables = []
+        // Each host process gives its own (`createOn`).
+        Jobs = Jobs.none
     }
 
 /// A fixture on local hands, with the interpreter `make` gives for its root.

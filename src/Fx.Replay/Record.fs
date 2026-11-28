@@ -128,6 +128,25 @@ module Ops =
     [<Literal>]
     let Kill = "Proc.Kill"
 
+    /// The hands' background jobs (T143), journaled at their level: replay starts no process for them.
+    [<Literal>]
+    let JobStart = "Jobs.Start"
+
+    [<Literal>]
+    let JobInfo = "Jobs.Info"
+
+    [<Literal>]
+    let JobList = "Jobs.List"
+
+    [<Literal>]
+    let JobRead = "Jobs.Read"
+
+    [<Literal>]
+    let JobWait = "Jobs.Wait"
+
+    [<Literal>]
+    let JobKill = "Jobs.Kill"
+
     [<Literal>]
     let ReadFile = "Fs.ReadFile"
 

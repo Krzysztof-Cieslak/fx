@@ -922,6 +922,29 @@ module Permissions =
                         | Some options -> command settings place (options |> Option.bind (fun o -> o.Cwd)) line
         }
 
+    /// `jobs.start(command, options?)` (T143): a command run in the background needs what `shell.run`
+    /// of it needs (each simple command, its redirections, auto approvals, `askCommands`).
+    let jobsStart: BindingRule =
+        {
+            Binding = "jobs.start"
+            Needs =
+                fun settings place call ->
+                    match arg Codec.string 0 call with
+                    | None -> CallNeeds.Needs []
+                    | Some line ->
+                        match List.tryItem 1 call.Args with
+                        | None
+                        | Some(Value.Inline Json.Null) -> command settings place None line
+                        | Some(Value.Inline(Json.Object members)) ->
+                            match members |> List.tryFind (fun (name, _) -> name = "cwd") with
+                            | None
+                            | Some(_, Json.Null) -> command settings place None line
+                            | Some(_, Json.String cwd) -> command settings place (Some cwd) line
+                            // Options that do not decode: the binding refuses them, nothing runs.
+                            | Some _ -> CallNeeds.Needs []
+                        | Some _ -> CallNeeds.Needs []
+        }
+
     /// `fs.write(path, text)`.
     let fsWriteRule: BindingRule =
         {
@@ -1043,7 +1066,15 @@ module Permissions =
     /// The core bindings' rules (`fs.list` and `fs.stat` show names and sizes, not content: they need
     /// nothing).
     let core: BindingRule list =
-        [ shellRun; fsWriteRule; fsPatchRule; fsEditRule; fsEditRangeRule; fsReadRule ]
+        [
+            shellRun
+            jobsStart
+            fsWriteRule
+            fsPatchRule
+            fsEditRule
+            fsEditRangeRule
+            fsReadRule
+        ]
 
     /// What a call needs, by its binding's rule; nothing for bindings without one.
     let needs (rules: BindingRule list) (settings: GrantSettings) (place: Workplace) (call: HostCall) : CallNeeds =

@@ -509,6 +509,80 @@ type RecordedCodeAct<'R, 'K
                                     }
                     }
             Snapshots = hands.Snapshots |> Option.map (Record.snapshots journal lane)
+            // Journaled at their level, with what they answered (T143): their processes run on the
+            // hands' own (unrecorded) shell, and replay answers from these entries without one.
+            Jobs =
+                let inner (env: 'K) = original.WithScope env.Scope
+                let jobs = hands.Jobs
+
+                {
+                    Start =
+                        fun launch ->
+                            fun env ->
+                                journal.RunActing(
+                                    lane,
+                                    Ops.JobStart,
+                                    Inputs.json (Values.jobLaunch launch),
+                                    $"{launch.Id}: {launch.Command}",
+                                    Values.jobStarted.Encode,
+                                    fun () -> jobs.Start launch (inner env)
+                                )
+                    Info =
+                        fun job ->
+                            fun env ->
+                                journal.Run(
+                                    lane,
+                                    Ops.JobInfo,
+                                    Inputs.json (Values.jobRef job),
+                                    job.Id,
+                                    Values.jobInfo.Encode,
+                                    fun () -> jobs.Info job (inner env)
+                                )
+                    List =
+                        fun session ->
+                            fun env ->
+                                journal.Run(
+                                    lane,
+                                    Ops.JobList,
+                                    Inputs.text session,
+                                    "",
+                                    Values.jobInfos.Encode,
+                                    fun () -> jobs.List session (inner env)
+                                )
+                    Read =
+                        fun read ->
+                            fun env ->
+                                journal.Run(
+                                    lane,
+                                    Ops.JobRead,
+                                    Inputs.json (Values.jobRead read),
+                                    read.Job.Id,
+                                    Values.jobOutput.Encode,
+                                    fun () -> jobs.Read read (inner env)
+                                )
+                    Wait =
+                        fun wait ->
+                            fun env ->
+                                journal.Run(
+                                    lane,
+                                    Ops.JobWait,
+                                    Inputs.json (Values.jobWait wait),
+                                    wait.Job.Id,
+                                    Values.jobInfo.Encode,
+                                    fun () -> jobs.Wait wait (inner env)
+                                )
+                    Kill =
+                        fun job ->
+                            fun env ->
+                                journal.RunActing(
+                                    lane,
+                                    Ops.JobKill,
+                                    Inputs.json (Values.jobRef job),
+                                    job.Id,
+                                    Values.jobInfo.Encode,
+                                    fun () -> jobs.Kill job (inner env)
+                                )
+                }
             Guard =
                 fun call ->
                     fun env ->

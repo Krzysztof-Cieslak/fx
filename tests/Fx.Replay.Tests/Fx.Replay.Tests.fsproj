@@ -11,6 +11,7 @@
     <Compile Include="Harness.fs" />
     <Compile Include="UnitTests.fs" />
     <Compile Include="SessionTests.fs" />
+    <Compile Include="JobTests.fs" />
     <Compile Include="SecretTests.fs" />
     <Compile Include="GrantTests.fs" />
     <Compile Include="GoldenTests.fs" />

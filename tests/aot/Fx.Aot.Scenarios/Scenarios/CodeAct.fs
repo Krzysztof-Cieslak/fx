@@ -274,6 +274,7 @@ let private sessionIn
                                         Snapshots = None
                                         Sandbox = None
                                         Variables = []
+                                        Jobs = Jobs.none
                                     }
                             )
                     Catalog = catalog
@@ -553,6 +554,7 @@ let private recovery () : Task<string list> =
                                                 Snapshots = None
                                                 Sandbox = None
                                                 Variables = []
+                                                Jobs = Jobs.none
                                             }
                                     )
                             Catalog = fun _ -> None

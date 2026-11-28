@@ -23,6 +23,7 @@
     <Compile Include="LoopGuard.fs" />
     <Compile Include="Instructions.fs" />
     <Compile Include="Receipts.fs" />
+    <Compile Include="Jobs.fs" />
     <Compile Include="Kernels.fs" />
     <Compile Include="Recall.fs" />
     <Compile Include="History.fs" />

@@ -174,3 +174,57 @@ module Values =
                 "spec", procInput command.Spec
                 "stdin", Json.String(Digest.bytes command.Stdin)
             ]
+
+    /// A background job's start as the journal identifies it (T143): its session and id, its command as
+    /// a process's inputs (`procInput`: variables by name only) and the digest of its standard input.
+    let jobLaunch (launch: Fx.CodeAct.JobLaunch) : Json =
+        let spec: ProcSpec =
+            {
+                Program = Program.Script launch.Command
+                Cwd = Some launch.Cwd
+                Env = launch.Env
+            }
+
+        Json.Object
+            [
+                "session", Json.String launch.Session
+                "id", Json.String launch.Id
+                "spec", procInput spec
+                "stdin", Json.String(Digest.bytes (Text.Encoding.UTF8.GetBytes(launch.Stdin |> Option.defaultValue "")))
+            ]
+
+    let jobRef (job: Fx.CodeAct.JobRef) : Json =
+        Json.Object [ "session", Json.String job.Session; "id", Json.String job.Id ]
+
+    let jobRead (read: Fx.CodeAct.JobRead) : Json =
+        Json.Object
+            [
+                "job", jobRef read.Job
+                "from",
+                (match read.From with
+                 | Some offset -> Json.int64 offset
+                 | None -> Json.Null)
+                "maxChars", Json.int read.MaxChars
+            ]
+
+    let jobWait (wait: Fx.CodeAct.JobWait) : Json =
+        Json.Object
+            [
+                "job", jobRef wait.Job
+                "timeoutMs",
+                (match wait.TimeoutMs with
+                 | Some ms -> Json.int ms
+                 | None -> Json.Null)
+            ]
+
+    /// What a job's start answered.
+    let jobStarted: Codec<Result<Fx.CodeAct.JobInfo, string>> =
+        result Fx.CodeAct.JobCodecs.info Codec.string
+
+    let jobInfo: Codec<Fx.CodeAct.JobInfo option> =
+        Codec.option Fx.CodeAct.JobCodecs.info
+
+    let jobInfos: Codec<Fx.CodeAct.JobInfo list> = Codec.list Fx.CodeAct.JobCodecs.info
+
+    let jobOutput: Codec<Fx.CodeAct.JobOutput option> =
+        Codec.option Fx.CodeAct.JobCodecs.output
