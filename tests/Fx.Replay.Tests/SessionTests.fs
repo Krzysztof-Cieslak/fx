@@ -283,6 +283,35 @@ let recovered (f: Fixture) (deploying: Task) : Task<string> =
         return "s1"
     }
 
+/// Commands: `wait` waits until it is cancelled; the others run.
+let waitsForCancel (command: Fx.Effects.Command) (token: CancellationToken) : Task<Result<Output, ShellError>> =
+    match command.Spec.Program with
+    | Program.Script "wait" ->
+        task {
+            let never = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+            use _ = token.Register(fun () -> never.TrySetCanceled token |> ignore)
+            do! never.Task
+            return! ran command token
+        }
+    | _ -> ran command token
+
+/// A cell's commands share its timeout (T141): the first is cut at it (its timer fires), and the
+/// next is refused, from the times the hands' clock gave.
+let sharedTimeout (f: Fixture) : Task<string> =
+    task {
+        f.Model.AddAll
+            [
+                Say.cell "// intent: wait\ncall a = shell.run [\"wait\"]\ncall b = shell.run [\"echo after\"]"
+                Say.finish "Stopped"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Wait"
+        let! ending = ended f "s1" 1
+        completed ending
+        return "s1"
+    }
+
 /// A model with a 20000-token window: compaction starts at 16000.
 let catalog (reference: ModelRef) : ModelInfo option =
     Some(ModelInfo.create reference { Context = 20000; Output = 4096 })
@@ -351,6 +380,23 @@ let tests =
             recordsAndReplays "a question answered into the next turn" (fun () -> create []) questioned ignore2
 
             recordsAndReplays "model errors retried after a delay" (fun () -> create []) retried ignore2
+
+            recordsAndReplays
+                "a cell's commands share its timeout: one cut at it, the next refused"
+                (fun () -> createWith [ "codeact.cell.timeoutMs", Json.int 300 ] waitsForCancel (Inherit []))
+                sharedTimeout
+                (fun f _ ->
+                    let receipts =
+                        f.Store.Events(ContextLog.stream "s1")
+                        |> List.map (Fx.Store.EventLog.decode ContextLog.schema)
+                        |> List.choose (fun (r: Fx.Machines.Host.Recorded<ContextEvent>) ->
+                            match r.Event with
+                            | ContextEvent.Returned receipt -> Some receipt
+                            | _ -> None)
+
+                    let shown = receipts.Head.Pieces |> List.map Piece.render |> String.concat "\n"
+                    Expect.stringContains shown "already ran for its whole timeout (300 ms)" "the next refused"
+                    Expect.stringContains shown "Not assigned (the cell stopped first): b" "b never assigned")
 
             recordsAndReplays
                 "hands in a sandbox: the prompt describes it, and replay renders it again"
