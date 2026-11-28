@@ -454,6 +454,18 @@ character offset, bounded (`codeact.outputChars` by default), with `next` to rea
 `fx.history.open(id)` gives a `HistoryRange` handle, which `history.read` takes as well as an id. They load
 the session's log as the turn does.
 
+**Pins** (spec §6.6, T201c): `fx.context.pin(name, value)` keeps a value in view at every later step as it
+is now (a string as its text, data as JSON, a handle or blob by reference; at most `codeact.outputChars`
+characters); `fx.context.pinFile(name, path, {lines})` keeps a live view of a workspace file (outside the
+workspace or excluded is refused); `fx.context.unpin(name)`; `fx.context.pins()` gives each pin with its
+characters and estimated tokens, file pins as their files are now. The bindings only ask (`ContextAsks`,
+per session; asks of an earlier turn are dropped when a turn starts); the turn records them as
+`Pinned`/`Unpinned` context events right after the cell's receipt, so the log's order is the order the
+model saw. Before each call the turn reads the live-pinned files through the hands, as `fs.read` reads
+them (`ContextBindings.readPinned`: content exclusions, the sandbox's policy; journaled for replay),
+into `Live.Files`, and the `pins` view (prompt.md) shows them; a file that cannot be read, or is longer
+than `codeact.outputChars` characters, shows as unavailable.
+
 **Handles** (T201b): a session's handles come from per-session tables (`HandleTable`, one per kind), so
 they resolve only in that session. A cell that ends with one shows it by reference (`Piece.Ref`:
 `[handle Out["cell"]: HistoryRange] preview`, never its id). The journal keeps it by reference
@@ -857,7 +869,6 @@ fake clock, auto approvals and their decision), on all eight targets.
 | Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | A person's compaction (a session command, the TUI's `/compact`) beside the model's `fx.history.compact` | when clients ask (T130's successors) |
-| `fx.context.pin` | T201c |
 | Compaction as the bundled extension `fx.compaction` (spec §16.4), a summarizer contributed by extensions | with a strategy contribution type (below) |
 | Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents) | T213 and their tasks |
 | A strategy contribution type for extensions (the SDK would need sessions, the render and interpreters) | when a second strategy exists |

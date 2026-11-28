@@ -146,7 +146,7 @@ module Clock =
 | `ISessionLog`, `IUser` (durable pending requests) | T125 |
 | `IInterpreter` (kernels are started and driven with `Kernel` and `Interpreter`, [interpreters.md](interpreters.md); a capability for strategies comes with them) | T127 |
 | `IGrants` | T123 |
-| `IContext` (the prompt render itself is pure: [prompt.md](prompt.md)) | T201 |
+| `IContext` (the prompt render itself is pure: [prompt.md](prompt.md)); pins needed none: they are context events the CodeAct strategy records (T201c, [codeact.md](codeact.md)) | when a second strategy needs one |
 | `ISnapshots`: per-step snapshots, retention, two-phase undo (the capability and `GitSnapshots` are in `src/Fx.Envd`, [envd.md](envd.md)) | T205 |
 | `ITerminal`: a deterministic fake and journaling (the shape and the local interpreter are in `src/Fx.Pty`, the conformance suite in `tests/Fx.Pty.Tests`, the proxy in `src/Fx.Envd`) | when sessions use terminals ([replay.md](replay.md)) |
 | `IRepo` | T202 |

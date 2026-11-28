@@ -405,7 +405,7 @@ terminal check's P/Invoke without a terminal).
 | What | Task |
 |---|---|
 | Changes and `[d]iff [u]ndo [r]eview` on the result card, activity lines from cells' host calls (`Refs`, `Read` inside cells) | T205 |
-| More `/` commands (`/context`, `/compact`, `/env`, `/goal`), a model picker from the catalog, the environment picker | T215, later |
+| More `/` commands (`/compact`, `/env`, `/goal`; `/context` came with T201c), a model picker from the catalog, the environment picker | T215, later |
 | The grants view (active grants, revoke) and the decisions panel | T303 |
 | Reconnecting `fx attach` after the listener restarts; notifications outside the terminal | T507 |
 | Clicks on cards, the prompt and the footer; asking the terminal for its background (OSC 11) | later |
