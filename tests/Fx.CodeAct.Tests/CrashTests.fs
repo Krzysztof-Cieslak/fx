@@ -30,24 +30,33 @@ type private Gate() =
     member _.Runs = lock gate (fun () -> runs)
 
     member this.Wrap(shell: Shell) : Shell =
+        let deploy (_: Fx.Effects.Command) (token: CancellationToken) =
+            task {
+                let first =
+                    lock gate (fun () ->
+                        runs <- runs + 1
+                        runs = 1)
+
+                if first then
+                    this.Started.TrySetResult() |> ignore
+                    do! Task.Delay(Timeout.Infinite, token)
+
+                return Ok(Fx.Effects.Fakes.ScriptedShell.output 0 "deployed\n" "")
+            }
+
+        // `shell.run` spawns its commands (T142): `deploy` is a process whose run its kill cancels.
         { shell with
             Run =
                 fun command token ->
                     match command.Spec.Program with
-                    | Program.Script "deploy" ->
-                        task {
-                            let first =
-                                lock gate (fun () ->
-                                    runs <- runs + 1
-                                    runs = 1)
-
-                            if first then
-                                this.Started.TrySetResult() |> ignore
-                                do! Task.Delay(Timeout.Infinite, token)
-
-                            return Ok(Fx.Effects.Fakes.ScriptedShell.output 0 "deployed\n" "")
-                        }
+                    | Program.Script "deploy" -> deploy command token
                     | _ -> shell.Run command token
+            Spawn =
+                fun spec token ->
+                    match spec.Program with
+                    | Program.Script "deploy" ->
+                        Task.FromResult(Ok(Fx.Aot.Scenarios.Kernel.ScriptProc.command deploy spec))
+                    | _ -> shell.Spawn spec token
         }
 
 let private snapshotsOn = [ "codeact.journal.snapshots", Json.Bool true ]

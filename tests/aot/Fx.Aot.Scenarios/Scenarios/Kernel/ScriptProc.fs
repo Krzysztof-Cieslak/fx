@@ -102,8 +102,110 @@ let start () : Proc =
                 Task.FromResult()
     }
 
+/// A command `run` answers, as a process (`shell.run` spawns its commands): it runs once its input is
+/// closed, with that input; its output comes as one piece per stream; `Kill` cancels the run, which
+/// then ends with exit code 137 (and nothing printed, if the run gave up on its cancellation).
+let command (run: Command -> CancellationToken -> Task<Result<Output, ShellError>>) (spec: ProcSpec) : Proc =
+    let gate = obj ()
+    let input = new IO.MemoryStream()
+    let killed = new CancellationTokenSource()
+
+    let ran =
+        TaskCompletionSource<Output>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+    let mutable started = false
+    let mutable pending: OutputChunk list option = None
+
+    let killedOutput =
+        {
+            ExitCode = 137
+            Stdout = [||]
+            Stderr = [||]
+        }
+
+    {
+        Pid = Interlocked.Increment pids
+        Write =
+            fun bytes _ ->
+                lock gate (fun () ->
+                    if not started then
+                        input.Write(bytes, 0, bytes.Length))
+
+                Task.FromResult()
+        CloseStdin =
+            fun () ->
+                let stdin =
+                    lock gate (fun () ->
+                        if started then
+                            None
+                        else
+                            started <- true
+                            Some(input.ToArray()))
+
+                match stdin with
+                | Some stdin ->
+                    task {
+                        try
+                            match! run { Spec = spec; Stdin = stdin } killed.Token with
+                            | Ok output -> ran.TrySetResult output |> ignore
+                            | Error e ->
+                                ran.TrySetResult
+                                    {
+                                        ExitCode = 127
+                                        Stdout = [||]
+                                        Stderr = Text.Encoding.UTF8.GetBytes(string e)
+                                    }
+                                |> ignore
+                        with _ ->
+                            ran.TrySetResult killedOutput |> ignore
+                    }
+                    |> ignore
+                | None -> ()
+
+                Task.FromResult()
+        Read =
+            fun cancellation ->
+                task {
+                    let! output = ran.Task.WaitAsync cancellation
+
+                    return
+                        lock gate (fun () ->
+                            let chunks =
+                                pending
+                                |> Option.defaultValue
+                                    [
+                                        if output.Stdout.Length > 0 then
+                                            Stdout output.Stdout
+                                        if output.Stderr.Length > 0 then
+                                            Stderr output.Stderr
+                                    ]
+
+                            match chunks with
+                            | chunk :: rest ->
+                                pending <- Some rest
+                                Some chunk
+                            | [] ->
+                                pending <- Some []
+                                None)
+                }
+        Wait =
+            fun cancellation ->
+                task {
+                    let! output = ran.Task.WaitAsync cancellation
+                    return output.ExitCode
+                }
+        Kill =
+            fun () ->
+                killed.Cancel()
+
+                if not (lock gate (fun () -> started)) then
+                    ran.TrySetResult killedOutput |> ignore
+
+                Task.FromResult()
+    }
+
 /// A shell whose processes are script kernels (the program `script-kernel`) and whose commands `run`
-/// answers.
+/// answers, whether they run or are spawned (`command`).
 let shell (run: Command -> CancellationToken -> Task<Result<Output, ShellError>>) : Shell =
     {
         Run = run
@@ -111,7 +213,7 @@ let shell (run: Command -> CancellationToken -> Task<Result<Output, ShellError>>
             fun spec _ ->
                 match spec.Program with
                 | Exec(program, _) when program = Program -> Task.FromResult(Ok(start ()))
-                | other -> Task.FromResult(Error(NotStarted(string other, "only the script kernel runs here")))
+                | _ -> Task.FromResult(Ok(command run spec))
     }
 
 /// The launch of a script kernel: the same on every machine, so a recording of it replays anywhere.

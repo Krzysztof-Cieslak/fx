@@ -159,27 +159,76 @@ let tests =
 
                     testCase "a command that does not start is the failure notStarted"
                     <| fun () ->
-                        let f = fakes (fun _ -> Some(Error(NotStarted("sh", "missing"))))
+                        let f = fakes (fun _ -> None)
 
-                        Expect.equal (failedCode (call f "shell.run" [ str "x" ])) "notStarted" "code"
+                        let missing: Shell =
+                            { f.Env.Shell with
+                                Spawn = fun _ _ -> Task.FromResult(Error(NotStarted("sh", "missing")))
+                            }
 
-                    testCase "a command past its timeout is killed and reported"
+                        let result =
+                            run
+                                { f.Env with Shell = missing }
+                                (HostBinding.dispatch
+                                    (CoreBindings.all settings)
+                                    {
+                                        CellId = None
+                                        Binding = "shell.run"
+                                        Args = [ str "x" ]
+                                    })
+
+                        Expect.equal (failedCode result) "notStarted" "code"
+
+                    testCase "a command past its timeout is killed and keeps what it printed"
                     <| fun () ->
                         let f = fakes (fun _ -> None)
 
-                        let hanging: Shell =
-                            { f.Env.Shell with
-                                Run =
-                                    fun _ cancellation ->
+                        let killed =
+                            TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+                        let mutable kills = 0
+                        let mutable reads = 0
+
+                        // Prints a line on each stream, then nothing until it is killed; what it printed
+                        // before it died ("last") is still read.
+                        let hanging: Proc =
+                            {
+                                Pid = 42
+                                Write = fun _ _ -> Task.FromResult()
+                                CloseStdin = fun () -> Task.FromResult()
+                                Read =
+                                    fun cancellation ->
                                         task {
-                                            do! Task.Delay(Timeout.Infinite, cancellation)
-                                            return Error(NotStarted("never", "never"))
+                                            reads <- reads + 1
+
+                                            match reads with
+                                            | 1 -> return Some(Stdout(Encoding.UTF8.GetBytes "partial\n"))
+                                            | 2 -> return Some(Stderr(Encoding.UTF8.GetBytes "warning\n"))
+                                            | 3 ->
+                                                do! killed.Task.WaitAsync cancellation
+                                                return Some(Stdout(Encoding.UTF8.GetBytes "last\n"))
+                                            | 4 -> return Some(Stdout(Encoding.UTF8.GetBytes "last\n"))
+                                            | _ -> return None
                                         }
+                                Wait =
+                                    fun cancellation ->
+                                        task {
+                                            do! killed.Task.WaitAsync cancellation
+                                            return 137
+                                        }
+                                Kill =
+                                    fun () ->
+                                        kills <- kills + 1
+                                        killed.TrySetResult() |> ignore
+                                        Task.FromResult()
                             }
 
                         let env =
                             { f.Env with
-                                Shell = hanging
+                                Shell =
+                                    { f.Env.Shell with
+                                        Spawn = fun _ _ -> Task.FromResult(Ok hanging)
+                                    }
                                 Clock = SystemClock.clock
                             }
 
@@ -191,17 +240,77 @@ let tests =
                                     {
                                         CellId = None
                                         Binding = "shell.run"
-                                        Args = [ str "sleep 100"; inline' """{"timeoutMs": 20}""" ]
+                                        Args = [ str "make watch"; inline' """{"timeoutMs": 20}""" ]
                                     })
                             |> json
 
                         Expect.equal (field "timedOut" result) (Json.Bool true) "timed out"
+                        Expect.equal (field "stdout" result |> text) "partial\nlast\n" "what it printed, to its end"
+                        Expect.equal (field "stderr" result |> text) "warning\n" "its errors"
+                        Expect.equal kills 1 "killed once (with its children: Proc.Kill)"
 
                         Expect.isFalse
                             (match result with
                              | Json.Object m -> m |> List.exists (fun (n, _) -> n = "exitCode")
                              | _ -> true)
                             "no exit code"
+
+                    testCase "a command stopped before its end is killed"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+
+                        let killed =
+                            TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+                        let hanging: Proc =
+                            {
+                                Pid = 42
+                                Write = fun _ _ -> Task.FromResult()
+                                CloseStdin = fun () -> Task.FromResult()
+                                Read =
+                                    fun cancellation ->
+                                        task {
+                                            do! killed.Task.WaitAsync cancellation
+                                            return None
+                                        }
+                                Wait = fun _ -> Task.FromResult 137
+                                Kill =
+                                    fun () ->
+                                        killed.TrySetResult() |> ignore
+                                        Task.FromResult()
+                            }
+
+                        use cancel = new CancellationTokenSource()
+
+                        let env =
+                            { f.Env with
+                                Shell =
+                                    { f.Env.Shell with
+                                        Spawn = fun _ _ -> Task.FromResult(Ok hanging)
+                                    }
+                                Scope = Scope.ofCancellation cancel.Token
+                            }
+
+                        let running =
+                            runTask
+                                env
+                                (HostBinding.dispatch
+                                    (CoreBindings.all settings)
+                                    {
+                                        CellId = None
+                                        Binding = "shell.run"
+                                        Args = [ str "sleep 100" ]
+                                    })
+
+                        cancel.Cancel()
+
+                        try
+                            running.GetAwaiter().GetResult() |> ignore
+                            failtest "not cancelled"
+                        with :? OperationCanceledException ->
+                            ()
+
+                        Expect.isTrue killed.Task.IsCompleted "killed"
 
                     testCase "arguments of the wrong type are refused"
                     <| fun () ->
@@ -729,6 +838,87 @@ let tests =
 
                         Expect.equal (failedCode result) "stale" "stale"
                         Expect.equal (readText f "a.txt") "changed\n" "kept"
+                ]
+
+            testList
+                "shell.run on this machine"
+                [
+                    let withWorkspace (body: Env -> CoreSettings -> unit) =
+                        let dir =
+                            IO.Path.Combine(IO.Path.GetTempPath(), "core-bindings-" + Guid.NewGuid().ToString("N"))
+
+                        IO.Directory.CreateDirectory dir |> ignore
+
+                        let env: Env =
+                            {
+                                Clock = SystemClock.clock
+                                FsRead = LocalFs.read
+                                Fs = LocalFs.write
+                                FsOps = Fx.Envd.FsOpsOver.create LocalFs.read LocalFs.write
+                                Shell = LocalShell.create (LocalShell.defaultShell ()) dir
+                                Scope = Scope.root
+                            }
+
+                        try
+                            body env { settings with Workspace = dir }
+                        finally
+                            try
+                                IO.Directory.Delete(dir, true)
+                            with _ ->
+                                ()
+
+                    let shellRun (env: Env) (settings: CoreSettings) (command: string) (options: string) =
+                        run
+                            env
+                            (HostBinding.dispatch
+                                (CoreBindings.all settings)
+                                {
+                                    CellId = None
+                                    Binding = "shell.run"
+                                    Args = [ str command; inline' options ]
+                                })
+                        |> json
+
+                    let alive (pid: int) =
+                        try
+                            if OperatingSystem.IsLinux() then
+                                let stat = IO.File.ReadAllText $"/proc/{pid}/stat"
+                                let close = stat.LastIndexOf ')'
+                                close > 0 && close + 2 < stat.Length && not ("ZX".Contains stat[close + 2])
+                            else
+                                use proc = Diagnostics.Process.GetProcessById pid
+                                not proc.HasExited
+                        with _ ->
+                            false
+
+                    testCase "a command that times out keeps what it printed, and its children are killed"
+                    <| fun () ->
+                        withWorkspace (fun env settings ->
+                            let command =
+                                if OperatingSystem.IsWindows() then
+                                    "Write-Output started; $p = Start-Process -FilePath pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 60' -NoNewWindow -PassThru; Write-Output \"child $($p.Id)\"; $p.WaitForExit()"
+                                else
+                                    "echo started; sleep 60 & echo \"child $!\"; wait"
+
+                            let started = DateTime.UtcNow
+                            let result = shellRun env settings command """{"timeoutMs": 3000}"""
+                            Expect.equal (field "timedOut" result) (Json.Bool true) "timed out"
+
+                            Expect.isLessThan
+                                (DateTime.UtcNow - started)
+                                (TimeSpan.FromSeconds 30.0)
+                                "it did not wait for the children"
+
+                            let stdout = (field "stdout" result |> text).Replace("\r\n", "\n")
+                            Expect.stringStarts stdout "started\nchild " "what it printed"
+                            let child = int (stdout.Substring("started\nchild ".Length).Trim())
+                            let mutable waited = 0
+
+                            while alive child && waited < 100 do
+                                Threading.Thread.Sleep 100
+                                waited <- waited + 1
+
+                            Expect.isFalse (alive child) "its child was killed")
                 ]
 
             testCase "the declarations name every binding with its schemas"

@@ -22,23 +22,6 @@ type RunOptions =
     override this.ToString() =
         $"RunOptions(cwd {this.Cwd}, timeout {this.TimeoutMs})"
 
-/// What a command did (spec §4.1 `RunResult`). Its output is bounded: the head and the tail of each
-/// stream, with a marker where the middle was left out.
-type RunResult =
-    {
-        Command: string
-        /// `None` if it timed out (it was killed).
-        ExitCode: int option
-        Stdout: string
-        Stderr: string
-        /// Output was left out of `Stdout` or `Stderr`.
-        Truncated: bool
-        TimedOut: bool
-    }
-
-    override this.ToString() =
-        $"RunResult({this.Command}: exit {this.ExitCode}, timed out {this.TimedOut})"
-
 /// A text file as `fs.read` gives it (spec §4.1 `FileText`): whole, or some of its lines. `Lines`,
 /// `Size` and `Digest` are the whole file's; `Start`, `End` and `Text` the lines read, so a file read is
 /// also a range `fs.editRange` takes (spec §6.8).
@@ -90,6 +73,24 @@ type FileRange =
 
     override this.ToString() =
         $"FileRange({this.Path}:{this.Start}-{this.End}, {this.Digest})"
+
+/// What a command did (spec §4.1 `RunResult`). Its output is bounded: the head and the tail of each
+/// stream, with a marker where the middle was left out. A command that timed out keeps what it
+/// printed until it was killed.
+type RunResult =
+    {
+        Command: string
+        /// `None` if it timed out (it was killed).
+        ExitCode: int option
+        Stdout: string
+        Stderr: string
+        /// Output was left out of `Stdout` or `Stderr`.
+        Truncated: bool
+        TimedOut: bool
+    }
+
+    override this.ToString() =
+        $"RunResult({this.Command}: exit {this.ExitCode}, timed out {this.TimedOut})"
 
 /// What `fs.edit` and `fs.editRange` did to a file: its new digest and line count, how many
 /// occurrences were replaced, and a fresh range for the lines each change left.
@@ -207,41 +208,6 @@ module CoreBindings =
             |> Codec.describe "How to run a command."
             |> Codec.named "RunOptions"
 
-        let runResult: Codec<RunResult> =
-            Codec.record {
-                let! command = Codec.field "command" (fun (r: RunResult) -> r.Command) Codec.string
-
-                and! exitCode =
-                    Codec.optionalField
-                        "exitCode"
-                        (fun r -> r.ExitCode)
-                        (Codec.int |> Codec.describe "Absent if the command timed out.")
-
-                and! stdout = Codec.field "stdout" (fun r -> r.Stdout) Codec.string
-                and! stderr = Codec.field "stderr" (fun r -> r.Stderr) Codec.string
-
-                and! truncated =
-                    Codec.field
-                        "truncated"
-                        (fun r -> r.Truncated)
-                        (Codec.bool
-                         |> Codec.describe "The middle of stdout or stderr was left out (marked in the text).")
-
-                and! timedOut = Codec.field "timedOut" (fun r -> r.TimedOut) Codec.bool
-
-                return
-                    {
-                        Command = command
-                        ExitCode = exitCode
-                        Stdout = stdout
-                        Stderr = stderr
-                        Truncated = truncated
-                        TimedOut = timedOut
-                    }
-            }
-            |> Codec.describe "What a command did; a non-zero exit code is not an error."
-            |> Codec.named "RunResult"
-
         let digest: Codec<BlobHash> =
             Fx.Store.Codecs.blobHash
             |> Codec.describe "SHA-256 of the content: sha256:<hex>."
@@ -355,6 +321,47 @@ module CoreBindings =
             |> Codec.describe
                 "Lines of a file, as fs.read gives them or an edit left them (digest and lines are the whole file's)."
             |> Codec.named "FileRange"
+
+        let runResult: Codec<RunResult> =
+            Codec.record {
+                let! command = Codec.field "command" (fun (r: RunResult) -> r.Command) Codec.string
+
+                and! exitCode =
+                    Codec.optionalField
+                        "exitCode"
+                        (fun r -> r.ExitCode)
+                        (Codec.int |> Codec.describe "Absent if the command timed out.")
+
+                and! stdout = Codec.field "stdout" (fun r -> r.Stdout) Codec.string
+                and! stderr = Codec.field "stderr" (fun r -> r.Stderr) Codec.string
+
+                and! truncated =
+                    Codec.field
+                        "truncated"
+                        (fun r -> r.Truncated)
+                        (Codec.bool
+                         |> Codec.describe "The middle of stdout or stderr was left out (marked in the text).")
+
+                and! timedOut =
+                    Codec.field
+                        "timedOut"
+                        (fun r -> r.TimedOut)
+                        (Codec.bool
+                         |> Codec.describe
+                             "It ran out of time and was killed with its children; stdout and stderr hold what it printed until then.")
+
+                return
+                    {
+                        Command = command
+                        ExitCode = exitCode
+                        Stdout = stdout
+                        Stderr = stderr
+                        Truncated = truncated
+                        TimedOut = timedOut
+                    }
+            }
+            |> Codec.describe "What a command did; a non-zero exit code is not an error."
+            |> Codec.named "RunResult"
 
         let textChange: Codec<TextChange> =
             Codec.record {
@@ -683,80 +690,6 @@ module CoreBindings =
             "fs", "The workspace's files."
         ]
 
-    /// `shell.run(command, options?)`: runs a command line with the environment's shell (`/bin/sh`;
-    /// PowerShell 7 on Windows) in the workspace.
-    let shellRun<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
-        (settings: CoreSettings)
-        : HostBinding<'R> =
-        HostBinding.create2
-            "shell.run"
-            "Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it."
-            (Arg.required "command" "The command line." Codec.string, Arg.optional "options" "" Codecs.runOptions)
-            Codecs.runResult
-            (fun (command, options) ->
-                eff {
-                    let options =
-                        options
-                        |> Option.defaultValue
-                            {
-                                Cwd = None
-                                TimeoutMs = None
-                                Stdin = None
-                            }
-
-                    let run =
-                        Shell.run
-                            {
-                                Spec =
-                                    {
-                                        Program = Program.Script command
-                                        Cwd =
-                                            Some(
-                                                options.Cwd
-                                                |> Option.map (resolve settings)
-                                                |> Option.defaultValue settings.Workspace
-                                            )
-                                        Env = settings.CommandEnv
-                                    }
-                                Stdin = options.Stdin |> Option.map utf8.GetBytes |> Option.defaultValue [||]
-                            }
-
-                    let! outcome =
-                        match options.TimeoutMs with
-                        | Some ms -> Eff.timeout (TimeSpan.FromMilliseconds(float ms)) run
-                        | None -> run |> Eff.map Some
-
-                    match outcome with
-                    | None ->
-                        return
-                            Ok
-                                {
-                                    Command = command
-                                    ExitCode = None
-                                    Stdout = ""
-                                    Stderr = ""
-                                    Truncated = false
-                                    TimedOut = true
-                                }
-                    | Some(Error(NotStarted(program, reason))) ->
-                        return Error(failure "notStarted" $"could not start {program}: {reason}")
-                    | Some(Ok output) ->
-                        let stdout, cutOut = bound settings.OutputChars (utf8.GetString output.Stdout)
-
-                        let stderr, cutErr = bound settings.OutputChars (utf8.GetString output.Stderr)
-
-                        return
-                            Ok
-                                {
-                                    Command = command
-                                    ExitCode = Some output.ExitCode
-                                    Stdout = stdout
-                                    Stderr = stderr
-                                    Truncated = cutOut || cutErr
-                                    TimedOut = false
-                                }
-                })
-
     /// A path as content exclusions match it: normalized (`..` resolved, so `../repo/x` inside the
     /// workspace is `x`), relative to the workspace when inside it.
     let exclusionPath (settings: CoreSettings) (full: string) : string =
@@ -828,6 +761,143 @@ module CoreBindings =
                                 Digest = BlobHash.ofBytes chunk.Content
                             }
         }
+
+    // ---- shell.run ------------------------------------------------------------------------------
+
+    /// How long a command killed at its timeout has to end its output before `shell.run` returns
+    /// without the rest: a process that escaped the kill (it left the tree) may hold the pipes open.
+    let private killGrace = TimeSpan.FromSeconds 2.0
+
+    /// What a process printed, as it was read.
+    [<Sealed>]
+    type private Printed() =
+        let stdout = new IO.MemoryStream()
+        let stderr = new IO.MemoryStream()
+
+        member _.Add(chunk: OutputChunk) =
+            match chunk with
+            | Stdout bytes -> stdout.Write(bytes, 0, bytes.Length)
+            | Stderr bytes -> stderr.Write(bytes, 0, bytes.Length)
+
+        member _.Stdout = stdout.ToArray()
+        member _.Stderr = stderr.ToArray()
+
+        override _.ToString() =
+            $"printed ({stdout.Length} + {stderr.Length} bytes)"
+
+    /// Reads a process's output until both streams end, then waits for its exit code.
+    let private readToEnd<'R when 'R :> IScope> (proc: Proc) (printed: Printed) : Eff<'R, int> =
+        eff {
+            let mutable reading = true
+
+            while reading do
+                match! Shell.read proc with
+                | Some chunk -> printed.Add chunk
+                | None -> reading <- false
+
+            return! Shell.wait proc
+        }
+
+    /// Runs a spawned command to its end, its exit code, or until `timeoutMs` runs out (`None`): then
+    /// its process tree is killed and what it printed until its output ended is kept (at most
+    /// `killGrace` later). A run stopped otherwise (its call cancelled, a failure) kills it the same
+    /// way. Whether it timed out is decided by which finished first, the command or the clock's delay,
+    /// both of which recording journals in their order.
+    let private runFor<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
+        (proc: Proc)
+        (stdin: byte array)
+        (timeoutMs: int option)
+        (printed: Printed)
+        : Eff<'R, int option> =
+        let settled = ref false
+
+        let stop: Eff<'R, unit> =
+            eff {
+                do! Shell.kill proc
+                let! _ = Eff.timeout killGrace (readToEnd proc printed)
+                return ()
+            }
+
+        let run: Eff<'R, int> =
+            eff {
+                if stdin.Length > 0 then
+                    do! Shell.write proc stdin
+
+                do! Shell.closeStdin proc
+                return! readToEnd proc printed
+            }
+
+        Eff.bracket (Eff.ret ()) (fun () -> if settled.Value then Eff.ret () else stop) (fun () ->
+            eff {
+                let! ended =
+                    match timeoutMs with
+                    | Some ms -> Eff.timeout (TimeSpan.FromMilliseconds(float ms)) run
+                    | None -> run |> Eff.map Some
+
+                settled.Value <- true
+
+                match ended with
+                | Some code -> return Some code
+                | None ->
+                    do! stop
+                    return None
+            })
+
+    /// `shell.run(command, options?)`: runs a command line with the environment's shell (`/bin/sh`;
+    /// PowerShell 7 on Windows) in the workspace. Past `options.timeoutMs` the command is killed with
+    /// its children and keeps what it printed.
+    let shellRun<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
+        (settings: CoreSettings)
+        : HostBinding<'R> =
+        HostBinding.create2
+            "shell.run"
+            "Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it."
+            (Arg.required "command" "The command line." Codec.string, Arg.optional "options" "" Codecs.runOptions)
+            Codecs.runResult
+            (fun (command, options) ->
+                eff {
+                    let options =
+                        options
+                        |> Option.defaultValue
+                            {
+                                Cwd = None
+                                TimeoutMs = None
+                                Stdin = None
+                            }
+
+                    let cwd =
+                        options.Cwd
+                        |> Option.map (resolve settings)
+                        |> Option.defaultValue settings.Workspace
+
+                    let spec =
+                        {
+                            Program = Program.Script command
+                            Cwd = Some cwd
+                            Env = settings.CommandEnv
+                        }
+
+                    match! Shell.spawn spec with
+                    | Error(NotStarted(program, reason)) ->
+                        return Error(failure "notStarted" $"could not start {program}: {reason}")
+                    | Ok proc ->
+                        let printed = Printed()
+                        let stdin = options.Stdin |> Option.map utf8.GetBytes |> Option.defaultValue [||]
+                        let! exitCode = runFor proc stdin options.TimeoutMs printed
+                        let stdout, cutOut = bound settings.OutputChars (utf8.GetString printed.Stdout)
+                        let stderr, cutErr = bound settings.OutputChars (utf8.GetString printed.Stderr)
+
+                        return
+                            Ok
+                                {
+                                    Command = command
+                                    ExitCode = exitCode
+                                    Stdout = stdout
+                                    Stderr = stderr
+                                    Truncated = cutOut || cutErr
+                                    TimedOut = exitCode.IsNone
+                                }
+                })
 
     /// `fs.read(path, options?)`: a text file, whole (up to `ReadBytes`), or the lines `options.lines`
     /// names; `excluded` for a file content exclusions keep from models (nothing of it is read).

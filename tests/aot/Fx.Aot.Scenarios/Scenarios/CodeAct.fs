@@ -456,28 +456,30 @@ let private recovery () : Task<string list> =
 
         let deploys = ref 0
 
+        let run (command: Fx.Effects.Command) (token: CancellationToken) =
+            task {
+                let first =
+                    lock deploying (fun () ->
+                        deploys.Value <- deploys.Value + 1
+                        deploys.Value = 1)
+
+                if first then
+                    deploying.TrySetResult() |> ignore
+                    do! Task.Delay(Threading.Timeout.Infinite, token)
+
+                let script =
+                    match command.Spec.Program with
+                    | Program.Script script -> script
+                    | Exec(file, _) -> file
+
+                return Ok(ScriptedShell.output 0 $"ran {script}\n" "")
+            }
+
+        // `shell.run` spawns its commands (T142): each is a process whose run its kill cancels.
         let shell: Shell =
             {
-                Run =
-                    fun command token ->
-                        task {
-                            let first =
-                                lock deploying (fun () ->
-                                    deploys.Value <- deploys.Value + 1
-                                    deploys.Value = 1)
-
-                            if first then
-                                deploying.TrySetResult() |> ignore
-                                do! Task.Delay(Threading.Timeout.Infinite, token)
-
-                            let script =
-                                match command.Spec.Program with
-                                | Program.Script script -> script
-                                | Exec(file, _) -> file
-
-                            return Ok(ScriptedShell.output 0 $"ran {script}\n" "")
-                        }
-                Spawn = fun _ _ -> Task.FromResult(Error(NotStarted("spawn", "not scripted")))
+                Run = run
+                Spawn = fun spec _ -> Task.FromResult(Ok(Fx.Aot.Scenarios.Kernel.ScriptProc.command run spec))
             }
 
         let queue =
