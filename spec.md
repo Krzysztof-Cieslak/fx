@@ -363,7 +363,8 @@ type Value =
 
 ```ts
 // intent: find all call sites of the deprecated helper
-const calls = await fx.repo.refs("Http.retry")            // Match[](len=37, files=14, …)
+const found = await fx.repo.grep("Http\\.retry ", { glob: ["*.fs"] })  // GrepResult(37 matches in 14 files)
+const calls = found.matches                              // one-line ranges with their column
 ```
 
 ```ts
