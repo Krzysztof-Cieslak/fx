@@ -68,6 +68,8 @@ type CellValue =
     | Written of Written list
     /// What `fs.edit` or `fs.editRange` returned: the lines the edit left (a file piece).
     | Edited of Edited
+    /// A handle of the host (T201b): its type and preview, by reference (`Piece.Ref`), never its id.
+    | Handle of typeRef: TypeRef * preview: Preview
 
     override this.ToString() =
         match this with
@@ -77,6 +79,7 @@ type CellValue =
         | File file -> $"file {file.Path}"
         | Written files -> $"written ({files.Length} files)"
         | Edited edited -> $"edited {edited.Path}"
+        | Handle(typeRef, _) -> $"handle ({typeRef})"
 
 [<RequireQualifiedAccess>]
 module CellValue =
@@ -584,6 +587,7 @@ module Receipts =
 
             $"Value of {label} (Written): {written}"
         | CellValue.Edited edited -> $"Value of {label} (Edited): {edited.Path}, {edited.Lines} lines, {edited.Digest}"
+        | CellValue.Handle(typeRef, _) -> $"Value of {label} ({typeRef}, a handle: pass it on as it is):"
 
     /// The most characters of a host call's first argument a receipt names it by.
     [<Literal>]
@@ -693,6 +697,19 @@ module Receipts =
             restarted note
             @ [ quoted limits.ReceiptChars reads head ]
             @ edited limits.ReadLines value None
+            @ (if tail = "" then [] else [ Piece.Text tail ])
+        | Some(CellValue.Handle(typeRef, preview)) ->
+            restarted note
+            @ [
+                quoted limits.ReceiptChars reads head
+                Piece.Ref
+                    {
+                        Kind = "handle"
+                        Id = $"Out[{Json.quote result.CellId}]"
+                        Type = Some typeRef.Name
+                        Preview = preview
+                    }
+            ]
             @ (if tail = "" then [] else [ Piece.Text tail ])
         | _ ->
             let text = lines [ head; tail ]

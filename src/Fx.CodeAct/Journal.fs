@@ -97,11 +97,15 @@ type KeptJson =
     | Inline of Json
     /// Its canonical JSON, UTF-8, in the host's blob store.
     | Stored of BlobRef
+    /// A host-resident object, by reference (T201b): it comes back into a new kernel only while the
+    /// session's handle table still has it (the host did not restart).
+    | Handle of handle: Fx.Kernel.HandleId * typeRef: Fx.Kernel.TypeRef * preview: Preview
 
     override this.ToString() =
         match this with
         | Inline _ -> "inline"
         | Stored blob -> $"stored {blob}"
+        | Handle(_, typeRef, _) -> $"handle ({typeRef})"
 
 /// A cell's completion value, kept for `recall` (spec §5, §6.5: `fx.recall`, `Out`).
 type KeptValue =
@@ -349,11 +353,21 @@ module StepCodecs =
             and! stored =
                 Codec.case1 "stored" KeptJson.Stored (Field.required "blob" Fx.Store.Codecs.blobRef)
 
+            // Added with handles (T201b): earlier journals have none.
+            and! handle =
+                Codec.case3
+                    "handle"
+                    (fun id typeRef preview -> KeptJson.Handle(id, typeRef, preview))
+                    (Field.required "handle" Fx.Kernel.ValueCodecs.handleId)
+                    (Field.required "type" Fx.Kernel.ValueCodecs.typeRef)
+                    (Field.required "preview" Fx.Contracts.Codecs.preview)
+
             return
                 fun k ->
                     match k with
                     | KeptJson.Inline json -> inline' json
                     | KeptJson.Stored blob -> stored blob
+                    | KeptJson.Handle(id, typeRef, preview) -> handle id typeRef preview
         }
         |> Codec.named "KeptJson"
 

@@ -296,6 +296,7 @@ let tests =
                                         Say.cell "// intent: open\ncall h = history.open [\"r1\"]\nh"
                                         Say.cell
                                             "// intent: read by handle\ncall th = history.read [\"$h\", {\"maxChars\": 100000}]\nth"
+                                        Say.cell "// intent: recall the handle\ncall back = recall [\"t1-s6-1\"]\nback"
                                         Say.finish "Done"
                                     ]
 
@@ -316,6 +317,13 @@ let tests =
                                 let opened = text rs[5]
                                 Expect.stringContains opened "HistoryRange" "a handle of its type"
                                 Expect.stringContains opened "r1, entries" "its preview"
+                                Expect.stringContains opened ": HistoryRange] r1, entries" "by reference (Piece.Ref)"
+
+                                Expect.stringContains
+                                    (text rs[7])
+                                    "a handle of the host, which has no JSON form"
+                                    "recall says why"
+
                                 Expect.isFalse (opened.Contains "h-") "never its id"
                                 Expect.stringContains (text rs[6]) "Count the sheep" "read through the handle"
                                 do! expectReplays f "s1"
