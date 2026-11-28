@@ -673,6 +673,36 @@ module View =
                                 if level = Verbosity.Verbose then
                                     yield! (Text.firstLines bound summary |> List.collect (lines width 6 t.Muted))
                             ]
+                | _, TurnItem.Pinned what ->
+                    yield
+                        plain
+                            [
+                                Row.fit
+                                    width
+                                    [
+                                        indent 2
+                                        s t.Accent "◇"
+                                        p " "
+                                        s (bold t) (Text.pad 8 "Pin")
+                                        p " "
+                                        p what
+                                    ]
+                            ]
+                | _, TurnItem.Unpinned name ->
+                    yield
+                        plain
+                            [
+                                Row.fit
+                                    width
+                                    [
+                                        indent 2
+                                        s t.Muted "◇"
+                                        p " "
+                                        s (bold t) (Text.pad 8 "Unpin")
+                                        p " "
+                                        p name
+                                    ]
+                            ]
                 | _, TurnItem.Steered inputs ->
                     for i in inputs do
                         match i.Content with

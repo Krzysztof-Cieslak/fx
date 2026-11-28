@@ -6,13 +6,13 @@
                       ┃ Commands                                                             esc
                       ┃ ›
                       ┃  /new        Start a new session
+                      ┃  /context    How full the context is, and the pins
                       ┃  /sessions   Switch to another session
                       ┃  /model      Use another model from the next turn on
                       ┃  /detail     Show more or less of each turn
                       ┃  /theme      Change the colours
                       ┃  /approvals  Ask for commands, or auto-approve workspace ones
                       ┃  /yolo       Approve everything without asking (Shift+Tab goes back to as…
-                      ┃  /exit       Leave (the session stays)
                       ┃ ›
                       ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 

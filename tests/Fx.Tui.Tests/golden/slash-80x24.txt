@@ -15,11 +15,11 @@
   ▣ fx · anthropic/claude-sonnet-5-5 · 1m39s
 
    /new         Start a new session
+   /context     How full the context is, and the pins
    /sessions    Switch to another session
    /model       Use another model from the next turn on  provider/model
    /detail      Show more or less of each turn
    /theme       Change the colours  auto|dark|light|ansi16
-   /approvals   Ask for commands, or auto-approve workspace ones  ask|auto|yolo
 ┃ › /
 ┃ anthropic/claude-sonnet-5-5 · env: default (local) · sandbox: off
 fx · …/src/billing:main · session …00000000   Enter send · Ctrl+O detail  ● idle

@@ -19,6 +19,8 @@ type CommandAction =
     | Approvals
     /// Yolo approvals: everything runs without asking.
     | Yolo
+    /// What the context holds: how full it is, and what is pinned with what each pin costs (T201c).
+    | Context
     | Exit
 
     override this.ToString() =
@@ -30,6 +32,7 @@ type CommandAction =
         | Theme -> "theme"
         | Approvals -> "approvals"
         | Yolo -> "yolo"
+        | Context -> "context"
         | Exit -> "exit"
 
 /// A command of the palette (`Ctrl+P`) and of the prompt (`/name`): values, so later screens add
@@ -59,6 +62,13 @@ module Commands =
                 Keys = None
                 Argument = None
                 Action = CommandAction.NewSession
+            }
+            {
+                Name = "context"
+                Title = "How full the context is, and the pins"
+                Keys = None
+                Argument = None
+                Action = CommandAction.Context
             }
             {
                 Name = "sessions"
