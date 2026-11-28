@@ -183,6 +183,89 @@ type Written =
     override this.ToString() =
         $"Written({this.Path}, {this.Lines} lines)"
 
+/// Options of `repo.grep`.
+type GrepOptions =
+    {
+        /// The directory searched, relative to the workspace (the workspace by default).
+        Path: string option
+        /// Globs a file must match (any of them); one starting with `!` excludes.
+        Glob: string list
+        IgnoreCase: bool
+        /// The pattern is text, not a regular expression.
+        Literal: bool
+        /// Lines of context around each match.
+        Context: int
+        /// At most this many matches.
+        Max: int
+        /// Search hidden files and directories too.
+        Hidden: bool
+    }
+
+    override this.ToString() =
+        $"GrepOptions({this.Path}, {this.Glob.Length} globs, max {this.Max})"
+
+/// A line `repo.grep` found: a one-line range of its file (what `fs.editRange` takes), where on the
+/// line the match starts, and with context the lines around it as a range too.
+type GrepMatch =
+    {
+        Range: FileRange
+        /// 1-based, in UTF-16 code units.
+        Column: int
+        Context: FileRange option
+    }
+
+    override this.ToString() =
+        $"GrepMatch({this.Range.Path}:{this.Range.Start}:{this.Column})"
+
+/// How many lines of a file matched.
+type GrepFile =
+    {
+        Path: string
+        Matches: int
+    }
+
+    override this.ToString() = $"{this.Path}: {this.Matches}"
+
+/// What `repo.grep` found: the first matches, and how many lines matched in each file.
+type GrepResult =
+    {
+        Pattern: string
+        Matches: GrepMatch list
+        /// Every file with matches and how many, in walk order (up to a limit: `FilesTruncated`).
+        Files: GrepFile list
+        /// More lines matched than `Matches` holds.
+        Truncated: bool
+        /// More files matched than `Files` holds.
+        FilesTruncated: bool
+    }
+
+    override this.ToString() =
+        $"GrepResult({this.Pattern}: {this.Matches.Length} matches in {this.Files.Length} files)"
+
+/// Options of `repo.files`.
+type FilesOptions =
+    {
+        Path: string option
+        Glob: string list
+        Hidden: bool
+        Max: int
+    }
+
+    override this.ToString() =
+        $"FilesOptions({this.Path}, {this.Glob.Length} globs, max {this.Max})"
+
+/// What `repo.files` found.
+type RepoFiles =
+    {
+        /// Relative to the workspace, with `/`, in walk order.
+        Files: string list
+        /// More files matched than `Files` holds.
+        Truncated: bool
+    }
+
+    override this.ToString() =
+        $"RepoFiles({this.Files.Length} files, truncated {this.Truncated})"
+
 /// Where the core bindings act and their bounds. Their values are variants (spec §6.6); the
 /// environment's shell, files and processes are the capabilities the bridge runs with.
 type CoreSettings =
@@ -760,6 +843,214 @@ module CoreBindings =
             |> Codec.describe "A change to one file."
             |> Codec.named "FilePatch"
 
+        let private globs =
+            Codec.list Codec.string
+            |> Codec.describe
+                "Globs a file's path must match (any of them), as ripgrep's -g: *.fs, src/**, {a,b}; one starting with ! excludes."
+
+        let private searchPath =
+            Codec.string
+            |> Codec.describe "The directory searched, relative to the workspace; the workspace by default."
+
+        let private hidden =
+            Codec.bool
+            |> Codec.describe "Also search hidden files and directories (names starting with .); .git never."
+
+        let grepOptions: Codec<GrepOptions> =
+            Codec.record {
+                let! path = Codec.optionalField "path" (fun (o: GrepOptions) -> o.Path) searchPath
+                and! glob = Codec.defaultField "glob" (fun o -> o.Glob) [] globs
+
+                and! ignoreCase =
+                    Codec.defaultField "ignoreCase" (fun o -> o.IgnoreCase) false Codec.bool
+
+                and! literal =
+                    Codec.defaultField
+                        "literal"
+                        (fun o -> o.Literal)
+                        false
+                        (Codec.bool
+                         |> Codec.describe "The pattern is plain text, not a regular expression (as ripgrep's -F).")
+
+                and! context =
+                    Codec.defaultField
+                        "context"
+                        (fun o -> o.Context)
+                        0
+                        (Codec.int
+                         |> Codec.between 0 20
+                         |> Codec.describe "Lines before and after each match, given as the match's context range.")
+
+                and! max =
+                    Codec.defaultField
+                        "max"
+                        (fun o -> o.Max)
+                        100
+                        (Codec.int
+                         |> Codec.between 1 1000
+                         |> Codec.describe "At most this many matches (100 by default); files still counts them all.")
+
+                and! hidden = Codec.defaultField "hidden" (fun o -> o.Hidden) false hidden
+
+                return
+                    {
+                        Path = path
+                        Glob = glob
+                        IgnoreCase = ignoreCase
+                        Literal = literal
+                        Context = context
+                        Max = max
+                        Hidden = hidden
+                    }
+            }
+            |> Codec.describe "How to search."
+            |> Codec.named "GrepOptions"
+
+        let grepMatch: Codec<GrepMatch> =
+            Codec.record {
+                let! range = Codec.field "path" (fun (m: GrepMatch) -> m.Range.Path) Codec.string
+                and! first = Codec.field "start" (fun m -> m.Range.Start) start
+                and! last = Codec.field "end" (fun m -> m.Range.End) stop
+
+                and! text =
+                    Codec.field
+                        "text"
+                        (fun m -> m.Range.Text)
+                        (Codec.string |> Codec.describe "The line, with its ending.")
+
+                and! digest = Codec.field "digest" (fun m -> m.Range.Digest) digest
+                and! lines = Codec.field "lines" (fun m -> m.Range.Lines) lineCount
+
+                and! column =
+                    Codec.field
+                        "column"
+                        (fun m -> m.Column)
+                        (Codec.int
+                         |> Codec.atLeast 1
+                         |> Codec.describe "Where on the line the match starts, 1-based.")
+
+                and! context =
+                    Codec.optionalField
+                        "context"
+                        (fun m -> m.Context)
+                        (fileRange |> Codec.describe "With options.context, the lines around the match.")
+
+                return
+                    {
+                        Range =
+                            {
+                                Path = range
+                                Start = first
+                                End = last
+                                Text = text
+                                Digest = digest
+                                Lines = lines
+                            }
+                        Column = column
+                        Context = context
+                    }
+            }
+            |> Codec.describe "A line that matched: a one-line range that fs.editRange takes."
+            |> Codec.named "GrepMatch"
+
+        let grepFile: Codec<GrepFile> =
+            Codec.record {
+                let! path = Codec.field "path" (fun (f: GrepFile) -> f.Path) Codec.string
+
+                and! matches =
+                    Codec.field "matches" (fun f -> f.Matches) (Codec.int |> Codec.describe "Its lines that matched.")
+
+                return { Path = path; Matches = matches }
+            }
+            |> Codec.named "GrepFile"
+
+        let grepResult: Codec<GrepResult> =
+            Codec.record {
+                let! pattern = Codec.field "pattern" (fun (r: GrepResult) -> r.Pattern) Codec.string
+
+                and! matches =
+                    Codec.field
+                        "matches"
+                        (fun r -> r.Matches)
+                        (Codec.list grepMatch
+                         |> Codec.describe "The first matches, in file and line order.")
+
+                and! files =
+                    Codec.field
+                        "files"
+                        (fun r -> r.Files)
+                        (Codec.list grepFile
+                         |> Codec.describe "Every file with matches and how many, also past max.")
+
+                and! truncated =
+                    Codec.field
+                        "truncated"
+                        (fun r -> r.Truncated)
+                        (Codec.bool |> Codec.describe "More lines matched than matches holds.")
+
+                and! filesTruncated =
+                    Codec.field
+                        "filesTruncated"
+                        (fun r -> r.FilesTruncated)
+                        (Codec.bool |> Codec.describe "More files matched than files holds (1000).")
+
+                return
+                    {
+                        Pattern = pattern
+                        Matches = matches
+                        Files = files
+                        Truncated = truncated
+                        FilesTruncated = filesTruncated
+                    }
+            }
+            |> Codec.describe "What a search found."
+            |> Codec.named "GrepResult"
+
+        let filesOptions: Codec<FilesOptions> =
+            Codec.record {
+                let! path = Codec.optionalField "path" (fun (o: FilesOptions) -> o.Path) searchPath
+                and! glob = Codec.defaultField "glob" (fun o -> o.Glob) [] globs
+                and! hidden = Codec.defaultField "hidden" (fun o -> o.Hidden) false hidden
+
+                and! max =
+                    Codec.defaultField
+                        "max"
+                        (fun o -> o.Max)
+                        1000
+                        (Codec.int
+                         |> Codec.between 1 10000
+                         |> Codec.describe "At most this many files (1000 by default).")
+
+                return
+                    {
+                        Path = path
+                        Glob = glob
+                        Hidden = hidden
+                        Max = max
+                    }
+            }
+            |> Codec.describe "Which files to list."
+            |> Codec.named "FilesOptions"
+
+        let repoFiles: Codec<RepoFiles> =
+            Codec.record {
+                let! files =
+                    Codec.field
+                        "files"
+                        (fun (r: RepoFiles) -> r.Files)
+                        (Codec.list Codec.string |> Codec.describe "Relative to the workspace, with /.")
+
+                and! truncated =
+                    Codec.field
+                        "truncated"
+                        (fun r -> r.Truncated)
+                        (Codec.bool |> Codec.describe "More files matched than files holds.")
+
+                return { Files = files; Truncated = truncated }
+            }
+            |> Codec.describe "The files of the workspace a listing found."
+            |> Codec.named "RepoFiles"
+
     // ---- Paths ----------------------------------------------------------------------------------
 
     let private separator (settings: CoreSettings) =
@@ -925,6 +1216,7 @@ module CoreBindings =
             "shell", "Commands in the workspace's shell."
             "fs", "The workspace's files."
             "blobs", "The environment's blob store: all of output that was cut."
+            "repo", "Searches of the workspace that skip what .gitignore ignores and hidden files, as ripgrep does."
         ]
 
     /// A path as content exclusions match it: normalized (`..` resolved, so `../repo/x` inside the
@@ -1342,6 +1634,230 @@ module CoreBindings =
                 |> EffResult.map (entry settings)
                 |> EffResult.mapError fsFailed)
 
+    // ---- repo.grep and repo.files ---------------------------------------------------------------
+
+    /// The directory a search walks: inside the workspace (relative to it, "" for the workspace), or
+    /// why not.
+    let private searchRoot (settings: CoreSettings) (path: string) : Result<string * string, HostCallError> =
+        let full = resolve settings path
+
+        match exclusionPath settings full with
+        | relative when
+            relative = ".."
+            || relative.StartsWith "../"
+            || Fx.Models.WorkspacePath.isAbsolute relative
+            ->
+            Error(
+                failure
+                    "outside"
+                    $"{path} is outside the workspace: repo searches the workspace; search elsewhere with shell.run"
+            )
+        | relative ->
+            match
+                (if relative = "" then
+                     None
+                 else
+                     Fx.Models.Exclusions.testDirectory settings.Exclusions relative)
+            with
+            | Some found -> Error(excluded path found)
+            | None -> Ok(full, relative)
+
+    /// A path the search gave (relative to its root) relative to the workspace.
+    let private underRoot (root: string) (path: string) =
+        if root = "" then path else root + "/" + path
+
+    /// Whether a workspace file's search results may be shown: content exclusions and a confining
+    /// sandbox's policy decide, as they do for `fs.read`.
+    let private shown (settings: CoreSettings) (relative: string) : bool =
+        Fx.Models.Exclusions.test settings.Exclusions relative |> Option.isNone
+        && readable settings relative
+
+    /// The query of a search below the workspace's root, ripgrep's way: ignore files and hidden
+    /// entries skipped. A glob starting with `!` excludes.
+    let private repoQuery (settings: CoreSettings) (root: string) (globs: string list) (hidden: bool) : SearchQuery =
+        { SearchQuery.files root with
+            Include = globs |> List.filter (fun g -> not (g.StartsWith '!'))
+            Exclude =
+                globs
+                |> List.filter (fun g -> g.StartsWith '!')
+                |> List.map (fun g -> g.Substring 1)
+            MaxFileBytes = int64 settings.ReadBytes
+            Ignores = true
+            IgnoresFrom = Some settings.Workspace
+            Hidden = hidden
+        }
+
+    let private searchFailed (error: SearchError) : HostCallError =
+        match error with
+        | InvalidQuery reason -> failure "invalidQuery" reason
+        | SearchFsError e -> fsFailed e
+
+    /// The lines `first` to `last` of a file as a range.
+    let private rangeOf (relative: string) (file: Read) (lines: int) (first: int) (last: int) : FileRange =
+        {
+            Path = relative
+            Start = first
+            End = last
+            Text = TextEdits.slice file.Text first last
+            Digest = file.Digest
+            Lines = lines
+        }
+
+    /// The matches of one file as ranges, each checked against the file as `fs.read` reads it now: a
+    /// line that changed since the search is left out.
+    let private grepMatches (relative: string) (file: Read) (context: int) (found: SearchMatch list) : GrepMatch list =
+        let fileLines = Array.ofList (TextEdits.lines file.Text)
+        let lines = lineCount file.Text
+
+        found
+        |> List.choose (fun m ->
+            let searched = if m.Line = 1 then withoutBom m.Text else m.Text
+
+            let same =
+                m.Line <= fileLines.Length
+                && (fileLines[m.Line - 1] = searched
+                    || (searched.Length >= 500
+                        && fileLines[m.Line - 1].StartsWith(searched, StringComparison.Ordinal)))
+
+            if not same then
+                None
+            else
+                Some
+                    {
+                        Range = rangeOf relative file lines m.Line m.Line
+                        Column = m.Column
+                        Context =
+                            if context = 0 then
+                                None
+                            else
+                                Some(
+                                    rangeOf
+                                        relative
+                                        file
+                                        lines
+                                        (max 1 (m.Line - context))
+                                        (min lines (m.Line + context))
+                                )
+                    })
+
+    /// `repo.grep(pattern, options?)`: lines that match in the workspace's files, as ranges.
+    let repoGrep<'R when 'R :> IFsOps and 'R :> IScope> (settings: CoreSettings) : HostBinding<'R> =
+        HostBinding.create2
+            "repo.grep"
+            "Searches the workspace's files for lines matching a regular expression (ripgrep's syntax: no backreferences or lookaround), skipping what .gitignore ignores, hidden files, binary files and excluded ones. Matches are one-line ranges fs.editRange takes; files counts every file's matching lines, also past max."
+            (Arg.required
+                "pattern"
+                "A regular expression, or text with options.literal."
+                (Codec.string |> Codec.nonEmpty),
+             Arg.optional "options" "" Codecs.grepOptions)
+            Codecs.grepResult
+            (fun (pattern, options) ->
+                eff {
+                    let o =
+                        options
+                        |> Option.defaultValue
+                            {
+                                Path = None
+                                Glob = []
+                                IgnoreCase = false
+                                Literal = false
+                                Context = 0
+                                Max = 100
+                                Hidden = false
+                            }
+
+                    match searchRoot settings (o.Path |> Option.defaultValue ".") with
+                    | Error e -> return Error e
+                    | Ok(full, root) ->
+                        let query =
+                            { repoQuery settings full o.Glob o.Hidden with
+                                Pattern =
+                                    Some(
+                                        if o.Literal then
+                                            Text.RegularExpressions.Regex.Escape pattern
+                                        else
+                                            pattern
+                                    )
+                                IgnoreCase = o.IgnoreCase
+                                MaxResults = o.Max
+                                CountAll = true
+                            }
+
+                        match! FsOps.search query with
+                        | Error e -> return Error(searchFailed e)
+                        | Ok found ->
+                            let byFile =
+                                found.Matches
+                                |> List.groupBy _.Path
+                                |> List.map (fun (path, ms) -> underRoot root path, ms)
+                                |> List.filter (fun (relative, _) -> shown settings relative)
+
+                            let matches = ResizeArray<GrepMatch>()
+
+                            for relative, ms in byFile do
+                                match! readText settings relative "" with
+                                | Ok file -> matches.AddRange(grepMatches relative file o.Context ms)
+                                | Error _ -> () // changed, removed or grown since the search: left out
+
+                            let files =
+                                found.Counts
+                                |> List.map (fun c ->
+                                    {
+                                        Path = underRoot root c.Path
+                                        Matches = c.Matches
+                                    })
+                                |> List.filter (fun f -> shown settings f.Path)
+
+                            return
+                                Ok
+                                    {
+                                        Pattern = pattern
+                                        Matches = List.ofSeq matches
+                                        Files = files
+                                        Truncated = found.Truncated
+                                        FilesTruncated = not found.CountsComplete
+                                    }
+                })
+
+    /// `repo.files(options?)`: the workspace's files, ripgrep's way.
+    let repoFiles<'R when 'R :> IFsOps and 'R :> IScope> (settings: CoreSettings) : HostBinding<'R> =
+        HostBinding.create1
+            "repo.files"
+            "Lists the workspace's files (recursively, in name order, directories after the files beside them), skipping what .gitignore ignores, hidden files and excluded ones."
+            (Arg.optional "options" "" Codecs.filesOptions)
+            Codecs.repoFiles
+            (fun options ->
+                eff {
+                    let o =
+                        options
+                        |> Option.defaultValue
+                            {
+                                Path = None
+                                Glob = []
+                                Hidden = false
+                                Max = 1000
+                            }
+
+                    match searchRoot settings (o.Path |> Option.defaultValue ".") with
+                    | Error e -> return Error e
+                    | Ok(full, root) ->
+                        let query =
+                            { repoQuery settings full o.Glob o.Hidden with
+                                MaxResults = o.Max
+                            }
+
+                        match! FsOps.search query with
+                        | Error e -> return Error(searchFailed e)
+                        | Ok found ->
+                            return
+                                Ok
+                                    {
+                                        Files =
+                                            found.Files |> List.map (underRoot root) |> List.filter (shown settings)
+                                        Truncated = found.Truncated
+                                    }
+                })
+
     /// At most `maxChars` characters of `text` from the offset `from` (clamped), never half a surrogate
     /// pair: the offset and the count of the window (`blobs.read`, `history.read`).
     let window (text: string) (from: int) (maxChars: int) : int * int =
@@ -1628,4 +2144,6 @@ module CoreBindings =
             fsEdit settings
             fsEditRange settings
             blobsRead settings
+            repoGrep settings
+            repoFiles settings
         ]
