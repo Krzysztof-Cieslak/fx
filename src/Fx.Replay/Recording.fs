@@ -221,6 +221,8 @@ type HandsInfo =
         /// The variables chosen for the commands (T138), by name and why one is missing: the prompt
         /// names them (`Instructions.variables`). Never values.
         Variables: HandsVariable list
+        /// The root of the environment's blob store (T201a): cut output names its files.
+        BlobRoot: string option
     }
 
     override this.ToString() =
@@ -249,6 +251,8 @@ module HandsInfo =
                 Codec.optionalField "interpreter" (fun h -> h.Interpreter) Codec.string
 
             and! sandbox = Codec.optionalField "sandbox" (fun h -> h.Sandbox) SandboxPolicy.codec
+            // Added with overflow (T201a): absent in earlier journals.
+            and! blobRoot = Codec.optionalField "blobRoot" (fun h -> h.BlobRoot) Codec.string
 
             // Added with chosen variables (T138): absent when none, so earlier journals read the same.
             and! variables =
@@ -282,6 +286,7 @@ module HandsInfo =
                     Interpreter = interpreter
                     Sandbox = sandbox
                     Variables = variables
+                    BlobRoot = blobRoot
                 }
         }
 
@@ -305,6 +310,7 @@ module HandsInfo =
                 |> Option.map (fun session -> (session 1).Provider.Id)
             Sandbox = hands.Sandbox
             Variables = hands.Variables
+            BlobRoot = hands.BlobRoot
         }
 
     /// The variables commands get, by name, with empty values (replay runs no command).
@@ -437,6 +443,7 @@ type private Recorded<'R, 'K
     and 'K :> IShell
     and 'K :> IFs
     and 'K :> IFsOps
+    and 'K :> IBlobs
     and 'K :> IClock
     and 'K :> IScopeWith<'K>> =
     {
@@ -457,6 +464,7 @@ type RecordedCodeAct<'R, 'K
     and 'K :> IShell
     and 'K :> IFs
     and 'K :> IFsOps
+    and 'K :> IBlobs
     and 'K :> IClock
     and 'K :> IScopeWith<'K>>(recorder: Recorder, wraps: Wraps<'R, 'K>, config: CodeActConfig<'R, 'K>) =
     let sessions =
@@ -848,6 +856,7 @@ module Recording =
         and 'K :> IShell
         and 'K :> IFs
         and 'K :> IFsOps
+        and 'K :> IBlobs
         and 'K :> IClock
         and 'K :> IScopeWith<'K>>
         (recorder: Recorder)

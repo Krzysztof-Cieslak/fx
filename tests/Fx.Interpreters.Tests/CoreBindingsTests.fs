@@ -167,7 +167,73 @@ let tests =
 
                         let result = call f "shell.run" [ str "yes" ] |> json
                         Expect.equal (field "truncated" result) (Json.Bool true) "truncated"
-                        Expect.isLessThan (text (field "stdout" result)).Length 16100 "bounded"
+
+                        Expect.isLessThan
+                            (text (field "stdout" result)).Length
+                            16200
+                            "bounded (the marker names the blob)"
+
+                    testCase "cut output is stored whole, and the marker and the result say where"
+                    <| fun () ->
+                        let printed = String.replicate 20000 "x" + "needle" + String.replicate 20000 "y"
+                        let f = fakes (fun _ -> Some(Ok(ScriptedShell.output 0 printed "err")))
+                        let root = path [ "home"; "envd"; "blobs" ]
+
+                        let result =
+                            run
+                                f.Env
+                                (HostBinding.dispatch
+                                    (CoreBindings.all { settings with BlobRoot = Some root })
+                                    {
+                                        CellId = Some "c1"
+                                        Binding = "shell.run"
+                                        Args = [ str "yes" ]
+                                    })
+                            |> json
+
+                        let overflow = field "stdoutOverflow" result
+                        let hash = text (field "hash" overflow)
+                        let file = text (field "path" overflow)
+                        let sep = if os = Os.Windows then "\\" else "/"
+                        let hex = hash.Substring("sha256:".Length)
+
+                        Expect.equal
+                            file
+                            (root + sep + "sha256" + sep + hex.Substring(0, 2) + sep + hex.Substring 2)
+                            "the blob's file"
+
+                        Expect.equal (field "bytes" overflow) (Json.int printed.Length) "its size"
+
+                        Expect.stringContains
+                            (text (field "stdout" result))
+                            ("chars omitted; all of it: " + file)
+                            "the marker names it"
+
+                        Expect.isFalse
+                            (match result with
+                             | Json.Object members -> members |> List.exists (fun (n, _) -> n = "stderrOverflow")
+                             | _ -> true)
+                            "a stream that was not cut has none"
+
+                        match BlobHash.tryParse hash with
+                        | Some blobHash ->
+                            match (Env.Stored.Blobs.Get blobHash CancellationToken.None).Result with
+                            | Ok bytes -> Expect.equal (Encoding.UTF8.GetString bytes) printed "all of it is stored"
+                            | Error e -> failtest (string e)
+                        | None -> failtest $"not a hash: {hash}"
+
+                    testCase "without files, the marker names the blob"
+                    <| fun () ->
+                        let f =
+                            fakes (fun _ -> Some(Ok(ScriptedShell.output 0 (String.replicate 40000 "x") "")))
+
+                        let result = call f "shell.run" [ str "yes" ] |> json
+                        let overflow = field "stdoutOverflow" result
+
+                        Expect.stringContains
+                            (text (field "stdout" result))
+                            ("all of it: blob " + text (field "hash" overflow))
+                            "the blob"
 
                     testCase "a command that does not start is the failure notStarted"
                     <| fun () ->

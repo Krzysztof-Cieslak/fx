@@ -32,6 +32,9 @@ type EnvHands =
     interface IShell with
         member env.Shell = env.Client.Shell
 
+    interface Fx.Store.IBlobs with
+        member env.Blobs = env.Client.Blobs
+
     interface IScopeWith<EnvHands> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }
@@ -127,6 +130,7 @@ module EnvHands =
                         | Ok() -> return! plan.Guard call
                     }
             Snapshots = Some handle.Client.Snapshots
+            BlobRoot = Some(EnvLayout.blobs handle.Layout)
             Sandbox = if handle.Sandbox.Driver.Confines then Some policy else None
             Variables =
                 handle.Variables

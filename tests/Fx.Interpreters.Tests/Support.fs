@@ -35,6 +35,12 @@ type Env =
     interface IShell with
         member env.Shell = env.Shell
 
+    /// Where output cut by the bindings goes (T201a): one store for every environment of this type.
+    static member val Stored = Fx.Store.Fakes.InMemoryBlobs()
+
+    interface Fx.Store.IBlobs with
+        member _.Blobs = Env.Stored.Blobs
+
     interface IScopeWith<Env> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }

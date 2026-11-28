@@ -74,6 +74,24 @@ type FileRange =
     override this.ToString() =
         $"FileRange({this.Path}:{this.Start}-{this.End}, {this.Digest})"
 
+/// Where the whole of a text that was cut is (spec §6.6 "overflow → blob with a grep-able path"):
+/// a blob of the environment's blob store, and the blob's file where the store keeps files, so the
+/// model reads it as it reads files (`grep`, `sed -n`, `fs.read` with lines).
+type Overflow =
+    {
+        /// The blob: the whole text, UTF-8.
+        Hash: BlobHash
+        /// Its size in bytes.
+        Bytes: int64
+        /// The blob's file, in the environment's syntax; `None` for a store without files.
+        Path: string option
+    }
+
+    override this.ToString() =
+        match this.Path with
+        | Some path -> $"Overflow({this.Bytes} bytes at {path})"
+        | None -> $"Overflow({this.Bytes} bytes, {this.Hash})"
+
 /// What a command did (spec §4.1 `RunResult`). Its output is bounded: the head and the tail of each
 /// stream, with a marker where the middle was left out. A command that timed out keeps what it
 /// printed until it was killed.
@@ -87,6 +105,10 @@ type RunResult =
         /// Output was left out of `Stdout` or `Stderr`.
         Truncated: bool
         TimedOut: bool
+        /// Where the whole of a stream cut in `Stdout` is: absent when nothing was cut.
+        StdoutOverflow: Overflow option
+        /// Where the whole of a stream cut in `Stderr` is.
+        StderrOverflow: Overflow option
         /// For a plain search (`grep -n`, `rg -n`, `git grep -n`; spec §6.7), the lines it printed as
         /// one-line ranges of files in the workspace, each checked against its file: all of them or
         /// none (`Searches`).
@@ -160,6 +182,11 @@ type CoreSettings =
         /// The policy a sandbox driver confines commands with, if one does: a search's matches are
         /// only checked in files it lets them read.
         Sandbox: SandboxPolicy option
+        /// The root of the environment's blob store where it keeps blobs as files (envd's
+        /// `FileBlobStore`, `EnvLayout.blobs`), in the environment's syntax: overflow names a blob's file
+        /// (`CoreBindings.blobFile`), so the model reads it with the tools it uses for files. `None` for
+        /// a store without files.
+        BlobRoot: string option
     }
 
     override this.ToString() = $"CoreSettings({this.Workspace})"
@@ -177,6 +204,7 @@ module CoreSettings =
             Exclusions = Fx.Models.Exclusions.none
             Words = fun _ -> None
             Sandbox = None
+            BlobRoot = None
         }
 
 /// The core bindings (spec §6.5 "env-side"): `shell.run`, `fs.read`, `fs.write`, `fs.list`,
@@ -336,6 +364,34 @@ module CoreBindings =
                 "Lines of a file, as fs.read gives them or an edit left them (digest and lines are the whole file's)."
             |> Codec.named "FileRange"
 
+        let overflow: Codec<Overflow> =
+            Codec.record {
+                let! hash = Codec.field "hash" (fun (o: Overflow) -> o.Hash) digest
+
+                and! bytes =
+                    Codec.field
+                        "bytes"
+                        (fun o -> o.Bytes)
+                        (Codec.int64 |> Codec.atLeast 0L |> Codec.describe "Its size.")
+
+                and! path =
+                    Codec.optionalField
+                        "path"
+                        (fun o -> o.Path)
+                        (Codec.string
+                         |> Codec.describe
+                             "The file that holds it (read it with grep, sed -n or fs.read); absent where blobs are not files.")
+
+                return
+                    {
+                        Hash = hash
+                        Bytes = bytes
+                        Path = path
+                    }
+            }
+            |> Codec.describe "Where all of a text that was cut is: a blob of the environment's blob store."
+            |> Codec.named "Overflow"
+
         let runResult: Codec<RunResult> =
             Codec.record {
                 let! command = Codec.field "command" (fun (r: RunResult) -> r.Command) Codec.string
@@ -364,6 +420,20 @@ module CoreBindings =
                          |> Codec.describe
                              "It ran out of time and was killed with its children; stdout and stderr hold what it printed until then.")
 
+                and! stdoutOverflow =
+                    Codec.optionalField
+                        "stdoutOverflow"
+                        (fun r -> r.StdoutOverflow)
+                        (overflow
+                         |> Codec.describe "Where all of stdout is, when the middle of it was left out.")
+
+                and! stderrOverflow =
+                    Codec.optionalField
+                        "stderrOverflow"
+                        (fun r -> r.StderrOverflow)
+                        (overflow
+                         |> Codec.describe "Where all of stderr is, when the middle of it was left out.")
+
                 and! matches =
                     let ranges =
                         Codec.list fileRange
@@ -388,6 +458,8 @@ module CoreBindings =
                         Stderr = stderr
                         Truncated = truncated
                         TimedOut = timedOut
+                        StdoutOverflow = stdoutOverflow
+                        StderrOverflow = stderrOverflow
                         Matches = matches
                     }
             }
@@ -672,9 +744,8 @@ module CoreBindings =
 
     // ---- Text -----------------------------------------------------------------------------------
 
-    /// At most `limit` characters: the head and the tail, with one marker line where the middle was
-    /// left out (never half a surrogate pair).
-    let bound (limit: int) (text: string) : string * bool =
+    /// `bound` with the marker line's words for `n` characters left out.
+    let private boundMarked (limit: int) (marker: int -> string) (text: string) : string * bool =
         if text.Length <= limit then
             text, false
         else
@@ -687,12 +758,68 @@ module CoreBindings =
             if tail < text.Length && Char.IsLowSurrogate text[tail] then
                 tail <- tail + 1
 
-            let omitted = tail - head
-
             text.Substring(0, head)
-            + $"\n… [{omitted} chars omitted] …\n"
+            + "\n… ["
+            + marker (tail - head)
+            + "] …\n"
             + text.Substring tail,
             true
+
+    /// At most `limit` characters: the head and the tail, with one marker line where the middle was
+    /// left out (never half a surrogate pair).
+    let bound (limit: int) (text: string) : string * bool =
+        boundMarked limit (fun omitted -> $"{omitted} chars omitted") text
+
+    /// The marker line's words for where all of a cut text is: its file, else its blob.
+    let whereAll (overflow: Overflow) : string =
+        match overflow.Path with
+        | Some path -> "all of it: " + path
+        | None -> "all of it: blob " + string overflow.Hash
+
+    /// The file of a blob in a `FileBlobStore` at `root`: `<root>/sha256/<2 hex>/<62 hex>`.
+    let blobFile (os: Os) (root: string) (hash: BlobHash) : string =
+        let separator = if os = Os.Windows then "\\" else "/"
+        let root = root.TrimEnd([| '/'; '\\' |])
+        String.Join(separator, [ root; "sha256"; hash.Hex.Substring(0, 2); hash.Hex.Substring 2 ])
+
+    /// Stores a text that was cut, whole, in the environment's blob store.
+    let storeOverflow<'R when 'R :> IBlobs and 'R :> IScope>
+        (settings: CoreSettings)
+        (content: byte array)
+        : Eff<'R, Overflow> =
+        eff {
+            let! blob = Blobs.put content
+
+            return
+                {
+                    Hash = blob.Hash
+                    Bytes = blob.Size
+                    Path =
+                        settings.BlobRoot
+                        |> Option.map (fun root -> blobFile settings.Os root blob.Hash)
+                }
+        }
+
+    /// UTF-8 `content` as text of at most `limit` characters (as `bound`); when the middle is left out,
+    /// all of it goes to the environment's blob store and the marker line says where (spec §6.6).
+    let boundStored<'R when 'R :> IBlobs and 'R :> IScope>
+        (settings: CoreSettings)
+        (limit: int)
+        (content: byte array)
+        : Eff<'R, string * Overflow option> =
+        eff {
+            let text = utf8.GetString content
+
+            if text.Length <= limit then
+                return text, None
+            else
+                let! overflow = storeOverflow settings content
+
+                let cut, _ =
+                    boundMarked limit (fun omitted -> $"{omitted} chars omitted; {whereAll overflow}") text
+
+                return cut, Some overflow
+        }
 
     let private lineCount (text: string) : int =
         if text.Length = 0 then
@@ -967,7 +1094,7 @@ module CoreBindings =
     /// `shell.run(command, options?)`: runs a command line with the environment's shell (`/bin/sh`;
     /// PowerShell 7 on Windows) in the workspace. Past `options.timeoutMs` the command is killed with
     /// its children and keeps what it printed; a plain search also gets its `matches`.
-    let shellRun<'R when 'R :> IShell and 'R :> IFsOps and 'R :> IClock and 'R :> IScopeWith<'R>>
+    let shellRun<'R when 'R :> IShell and 'R :> IFsOps and 'R :> IBlobs and 'R :> IClock and 'R :> IScopeWith<'R>>
         (settings: CoreSettings)
         : HostBinding<'R> =
         HostBinding.create2
@@ -1005,8 +1132,10 @@ module CoreBindings =
                         let printed = Printed()
                         let stdin = options.Stdin |> Option.map utf8.GetBytes |> Option.defaultValue [||]
                         let! exitCode = runFor proc stdin options.TimeoutMs printed
-                        let stdout, cutOut = bound settings.OutputChars (utf8.GetString printed.Stdout)
-                        let stderr, cutErr = bound settings.OutputChars (utf8.GetString printed.Stderr)
+                        let! stdout, outOverflow = boundStored settings settings.OutputChars printed.Stdout
+                        let! stderr, errOverflow = boundStored settings settings.OutputChars printed.Stderr
+                        let cutOut = outOverflow.IsSome
+                        let cutErr = errOverflow.IsSome
 
                         let! matches =
                             match exitCode with
@@ -1022,6 +1151,8 @@ module CoreBindings =
                                     Stderr = stderr
                                     Truncated = cutOut || cutErr
                                     TimedOut = exitCode.IsNone
+                                    StdoutOverflow = outOverflow
+                                    StderrOverflow = errOverflow
                                     Matches = matches
                                 }
                 })
@@ -1342,7 +1473,8 @@ module CoreBindings =
                 })
 
     /// Every core binding.
-    let all<'R when 'R :> IShell and 'R :> IFs and 'R :> IFsOps and 'R :> IClock and 'R :> IScopeWith<'R>>
+    let all<'R
+        when 'R :> IShell and 'R :> IFs and 'R :> IFsOps and 'R :> IBlobs and 'R :> IClock and 'R :> IScopeWith<'R>>
         (settings: CoreSettings)
         : HostBinding<'R> list =
         [

@@ -78,6 +78,12 @@ type HandsEnv =
     interface IShell with
         member env.Shell = env.Shell
 
+    /// Where output cut by the bindings goes (T201a): one store for every environment of this type.
+    static member val Stored = Fx.Store.Fakes.InMemoryBlobs()
+
+    interface Fx.Store.IBlobs with
+        member _.Blobs = HandsEnv.Stored.Blobs
+
     interface IScopeWith<HandsEnv> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }
@@ -404,7 +410,8 @@ let baseSelections: (string * Json) list =
 
 /// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
 /// for the fixture's root directory.
-let createOn<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IClock and 'K :> IScopeWith<'K>>
+let createOn<'K
+    when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IBlobs and 'K :> IClock and 'K :> IScopeWith<'K>>
     (name: string)
     (selections: (string * Json) list)
     (handsOf: string -> string -> ResizeArray<unit -> Task> -> Hands<'K>)
@@ -534,6 +541,7 @@ let localHands
         CommandEnv = Inherit []
         Interpreter = make root
         Guard = fun _ -> EffResult.ok []
+        BlobRoot = None
         Snapshots =
             Some(
                 GitSnapshots.create

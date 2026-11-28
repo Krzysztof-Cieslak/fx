@@ -392,6 +392,7 @@ module SessionReplay =
                     Fs = Replay.fs segment Markers.Hands
                     FsOps = Replay.fsOps segment Markers.Hands
                     Shell = Replay.shell segment Markers.Hands
+                    Blobs = Fx.Store.Fakes.InMemoryBlobs().Blobs
                     Scope = Scope.ofCancellation segment.Stop
                 }
 
@@ -529,6 +530,7 @@ module SessionReplay =
                                                         None
                                                 Sandbox = info.Sandbox
                                                 Variables = info.Variables
+                                                BlobRoot = info.BlobRoot
                                                 Jobs = Replay.jobs segment Markers.Hands
                                             })
                                 }
