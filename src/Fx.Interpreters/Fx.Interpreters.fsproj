@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="HostBinding.fs" />
     <Compile Include="Bridge.fs" />
+    <Compile Include="TextEdits.fs" />
     <Compile Include="CoreBindings.fs" />
     <Compile Include="Assets.fs" />
     <Compile Include="Interpreter.fs" />

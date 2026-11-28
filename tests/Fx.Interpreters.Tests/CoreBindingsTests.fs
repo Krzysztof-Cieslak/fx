@@ -57,6 +57,11 @@ let private failedCode (result: Result<Value, HostCallError>) =
 
 let private inWorkspace (relative: string) = CoreBindings.resolve settings relative
 
+let private readText (f: Fakes) (relative: string) : string =
+    match (f.Env.FsRead.ReadFile (inWorkspace relative) CancellationToken.None).Result with
+    | Ok bytes -> Encoding.UTF8.GetString bytes
+    | Error e -> failtest (string e)
+
 [<Tests>]
 let tests =
     testList
@@ -360,9 +365,387 @@ let tests =
                         Expect.equal (failedCode (call f "fs.patch" [ inline' stale ])) "stale" "stale"
                 ]
 
+            testList
+                "ranged reads and anchored edits"
+                [
+                    let lines (count: int) =
+                        String.Join("", [ for i in 1..count -> $"line {i}\n" ])
+
+                    let decodeRange (json: Json) =
+                        match CoreBindings.Codecs.fileRange.Decode json with
+                        | Ok range -> range
+                        | Error issues -> failtest (string issues)
+
+                    let editedOf (result: Result<Value, HostCallError>) : Edited =
+                        match CoreBindings.Codecs.edited.Decode(json result) with
+                        | Ok edited -> edited
+                        | Error issues -> failtest (string issues)
+
+                    let change (old: string) (replacement: string) =
+                        Json.Object [ "old", Json.String old; "new", Json.String replacement ]
+
+                    testCase "a ranged read gives those lines, the whole file's digest and line count"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", lines 10)
+                        let whole = call f "fs.read" [ str "a.txt" ] |> json
+                        Expect.equal (field "start" whole) (Json.int 1) "a whole file starts at 1"
+                        Expect.equal (field "end" whole) (Json.int 10) "and ends at its last line"
+                        let part = call f "fs.read" [ str "a.txt"; inline' """{"lines": [3, 4]}""" ] |> json
+                        Expect.equal (field "text" part |> text) "line 3\nline 4\n" "those lines"
+                        Expect.equal (field "start" part, field "end" part) (Json.int 3, Json.int 4) "where"
+                        Expect.equal (field "digest" part) (field "digest" whole) "the file's digest"
+                        Expect.equal (field "lines" part) (Json.int 10) "the file's lines"
+                        Expect.equal (field "size" part) (field "size" whole) "the file's size"
+
+                        let tail =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [9, 20]}""" ] |> json
+
+                        Expect.equal (field "end" tail) (Json.int 10) "lines past the end are left out"
+
+                        let after =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [11, 12]}""" ] |> json
+
+                        Expect.equal
+                            (field "text" after |> text, field "end" after)
+                            ("", Json.int 10)
+                            "an empty range at the end"
+
+                        Expect.equal
+                            (failedCode (call f "fs.read" [ str "a.txt"; inline' """{"lines": [12, 13]}""" ]))
+                            "outOfRange"
+                            "beyond it"
+
+                        match call f "fs.read" [ str "a.txt"; inline' """{"lines": [4, 3]}""" ] with
+                        | Error(HostCallError.InvalidArguments _) -> ()
+                        | other -> failtest $"backwards: {other}"
+
+                    testCase "fs.edit replaces text that occurs once, and gives the lines it left as a fresh range"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", "one\ntwo\nthree\n")
+
+                        let edited =
+                            call f "fs.edit" [ str "a.txt"; Value.Inline(change "two" "2\n2b") ] |> editedOf
+
+                        Expect.equal (readText f "a.txt") "one\n2\n2b\nthree\n" "edited"
+                        Expect.equal edited.Path "a.txt" "the path"
+                        Expect.equal edited.Lines 4 "its lines"
+                        Expect.equal edited.Replacements 1 "one"
+
+                        Expect.equal
+                            edited.Digest
+                            (BlobHash.ofBytes (Encoding.UTF8.GetBytes "one\n2\n2b\nthree\n"))
+                            "the new digest"
+
+                        match edited.Ranges with
+                        | [ range ] ->
+                            Expect.equal (range.Start, range.End, range.Text) (2, 3, "2\n2b\n") "the new lines"
+                            Expect.equal range.Digest edited.Digest "of the new version"
+
+                            let again =
+                                call
+                                    f
+                                    "fs.editRange"
+                                    [ Value.Inline(CoreBindings.Codecs.fileRange.Encode range); str "two" ]
+                                |> editedOf
+
+                            Expect.equal (readText f "a.txt") "one\ntwo\nthree\n" "the same lines edited again"
+                            Expect.equal (again.Ranges |> List.map (fun r -> r.Start, r.End)) [ 2, 2 ] "fresh again"
+                        | other -> failtest $"{other}"
+
+                    testCase "missing, ambiguous and unchanged text fail as hybrid's edit says them; nothing is written"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", "x x\n")
+
+                        let failure (changes: Json) =
+                            match call f "fs.edit" [ str "a.txt"; Value.Inline changes ] with
+                            | Error(HostCallError.Failed(code, message, _)) -> code, message
+                            | other -> failtest $"{other}"
+
+                        let code, message = failure (change "y" "z")
+                        Expect.equal code "missing" "missing"
+
+                        Expect.stringContains
+                            message
+                            "`old` does not occur in a.txt: copy it from the file as read"
+                            "worded"
+
+                        let code, message = failure (change "x" "z")
+                        Expect.equal code "ambiguous" "ambiguous"
+                        Expect.stringContains message "`old` occurs 2 times in a.txt" "worded"
+                        Expect.stringContains message "set `all`" "how"
+                        let code, message = failure (change "x x" "x x")
+
+                        Expect.equal
+                            (code, message)
+                            ("unchanged", "`old` and `new` are the same: nothing to change.")
+                            "the same"
+
+                        let code, message = failure (Json.Array [ change "x x" "a"; change "x" "b" ])
+                        Expect.equal code "missing" "after the change before it"
+
+                        Expect.stringStarts
+                            message
+                            "Change 2 of 2: `old` does not occur in a.txt (as the changes before it left it)"
+                            "which"
+
+                        Expect.equal (readText f "a.txt") "x x\n" "nothing written"
+
+                        match call f "fs.edit" [ str "a.txt"; Value.Inline(change "" "z") ] with
+                        | Error(HostCallError.InvalidArguments _) -> ()
+                        | other -> failtest $"empty old: {other}"
+
+                    testCase "all replaces every occurrence; several changes apply in order, written together"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", "x = 1\ny\nx = 2\nz\n")
+
+                        let edited =
+                            call
+                                f
+                                "fs.edit"
+                                [
+                                    str "a.txt"
+                                    Value.Inline(
+                                        Json.Array
+                                            [
+                                                Json.Object
+                                                    [
+                                                        "old", Json.String "x"
+                                                        "new", Json.String "w"
+                                                        "all", Json.Bool true
+                                                    ]
+                                                change "w = 2" "w = 20"
+                                                change "z\n" ""
+                                            ]
+                                    )
+                                ]
+                            |> editedOf
+
+                        Expect.equal (readText f "a.txt") "w = 1\ny\nw = 20\n" "edited"
+                        Expect.equal edited.Replacements 4 "replacements"
+
+                        Expect.equal
+                            (edited.Ranges |> List.map (fun r -> r.Start, r.End, r.Text))
+                            [ 1, 1, "w = 1\n"; 3, 3, "w = 20\n"; 4, 3, "" ]
+                            "a fresh range for each region, in file order"
+
+                    testCase "CRLF files keep their line endings; text matches with either ending"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "w.txt", "a\r\nb\r\nc\r\n")
+
+                        let edited =
+                            call f "fs.edit" [ str "w.txt"; Value.Inline(change "a\nb" "A\r\nB\nB2") ]
+                            |> editedOf
+
+                        Expect.equal (readText f "w.txt") "A\r\nB\r\nB2\r\nc\r\n" "CRLF kept"
+
+                        Expect.equal
+                            (edited.Ranges |> List.map (fun r -> r.Text))
+                            [ "A\r\nB\r\nB2\r\n" ]
+                            "as in the file"
+
+                        let range =
+                            call f "fs.read" [ str "w.txt"; inline' """{"lines": [4, 4]}""" ] |> json
+
+                        Expect.equal (field "text" range |> text) "c\r\n" "a range as it is"
+                        call f "fs.editRange" [ Value.Inline range; str "C\n" ] |> editedOf |> ignore
+                        Expect.equal (readText f "w.txt") "A\r\nB\r\nB2\r\nC\r\n" "replaced, CRLF"
+
+                    testCase "a range whose lines changed is stale, with the lines there now; nothing is written"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", lines 5)
+
+                        let range =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [2, 3]}""" ] |> json
+
+                        let unrelated =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [5, 5]}""" ] |> json
+
+                        call f "fs.editRange" [ Value.Inline unrelated; str "five" ]
+                        |> editedOf
+                        |> ignore
+
+                        Expect.equal (readText f "a.txt") "line 1\nline 2\nline 3\nline 4\nfive\n" "edited"
+
+                        call f "fs.editRange" [ Value.Inline range; str "two\nthree" ]
+                        |> editedOf
+                        |> ignore
+
+                        Expect.equal
+                            (readText f "a.txt")
+                            "line 1\ntwo\nthree\nline 4\nfive\n"
+                            "a range whose lines did not change still applies after another edit"
+
+                        match call f "fs.editRange" [ Value.Inline range; str "x" ] with
+                        | Error(HostCallError.Failed("stale", message, Some data)) ->
+                            Expect.stringContains message "Lines 2–3 of a.txt are not what the range holds" "why"
+                            let now = decodeRange data
+                            Expect.equal (now.Start, now.End, now.Text) (2, 3, "two\nthree\n") "the lines there now"
+                        | other -> failtest $"{other}"
+
+                        f.Fs.AddText(inWorkspace "short.txt", "a\n")
+
+                        let beyond =
+                            Json.Object
+                                [
+                                    "path", Json.String "short.txt"
+                                    "start", Json.int 2
+                                    "end", Json.int 3
+                                    "text", Json.String "b\nc\n"
+                                    "digest", field "digest" range
+                                    "lines", Json.int 3
+                                ]
+
+                        match call f "fs.editRange" [ Value.Inline beyond; str "x" ] with
+                        | Error(HostCallError.Failed("stale", _, Some data)) ->
+                            let now = decodeRange data
+                            Expect.equal (now.Start, now.End, now.Text) (2, 1, "") "past the end: none"
+                        | other -> failtest $"{other}"
+
+                        Expect.equal (readText f "short.txt") "a\n" "nothing written"
+
+                        match call f "fs.editRange" [ Value.Inline range; str "two\nthree\n" ] with
+                        | Error(HostCallError.Failed("stale", _, _)) -> ()
+                        | other -> failtest $"{other}"
+
+                        let current =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [2, 3]}""" ] |> json
+
+                        Expect.equal
+                            (failedCode (call f "fs.editRange" [ Value.Inline current; str "two\r\nthree\n" ]))
+                            "unchanged"
+                            "the same lines"
+
+                    testCase "an empty range inserts; empty text removes the lines"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", "a\nb")
+
+                        let atEnd =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [3, 3]}""" ] |> json
+
+                        let edited = call f "fs.editRange" [ Value.Inline atEnd; str "c\nd\n" ] |> editedOf
+                        Expect.equal (readText f "a.txt") "a\nb\nc\nd" "appended, without a final line ending as before"
+                        Expect.equal (edited.Ranges |> List.map (fun r -> r.Start, r.End)) [ 3, 4 ] "the new lines"
+
+                        let first =
+                            call f "fs.read" [ str "a.txt"; inline' """{"lines": [1, 2]}""" ] |> json
+
+                        let removed = call f "fs.editRange" [ Value.Inline first; str "" ] |> editedOf
+                        Expect.equal (readText f "a.txt") "c\nd" "removed"
+
+                        Expect.equal
+                            (removed.Ranges |> List.map (fun r -> r.Start, r.End))
+                            [ 1, 0 ]
+                            "an empty range where they were"
+
+                    testCase "edits of files content exclusions keep from models are refused before anything is read"
+                    <| fun () ->
+                        let exclusions =
+                            match
+                                Fx.Models.Exclusions.create
+                                    [
+                                        {
+                                            Origin = "host"
+                                            Patterns = [ "*.env" ]
+                                        }
+                                    ]
+                            with
+                            | Ok e -> e
+                            | Error issues -> failtest (string issues)
+
+                        let excluding =
+                            { settings with
+                                Exclusions = exclusions
+                            }
+
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace ".env", "TOKEN=SECRET\n")
+
+                        let callWith (binding: string) (args: Value list) =
+                            run
+                                f.Env
+                                (HostBinding.dispatch
+                                    (CoreBindings.all excluding)
+                                    {
+                                        CellId = Some "c1"
+                                        Binding = binding
+                                        Args = args
+                                    })
+
+                        let range =
+                            Json.Object
+                                [
+                                    "path", Json.String ".env"
+                                    "start", Json.int 1
+                                    "end", Json.int 1
+                                    "text", Json.String "x\n"
+                                    "digest", Json.String(string (BlobHash.ofBytes [| 1uy |]))
+                                    "lines", Json.int 1
+                                ]
+
+                        for binding, args in
+                            [
+                                "fs.read", [ str ".env"; inline' """{"lines": [1, 1]}""" ]
+                                "fs.edit", [ str ".env"; Value.Inline(change "SECRET" "x") ]
+                                "fs.editRange", [ Value.Inline range; str "x" ]
+                            ] do
+                            match callWith binding args with
+                            | Error(HostCallError.Failed("excluded", message, _)) ->
+                                Expect.isFalse (message.Contains "SECRET") $"{binding}: no content"
+                            | other -> failtest $"{binding}: {other}"
+
+                        Expect.equal (readText f ".env") "TOKEN=SECRET\n" "unchanged"
+
+                    testCase "a file that changed between the read and the write is not overwritten"
+                    <| fun () ->
+                        let f = fakes (fun _ -> None)
+                        f.Fs.AddText(inWorkspace "a.txt", "a\n")
+                        let ops = f.Env.FsOps
+
+                        let racing: Fx.Envd.FsOps =
+                            { ops with
+                                ApplyPatch =
+                                    fun patches cancellation ->
+                                        f.Fs.AddText(inWorkspace "a.txt", "changed\n")
+                                        ops.ApplyPatch patches cancellation
+                            }
+
+                        let result =
+                            run
+                                { f.Env with FsOps = racing }
+                                (HostBinding.dispatch
+                                    (CoreBindings.all settings)
+                                    {
+                                        CellId = None
+                                        Binding = "fs.edit"
+                                        Args = [ str "a.txt"; Value.Inline(change "a" "b") ]
+                                    })
+
+                        Expect.equal (failedCode result) "stale" "stale"
+                        Expect.equal (readText f "a.txt") "changed\n" "kept"
+                ]
+
             testCase "the declarations name every binding with its schemas"
             <| fun () ->
                 let paths = CoreBindings.all<Env> settings |> List.map (fun b -> b.Decl.Path)
 
-                Expect.equal paths [ "shell.run"; "fs.read"; "fs.write"; "fs.list"; "fs.stat"; "fs.patch" ] "paths"
+                Expect.equal
+                    paths
+                    [
+                        "shell.run"
+                        "fs.read"
+                        "fs.write"
+                        "fs.list"
+                        "fs.stat"
+                        "fs.patch"
+                        "fs.edit"
+                        "fs.editRange"
+                    ]
+                    "paths"
         ]
