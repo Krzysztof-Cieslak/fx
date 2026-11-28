@@ -1125,6 +1125,20 @@ module ShellSyntax =
             | Some reason -> CommandLine.Opaque reason
             | None -> CommandLine.Parsed(List.ofSeq cursor.Commands)
 
+    /// The words of a line the dialect's shell runs as one simple command, as written: no pipes,
+    /// lists, substitutions, redirections (but to the null device) or expansions. How `shell.run`
+    /// tells a plain search (`CoreSettings.Words`); `None` for anything else.
+    let words (dialect: ShellDialect) (text: string) : string list option =
+        match parse dialect text with
+        | CommandLine.Parsed [ command ] when
+            command.Writes.IsEmpty
+            && command.Reads.IsEmpty
+            && not command.Words.IsEmpty
+            && command.Words |> List.forall (fun w -> not w.Expands)
+            ->
+            Some(command.Words |> List.map _.Text)
+        | _ -> None
+
     /// Text as one line of words: control characters and runs of white space become single spaces.
     let normalize (text: string) : string =
         let builder = StringBuilder(text.Length)

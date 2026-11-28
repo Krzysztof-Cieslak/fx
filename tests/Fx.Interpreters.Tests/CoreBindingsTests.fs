@@ -18,6 +18,18 @@ open Fx.Store
 
 let private settings = CoreSettings.defaults workspace os
 
+/// The settings with command lines split as a shell would, roughly: CodeAct's `ShellSyntax.words`
+/// is tested with it; here a line with any of the shell's operators is not one simple command.
+let private searchSettings =
+    { settings with
+        Words =
+            fun line ->
+                if line.IndexOfAny([| '|'; '&'; ';'; '<'; '>'; '$'; '`'; '('; ')' |]) >= 0 then
+                    None
+                else
+                    Some(line.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray)
+    }
+
 let private inline' (text: string) = Value.Inline(parse text)
 let private str (text: string) = Value.Inline(Json.String text)
 
@@ -251,9 +263,9 @@ let tests =
 
                         Expect.isFalse
                             (match result with
-                             | Json.Object m -> m |> List.exists (fun (n, _) -> n = "exitCode")
+                             | Json.Object m -> m |> List.exists (fun (n, _) -> n = "exitCode" || n = "matches")
                              | _ -> true)
-                            "no exit code"
+                            "no exit code, no matches"
 
                     testCase "a command stopped before its end is killed"
                     <| fun () ->
@@ -841,6 +853,230 @@ let tests =
                 ]
 
             testList
+                "searches"
+                [
+                    // The files a search finds in, and a shell that prints what grep would.
+                    let searching (printed: string) =
+                        let f =
+                            fakes (fun command ->
+                                match command.Spec.Program with
+                                | Program.Script "false" -> Some(Ok(ScriptedShell.output 1 printed ""))
+                                | _ -> Some(ScriptedShell.ok printed))
+
+                        f.Fs.AddText(inWorkspace "src/retry.ts", "let a = 1\nretry(3)\nlet b = 2\n")
+                        f.Fs.AddText(inWorkspace "src/loop.ts", "retry(1)\r\nwhile (true) {}\r\n")
+                        f.Fs.AddText(inWorkspace ".env", "retry=SECRET\n")
+                        f
+
+                    let searchWith (settings: CoreSettings) (f: Fakes) (command: string) =
+                        run
+                            f.Env
+                            (HostBinding.dispatch
+                                (CoreBindings.all settings)
+                                {
+                                    CellId = None
+                                    Binding = "shell.run"
+                                    Args = [ str command ]
+                                })
+                        |> json
+
+                    let search = searchWith searchSettings
+
+                    let matches (result: Json) : FileRange list =
+                        match result with
+                        | Json.Object members ->
+                            match members |> List.tryFind (fun (n, _) -> n = "matches") with
+                            | Some(_, value) ->
+                                match Codec.decode (Codec.list CoreBindings.Codecs.fileRange) value with
+                                | Ok ranges -> ranges
+                                | Error issues -> failtest (string issues)
+                            | None -> []
+                        | _ -> failtest $"not an object: {Json.serialize result}"
+
+                    let found = "src/retry.ts:2:retry(3)\nsrc/loop.ts:1:retry(1)\r\n"
+
+                    testCase "a plain search's lines come back as ranges of their files"
+                    <| fun () ->
+                        let f = searching found
+                        let result = search f "grep -rn retry src"
+                        let ranges = matches result
+                        Expect.equal (field "stdout" result |> text) found "its output, as it printed it"
+
+                        Expect.equal
+                            (ranges |> List.map (fun r -> r.Path, r.Start, r.End, r.Text, r.Lines))
+                            [
+                                "src/retry.ts", 2, 2, "retry(3)\n", 3
+                                "src/loop.ts", 1, 1, "retry(1)\r\n", 2
+                            ]
+                            "one-line ranges, with the files' own line endings"
+
+                        Expect.equal
+                            ranges.Head.Digest
+                            (BlobHash.ofBytes (Encoding.UTF8.GetBytes "let a = 1\nretry(3)\nlet b = 2\n"))
+                            "the file's digest"
+
+                    testCase "one file searched: its lines without the file's name"
+                    <| fun () ->
+                        let f = searching "2:retry(3)\n"
+
+                        for command in [ "grep -n retry src/retry.ts"; "rg -n -e retry src/retry.ts" ] do
+                            Expect.equal
+                                (matches (search f command) |> List.map (fun r -> r.Path, r.Start))
+                                [ "src/retry.ts", 2 ]
+                                command
+
+                    testCase "paths relative to the command's working directory"
+                    <| fun () ->
+                        let f = searching "retry.ts:2:retry(3)\n../src/loop.ts:1:retry(1)\n"
+
+                        let result =
+                            run
+                                f.Env
+                                (HostBinding.dispatch
+                                    (CoreBindings.all searchSettings)
+                                    {
+                                        CellId = None
+                                        Binding = "shell.run"
+                                        Args = [ str "git grep -n retry -- . ../src"; inline' """{"cwd": "src"}""" ]
+                                    })
+                            |> json
+
+                        Expect.equal
+                            (matches result |> List.map (fun r -> r.Path, r.Start))
+                            [ "src/retry.ts", 2; "src/loop.ts", 1 ]
+                            "relative to the workspace"
+
+                    testCase "a match is a range fs.editRange takes"
+                    <| fun () ->
+                        let f = searching found
+                        let first = matches (search f "rg -n retry") |> List.head
+
+                        let edited =
+                            call
+                                f
+                                "fs.editRange"
+                                [ Value.Inline(CoreBindings.Codecs.fileRange.Encode first); str "retry(5)" ]
+                            |> json
+
+                        Expect.equal (field "replacements" edited) (Json.int 1) "replaced"
+                        Expect.equal (readText f "src/retry.ts") "let a = 1\nretry(5)\nlet b = 2\n" "the line"
+
+                    testCase "no matches unless every line is its file's line"
+                    <| fun () ->
+                        let none (why: string) (f: Fakes) (command: string) =
+                            Expect.isEmpty (matches (search f command)) why
+
+                        // What the command line says.
+                        none "not a search" (searching found) "cat src/retry.ts"
+                        none "without -n" (searching found) "grep -r retry src"
+                        none "a pipe" (searching found) "grep -rn retry src | head"
+                        none "a count" (searching found) "grep -rnc retry src"
+                        none "file names only" (searching found) "grep -rnl retry src"
+                        none "files without" (searching found) "rg -n --files-without-match retry"
+                        none "only the matching parts" (searching found) "rg -no retry"
+                        none "context" (searching found) "grep -rn -C 2 retry src"
+                        none "context, long" (searching found) "rg -n --context=2 retry"
+                        none "inverted" (searching found) "git grep -nv retry"
+                        none "standard input" (searching "2:retry(3)\n") "grep -n retry"
+                        none "a failed command" (searching found) "false"
+                        none "a list of commands" (searching found) "grep -rn retry src || false"
+
+                        // What it printed.
+                        none
+                            "a line that is not its file's (it changed since)"
+                            (searching "src/retry.ts:2:retry(4)\n")
+                            "grep -rn retry src"
+
+                        none "a line past the end" (searching "src/retry.ts:9:retry(3)\n") "grep -rn retry src"
+                        none "a file that is not there" (searching "src/gone.ts:1:retry(3)\n") "grep -rn retry src"
+                        none "a path with a colon" (searching "src/a:b.ts:2:retry(3)\n") "grep -rn retry src"
+
+                        none
+                            "a line that is not a file line"
+                            (searching (found + "Binary file x matches\n"))
+                            "grep -rn retry src"
+
+                        let outside = searching (path [ "etc"; "hosts" ] + ":1:retry\n")
+                        outside.Fs.AddText(path [ "etc"; "hosts" ], "retry\n")
+                        none "outside the workspace" outside "grep -rn retry /etc"
+
+                        let many = String.replicate (Searches.MaxMatches + 1) "src/retry.ts:2:retry(3)\n"
+                        none "more lines than the bound" (searching many) "grep -rn retry src"
+
+                        let cut = { searchSettings with OutputChars = 30 }
+
+                        Expect.isEmpty
+                            (matches (searchWith cut (searching found) "grep -rn retry src"))
+                            "output that was cut"
+
+                    testCase "excluded files and files the sandbox denies give none"
+                    <| fun () ->
+                        let exclusions =
+                            match
+                                Fx.Models.Exclusions.create
+                                    [
+                                        {
+                                            Origin = "host"
+                                            Patterns = [ "*.env" ]
+                                        }
+                                    ]
+                            with
+                            | Ok e -> e
+                            | Error issues -> failtest (string issues)
+
+                        let printed = ".env:1:retry=SECRET\n"
+
+                        let f = searching printed
+
+                        Expect.isEmpty
+                            (matches (
+                                searchWith
+                                    { searchSettings with
+                                        Exclusions = exclusions
+                                    }
+                                    f
+                                    "grep -rn retry ."
+                            ))
+                            "excluded"
+
+                        let policy: SandboxPolicy =
+                            {
+                                Workspace = workspace
+                                WorkspaceAccess = WorkspaceAccess.ReadWrite
+                                Writable = []
+                                Readable = []
+                                Protected = []
+                                Denied = [ inWorkspace ".env" ]
+                                Temp = None
+                                Network = NetworkAccess.Allowed
+                            }
+
+                        Expect.isEmpty
+                            (matches (
+                                searchWith
+                                    { searchSettings with
+                                        Sandbox = Some policy
+                                    }
+                                    f
+                                    "grep -rn retry ."
+                            ))
+                            "denied"
+
+                        Expect.equal
+                            (matches (
+                                searchWith
+                                    { searchSettings with
+                                        Sandbox = Some policy
+                                    }
+                                    (searching found)
+                                    "grep -rn retry src"
+                             )
+                             |> List.length)
+                            2
+                            "the rest of the workspace is readable"
+                ]
+
+            testList
                 "shell.run on this machine"
                 [
                     let withWorkspace (body: Env -> CoreSettings -> unit) =
@@ -860,7 +1096,7 @@ let tests =
                             }
 
                         try
-                            body env { settings with Workspace = dir }
+                            body env { searchSettings with Workspace = dir }
                         finally
                             try
                                 IO.Directory.Delete(dir, true)
@@ -919,6 +1155,44 @@ let tests =
                                 waited <- waited + 1
 
                             Expect.isFalse (alive child) "its child was killed")
+
+                    testCase "a plain search's matches, checked against the files"
+                    <| fun () ->
+                        if OperatingSystem.IsWindows() then
+                            skiptest "grep: Windows has no grep (git grep needs a repository)"
+
+                        withWorkspace (fun env settings ->
+                            IO.Directory.CreateDirectory(IO.Path.Combine(settings.Workspace, "src"))
+                            |> ignore
+
+                            IO.File.WriteAllText(IO.Path.Combine(settings.Workspace, "src", "a.ts"), "x\nretry(3)\n")
+                            IO.File.WriteAllText(IO.Path.Combine(settings.Workspace, "b.ts"), "retry(1)\r\ny\r\n")
+
+                            let result = shellRun env settings "grep -rn retry ." "{}"
+
+                            let ranges =
+                                match result with
+                                | Json.Object members ->
+                                    match members |> List.tryFind (fun (n, _) -> n = "matches") with
+                                    | Some(_, value) ->
+                                        match Codec.decode (Codec.list CoreBindings.Codecs.fileRange) value with
+                                        | Ok ranges -> ranges
+                                        | Error issues -> failtest (string issues)
+                                    | None -> failtest $"no matches: {Json.serialize result}"
+                                | _ -> failtest "not an object"
+
+                            Expect.equal
+                                (ranges |> List.map (fun r -> r.Path, r.Start, r.Text) |> List.sort)
+                                [ "b.ts", 1, "retry(1)\r\n"; "src/a.ts", 2, "retry(3)\n" ]
+                                "both lines"
+
+                            let piped = shellRun env settings "grep -rn retry . | sort" "{}"
+
+                            Expect.isFalse
+                                (match piped with
+                                 | Json.Object m -> m |> List.exists (fun (n, _) -> n = "matches")
+                                 | _ -> true)
+                                "a pipe: none")
                 ]
 
             testCase "the declarations name every binding with its schemas"

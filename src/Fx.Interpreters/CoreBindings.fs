@@ -87,10 +87,14 @@ type RunResult =
         /// Output was left out of `Stdout` or `Stderr`.
         Truncated: bool
         TimedOut: bool
+        /// For a plain search (`grep -n`, `rg -n`, `git grep -n`; spec §6.7), the lines it printed as
+        /// one-line ranges of files in the workspace, each checked against its file: all of them or
+        /// none (`Searches`).
+        Matches: FileRange list
     }
 
     override this.ToString() =
-        $"RunResult({this.Command}: exit {this.ExitCode}, timed out {this.TimedOut})"
+        $"RunResult({this.Command}: exit {this.ExitCode}, timed out {this.TimedOut}, {this.Matches.Length} matches)"
 
 /// What `fs.edit` and `fs.editRange` did to a file: its new digest and line count, how many
 /// occurrences were replaced, and a fresh range for the lines each change left.
@@ -148,6 +152,14 @@ type CoreSettings =
         /// Files `fs.read` refuses (`excluded`): content exclusions (spec §6.5, §18), matched on the
         /// path relative to the workspace, with the case rules of the environment's filesystem.
         Exclusions: Fx.Models.Exclusions
+        /// The words of a command line that the environment's shell runs as one simple command, as
+        /// written (no pipes, lists, substitutions, redirections or expansions), else `None`: how
+        /// `shell.run` tells a plain search (`Searches.recognize`). CodeAct reads lines with
+        /// `ShellSyntax`; the defaults recognize none.
+        Words: string -> string list option
+        /// The policy a sandbox driver confines commands with, if one does: a search's matches are
+        /// only checked in files it lets them read.
+        Sandbox: SandboxPolicy option
     }
 
     override this.ToString() = $"CoreSettings({this.Workspace})"
@@ -163,6 +175,8 @@ module CoreSettings =
             OutputChars = 16000
             ReadBytes = 1024 * 1024
             Exclusions = Fx.Models.Exclusions.none
+            Words = fun _ -> None
+            Sandbox = None
         }
 
 /// The core bindings (spec §6.5 "env-side"): `shell.run`, `fs.read`, `fs.write`, `fs.list`,
@@ -350,6 +364,22 @@ module CoreBindings =
                          |> Codec.describe
                              "It ran out of time and was killed with its children; stdout and stderr hold what it printed until then.")
 
+                and! matches =
+                    let ranges =
+                        Codec.list fileRange
+                        |> Codec.describe
+                            "For a plain search (grep -n, rg -n or git grep -n, one command, nothing cut), the lines it printed as one-line ranges fs.editRange takes, each checked against its file in the workspace; absent when not every line could be."
+
+                    let spec = Field.withDefault "matches" [] ranges
+
+                    // Absent when empty, so results written before there were matches read the same.
+                    Codec.fieldOf
+                        { spec with
+                            Encode = fun value -> if List.isEmpty value then None else spec.Encode value
+                            Show = fun value -> if List.isEmpty value then None else spec.Show value
+                        }
+                        (fun r -> r.Matches)
+
                 return
                     {
                         Command = command
@@ -358,6 +388,7 @@ module CoreBindings =
                         Stderr = stderr
                         Truncated = truncated
                         TimedOut = timedOut
+                        Matches = matches
                     }
             }
             |> Codec.describe "What a command did; a non-zero exit code is not an error."
@@ -843,15 +874,105 @@ module CoreBindings =
                     return None
             })
 
+    /// A path a command printed (relative to its working directory `cwd`, or absolute) as the file
+    /// bindings show it: relative to the workspace, with `/`. `None` outside the workspace.
+    let private printedPath (settings: CoreSettings) (cwd: string) (path: string) : string option =
+        let full =
+            if RuntimeSpec.isAbsoluteOn settings.Os path then
+                path
+            else
+                cwd.TrimEnd([| '/'; '\\' |]) + string (separator settings) + path
+
+        match exclusionPath settings full with
+        | ""
+        | ".." -> None
+        | relative when relative.StartsWith "../" || Fx.Models.WorkspacePath.isAbsolute relative -> None
+        | relative -> Some relative
+
+    /// Whether the sandbox that confines commands, if one does, lets them read a workspace file: a
+    /// search's lines are only checked where the search itself could have read (else a command could
+    /// learn, line by line, what a denied file holds).
+    let private readable (settings: CoreSettings) (relative: string) : bool =
+        match settings.Sandbox with
+        | None -> true
+        | Some policy ->
+            SandboxPolicy.access policy (SandboxPath.normalize (resolve settings relative))
+            <> PathAccess.NoAccess
+
+    /// The matches of a command that printed `stdout` and exited 0, nothing cut: for a plain search
+    /// (`Searches.recognize`, on the words `CoreSettings.Words` gives), its lines as one-line ranges
+    /// of the files they name, each checked against its file as it is now (read as `fs.read` reads
+    /// it: content exclusions refuse it, the sandbox's policy too). All of them or none, so a match is
+    /// never wrong: a file outside the workspace, excluded, unreadable or too large, or a line that
+    /// differs (it changed since, or the output was not what it seemed) means none.
+    let private matchesOf<'R when 'R :> IFsOps and 'R :> IScope>
+        (settings: CoreSettings)
+        (cwd: string)
+        (command: string)
+        (stdout: string)
+        : Eff<'R, FileRange list> =
+        eff {
+            let printed =
+                settings.Words command
+                |> Option.bind (Searches.recognize settings.Os)
+                |> Option.bind (fun form -> Searches.parse form stdout)
+
+            match printed with
+            | None -> return []
+            | Some lines ->
+                // Each file once, in the order the search printed them.
+                let files = Collections.Generic.Dictionary<string, string * Read * string array>()
+                let mutable usable = true
+
+                for path in lines |> List.map _.Path |> List.distinct do
+                    if usable then
+                        match printedPath settings cwd path with
+                        | Some relative when readable settings relative ->
+                            match! readText settings relative "" with
+                            | Ok file -> files[path] <- (relative, file, Array.ofList (TextEdits.lines file.Text))
+                            | Error _ -> usable <- false
+                        | _ -> usable <- false
+
+                if not usable then
+                    return []
+                else
+                    let ranges =
+                        lines
+                        |> List.map (fun line ->
+                            let relative, file, fileLines = files[line.Path]
+
+                            let text = if line.Line = 1 then withoutBom line.Text else line.Text
+
+                            if line.Line <= fileLines.Length && fileLines[line.Line - 1] = text then
+                                Some(
+                                    {
+                                        Path = relative
+                                        Start = line.Line
+                                        End = line.Line
+                                        Text = TextEdits.slice file.Text line.Line line.Line
+                                        Digest = file.Digest
+                                        Lines = lineCount file.Text
+                                    }
+                                    : FileRange
+                                )
+                            else
+                                None)
+
+                    if ranges |> List.forall Option.isSome then
+                        return List.choose id ranges
+                    else
+                        return []
+        }
+
     /// `shell.run(command, options?)`: runs a command line with the environment's shell (`/bin/sh`;
     /// PowerShell 7 on Windows) in the workspace. Past `options.timeoutMs` the command is killed with
-    /// its children and keeps what it printed.
-    let shellRun<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
+    /// its children and keeps what it printed; a plain search also gets its `matches`.
+    let shellRun<'R when 'R :> IShell and 'R :> IFsOps and 'R :> IClock and 'R :> IScopeWith<'R>>
         (settings: CoreSettings)
         : HostBinding<'R> =
         HostBinding.create2
             "shell.run"
-            "Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it."
+            "Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it. A plain search (grep -n, rg -n or git grep -n) also returns its lines as matches, ranges fs.editRange takes."
             (Arg.required "command" "The command line." Codec.string, Arg.optional "options" "" Codecs.runOptions)
             Codecs.runResult
             (fun (command, options) ->
@@ -887,6 +1008,11 @@ module CoreBindings =
                         let stdout, cutOut = bound settings.OutputChars (utf8.GetString printed.Stdout)
                         let stderr, cutErr = bound settings.OutputChars (utf8.GetString printed.Stderr)
 
+                        let! matches =
+                            match exitCode with
+                            | Some 0 when not cutOut -> matchesOf settings cwd command stdout
+                            | _ -> Eff.ret []
+
                         return
                             Ok
                                 {
@@ -896,6 +1022,7 @@ module CoreBindings =
                                     Stderr = stderr
                                     Truncated = cutOut || cutErr
                                     TimedOut = exitCode.IsNone
+                                    Matches = matches
                                 }
                 })
 

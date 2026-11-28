@@ -771,6 +771,8 @@ type CodeAct<'R, 'K
                         CommandEnv = hands.CommandEnv
                         OutputChars = settings.OutputChars
                         Exclusions = exclusions
+                        Words = ShellSyntax.words (Workplace.create hands.Workspace hands.Os).Shell
+                        Sandbox = hands.Sandbox
                     }
 
                 let limits: KernelLimits =

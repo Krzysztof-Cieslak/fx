@@ -10,6 +10,7 @@
     <Compile Include="Conformance\InterpreterConformance.fs" />
     <Compile Include="BridgeTests.fs" />
     <Compile Include="TextEditsTests.fs" />
+    <Compile Include="SearchesTests.fs" />
     <Compile Include="CoreBindingsTests.fs" />
     <Compile Include="AssetsTests.fs" />
     <Compile Include="InterpreterTests.fs" />

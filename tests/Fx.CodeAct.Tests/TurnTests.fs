@@ -280,6 +280,85 @@ let tests =
                         ()
             }
 
+            testTask
+                "a search's matches are ranges a cell edits; bash and cells say how; a command cut at its timeout keeps its output" {
+                if OperatingSystem.IsWindows() then
+                    skiptest "grep: Windows has no grep (the bindings' tests cover searches and timeouts there)"
+
+                do!
+                    within
+                        "searches"
+                        [ "agent.actionSurface", Json.String "hybrid" ]
+                        (fun f ->
+                            task {
+                                f.Write("src/a.ts", "x\nretry(3)\n")
+                                f.Write("b.ts", "retry(1)\n")
+
+                                // The match fs.editRange gets: line 2 of src/a.ts as the search found it.
+                                let range =
+                                    Json.serialize (
+                                        Json.Object
+                                            [
+                                                "path", Json.String "src/a.ts"
+                                                "start", Json.int 2
+                                                "end", Json.int 2
+                                                "text", Json.String "retry(3)\n"
+                                                "digest",
+                                                Json.String(
+                                                    string (
+                                                        Fx.Store.BlobHash.ofBytes (
+                                                            Text.Encoding.UTF8.GetBytes "x\nretry(3)\n"
+                                                        )
+                                                    )
+                                                )
+                                                "lines", Json.int 2
+                                            ]
+                                    )
+
+                                f.Model.AddAll
+                                    [
+                                        Say.tool "bash" [ "command", Json.String "grep -rn retry ." ]
+                                        Say.cell
+                                            "// intent: find it\ncall found = shell.run [\"grep -n retry src/a.ts\"]\nfound"
+                                        Say.cell
+                                            $"// intent: change it\ncall e = fs.editRange [{range}, \"retry(5)\"]\ne"
+                                        Say.tool
+                                            "bash"
+                                            [
+                                                "command", Json.String "echo started; sleep 30"
+                                                "timeoutMs", Json.int 1000
+                                            ]
+                                        Say.finish "Retried five times"
+                                    ]
+
+                                do! kickoff f "Retry five times"
+                                let! _ = ended f "s1" 1
+                                Expect.equal (f.Read "src/a.ts") "x\nretry(5)\n" "the match was edited"
+                                let g = Fx.Product.kernelGlobal
+
+                                match receipts f "s1" with
+                                | bash :: cell :: _ :: cut :: _ ->
+                                    Expect.stringContains (text bash) "./src/a.ts:2:retry(3)" "its output"
+
+                                    Expect.stringContains
+                                        (text bash)
+                                        $"[2 matches, each checked against its file: `edit` one with its line as `old`; in a cell, `{g}.shell.run` gives them as `matches`"
+                                        "bash says how"
+
+                                    Expect.stringContains (text cell) "2:retry(3)" "the cell's search"
+
+                                    Expect.stringContains
+                                        (text cell)
+                                        $"[1 match, each a line checked against its file: `{g}.fs.editRange(Out["
+                                        "the cell says how"
+
+                                    Expect.stringContains (text cut) "timed out (killed)" "cut"
+                                    Expect.stringContains (text cut) "started" "with what it printed"
+                                | other -> failtest $"{other}"
+                            })
+                        ()
+            }
+
             testTask "a rejected finish comes back to the model with the reasons, and it finishes again" {
                 do!
                     within
