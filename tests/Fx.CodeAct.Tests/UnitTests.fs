@@ -238,6 +238,7 @@ let tests =
                         Stderr = ""
                         Truncated = false
                         TimedOut = false
+                        Matches = []
                     }
 
                 let ranJson = CoreBindings.Codecs.runResult.Encode ran
@@ -327,6 +328,7 @@ let tests =
                         Stderr = "oops\n"
                         Truncated = false
                         TimedOut = false
+                        Matches = []
                     }
 
                 let shownRan =
@@ -337,6 +339,44 @@ let tests =
                     shownRan
                     "(RunResult):\n$ ls\nexit code 1\na.txt\n[stderr]\noops"
                     "as bash shows it"
+
+                Expect.isFalse (shownRan.Contains "editRange") "no matches, no hint"
+
+                let found: RunResult =
+                    { ran with
+                        Command = "grep -n retry a.txt"
+                        ExitCode = Some 0
+                        Stdout = "2:retry\n"
+                        Stderr = ""
+                        Matches =
+                            [
+                                {
+                                    Path = "a.txt"
+                                    Start = 2
+                                    End = 2
+                                    Text = "retry\n"
+                                    Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                                    Lines = 3
+                                }
+                            ]
+                    }
+
+                let g = Fx.Product.kernelGlobal
+
+                let shownFound =
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Ran found)) result
+                    |> text
+
+                Expect.stringContains
+                    shownFound
+                    $"exit code 0\n2:retry\n[1 match, each a line checked against its file: `{g}.fs.editRange(Out[\"t1-s1-1\"].matches[0], text)` replaces the first one's line.]"
+                    "a search's value ends with how to edit a match"
+
+                match Receipts.ran 1000 found with
+                | [ Piece.Text _; Piece.Text _; Piece.Text hint ] ->
+                    Expect.stringStarts hint "[1 match, each checked against its file: `edit` one" "bash's hint"
+                    Expect.stringContains hint $"`{g}.fs.editRange`" "and the cells' way"
+                | other -> failtest $"{other}"
 
                 let file: FileText =
                     {

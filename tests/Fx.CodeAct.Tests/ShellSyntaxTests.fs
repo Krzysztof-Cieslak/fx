@@ -258,6 +258,38 @@ let tests =
                 ]
 
             testList
+                "one simple command (shell.run's plain searches)"
+                [
+                    test "its words, as written" {
+                        let words = ShellSyntax.words ShellDialect.Sh
+
+                        Expect.equal
+                            (words "grep -rn 'retry (' src")
+                            (Some [ "grep"; "-rn"; "retry ("; "src" ])
+                            "quoted"
+
+                        Expect.equal
+                            (words "rg -n retry *.ts 2>/dev/null")
+                            (Some [ "rg"; "-n"; "retry"; "*.ts" ])
+                            "a glob, errors dropped"
+
+                        Expect.equal (words "grep -rn retry src | head") None "a pipe"
+                        Expect.equal (words "cd src && grep -rn retry .") None "a list"
+                        Expect.equal (words "grep -rn retry src > out.txt") None "redirected"
+                        Expect.equal (words "grep -rn \"$PATTERN\" src") None "expanded"
+                        Expect.equal (words "grep -rn $(cat p) src") None "a substitution"
+                        Expect.equal (words "if true; then grep -rn x .; fi") None "opaque"
+
+                        Expect.equal
+                            (ShellSyntax.words ShellDialect.PowerShell "git grep -n retry")
+                            (Some [ "git"; "grep"; "-n"; "retry" ])
+                            "PowerShell"
+
+                        Expect.equal (ShellSyntax.words ShellDialect.PowerShell "rg -n $x") None "a PowerShell variable"
+                    }
+                ]
+
+            testList
                 "properties"
                 [
                     test "lines of plain commands split into exactly those commands, in order" {

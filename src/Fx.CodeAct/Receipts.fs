@@ -457,7 +457,27 @@ module Receipts =
 
         $"$ {result.Command}\n{ending}", streams
 
-    /// `bash`'s receipt: the command, how it ended and its output (bounded already).
+    let private matchCount (result: RunResult) =
+        if result.Matches.Length = 1 then
+            "1 match"
+        else
+            $"{result.Matches.Length} matches"
+
+    /// The line a search's receipt ends with (T142): how to edit what it found. `bash`'s, whose
+    /// result the model cannot reach from a cell.
+    let private bashMatches (result: RunResult) : string =
+        let g = Fx.Product.kernelGlobal
+
+        $"[{matchCount result}, each checked against its file: `edit` one with its line as `old`; in a cell, `{g}.shell.run` gives them as `matches`, ranges `{g}.fs.editRange` replaces.]"
+
+    /// A cell's, whose value is `Out[cell]`.
+    let private cellMatches (label: string) (result: RunResult) : string =
+        let g = Fx.Product.kernelGlobal
+
+        $"[{matchCount result}, each a line checked against its file: `{g}.fs.editRange({label}.matches[0], text)` replaces the first one's line.]"
+
+    /// `bash`'s receipt: the command, how it ended and its output (bounded already); a search's
+    /// matches add how to edit them.
     let ran (maxChars: int) (result: RunResult) : Piece list =
         let header, streams = ranParts result
 
@@ -465,6 +485,8 @@ module Receipts =
             Piece.Text header
             if streams <> "" then
                 Piece.output maxChars streams
+            if not result.Matches.IsEmpty then
+                Piece.Text(bashMatches result)
         ]
 
     /// Text cut to `maxChars` (head and tail), as output is.
@@ -483,7 +505,17 @@ module Receipts =
         | CellValue.Text text -> $"Value of {label} (string, {text.Length} chars):\n" + bounded outputChars text
         | CellValue.Ran result ->
             let header, streams = ranParts result
-            lines [ $"Value of {label} (RunResult):"; header; bounded outputChars streams ]
+
+            lines
+                [
+                    $"Value of {label} (RunResult):"
+                    header
+                    bounded outputChars streams
+                    (if result.Matches.IsEmpty then
+                         ""
+                     else
+                         cellMatches label result)
+                ]
         | CellValue.File file -> $"Value of {label} (FileText): {file.Path}, {file.Lines} lines, {file.Digest}"
         | CellValue.Written files ->
             let written =

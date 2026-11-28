@@ -143,6 +143,96 @@ let anchored (f: Fixture) : Task<string> =
         return "s1"
     }
 
+/// Commands: `grep -rn retry .` finds line 2 of notes.md; the others run.
+let searches (command: Fx.Effects.Command) (token: CancellationToken) : Task<Result<Output, ShellError>> =
+    match command.Spec.Program with
+    | Program.Script "grep -rn retry ." ->
+        Task.FromResult(Ok(Fx.Effects.Fakes.ScriptedShell.output 0 "./notes.md:2:retry(3)\n" ""))
+    | _ -> ran command token
+
+/// The hands' shell with `watch`: it prints a line, then nothing until it is killed; what it printed
+/// before it died comes after.
+let watching (inner: Shell) : Shell =
+    let watch () : Proc =
+        let killed =
+            TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+        let reads = ref 0
+
+        {
+            Pid = 4242
+            Write = fun _ _ -> Task.FromResult()
+            CloseStdin = fun () -> Task.FromResult()
+            Read =
+                fun cancellation ->
+                    task {
+                        reads.Value <- reads.Value + 1
+
+                        match reads.Value with
+                        | 1 -> return Some(Stdout(Text.Encoding.UTF8.GetBytes "watching\n"))
+                        | 2 ->
+                            do! killed.Task.WaitAsync cancellation
+                            return Some(Stdout(Text.Encoding.UTF8.GetBytes "stopped\n"))
+                        | 3 when killed.Task.IsCompleted -> return Some(Stdout(Text.Encoding.UTF8.GetBytes "stopped\n"))
+                        | _ -> return None
+                    }
+            Wait =
+                fun cancellation ->
+                    task {
+                        do! killed.Task.WaitAsync cancellation
+                        return 137
+                    }
+            Kill =
+                fun () ->
+                    killed.TrySetResult() |> ignore
+                    Task.FromResult()
+        }
+
+    { inner with
+        Spawn =
+            fun spec cancellation ->
+                match spec.Program with
+                | Program.Script "watch" -> Task.FromResult(Ok(watch ()))
+                | _ -> inner.Spawn spec cancellation
+    }
+
+/// T142: a command cut at its timeout keeps what it printed; a plain search's lines come back as
+/// matches (checked against the file, through envd's recorded file operations), from `bash` and from a
+/// cell, and a cell edits one by range.
+let searched (f: Fixture) : Task<string> =
+    task {
+        let notes = "# Notes\nretry(3)\n"
+        f.Fs.AddText(file "notes.md", notes)
+
+        let range =
+            Json.serialize (
+                Json.Object
+                    [
+                        "path", Json.String "notes.md"
+                        "start", Json.int 2
+                        "end", Json.int 2
+                        "text", Json.String "retry(3)\n"
+                        "digest", Json.String(string (Fx.Store.BlobHash.ofBytes (Text.Encoding.UTF8.GetBytes notes)))
+                        "lines", Json.int 2
+                    ]
+            )
+
+        f.Model.AddAll
+            [
+                Say.cell "// intent: watch a while\ncall w = shell.run [\"watch\", {\"timeoutMs\": 200}]\nw"
+                Say.tool "bash" [ "command", Json.String "grep -rn retry ." ]
+                Say.cell "// intent: find it\ncall g = shell.run [\"grep -rn retry .\"]\ng"
+                Say.cell $"// intent: change it\ncall e = fs.editRange [{range}, \"retry(5)\"]\ne"
+                Say.finish "Retried five times"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Retry five times"
+        let! ending = ended f "s1" 1
+        completed ending
+        return "s1"
+    }
+
 /// A steer sent while the model answers reaches it at the next step boundary.
 let steered (f: Fixture) : Task<string> =
     task {
@@ -412,6 +502,41 @@ let tests =
                             (System.Text.Encoding.UTF8.GetString bytes)
                             "# All notes\n1st\n2nd\n3rd\nfourth\n"
                             "edited"
+                    | Error e -> failtest (string e))
+
+            recordsAndReplays
+                "a command cut at its timeout keeps its output; a search's matches, edited by range"
+                (fun () ->
+                    createGuarded hybrid searches (Inherit []) None (fun _ _ _ hands ->
+                        Eff.ret
+                            { hands with
+                                Env =
+                                    { hands.Env with
+                                        Shell = watching hands.Env.Shell
+                                    }
+                            }))
+                searched
+                (fun f report ->
+                    Expect.equal report.Requests f.Model.Requests.Length "every request"
+
+                    let receipts =
+                        f.Store.Events(ContextLog.stream "s1")
+                        |> List.map (Fx.Store.EventLog.decode ContextLog.schema)
+                        |> List.choose (fun (r: Fx.Machines.Host.Recorded<ContextEvent>) ->
+                            match r.Event with
+                            | ContextEvent.Returned receipt ->
+                                Some(receipt.Pieces |> List.map Piece.render |> String.concat "\n")
+                            | _ -> None)
+
+                    match receipts with
+                    | cut :: bash :: cell :: _ ->
+                        Expect.stringContains cut "timed out (killed)\nwatching\nstopped" "what it printed, to its end"
+                        Expect.stringContains bash "[1 match, each checked against its file" "bash's matches"
+                        Expect.stringContains cell "[1 match, each a line checked against its file" "the cell's"
+                    | other -> failtest $"{other}"
+
+                    match (f.Fs.FsRead.ReadFile (file "notes.md") CancellationToken.None).Result with
+                    | Ok bytes -> Expect.equal (Text.Encoding.UTF8.GetString bytes) "# Notes\nretry(5)\n" "edited"
                     | Error e -> failtest (string e))
 
             recordsAndReplays "a steer delivered at the next boundary" (fun () -> create []) steered ignore2

@@ -52,7 +52,7 @@ declare namespace fx {
   /** Commands in the workspace's shell. */
   const shell: {
     /**
-     * Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it.
+     * Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it. A plain search (grep -n, rg -n or git grep -n) also returns its lines as matches, ranges fs.editRange takes.
      *
      * @param command The command line.
      */
@@ -218,6 +218,12 @@ declare namespace fx {
     truncated: boolean;
     /** It ran out of time and was killed with its children; stdout and stderr hold what it printed until then. */
     timedOut: boolean;
+    /**
+     * For a plain search (grep -n, rg -n or git grep -n, one command, nothing cut), the lines it printed as one-line ranges fs.editRange takes, each checked against its file in the workspace; absent when not every line could be.
+     *
+     * @default []
+     */
+    matches?: FileRange[];
   }
 
   /** Replaces text in a file. */

@@ -5,6 +5,7 @@ You act by writing TypeScript cells. They run one at a time in a persistent kern
 - The value of a cell's last expression comes back to you and stays available as `Out["<cell id>"]`: a string as its text, a command's result as its output and exit code, a file or lines you read as numbered lines, an edit as the lines it left, anything else as a preview. End a cell with what you want to see; print with `console.log` only to see several things. Keep large values in variables and pass them on by name; text beyond a limit is cut in the middle.
 - Put file bodies, commit messages, patches, a command's input and any text with backticks or more than a few lines in the `cell` tool's `texts`, never in a template literal: `{"code": "…", "texts": {"notes": "…"}}` makes `notes` a string constant before the code runs, with nothing to escape. Pass texts on by name.
 - Edit files with `fx.fs.edit` (text to replace, which must occur exactly once) or `fx.fs.editRange` (exactly the lines of a range you read, if they did not change since), not by rewriting whole files or splicing text by hand.
+- A plain search (`grep -n`, `rg -n` or `git grep -n` as one command, no pipes) also returns `matches`: the lines it found as one-line ranges, checked against their files, so `fx.fs.editRange(found.matches[0], text)` replaces the first without copying it. A command that times out is killed and keeps what it printed.
 - `process`, `Bun` and `require` are not globals: import what you need, e.g. `const path = await import("node:path")`.
 - End the turn with `await fx.finish(result)`, with a result of the type `finish` declares. The host checks it; if it is rejected, the call throws with the reasons: fix the result and finish again.
 
@@ -61,7 +62,7 @@ declare namespace fx {
   /** Commands in the workspace's shell. */
   const shell: {
     /**
-     * Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it.
+     * Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and waits for it. A plain search (grep -n, rg -n or git grep -n) also returns its lines as matches, ranges fs.editRange takes.
      *
      * @param command The command line.
      */
@@ -227,6 +228,12 @@ declare namespace fx {
     truncated: boolean;
     /** It ran out of time and was killed with its children; stdout and stderr hold what it printed until then. */
     timedOut: boolean;
+    /**
+     * For a plain search (grep -n, rg -n or git grep -n, one command, nothing cut), the lines it printed as one-line ranges fs.editRange takes, each checked against its file in the workspace; absent when not every line could be.
+     *
+     * @default []
+     */
+    matches?: FileRange[];
   }
 
   /** Replaces text in a file. */
