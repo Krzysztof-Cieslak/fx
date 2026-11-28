@@ -117,14 +117,27 @@ environment, `EnvClient`'s proxies.
 | Binding | Does | Returns |
 |---|---|---|
 | `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`, killed after `options.timeoutMs` | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut}`; a non-zero exit is data |
-| `fs.read(path)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`); a byte order mark dropped; not UTF-8: `notText`; a file content exclusions keep from models: `excluded` (origin and pattern as data; nothing is read, [egress.md](egress.md)) | `FileText {path, text, lines, size, digest}` |
+| `fs.read(path, options?)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`), or with `options.lines: [first, last]` only those lines (lines past the end left out; a `first` past the line after the last: `outOfRange`); a byte order mark dropped; not UTF-8: `notText`; a file content exclusions keep from models: `excluded` (origin and pattern as data; nothing is read, [egress.md](egress.md)) | `FileText {path, text, lines, size, digest, start, end}`: `text` holds lines `start` to `end` as they are in the file (their endings kept); `lines`, `size` and `digest` are the whole file's, so a `FileText` is also a `FileRange` |
 | `fs.write(path, text)` | creates the directories, then writes atomically (`FsOps.WriteAtomic`) | `Written {path, digest, lines}` |
 | `fs.list(path = ".")` | a directory's entries, by name | `FileEntry[] {path, name, kind, size}` |
 | `fs.stat(path)` | one entry; `notFound` if none | `FileEntry` |
 | `fs.patch(patches)` | envd's apply-patch: `create`, `edit` (line ranges, with the digest from `fs.read`: `stale` if the file changed), `delete`; all checked, then all written | `Written[]` |
+| `fs.edit(path, changes)` | edits by text (spec §6.8): `changes` is one `TextChange {old, new, all?}` or a list. They apply in order, each to the text the ones before it left; each `old` must occur exactly once (`missing`, `ambiguous`), or everywhere with `all`; `old = new`, or changes that leave every line as it was: `unchanged`. The lines that differ are one `fs.patch` edit, checked against the digest read (`stale` if the file changed meanwhile) | `Edited {path, digest, lines, replacements, ranges}`: a fresh `FileRange` for the lines each change left, in file order |
+| `fs.editRange(range, text)` | replaces exactly the range's lines (from `fs.read`, or a fresh range of an edit) with the lines of `text` (a final line ending optional; empty text removes them; an empty range, `end = start - 1`, inserts before `start`), if they still hold the range's text; otherwise `stale`, with the lines there now as a `FileRange` in the error's data. Same lines: `unchanged` | `Edited`, its range the new lines |
 
 - Paths are relative to the workspace (`/` or `\`; `.` and `..` resolved) or absolute in the
   environment's syntax; results show them relative, with `/`, when inside the workspace.
+- **Edits** (`TextEdits`, pure): text matches with `\n` endings (`\r\n` in the file, in `old` and in
+  `new` is `\n`), and the patch gives new lines the file's own ending (`TextPatch`), so CRLF files stay
+  CRLF. The text each replacement wrote is tracked through later changes; the whole lines around it
+  (replacements on shared lines together) become one line edit, trimmed to the lines that differ, so
+  untouched lines keep their endings and fresh ranges are exactly the changed lines. A file without a
+  final line ending keeps lacking one. `fs.edit`, `fs.editRange` and ranged reads read the whole file
+  (the digest is the whole file's) and check content exclusions before reading, as `fs.read` does.
+- **Why two edit bindings**: `fs.edit(path, changes)` and `fs.editRange(range, text)` rather than one
+  `fs.edit(string | FileRange, …)`: with one, the second argument would be `TextChange | TextChange[] |
+  string`, and the declaration could not say which goes with which; with two, each signature says
+  exactly what it takes, so the type check catches a mismatch before the cell runs.
 - Output is bounded (spec §6.6): each stream of a command keeps `OutputChars` (16 000) characters, the
   head and the tail with a marker line (`… [n chars omitted] …`), never half a surrogate pair. Overflow
   into a blob with a grep-able path is T201's.
@@ -241,6 +254,12 @@ protocol (T116) and finished here:
   `cell/check` against the generated declarations and earlier cells, `check: true`, values the host
   bound declared to the checker and names a cell could not use refused, and the prompt's examples
   type-checking (with the texts they use bound).
+- **Edits** (`tests/Fx.Interpreters.Tests`): `TextEditsTests` (changes in order, missing, ambiguous,
+  `all`, unchanged, fresh ranges, and generated cases checking that the patch always makes the text the
+  changes make, and that each range holds its edit's lines), and the bindings over fakes (ranged reads,
+  CRLF files, stale ranges, several changes in one call, exclusions, a file changed between the read and
+  the write). A TypeScript session that reads a range, replaces it, edits by text and finds a range
+  stale is in `tests/Fx.CodeAct.Tests/LiveTests.fs`; its replay in `tests/Fx.Replay.Tests`.
 
 ## Native AOT
 
@@ -257,7 +276,7 @@ environment, a missing runtime).
 |---|---|
 | A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores kept values with `recall` (done: [codeact.md](codeact.md)) | T127, T128 |
 | Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, …; `recall` is the CodeAct strategy's, T128) | their tasks (T201, T301, T213, …) |
-| `repo.*` bindings, anchored edits (`fs.edit`), readable results and smart previews | T202, T204a, T203a, T203b |
+| `repo.*` bindings and smart previews (anchored edits, `fs.edit`, are T204a's and readable results T203a's: done); the edit guard over `SeenRanges` | T202, T203b, T204b |
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |
