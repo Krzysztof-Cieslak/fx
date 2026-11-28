@@ -364,6 +364,40 @@ let tests =
                     "the job's notice starts the next turn"
             }
 
+            test "a turn that waits on a job whose notice came while it ended does not wait for ever" {
+                let drive =
+                    started
+                    |> steer alice "build it"
+                    |> send system (Command.NotifyJob("j1", "built"))
+
+                Expect.equal drive.State.Inbox.Length 1 "the notice waits in the inbox"
+
+                let drive =
+                    drive
+                    |> send system (Command.EndTurn(1, TurnResult.Waiting([ "j1"; "j2" ], "building")))
+
+                Expect.equal drive.State.AwaitingJobs [ "j2" ] "only the job still running"
+                Expect.isNone drive.State.Running "j2 runs"
+
+                let ended =
+                    started
+                    |> steer alice "build it"
+                    |> send system (Command.NotifyJob("j1", "built"))
+                    |> send system (Command.EndTurn(1, TurnResult.Waiting([ "j1" ], "building")))
+
+                Expect.isEmpty ended.State.AwaitingJobs "nothing to wait for"
+
+                match ended.State.Running with
+                | Some running ->
+                    Expect.equal running.Turn 2 "the next turn"
+
+                    Expect.equal
+                        (running.Inputs |> List.map _.Content)
+                        [ InputContent.JobFinished("j1", "built") ]
+                        "starts with the notice"
+                | None -> failtest "no turn started"
+            }
+
             test "a failed or abandoned turn holds the session" {
                 for ending in [ Command.FailTurn(1, "model down"); Command.AbandonTurn(1, "restart") ] do
                     let drive = started |> steer alice "one" |> queue alice "two" |> send system ending

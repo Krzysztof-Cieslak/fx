@@ -18,7 +18,7 @@ module SessionLog =
     /// The snapshot schema of a session's state. Bump the version whenever `SessionState`'s JSON or
     /// `Session.evolve` changes meaning: old snapshots are then ignored and rebuilt from the log.
     let snapshot: SnapshotSchema<SessionState> =
-        SnapshotSchema.create Session.StreamKind 1 Codecs.state
+        SnapshotSchema.create Session.StreamKind 2 Codecs.state
 
     /// A session's state as a projection: what actors start from and subscribers catch up with.
     let projection: Projection<SessionState, Event> =
