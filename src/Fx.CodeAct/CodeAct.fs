@@ -153,6 +153,12 @@ type CodeAct<'R, 'K
     let rangesOf (session: string) : HandleKind<string> =
         HistoryBindings.rangeKind (ranges.GetOrAdd(session, (fun _ -> HandleTable<string>())))
 
+    /// Whether a session's handle tables still have a handle: after the host restarted they are empty.
+    let liveHandle (session: string) (id: HandleId) : bool =
+        match ranges.TryGetValue session with
+        | true, table -> (table.TryFind id).IsSome
+        | _ -> false
+
     /// A session's transcript as its log holds it now: what `fx.history.*` reads collapsed ranges from.
     let transcriptOf (session: string) : Eff<'K, Transcript> =
         ContextLog.load config.Sessions config.Contexts session
@@ -264,7 +270,7 @@ type CodeAct<'R, 'K
                             fun limit kernel ->
                                 eff {
                                     let! journal = journalOf id
-                                    return! Recall.restore config.Blobs limit journal kernel
+                                    return! Recall.restore config.Blobs (liveHandle id) limit journal kernel
                                 }
                     }
 
@@ -688,7 +694,12 @@ type CodeAct<'R, 'K
                                                 info)
 
                                     do! (writerOf kernel.Session).Append($"{journaled.Key}/value", kept)
-                                    return Some(CellValue.ofValue info json record.Returned)
+
+                                    match kept with
+                                    | StepEvent.ValueKept {
+                                                              Value = KeptJson.Handle(_, typeRef, preview)
+                                                          } -> return Some(CellValue.Handle(typeRef, preview))
+                                    | _ -> return Some(CellValue.ofValue info json record.Returned)
                                 }
                             | _ -> Eff.ret None
 

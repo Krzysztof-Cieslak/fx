@@ -76,7 +76,18 @@ module Recall =
 
                             return event, Some json
                 | Ok(Value.Blob _) -> return lost "a value in the environment's blob store is not kept yet"
-                | Ok(Value.Handle _) -> return lost "a live object of the host (a handle) is not kept"
+                | Ok(Value.Handle(id, typeRef, preview)) ->
+                    // By reference (T201b): a handle has no JSON form; it comes back into a new kernel
+                    // while the session's table has it.
+                    return
+                        StepEvent.ValueKept
+                            {
+                                Call = call
+                                Cell = cell
+                                Value = KeptJson.Handle(id, typeRef, preview)
+                                Type = info.Type
+                            },
+                        None
                 | Error(KernelFailure.Refused(KernelError.TooLarge(bytes, limit))) ->
                     return lost $"its JSON has {bytes} bytes, more than {limit} (codeact.recall.maxBytes)"
                 | Error(KernelFailure.Refused(KernelError.NotEncodable(typeName, reason))) ->
@@ -131,12 +142,18 @@ module Recall =
                     | Error e -> return Error $"its stored JSON does not parse: {e}"
                 | Error e -> return Error $"its stored JSON is not readable: {e}"
             | KeptJson.Stored _, None -> return Error "it is in a blob store this host does not have"
+            | KeptJson.Handle(_, typeRef, _), _ ->
+                return
+                    Error
+                        $"it is a {typeRef}, a handle of the host, which has no JSON form: Out[{Json.quote value.Cell}] holds it, and a new kernel gets it back unless the host restarted (then it is gone)"
         }
 
     /// Puts the last `limit` kept values back into a new kernel as `Out[cell]`, oldest first; gives the
-    /// cells restored.
+    /// cells restored. A handle comes back only while `live` says the session's table has it: after the
+    /// host restarted its handles are gone (T201b).
     let restore<'K when 'K :> IScope>
         (blobs: Blobs option)
+        (live: HandleId -> bool)
         (limit: int)
         (journal: Recorded<StepEvent> list)
         (kernel: Kernel)
@@ -147,12 +164,19 @@ module Recall =
             let restored = ResizeArray<string>()
 
             for value in latest do
-                match! json blobs value with
-                | Ok json ->
-                    match! Kernel.recall kernel value.Cell (Value.Inline json) with
-                    | Ok _ -> restored.Add value.Cell
+                match value.Value with
+                | KeptJson.Handle(id, typeRef, preview) ->
+                    if live id then
+                        match! Kernel.recall kernel value.Cell (Value.Handle(id, typeRef, preview)) with
+                        | Ok _ -> restored.Add value.Cell
+                        | Error _ -> ()
+                | _ ->
+                    match! json blobs value with
+                    | Ok json ->
+                        match! Kernel.recall kernel value.Cell (Value.Inline json) with
+                        | Ok _ -> restored.Add value.Cell
+                        | Error _ -> ()
                     | Error _ -> ()
-                | Error _ -> ()
 
             return List.ofSeq restored
         }
