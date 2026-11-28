@@ -321,7 +321,6 @@ kept JSON of version 1's context events.
 
 | What | Task |
 |---|---|
-| `fx.context.pin`/`pinFile` | T201c (handles in receipts as `Piece.Ref`: T201b; reading collapsed originals back: `Originals`, T201b) |
 | Type-aware previews and outlines in receipts | T203a, T203b |
 | The edit guard over `SeenRanges` | T204b |
 | The repo map's content | T202 |
