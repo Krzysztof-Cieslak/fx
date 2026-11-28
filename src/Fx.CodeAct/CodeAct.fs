@@ -620,26 +620,37 @@ type CodeAct<'R, 'K
 
                     match record.Result with
                     | Ok result ->
-                        match result.Outcome with
-                        | CellOutcome.Completed(Some info) when record.Ended.IsNone ->
-                            let! kept =
-                                Eff.provide
-                                    env
-                                    (Recall.keep
-                                        config.Blobs
-                                        settings.InlineBytes
-                                        settings.RecallMaxBytes
-                                        running
-                                        journaled.Call
-                                        cellId
-                                        info)
+                        let! value =
+                            match result.Outcome with
+                            | CellOutcome.Completed(Some info) when record.Ended.IsNone ->
+                                eff {
+                                    let! kept, json =
+                                        Eff.provide
+                                            env
+                                            (Recall.keep
+                                                config.Blobs
+                                                settings.InlineBytes
+                                                settings.RecallMaxBytes
+                                                running
+                                                journaled.Call
+                                                cellId
+                                                info)
 
-                            do! (writerOf kernel.Session).Append($"{journaled.Key}/value", kept)
-                        | _ -> ()
+                                    do! (writerOf kernel.Session).Append($"{journaled.Key}/value", kept)
+                                    return Some(CellValue.ofValue info json record.Returned)
+                                }
+                            | _ -> Eff.ret None
+
+                        let cellLimits: CellLimits =
+                            {
+                                ReceiptChars = settings.ReceiptChars
+                                OutputChars = settings.OutputChars
+                                ReadLines = settings.ReadLines
+                            }
 
                         return
                             {
-                                Pieces = Receipts.cell settings.ReceiptChars note intent record.Reads result
+                                Pieces = Receipts.cell cellLimits note intent record.Reads value result
                                 IsError = Receipts.isError result.Outcome
                                 Restarted = Receipts.restart note
                                 Approvals = []

@@ -1,6 +1,7 @@
 namespace Fx.CodeAct
 
 open System
+open System.Security.Cryptography
 open System.Text
 open Fx.Contracts
 open Fx.Models
@@ -27,6 +28,76 @@ module Reads =
             reads
         else
             { Files = reads.Files @ [ source ] }
+
+/// What one host call of a cell returned, as the cell's receipt uses it: the binding, and the digest of
+/// the result's canonical JSON. A value the cell ends with whose JSON has that digest is that result,
+/// and its receipt shows it the way the binding's direct tool would (T203a).
+type Returned =
+    {
+        Binding: string
+        Digest: string
+    }
+
+    override this.ToString() =
+        $"{this.Binding} returned {this.Digest}"
+
+[<RequireQualifiedAccess>]
+module Returned =
+    /// The digest of a value's canonical JSON.
+    let digest (json: Json) : string =
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Json.serializeCanonical json)))
+
+    let ofResult (binding: string) (json: Json) : Returned =
+        {
+            Binding = binding
+            Digest = digest json
+        }
+
+/// How a cell's receipt shows the value the cell ended with (spec §6.6, T203a).
+[<RequireQualifiedAccess>]
+type CellValue =
+    /// The kernel's preview (`values.previewLimits`).
+    | Preview of ValueInfo
+    /// A string: the text itself, bounded as output is.
+    | Text of string
+    /// What `shell.run` returned: the command, how it ended, its output.
+    | Ran of RunResult
+    /// What `fs.read` returned: the file's lines (a file piece: they count as seen).
+    | File of FileText
+    /// What `fs.write` or `fs.patch` returned: what was written.
+    | Written of Written list
+
+    override this.ToString() =
+        match this with
+        | Preview info -> $"preview ({info.Type})"
+        | Text text -> $"text ({text.Length} chars)"
+        | Ran result -> $"ran {result.Command}"
+        | File file -> $"file {file.Path}"
+        | Written files -> $"written ({files.Length} files)"
+
+[<RequireQualifiedAccess>]
+module CellValue =
+    /// How to show a cell's value: its JSON (when the kernel encoded it) and what the cell's host calls
+    /// returned decide; anything else is the kernel's preview.
+    let ofValue (info: ValueInfo) (json: Json option) (returned: Returned list) : CellValue =
+        match json with
+        | Some(Json.String text) -> CellValue.Text text
+        | Some json ->
+            let digest = Returned.digest json
+
+            let decoded (codec: Codec<'T>) (shown: 'T -> CellValue) =
+                match codec.Decode json with
+                | Ok value -> shown value
+                | Error _ -> CellValue.Preview info
+
+            match returned |> List.tryFind (fun r -> r.Digest = digest) with
+            | Some r when r.Binding = "shell.run" -> decoded CoreBindings.Codecs.runResult CellValue.Ran
+            | Some r when r.Binding = "fs.read" -> decoded CoreBindings.Codecs.fileText CellValue.File
+            | Some r when r.Binding = "fs.write" ->
+                decoded CoreBindings.Codecs.written (fun w -> CellValue.Written [ w ])
+            | Some r when r.Binding = "fs.patch" -> decoded (Codec.list CoreBindings.Codecs.written) CellValue.Written
+            | _ -> CellValue.Preview info
+        | None -> CellValue.Preview info
 
 /// How kernels ended, in words for the model and for people (T135).
 [<RequireQualifiedAccess>]
@@ -101,6 +172,20 @@ type KernelNote =
         match this with
         | Same -> "same kernel"
         | Restarted(launch, why, restored) -> $"restarted (launch {launch}): {why} ({restored.Length} values restored)"
+
+/// The bounds of a cell's receipt.
+type CellLimits =
+    {
+        /// The whole receipt (`codeact.receipt.maxChars`).
+        ReceiptChars: int
+        /// A value shown as text (`codeact.output.maxChars`, as printed output).
+        OutputChars: int
+        /// A file's lines shown (`codeact.read.maxLines`).
+        ReadLines: int
+    }
+
+    override this.ToString() =
+        $"cell limits ({this.ReceiptChars} chars, values {this.OutputChars}, {this.ReadLines} lines)"
 
 /// Receipts (spec §5: stable, bounded when made, never re-rendered): what the model sees of an action's
 /// result. Pure.
@@ -198,38 +283,6 @@ module Receipts =
         match outcome with
         | CellOutcome.Completed _ -> false
         | _ -> true
-
-    /// A cell's receipt: what it printed, its outcome (its value's preview, or the error), the names it
-    /// declared, whether its `finish` was accepted, and a note if the kernel started afresh. Any of it
-    /// may quote what the cell read through the bridge, so it carries those files as provenance.
-    let cell
-        (maxChars: int)
-        (note: KernelNote)
-        (intent: string option)
-        (reads: Reads)
-        (result: CellResult)
-        : Piece list =
-        let text =
-            lines
-                [
-                    result.Output.Text.TrimEnd()
-                    outcomeText result.CellId result.Outcome
-                    (if result.Declared.IsEmpty then
-                         ""
-                     else
-                         "Declared: " + String.concat ", " result.Declared)
-                    (if result.Finished then
-                         "The turn's result was accepted."
-                     else
-                         "")
-                    (if intent.IsNone then
-                         "[Note: start each cell with an `// intent: …` line.]"
-                     else
-                         "")
-                ]
-
-        restarted note
-        @ [ quoted maxChars reads (if text = "" then "(no output)" else text) ]
 
     /// A cell the kernel did not answer; `ended`: how the kernel ended (after "the kernel"), if it did.
     let kernelFailed (note: KernelNote) (failure: KernelFailure) (ended: string option) : Piece list =
@@ -344,8 +397,8 @@ module Receipts =
                     }
         ]
 
-    /// `bash`'s receipt: the command, how it ended and its output (bounded already).
-    let ran (maxChars: int) (result: RunResult) : Piece list =
+    /// A command's line and how it ended, then its output: what `bash` and a cell's `RunResult` show.
+    let private ranParts (result: RunResult) : string * string =
         let ending =
             match result.ExitCode with
             | _ when result.TimedOut -> "timed out (killed)"
@@ -362,8 +415,98 @@ module Receipts =
                          "[stderr]\n" + result.Stderr.TrimEnd())
                 ]
 
+        $"$ {result.Command}\n{ending}", streams
+
+    /// `bash`'s receipt: the command, how it ended and its output (bounded already).
+    let ran (maxChars: int) (result: RunResult) : Piece list =
+        let header, streams = ranParts result
+
         [
-            Piece.Text $"$ {result.Command}\n{ending}"
+            Piece.Text header
             if streams <> "" then
                 Piece.output maxChars streams
         ]
+
+    /// Text cut to `maxChars` (head and tail), as output is.
+    let private bounded (maxChars: int) (text: string) : string =
+        match Piece.output maxChars text with
+        | Piece.Text cut -> cut
+        | _ -> text
+
+    /// What a cell's receipt says about the value it ended with (a file's lines are a piece of their own).
+    let private valueText (outputChars: int) (cellId: string) (value: CellValue) : string =
+        let label = $"Out[{Json.quote cellId}]"
+
+        match value with
+        | CellValue.Preview info -> $"Value of {label} ({info.Type}): {info.Preview.Text}"
+        | CellValue.Text "" -> $"Value of {label} (string): \"\""
+        | CellValue.Text text -> $"Value of {label} (string, {text.Length} chars):\n" + bounded outputChars text
+        | CellValue.Ran result ->
+            let header, streams = ranParts result
+            lines [ $"Value of {label} (RunResult):"; header; bounded outputChars streams ]
+        | CellValue.File file -> $"Value of {label} (FileText): {file.Path}, {file.Lines} lines, {file.Digest}"
+        | CellValue.Written files ->
+            let written =
+                files
+                |> List.map (fun w ->
+                    match w.Digest with
+                    | Some _ -> $"{w.Path} ({w.Lines} lines)"
+                    | None -> $"{w.Path} (deleted)")
+                |> String.concat ", "
+
+            $"Value of {label} (Written): {written}"
+
+    /// A cell's receipt: what it printed, the value it ended with or its error, the names it declared,
+    /// whether its `finish` was accepted, and a note if the kernel started afresh. The value shows as
+    /// `value` says (`CellValue.ofValue`): a string as its text, a command's result as `bash` shows it,
+    /// a file it read as numbered lines (a file piece: they count as seen); anything else as the
+    /// kernel's preview. The rest may quote what the cell read through the bridge, so it carries those
+    /// files as provenance.
+    let cell
+        (limits: CellLimits)
+        (note: KernelNote)
+        (intent: string option)
+        (reads: Reads)
+        (value: CellValue option)
+        (result: CellResult)
+        : Piece list =
+        let shown =
+            match result.Outcome with
+            | CellOutcome.Completed(Some info) -> Some(value |> Option.defaultValue (CellValue.Preview info))
+            | _ -> None
+
+        let outcome =
+            match shown with
+            | Some value -> valueText limits.OutputChars result.CellId value
+            | None -> outcomeText result.CellId result.Outcome
+
+        let head = lines [ result.Output.Text.TrimEnd(); outcome ]
+
+        let tail =
+            lines
+                [
+                    (if result.Declared.IsEmpty then
+                         ""
+                     else
+                         "Declared: " + String.concat ", " result.Declared)
+                    (if result.Finished then
+                         "The turn's result was accepted."
+                     else
+                         "")
+                    (if intent.IsNone then
+                         "[Note: start each cell with an `// intent: …` line.]"
+                     else
+                         "")
+                ]
+
+        match shown with
+        | Some(CellValue.File file) ->
+            restarted note
+            @ [ quoted limits.ReceiptChars reads head ]
+            @ read file None None limits.ReadLines
+            @ (if tail = "" then [] else [ Piece.Text tail ])
+        | _ ->
+            let text = lines [ head; tail ]
+
+            restarted note
+            @ [ quoted limits.ReceiptChars reads (if text = "" then "(no output)" else text) ]

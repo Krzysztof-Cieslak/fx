@@ -76,13 +76,20 @@ module Slots =
             [ EditGuard.Off, "off"; EditGuard.Warn, "warn"; EditGuard.Require, "require" ]
             EditGuard.Warn
 
-    /// `values.previewLimits`: the bounds of the previews models see (spec §6.6, §6.7).
+    /// `values.previewLimits`: the bounds of the previews models see of cells' values (spec §6.6,
+    /// §6.7): larger than the codecs' own `Limits.defaults`, so a value reads without printing it
+    /// again (T203a).
     let previewLimits: Slot<Limits> =
         Slot.create
             "values.previewLimits"
             "The bounds of value previews shown to models: characters, items, depth and string length."
             Codecs.limits
-            Limits.defaults
+            {
+                MaxChars = 4000
+                MaxItems = 50
+                MaxDepth = 4
+                MaxStringChars = 1000
+            }
 
     /// `values.inlineMaxBytes`: the largest value copied inline; larger ones travel as blob
     /// references (spec §6.6).

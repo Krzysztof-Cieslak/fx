@@ -136,7 +136,7 @@ let promptPack: PromptPack =
                         ""
                         "- Start every cell with one line `// intent: <what the cell is for>`."
                         "- Work through the `{global}` bridge declared below, e.g. `await {global}.shell.run(\"git status\")` or `await {global}.fs.read(\"src/app.ts\")`. Paths are relative to the workspace. The host checks every call: a call that fails throws an error with a `code`: `invalidArguments` (with the reasons), or `failed`, whose `data.code` says why (e.g. `notFound`)."
-                        "- The value of a cell's last expression comes back to you as a short preview and stays available as `Out[\"<cell id>\"]`. Keep large values in variables and pass them on by name instead of printing them; printed output beyond a limit is cut in the middle."
+                        "- The value of a cell's last expression comes back to you and stays available as `Out[\"<cell id>\"]`: a string as its text, a command's result as its output and exit code, a file you read as its numbered lines, anything else as a preview. End a cell with what you want to see; print with `console.log` only to see several things. Keep large values in variables and pass them on by name; text beyond a limit is cut in the middle."
                         "- `process`, `Bun` and `require` are not globals: import what you need, e.g. `const path = await import(\"node:path\")`."
                         "- End the turn with `await {global}.finish(result)`, with a result of the type `finish` declares. The host checks it; if it is rejected, the call throws with the reasons: fix the result and finish again."
                     ]
@@ -152,7 +152,7 @@ let promptPack: PromptPack =
                                 [
                                     "// intent: find the tests that mention retries"
                                     "const found = await {global}.shell.run(\"git grep -n retry -- tests\")"
-                                    "found.stdout"
+                                    "found"
                                 ]
                         )
                 }
@@ -167,7 +167,7 @@ let promptPack: PromptPack =
                                     "const file = await {global}.fs.read(\"src/retry.ts\")"
                                     "await {global}.fs.write(file.path, file.text.replaceAll(\"retryOld\", \"retryNew\"))"
                                     "const run = await {global}.shell.run(\"bun test test/retry.test.ts\")"
-                                    "run.exitCode"
+                                    "run"
                                 ]
                         )
                 }
