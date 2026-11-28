@@ -309,6 +309,7 @@ and InterpreterCaps =
 - **Activity:** semantic events (Read, Refs, Edit, Run, Test, Review, Agent, Applies D-n), best-effort wrappers, per-cell diff, content exclusions.
 - **Durability:** snapshot if supported; otherwise Jupyter semantics + journal.
 - **Lifetime:** one kernel per session, kept across cells and turns; it ends only when it is killed (an interrupt's escalation), dies, or the host stops. Every restart is journaled with how the kernel before it ended, and the model and people are told that names from earlier cells are gone, and why.
+- **Cell timeout:** counts only the cell's own time: kernels stop its clock while its host calls are in flight, so a person's wait for a grant never times a cell out; the host bounds what those calls do (a cell's commands share its timeout, measured after the grants guard). An interrupt still stops a cell at once. A cell that stopped early reports the names it declared but never assigned, and the calls it stopped while they waited for approval.
 - **Windows shell:** `fx.shell.run` defaults to **PowerShell 7** (`pwsh`), falling back to Windows PowerShell; configurable (variant).
 
 ### 6.6 Values and references

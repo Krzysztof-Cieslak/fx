@@ -231,6 +231,23 @@ host stops (T135).
 - Each cell is `t<turn>-s<step>-<k>` (`-<attempt>` when people chose to run it again after a crash), with
   its `// intent:` line, `codeact.cell.timeoutMs`, and `check` when `codeact.cell.typeCheck` is on and the
   kernel handles `cell/check`. Its receipt names its value `Out["<cell>"]`.
+- **The cell timeout and approval waits (T141).** In dogfooding (T132) cells were stopped at the
+  600-second timeout while a host call waited for a person to approve `strace`, and the receipt said
+  only "timed out". Now no wait for a person counts against a cell:
+  - the kernel counts only the cell's own time (`timeoutMs`, kernel-protocol.md): its clock stops while
+    any host call of the cell is in flight, guard and binding alike;
+  - the host bounds the cell's commands instead (`CellCommands`): `shell.run` from the running cell
+    runs for at most what is left of `codeact.cell.timeoutMs` after the cell's earlier commands (its
+    `timeoutMs` option is added, or lowered when longer; the step journal shows the bound). Their time
+    is measured around the binding, after the grants guard answered, on the hands' clock (recorded:
+    replay gives the same bounds). Once the commands used it up, the next one is refused before it
+    runs: `failed` with code `cellTimeout` and a message saying to run it in a cell of its own. A cell
+    looping over commands therefore still ends: at most twice the timeout, plus the time people take;
+  - an interrupt still stops a cell at once, waiting or not.
+
+  The host never signals the kernel from the guard (a `cell/hold` notification was planned and
+  dropped): replay answers the guard from one journal entry (`Hands.Guard`) without running it, so the
+  notification would be missing there and the kernel's input would diverge.
 
 ### `Ensure` (spec §4.3, §4.5)
 
@@ -256,7 +273,14 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 
 - **Cells**: what the cell printed, the value it ended with or its error (syntax, type, runtime,
   timeout, cancellation), the names it declared, whether its `finish` was accepted, a note when the
-  kernel was new, and a reminder when the `// intent:` line is missing. **Provenance:** the files the
+  kernel was new, and a reminder when the `// intent:` line is missing. A cell that stopped early (an
+  error, a timeout, a cancellation) lists the names it declared but never assigned apart (the kernel's
+  `unassigned`): `Declared: tk, tl` and `Not assigned (the cell stopped first): c1`, so the model does
+  not read an `undefined` name as a value next time. A timed-out or cancelled cell names each host call
+  it stopped while the guard had it wait for a person (`CellRecord.Waiting`: calls the guard had not
+  answered when the cell ended), e.g. `shell.run: strace -f ls (stopped while it waited for its
+  approval)` (`Receipts.callTitle`: the binding and its first argument, cut at 120 characters); their
+  requests are withdrawn (below, "Grants"). **Provenance:** the files the
   cell read through the bridge (`fs.read` calls attributed to its cell id) make the receipt a
   `Piece.Quote` with those sources: the egress hooks redact it, and the render withholds it, if one of
   them is excluded; it never counts as seen. What a command printed (`shell.run`) has no provenance
@@ -509,7 +533,9 @@ and a reminder not to work around a denial), or a person must decide. Then, by `
   `grants/subscribe` by session (T130); the grants log owns them, the session opens none.
 - **Waiting**: the first denial or unanswered request refuses the call and withdraws the others. An
   **interrupt** cancels the wait (a cell's host call is cancelled with the cell) and withdraws the
-  requests. A **steer** that arrives while a call waits withdraws its requests too: the call fails
+  requests, with the reason "the call was cancelled: the turn was interrupted or its cell stopped". The
+  wait never counts against the cell's timeout (above, "Kernels"), and a cell stopped while one of its
+  calls waits names the call in its receipt. A **steer** that arrives while a call waits withdraws its requests too: the call fails
   ("a message from the user arrived"), and the steer comes at the next boundary. A request times out
   after `codeact.grants.timeoutMs` (the grants service closes it), and the call is refused.
 - **A host that stops** mid-wait cancels the turn and so withdraws its requests; after a crash they stay
@@ -653,7 +679,10 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   retries, overflow, fatal errors, the step budget, content exclusions for cells and direct tools, an
   unknown tool, calls after `finish`; texts (a 50 KB F# file with double backticks and fences written
   byte for byte, names refused by the codec and by the kernel before anything runs, a conversation framed
-  with version 1 of the tools keeping them).
+  with version 1 of the tools keeping them); a cell's commands sharing its timeout (one cut at what is
+  left, the next refused), and a cell stopped while its call waits for approval (the receipt names the
+  call and what the cell never assigned); a grant answered after longer than the cell's timeout (the
+  cell completes) is in the grants turns.
 - **Grants**: the parsers (both dialects case by case; seeded random lines: plain lists split exactly,
   substitutions at any depth flattened in order, and any line split or opaque, never a crash), host
   calls as grants (`PermissionTests`), the guard over the real grants service (listed, asked and
