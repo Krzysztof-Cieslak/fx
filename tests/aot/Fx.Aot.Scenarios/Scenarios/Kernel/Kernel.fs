@@ -114,7 +114,8 @@ let private codecs () : string list =
                     Truncated = false
                     TotalChars = 2L
                 }
-            Declared = [ "x" ]
+            Declared = [ "x"; "y" ]
+            Unassigned = [ "y" ]
             Finished = true
             Notified = 2
             DurationMs = 3L

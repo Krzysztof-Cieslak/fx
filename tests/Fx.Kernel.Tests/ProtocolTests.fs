@@ -115,22 +115,59 @@ let tests =
 
             test "cell results round trip, for every outcome" {
                 for outcome in outcomes do
-                    roundTrip
-                        KernelProtocol.Codecs.cellResult
-                        {
-                            CellId = "c1"
-                            Outcome = outcome
-                            Output =
-                                {
-                                    Text = "hi\n"
-                                    Truncated = false
-                                    TotalChars = 3L
-                                }
-                            Declared = [ "x" ]
-                            Finished = false
-                            Notified = 1
-                            DurationMs = 12L
-                        }
+                    for unassigned in [ []; [ "y" ] ] do
+                        roundTrip
+                            KernelProtocol.Codecs.cellResult
+                            {
+                                CellId = "c1"
+                                Outcome = outcome
+                                Output =
+                                    {
+                                        Text = "hi\n"
+                                        Truncated = false
+                                        TotalChars = 3L
+                                    }
+                                Declared = [ "x"; "y" ]
+                                Unassigned = unassigned
+                                Finished = false
+                                Notified = 1
+                                DurationMs = 12L
+                            }
+            }
+
+            test "unassigned names are absent when there are none: older hosts read the result as before" {
+                let result unassigned =
+                    {
+                        CellId = "c1"
+                        Outcome = CellOutcome.Cancelled
+                        Output =
+                            {
+                                Text = ""
+                                Truncated = false
+                                TotalChars = 0L
+                            }
+                        Declared = [ "x" ]
+                        Unassigned = unassigned
+                        Finished = false
+                        Notified = 0
+                        DurationMs = 0L
+                    }
+
+                let members (json: Json) =
+                    match json with
+                    | Json.Object members -> members |> List.map fst
+                    | _ -> []
+
+                let none = KernelProtocol.Codecs.cellResult.Encode(result [])
+                Expect.isFalse (List.contains "unassigned" (members none)) "absent when empty"
+
+                let some = KernelProtocol.Codecs.cellResult.Encode(result [ "x" ])
+                Expect.isTrue (List.contains "unassigned" (members some)) "present otherwise"
+
+                // What a kernel without the field sends.
+                match KernelProtocol.Codecs.cellResult.Decode none with
+                | Ok decoded -> Expect.equal decoded.Unassigned [] "none"
+                | Error issues -> failtest (Issue.renderAtMost 3 issues)
             }
 
             test "errors round trip and say what happened" {

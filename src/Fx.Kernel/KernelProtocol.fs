@@ -142,7 +142,13 @@ module Codecs =
             and! intent = Codec.optionalField "intent" (fun r -> r.Intent) Codec.string
 
             and! timeout =
-                Codec.optionalField "timeoutMs" (fun r -> r.TimeoutMs) (Codec.int |> Codec.atLeast 1)
+                Codec.optionalField
+                    "timeoutMs"
+                    (fun r -> r.TimeoutMs)
+                    (Codec.int
+                     |> Codec.atLeast 1
+                     |> Codec.describe
+                         "The cell's own time limit; time spent waiting for the host to answer its host calls does not count.")
 
             and! check = Codec.defaultField "check" (fun r -> r.Check) false Codec.bool
 
@@ -288,6 +294,14 @@ module Codecs =
             and! declared =
                 Codec.defaultField "declared" (fun r -> r.Declared) [] (Codec.list Codec.string)
 
+            and! unassigned =
+                Codec.optionalField
+                    "unassigned"
+                    (fun r -> if r.Unassigned.IsEmpty then None else Some r.Unassigned)
+                    (Codec.list Codec.string
+                     |> Codec.describe
+                         "Declared names that hold no value because the cell stopped first (an error, a timeout, a cancellation); absent when none.")
+
             and! finished = Codec.defaultField "finished" (fun r -> r.Finished) false Codec.bool
             and! notified = Codec.defaultField "notified" (fun r -> r.Notified) 0 count
 
@@ -300,6 +314,7 @@ module Codecs =
                     Outcome = outcome
                     Output = output
                     Declared = declared
+                    Unassigned = defaultArg unassigned []
                     Finished = finished
                     Notified = notified
                     DurationMs = duration

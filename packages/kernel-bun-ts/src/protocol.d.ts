@@ -125,6 +125,8 @@ export interface CellResult {
   output: BoundedText;
   /** @default [] */
   declared?: string[];
+  /** Declared names that hold no value because the cell stopped first (an error, a timeout, a cancellation); absent when none. */
+  unassigned?: string[];
   /** @default false */
   finished?: boolean;
   /**
@@ -150,7 +152,10 @@ export interface CellRun {
   cellId: string;
   code: string;
   intent?: string;
-  /** Integer, at least 1. */
+  /**
+   * The cell's own time limit; time spent waiting for the host to answer its host calls does not count.
+   * Integer, at least 1.
+   */
   timeoutMs?: number;
   /** @default false */
   check?: boolean;
