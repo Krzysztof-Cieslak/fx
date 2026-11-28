@@ -207,19 +207,173 @@ let tests =
                         End = 4
                     }
 
-                match Receipts.read file (Some 2) (Some 2) 100 with
+                let bounds (lines: int) : Receipts.ReadBounds = { MaxLines = lines; MaxChars = 16000 }
+
+                match Receipts.read file (Some 2) (Some 2) (bounds 100) with
                 | [ Piece.File view; Piece.Text more ] ->
                     Expect.equal view.Text "     2\ttwo\n     3\tthree" "numbered"
                     Expect.equal view.Lines [ LineRange.create 2 3 ] "the lines shown"
                     Expect.stringContains more "Lines 2–3 of 4. Read on with offset 4." "more"
                 | other -> failtest $"{other}"
 
-                match Receipts.read file None None 100 with
+                match Receipts.read file None None (bounds 100) with
                 | [ Piece.File view ] -> Expect.isEmpty view.Lines "the whole file"
                 | other -> failtest $"{other}"
 
-                match Receipts.read file None None 3 with
-                | [ Piece.File _; Piece.Text more ] -> Expect.stringContains more "offset 4" "bounded"
+                match Receipts.read file (Some 1) None (bounds 3) with
+                | [ Piece.File _; Piece.Text more ] -> Expect.stringContains more "offset 4" "bounded, from an offset"
+                | other -> failtest $"{other}"
+
+                match Receipts.read file None None (bounds 3) with
+                | [ Piece.File head; Piece.Text gap; Piece.File tail ] ->
+                    Expect.equal head.Lines [ LineRange.create 1 1 ] "the head"
+                    Expect.equal gap "[Lines 2–3 of 4 not shown: read them with offset 2.]" "what is left out"
+                    Expect.equal tail.Lines [ LineRange.create 4 4 ] "the tail"
+                | other -> failtest $"{other}"
+            }
+
+            test "a large file shows its head and tail within the characters, and the lines left out" {
+                let lines = [ for i in 1..400 -> System.String('x', 90) + string i ]
+                let text = String.concat "\n" lines + "\n"
+
+                let file: FileText =
+                    {
+                        Path = "src/big.fs"
+                        Text = text
+                        Lines = 400
+                        Size = int64 text.Length
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = 400
+                    }
+
+                let bounds: Receipts.ReadBounds = { MaxLines = 2000; MaxChars = 4000 }
+
+                match Receipts.read file None None bounds with
+                | [ Piece.File head; Piece.Text gap; Piece.File tail ] ->
+                    Expect.isLessThanOrEqual (head.Text.Length + tail.Text.Length) 4000 "within the characters"
+                    let headLast = head.Lines.Head.Last
+                    let tailFirst = tail.Lines.Head.First
+                    Expect.equal head.Lines.Head.First 1 "from the start"
+                    Expect.equal tail.Lines.Head.Last 400 "to the end"
+
+                    Expect.equal
+                        gap
+                        $"[Lines {headLast + 1}–{tailFirst - 1} of 400 not shown: read them with offset {headLast + 1}.]"
+                        "the gap"
+                | other -> failtest $"{other}"
+
+                let minified =
+                    { file with
+                        Text = System.String('y', 50000) + "\n"
+                        Lines = 1
+                        End = 1
+                    }
+
+                match Receipts.read minified None None bounds with
+                | [ Piece.File one ] ->
+                    Expect.isLessThan one.Text.Length 2200 "a long line is cut"
+                    Expect.stringEnds one.Text "… [50000 characters]" "saying how long it is"
+                | other -> failtest $"{other}"
+            }
+
+            test "a Markdown file left out in part shows its headings, outside code fences" {
+                let body = [ for i in 1..50 -> $"text {i}" ]
+
+                let lines =
+                    [
+                        "# Title"
+                        yield! body
+                        "## Part one"
+                        "```sh"
+                        "# not a heading"
+                        "```"
+                        yield! body
+                        "### Detail"
+                        "#hashtag is not one"
+                        "    # indented code"
+                        yield! body
+                        "## Part two"
+                    ]
+
+                let text = String.concat "\n" lines + "\n"
+
+                let file: FileText =
+                    {
+                        Path = "docs/Guide.md"
+                        Text = text
+                        Lines = lines.Length
+                        Size = int64 text.Length
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = lines.Length
+                    }
+
+                Expect.equal
+                    (Receipts.markdownHeadings 1 lines)
+                    [ 1, "# Title"; 52, "## Part one"; 106, "### Detail"; 159, "## Part two" ]
+                    "headings"
+
+                let bounds: Receipts.ReadBounds = { MaxLines = 20; MaxChars = 16000 }
+
+                match Receipts.read file None None bounds with
+                | [ Piece.File _; Piece.Text _; Piece.File _; Piece.Text note; Piece.File outline ] ->
+                    Expect.equal note "[Its headings:]" "introduced"
+
+                    Expect.equal
+                        outline.Text
+                        "     1\t# Title\n    52\t## Part one\n   106\t### Detail\n   159\t## Part two"
+                        "numbered"
+
+                    Expect.equal
+                        (outline.Lines |> List.map (fun r -> r.First))
+                        [ 1; 52; 106; 159 ]
+                        "the heading lines are seen"
+                | other -> failtest $"{other}"
+
+                match Receipts.read { file with Path = "docs/guide.txt" } None None bounds with
+                | [ Piece.File _; Piece.Text _; Piece.File _ ] -> ()
+                | other -> failtest $"not Markdown: {other}"
+
+                let ranged =
+                    { file with
+                        Text = String.concat "\n" (List.take 40 lines) + "\n"
+                        End = 40
+                    }
+
+                match Receipts.read ranged None None bounds with
+                | [ Piece.File _; Piece.Text _; Piece.File _ ] -> ()
+                | other -> failtest $"a ranged read has no outline: {other}"
+            }
+
+            test "an outline of many headings keeps the upper levels" {
+                let lines =
+                    [
+                        for part in 1..10 do
+                            $"# Part {part}"
+
+                            for section in 1..9 do
+                                $"## Section {part}.{section}"
+                                "text"
+                    ]
+
+                let text = String.concat "\n" lines + "\n"
+
+                let file: FileText =
+                    {
+                        Path = "README.md"
+                        Text = text
+                        Lines = lines.Length
+                        Size = int64 text.Length
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = lines.Length
+                    }
+
+                match Receipts.read file None None { MaxLines = 10; MaxChars = 16000 } |> List.rev with
+                | Piece.File outline :: Piece.Text note :: _ ->
+                    Expect.equal note "[Its headings (10 of 100, the deeper ones left out):]" "what was left out"
+                    Expect.equal outline.Lines.Length 10 "the parts"
                 | other -> failtest $"{other}"
             }
 
@@ -283,6 +437,7 @@ let tests =
                         ReceiptChars = 20000
                         OutputChars = 200
                         ReadLines = 100
+                        ReadChars = 16000
                     }
 
                 let result: CellResult =
@@ -587,6 +742,7 @@ let tests =
                         ReceiptChars = 20000
                         OutputChars = 200
                         ReadLines = 100
+                        ReadChars = 16000
                     }
 
                 let result (outcome: CellOutcome) : CellResult =
@@ -765,6 +921,7 @@ let tests =
                         ReceiptChars = 20000
                         OutputChars = 200
                         ReadLines = 3
+                        ReadChars = 16000
                     }
 
                 let result: CellResult =
@@ -852,9 +1009,11 @@ let tests =
                         None
                         result
                 with
-                | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
-                    Expect.equal view.Lines [ LineRange.create 1 3 ] "up to the receipt's lines"
-                    Expect.stringContains more "fs.read(\"a.txt\", { lines: [4, 5] })" "how to read on"
+                | [ Piece.Text _; Piece.File head; Piece.Text gap; Piece.File tail ] ->
+                    Expect.equal head.Lines [ LineRange.create 1 1 ] "the head"
+                    Expect.equal tail.Lines [ LineRange.create 5 5 ] "the tail"
+                    Expect.stringContains gap "Lines 2–4 of 10 not shown" "what is left out"
+                    Expect.stringContains gap "fs.read(\"a.txt\", { lines: [2, 4] })" "how to read it"
                 | other -> failtest $"{other}"
 
                 let edited: Edited =

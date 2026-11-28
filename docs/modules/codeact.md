@@ -359,7 +359,9 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
     `fx.fs.editRange(Out["t1-s2-1"].matches[0], text)` replaces the first one's line.]``;
     `fs.read`'s `FileText` as `read` shows it (numbered lines in a `Piece.File` from the line it
     starts at, so a ranged read counts exactly its lines as seen, and exclusions withhold them;
-    `codeact.read.maxLines` at most, then how to read on),
+    within `codeact.read.maxLines` and `codeact.read.maxChars`: a read that does not fit shows its
+    head and its tail, half the bounds each, the lines left out and the `fx.fs.read(path, { lines })`
+    that reads them, and for a whole Markdown file its headings (T203b, below),
     `fs.edit`'s and `fs.editRange`'s `Edited` as `edit` shows it (what changed, then each fresh range's
     lines as a `Piece.File`, up to `codeact.read.maxLines` lines in all), `fs.write` and `fs.patch` as
     the files written; `repo.grep`'s `GrepResult` (T202) as ripgrep prints it: a line of what it found
@@ -371,7 +373,17 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
     levels, 1000 characters per string).
 - **A cell whose texts could not be bound** (T140): which text and why (`invalidName`, or over
   `values.argumentMaxBytes`), and that nothing ran. Receipts never repeat a cell's texts.
-- **`read`**: a `Piece.File` (path, digest, the lines shown), numbered, and where to read on.
+- **`read`**: a `Piece.File` (path, digest, the lines shown), numbered, within `codeact.read.maxLines`
+  and `codeact.read.maxChars`. Without an offset or a limit, a file that does not fit shows as a cell's
+  file value does (head, tail, the lines left out: "read them with offset n"); with one, the lines
+  from the offset that fit, and where to read on.
+- **Smart previews of files** (T203b, spec §6.7, `Receipts.headAndTail`): lines are counted with
+  their number (8 characters each); a line longer than half `codeact.read.maxChars` is cut with its
+  length (`… [50000 characters]`), so a minified file cannot fill the context. A Markdown file (`.md`,
+  `.markdown`, `.mdx`) read whole and left out in part adds its ATX headings (`#` to `######`, outside
+  fenced code) as a file piece of their lines, numbered, so the model reads the section it needs;
+  over 80 headings, the deepest levels go first. Logs and data keep their plain cut and previews
+  until sessions show they need more.
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
   new version (`Receipts.edited`, from the `Edited` result and the ranged read after it; without that
   read, each fresh range's lines).
@@ -772,7 +784,7 @@ recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, t
 | `codeact.budget.steps`, `codeact.budget.tokens` | 100, none |
 | `codeact.maxOutputTokens` | none (the model's) |
 | `codeact.cell.timeoutMs`, `codeact.cell.typeCheck` | 600000, false |
-| `codeact.output.maxChars`, `codeact.receipt.maxChars`, `codeact.read.maxLines` | 16000, 20000, 2000 |
+| `codeact.output.maxChars`, `codeact.receipt.maxChars`, `codeact.read.maxLines`, `codeact.read.maxChars` | 16000, 20000, 2000, 16000 |
 | `codeact.finish.evidence` | `optional` |
 | `codeact.journal.snapshots` | true |
 | `codeact.recall.maxBytes`, `codeact.recall.restore` | 1048576, 20 |

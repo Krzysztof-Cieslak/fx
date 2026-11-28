@@ -66,14 +66,14 @@ module Hybrid =
         }
 
     /// `read`: the file's lines, numbered, as a file piece.
-    let read (call: Call<'K>) (maxLines: int) (input: ReadInput) : Eff<'K, Executed> =
+    let read (call: Call<'K>) (bounds: Receipts.ReadBounds) (input: ReadInput) : Eff<'K, Executed> =
         eff {
             match! readFile call input.Path with
             | Error message -> return failed message
             | Ok file ->
                 return
                     {
-                        Pieces = Receipts.read file input.Offset input.Limit maxLines
+                        Pieces = Receipts.read file input.Offset input.Limit bounds
                         IsError = false
                         Restarted = None
                         Approvals = []

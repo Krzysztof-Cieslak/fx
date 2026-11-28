@@ -634,7 +634,17 @@ type CodeAct<'R, 'K
 
             match action with
             | ToolAction.Read input ->
-                let! executed = Eff.provide env (Hybrid.read call settings.ReadLines input)
+                let! executed =
+                    Eff.provide
+                        env
+                        (Hybrid.read
+                            call
+                            {
+                                MaxLines = settings.ReadLines
+                                MaxChars = settings.ReadChars
+                            }
+                            input)
+
                 return executed, None
             | ToolAction.Edit input ->
                 let! executed = Eff.provide env (Hybrid.edit call settings.ReadLines input)
@@ -723,6 +733,7 @@ type CodeAct<'R, 'K
                                 ReceiptChars = settings.ReceiptChars
                                 OutputChars = settings.OutputChars
                                 ReadLines = settings.ReadLines
+                                ReadChars = settings.ReadChars
                             }
 
                         let overflowSettings =
