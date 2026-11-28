@@ -434,8 +434,8 @@ flowchart LR
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T203a,T204a,T206 done
-  class T132,T201a inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T201a,T203a,T204a,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -525,7 +525,7 @@ flowchart LR
 
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
-| T201a | Values: blobs and output overflow | T117, T126 | §6.6 | in-progress | `Value.Blob` in practice: a cell's value larger than `values.inlineMaxBytes` and printed output beyond `outputChars` are stored in the environment's blob store, and the receipt names them by a grep-able path besides the bounded preview; kernels read blobs (`fx.blobs`); kept values that are blobs are journaled by reference and restored by `recall`; host-call arguments may travel as blobs; kernel conformance covers them. |
+| T201a | Values: blobs and output overflow | T117, T126 | §6.6 | done | `Value.Blob` in practice for output: a command's stream beyond `OutputChars`, a cell's printed output beyond `outputChars` (the kernel protocol's optional `overflowChars` and `output.whole`) and a string or command result its receipt cuts are stored whole in the environment's blob store, and the marker names where (a grep-able file under envd's store, `Overflow {hash, bytes, path?}`); reads there need no grant; `fx.blobs.read(hash, {from, maxChars})`; kernel conformance covers `whole`. Values as blobs in kernels and host-call arguments as blobs moved to T501. |
 | T201b | Values: handles and history | T201a | §6.6, §5 | todo | `Value.Handle` in practice: handles inside data, handles in the journal (kept by reference, reported lost after a restart), `Piece.Ref` in receipts; `fx.history.*` beyond `compact` reads collapsed originals back as handles; kernel conformance covers handles in data. |
 | T201c | Values: context pins | T201b | §6.6, §5 | todo | `IContext`; `fx.context.pin(name, value)` and `fx.context.pinFile(path, range)` (a live view of the file) shown in the `pins` view, listed in `/context` with their cost, unpinned by name; replayed from the context log. |
 | T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. |
@@ -577,7 +577,7 @@ flowchart LR
 
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
-| T501 | SSH provider | T110, T112 | §9 | todo | `fx.env.ssh` with envd bootstrap over SSH. |
+| T501 | SSH provider | T110, T112 | §9 | todo | `fx.env.ssh` with envd bootstrap over SSH; values that live as blobs in kernels (`value/encode` giving `Value.Blob`, kept by reference) and host-call arguments as blobs, so content stays in the remote environment (from T201a). |
 | T502 | Docker provider | T216 | §9 | todo | `fx.env.docker` general-purpose provider. |
 | T503 | Materialize/export | T112, T211 | §9.3, §6.1 | todo | Workspace materialize (`existing|mount|git|upload|snapshot`) and export (`patch|branch|pr|download`); `host-push`/`prebaked` component placement. |
 | T504 | Relay + Dialback | T107, T111 | §3, §17 | todo | Relay service, Dialback transport, Noise end-to-end encryption. |

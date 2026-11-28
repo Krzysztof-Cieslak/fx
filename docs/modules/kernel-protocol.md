@@ -34,7 +34,7 @@ JSON-RPC 2.0 as `src/Fx.Rpc` speaks it ([rpc.md](rpc.md)), on the kernel process
 output: one message per line, `$/cancelRequest`, the error codes, the `initialize` handshake. Kernels
 differ from other peers in three ways:
 
-- **No binary channels and no batches.** Bulk data travels as blobs (T201), not in channels.
+- **No binary channels and no batches.** Bulk data travels as blobs, not in channels.
 - **Framing.** Code running in a kernel may write to file descriptor 1 directly (a child process that
   inherits it, `fs.writeSync(1, …)`). So every message starts with the literal `{"jsonrpc":"2.0",` (the
   `jsonrpc` member first) on a line of its own (writers put a newline before each message, which ends
@@ -73,7 +73,10 @@ The host is the client. Its `initialize` params carry the member `kernel` (`Kern
   (optional, T139) bounds each argument of a `host/call`, so a cell can pass a file's text or a
   command's input beyond `inlineBytes`; a host that sends none gets `inlineBytes` for arguments too. An
   argument over the limit never reaches the host: the cell gets an error with the code
-  `invalidArguments` that names the binding, the size and the limit.
+  `invalidArguments` that names the binding, the size and the limit. `overflowChars` (optional,
+  T201a): when a cell's output is cut, the kernel also returns all of it as `output.whole` if it has
+  at most that many characters; a kernel that does not know the limit returns none (nothing is
+  misread).
 
 The result carries `kernel` (`KernelInfo`): the chosen `version`, the cells' `language`, `caps`
 (`InterpreterCaps`, spec §6.2) and free-form `details` (runtime versions):
@@ -141,7 +144,9 @@ time out sooner; nothing is misread). The result:
   cells only, `cell <id>:line:column`), `timedOut {afterMs}`, `cancelled`.
 - `output`: what the cell printed, bounded: at most `outputChars` characters of it, the head and the
   tail, plus one marker line of at most 64 characters where the middle was left out; `totalChars`
-  counts everything. Overflow into a blob with a grep-able path is T201's.
+  counts everything; `whole` (optional, T201a): all of it, when it was cut and the host's
+  `overflowChars` allows. The host stores it in the environment's blob store and names the blob's file
+  in the marker line (`… [n chars omitted; all of it: <file>] …`).
 - `declared`: top-level names the cell declared (they persist).
 - `unassigned` (optional, absent when empty): the names of `declared` that hold no value
   (`undefined` in TypeScript, unbound in the script kernel) because the cell stopped before it assigned
@@ -227,7 +232,9 @@ type Value =
   came. The reference kernel keeps ids in a `WeakMap`: cells see a frozen object with `type` and
   `preview`, cannot read the id, and plain data never encodes as a handle (the conformance suite checks
   that a look-alike object reaches the host as inline data).
-- **Blobs** are references to content in the environment's blob store; how a kernel reads one is T201's.
+- **Blobs** are references to content in the environment's blob store. Cells read stored output with
+  the `blobs.read` binding (T201a), or as files where the store keeps them; values that live as blobs
+  in kernels wait for remote environments (T501).
 - **Inline** JSON is strict: kernels refuse (`notEncodable`) functions, cycles, big integers, non-finite
   numbers and references inside data instead of dropping them as `JSON.stringify` would. Numbers are
   exact in the host's JSON; TypeScript kernels hold them as doubles (exact to 2^53).
@@ -341,8 +348,8 @@ a refused launch, a snapshot and a killed kernel).
 ## Left to later tasks
 
 - **T205:** kernel-side wrappers reporting activity. **Later:** packages (interpreters.md).
-- **T201:** blobs for large values and output overflow; handles inside data; how kernels read blobs;
-  `fx.recall(callId)` and handles in the journal.
+- **T201b:** handles inside data and in the journal. **T501:** values as blobs in kernels.
+- **Done in T201a:** output overflow (`overflowChars`, `whole`); `fx.recall(callId)` was done in T128.
 - **Done in T128** ([codeact.md](codeact.md#kept-values-and-recall-spec-65-durability)): cells' values
   journaled (`value/encode`) and restored into new kernels with `recall`; their streamed output journaled
   as evidence for calls in doubt.

@@ -49,13 +49,8 @@ pieces. Spec §6.6: "overflow → blob with a grep-able path".
 4. `fx.blobs.read`.
 5. Docs (spec §6.6, interpreters.md, kernel-protocol.md, codeact.md), tasks.md: T201a done.
 
-## Progress
+## Outcome
 
-- Done: step 1 (`shell.run` overflow, `EnvLayout.blobs`, hands with `IBlobs`, `HandsInfo.blobRoot`),
-  step 2 (`Workplace.Readable`), step 3 for a cell's value (receipts name the blob).
-- Next: a cell's printed output. The kernel cuts it, so the protocol gets an optional limit
-  `overflowChars` (`KernelLimits.OverflowChars`) and `BoundedText.whole?` (all of it, when cut and
-  within the limit), in the bun-ts kernel (`output.ts`, then regenerate `KernelFiles.fs`) and the
-  script kernel, with a conformance case; CodeAct stores `whole` and names it in the marker.
-- Then step 4 (`fx.blobs.read`), step 5 (docs, T201a done, the T501 note), and the AOT diff and
-  analyzers before pushing.
+All five steps landed in the lane. A cell's printed output is step 3's second half: the kernel
+protocol's optional `overflowChars` and `output.whole`, in both kernels and the conformance suite.
+The golden replay session was re-recorded for `blobs.read`, as for T140 and T143.
