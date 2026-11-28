@@ -348,7 +348,10 @@ a refused launch, a snapshot and a killed kernel).
 ## Left to later tasks
 
 - **T205:** kernel-side wrappers reporting activity. **Later:** packages (interpreters.md).
-- **T201b:** handles inside data and in the journal. **T501:** values as blobs in kernels.
+- **T213:** handles inside data: an inline value with the paths of the references it holds, so data
+  that only looks like a reference never becomes one. **T501:** values as blobs in kernels.
+- **Done in T201b:** bindings hand out and take back handles (interpreters.md); kept handles in the
+  journal, back in a new kernel through `recall` while the host's table has them (codeact.md).
 - **Done in T201a:** output overflow (`overflowChars`, `whole`); `fx.recall(callId)` was done in T128.
 - **Done in T128** ([codeact.md](codeact.md#kept-values-and-recall-spec-65-durability)): cells' values
   journaled (`value/encode`) and restored into new kernels with `recall`; their streamed output journaled

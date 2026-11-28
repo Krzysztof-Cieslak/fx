@@ -146,6 +146,13 @@ environment, `EnvClient`'s proxies.
   line names it (`… [n chars omitted; all of it: <file>] …`). `path` is the blob's file where the store
   keeps files (`CoreSettings.BlobRoot`, `EnvLayout.blobs`: envd's `FileBlobStore`), else absent and
   the marker names the hash. Replay stores into memory: a blob's reference depends only on its content.
+- **Handles** (spec §6.6, T201b): a binding hands out host-resident objects by handle with
+  `HostBinding.createHandle1 path description arg kind run`: `run` gives the object and its preview, and
+  the kind's table issues the handle (`HandleTable.issue`, its id from `IIds`). A `HandleKind` is a
+  declared type (`HandleKind.create name description table`: cells see a frozen `{type, preview}`), and
+  `Arg.valueOrHandle name description codec kind` takes a value of `codec` or a handle of the kind that
+  its table issued (`string | HistoryRange` in the declarations); a handle of another type or another
+  session's table is an invalid argument.
 - **Commands are spawned** (T142): `shell.run` starts the command with `Shell.Spawn`, writes its input,
   and reads its output until both streams end, then its exit code. With `timeoutMs`, that read races
   the clock's delay (`Eff.timeout`); when the delay wins, the process is killed with its children
@@ -313,7 +320,7 @@ environment, a missing runtime).
 | A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores kept values with `recall` (done: [codeact.md](codeact.md)) | T127, T128 |
 | Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, …; `recall` is the CodeAct strategy's, T128) | their tasks (T201, T301, T213, …) |
 | `repo.*` bindings and smart previews (anchored edits, `fs.edit`, are T204a's and readable results T203a's: done); the edit guard over `SeenRanges` | T202, T203b, T204b |
-| Handles in data and in the journal | T201b |
+| Handles inside data (an inline value with the paths of the references it holds) | T213 |
 | Values as blobs in kernels, host-call arguments as blobs (remote environments) | T501 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |

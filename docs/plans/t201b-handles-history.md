@@ -25,3 +25,8 @@ Compaction keeps the originals of a collapsed range in the context log (`Context
    restart they are reported gone, with why.
 5. Docs, tasks.md (T201b done; handles inside data to T213, with the wire design: an inline value with
    the paths of the references it holds, so look-alike data never becomes one).
+
+## Outcome
+
+All five steps landed in the lane. Adding the history bindings changes the frame, so the golden replay
+session was re-recorded (as for T140, T143 and T201a).

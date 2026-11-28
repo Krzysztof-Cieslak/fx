@@ -30,7 +30,7 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | Kernels per session, the host's side of the protocol, `Ensure` (`SessionKernel`, `Interpreter`, `Hands`, `Watch`, `KernelJournal`) | `Kernels.fs` |
 | Cells' values kept for `recall` (`Recall`: keep, restore, the `recall` binding) | `Recall.fs` |
 | The hybrid tools over the bridge's bindings (`Hybrid`) | `Hybrid.fs` |
-| What cells ask of the history, the `history.compact` binding (`HistoryAsks`, `HistoryBindings`) | `History.fs` |
+| What cells ask of the history: `history.compact`, `history.list`, `history.read`, `history.open` (`HistoryAsks`, `HistoryBindings`) | `History.fs` |
 | Background jobs: the hands' `Jobs`, their interpreter `LiveJobs`, notices (`JobNotices`), a session's jobs (`SessionJobs`) and the `jobs` bindings (`JobBindings`) | `Jobs.fs` |
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
@@ -445,6 +445,22 @@ is never touched.
 before its next step, keeping `focus` in particular; it answers at once, and the next step compacts first
 (if nothing is old enough yet, a note says so). Asks of an earlier turn are forgotten when a turn starts.
 
+**Reading collapsed parts back** (T201b): the originals of a collapsed range stay in the context log, and
+cells read them back. `fx.history.list()` gives each range (`r1`, `r2`, … in the order the collapses
+were applied) with the entries it covers, its summary and its originals' length; `fx.history.read(range,
+{from, maxChars})` gives the originals as text (`Originals.text`: inputs, replies' text and calls,
+receipts, turn ends; files content exclusions keep from models withheld as the render does) from a
+character offset, bounded (`codeact.outputChars` by default), with `next` to read on;
+`fx.history.open(id)` gives a `HistoryRange` handle, which `history.read` takes as well as an id. They load
+the session's log as the turn does.
+
+**Handles** (T201b): a session's handles come from per-session tables (`HandleTable`, one per kind), so
+they resolve only in that session. A cell that ends with one shows it by reference (`Piece.Ref`:
+`[handle Out["cell"]: HistoryRange] preview`, never its id). The journal keeps it by reference
+(`KeptJson.Handle`); a new kernel gets it back as `Out[cell]` while the table has it (the host did not
+restart: then it is gone), and `fx.recall` of it says it has no JSON form. Handle ids are random bytes from
+the hands' `IIds`, journaled in the hands' lane, since they reach the kernel in the host's replies.
+
 ## Crash recovery (spec §5, §6.5, §12.1, §19.1)
 
 When the host stops in the middle of a turn (a crash, a kill, an upgrade), nothing auto-resumes: the
@@ -834,14 +850,14 @@ fake clock, auto approvals and their decision), on all eight targets.
 | Partial output of commands in doubt (`shell.run`, `bash`): they run as envd processes (spawned since T142); after a restart, resume their output logs by byte offset, and journal the process | T205 |
 | Background jobs that survive a host restart: reattach to envd's processes and resume their output by byte offset (today a restart loses them, reported `lost`) | later |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values | interpreters that have them |
-| Values in envd's blob store (remote environments); handles in the journal | T501; T201b |
+| Values in envd's blob store (remote environments); handles inside data | T501; T213 |
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
 | Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | the sandbox is off by default (T137), so nothing catches them there |
 | Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
 | Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | A person's compaction (a session command, the TUI's `/compact`) beside the model's `fx.history.compact` | when clients ask (T130's successors) |
-| Reading collapsed originals back (`fx.history.*` beyond `compact`); `fx.context.pin` | T201b; T201c |
+| `fx.context.pin` | T201c |
 | Compaction as the bundled extension `fx.compaction` (spec §16.4), a summarizer contributed by extensions | with a strategy contribution type (below) |
-| Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents, values and handles) | T201, T213 and their tasks |
+| Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents) | T213 and their tasks |
 | A strategy contribution type for extensions (the SDK would need sessions, the render and interpreters) | when a second strategy exists |
