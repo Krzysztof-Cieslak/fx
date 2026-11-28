@@ -112,6 +112,7 @@ export type ContextEvent =
       isError?: boolean;
       restarted?: KernelRestart;
       approvals?: Approval[];
+      jobs?: StartedJob[];
     }
   | {
       kind: "pinned";
@@ -862,6 +863,13 @@ export interface SetApprovals {
   /** From 1 to 128 characters. */
   session: string;
   mode: "ask" | "auto" | "yolo";
+}
+
+/** A background job an action started: its id, name and command. */
+export interface StartedJob {
+  id: string;
+  name: string;
+  command: string;
 }
 
 /** What the model is writing in a running turn, as it writes it: text the reply adds, or a tool call it started. Not recorded: the complete reply arrives as a context event. */
