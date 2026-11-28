@@ -239,6 +239,47 @@ type private OutputBuffer(limit: int) =
 
 exception private CellStopped of RuntimeFailure
 
+/// A cell's own time, which `timeoutMs` limits: it stops while a host call of the cell is in flight
+/// (the host bounds those itself, and a person may take long to answer a grant), and goes on with what
+/// was left when the last one returns (docs/modules/kernel-protocol.md, "Cancellation").
+type private CellClock(timeout: CancellationTokenSource, limit: int option) =
+    let gate = obj ()
+    let watch = Diagnostics.Stopwatch()
+    let mutable calls = 0
+
+    member _.Start() =
+        match limit with
+        | Some ms ->
+            watch.Start()
+            timeout.CancelAfter ms
+        | None -> ()
+
+    /// A host call starts.
+    member _.Pause() =
+        match limit with
+        | Some _ ->
+            lock gate (fun () ->
+                calls <- calls + 1
+
+                if calls = 1 then
+                    timeout.CancelAfter Timeout.Infinite
+                    watch.Stop())
+        | None -> ()
+
+    /// A host call returned.
+    member _.Resume() =
+        match limit with
+        | Some ms ->
+            lock gate (fun () ->
+                calls <- calls - 1
+
+                if calls = 0 then
+                    watch.Start()
+                    timeout.CancelAfter(max 1 (ms - int watch.ElapsedMilliseconds)))
+        | None -> ()
+
+    override _.ToString() = $"cell clock ({limit})"
+
 /// The kernel. One instance per connection.
 type Kernel(stray: string -> unit) =
     let gate = obj ()
@@ -352,6 +393,7 @@ type Kernel(stray: string -> unit) =
         (stream: string -> Task)
         (report: Activity -> Task)
         (finished: bool ref)
+        (clock: CellClock)
         (cancellation: CancellationToken)
         : Task<Value option> =
         task {
@@ -412,16 +454,25 @@ type Kernel(stray: string -> unit) =
                                     (Some "invalidArguments")
                         | _ -> ()
 
+                    // The cell's clock stops while the host answers: a person may be deciding a grant.
+                    clock.Pause()
+
                     let! outcome =
-                        Rpc.call
-                            peer
-                            KernelProtocol.hostCall
-                            {
-                                CellId = Some cellId
-                                Binding = binding
-                                Args = values
-                            }
-                            callEnv
+                        task {
+                            try
+                                return!
+                                    Rpc.call
+                                        peer
+                                        KernelProtocol.hostCall
+                                        {
+                                            CellId = Some cellId
+                                            Binding = binding
+                                            Args = values
+                                        }
+                                        callEnv
+                            finally
+                                clock.Resume()
+                        }
 
                     match outcome with
                     | Ok value -> bind name value
@@ -608,12 +659,23 @@ type Kernel(stray: string -> unit) =
                         lock gate (fun () -> running <- None)
                         cancel.Dispose()
 
+                        // A cell that stopped early leaves the names it had not bound yet without a value.
+                        let unassigned =
+                            match outcome with
+                            | CellOutcome.RuntimeError _
+                            | CellOutcome.TimedOut _
+                            | CellOutcome.Cancelled ->
+                                lock gate (fun () ->
+                                    names |> List.filter (fun name -> not (variables.ContainsKey name)))
+                            | _ -> []
+
                         Ok
                             {
                                 CellId = cell.CellId
                                 Outcome = outcome
                                 Output = output.Take()
                                 Declared = names
+                                Unassigned = unassigned
                                 Finished = finished.Value
                                 Notified = notified.Value
                                 DurationMs = 0L
@@ -629,7 +691,8 @@ type Kernel(stray: string -> unit) =
                                 timeout.Token
                             )
 
-                        cell.TimeoutMs |> Option.iter timeout.CancelAfter
+                        let clock = CellClock(timeout, cell.TimeoutMs)
+                        clock.Start()
 
                         try
                             let! value =
@@ -642,6 +705,7 @@ type Kernel(stray: string -> unit) =
                                     stream
                                     report
                                     finished
+                                    clock
                                     linked.Token
 
                             let info =

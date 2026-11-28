@@ -85,12 +85,71 @@ class Interrupt extends Error {
   }
 }
 
+/**
+ * A cell's own time, which `timeoutMs` limits: it stops while one of the cell's host calls is in
+ * flight (the host bounds those itself, and a person may take long to answer a grant), and goes on
+ * with what was left when the last one returns. `expire` runs when it is used up.
+ */
+class CellClock {
+  private used = 0;
+  /** When the current stretch of the cell's own time began; undefined while paused. */
+  private since: number | undefined = performance.now();
+  private calls = 0;
+  private armed = false;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private readonly limit: number | undefined,
+    private readonly expire: () => void,
+  ) {}
+
+  /** Starts the timer for what is left (the VM's own timeout covers the synchronous start). */
+  arm(): void {
+    this.armed = true;
+    this.schedule();
+  }
+
+  /** A host call starts. */
+  pause(): void {
+    if (this.calls++ > 0 || this.since === undefined) return;
+    this.used += performance.now() - this.since;
+    this.since = undefined;
+    this.clear();
+  }
+
+  /** A host call returned. */
+  resume(): void {
+    if (--this.calls > 0) return;
+    this.calls = 0;
+    this.since = performance.now();
+    this.schedule();
+  }
+
+  stop(): void {
+    this.armed = false;
+    this.clear();
+  }
+
+  private schedule(): void {
+    if (!this.armed || this.limit === undefined || this.since === undefined) return;
+    this.clear();
+    const remaining = Math.max(0, this.limit - this.used - (performance.now() - this.since));
+    this.timer = setTimeout(this.expire, remaining);
+  }
+
+  private clear(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+}
+
 class Cell {
   readonly output: OutputBuffer;
   readonly stream: OutputStream;
   /** Aborts the cell's host calls. */
   readonly calls = new AbortController();
   graph: ModuleGraphLike | undefined;
+  clock: CellClock | undefined;
   done = false;
   finished = false;
   activities = 0;
@@ -267,6 +326,9 @@ export class Kernel {
       const reason = e instanceof values.TooLarge ? `${e.bytes} bytes of JSON, more than the ${e.limit} a host call takes` : e instanceof Error ? e.message : String(e);
       throw this.contextError(`cannot pass an argument of ${binding}: ${reason}`, { code: "invalidArguments" });
     }
+    // The cell's clock stops while the host answers: a person may be deciding a grant.
+    const clock = cell && !cell.done ? cell.clock : undefined;
+    clock?.pause();
     try {
       const result = (await this.peer.request("host/call", { cellId: cell?.id, binding, args: encoded }, cell?.calls.signal)) as Value;
       return values.decode(this.realm, result);
@@ -277,6 +339,8 @@ export class Kernel {
       }
       if (e instanceof Cancelled) throw this.contextError(`${binding} was cancelled`, { code: "cancelled" });
       throw e;
+    } finally {
+      clock?.resume();
     }
   }
 
@@ -353,9 +417,10 @@ export class Kernel {
     const result = (outcome: CellOutcome, declared: string[]): CellResult => {
       cell.stream.flush();
       cell.done = true;
+      cell.clock?.stop();
       signal.removeEventListener("abort", onAbort);
       if (this.active === cell) this.active = undefined;
-      return {
+      const answer: CellResult = {
         cellId,
         outcome,
         output: cell.output.take(),
@@ -364,6 +429,13 @@ export class Kernel {
         notified: cell.stream.sent + cell.activities,
         durationMs: Math.round(performance.now() - t0),
       };
+      // A cell that stopped early leaves what it had not assigned yet `undefined` (replMode hoists its
+      // declarations to `var`s before it runs).
+      if (outcome.kind === "runtimeError" || outcome.kind === "timedOut" || outcome.kind === "cancelled") {
+        const unassigned = declared.filter((name) => this.context[name] === undefined);
+        if (unassigned.length > 0) answer.unassigned = unassigned;
+      }
+      return answer;
     };
 
     const transpiled = this.transpile(params.code);
@@ -384,18 +456,17 @@ export class Kernel {
       this.byGraph.set(cell.graph, cell);
     }
 
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = (): Interrupt => new Interrupt({ kind: "timedOut", afterMs: params.timeoutMs ?? 0 });
+    // The cell's own time: host calls in flight do not count (CellClock).
+    const clock = new CellClock(params.timeoutMs, () => this.interrupt(cell, timedOut()));
+    cell.clock = clock;
     try {
       const script = new vm.Script(js, { filename, importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER } as vm.ScriptOptions);
       // displayErrors: false keeps Node-style source excerpts of the transpiled code out of `stack`.
       const options = { displayErrors: false, ...(params.timeoutMs ? { timeout: params.timeoutMs } : {}) };
       const execute = () => script.runInContext(this.context, options) as { value: unknown } | Promise<{ value: unknown }>;
       const returned = cell.graph ? cell.graph.run(execute) : execute();
-      if (params.timeoutMs) {
-        const remaining = Math.max(0, params.timeoutMs - (performance.now() - t0));
-        timer = setTimeout(() => this.interrupt(cell, timedOut()), remaining);
-      }
+      clock.arm();
       const completion = await Promise.race([Promise.resolve(returned), cell.interrupted]);
       const value = completion?.value;
       if (value === undefined) return result({ kind: "completed" }, declared);
@@ -408,7 +479,7 @@ export class Kernel {
       }
       return result(this.runtimeError(e), declared);
     } finally {
-      if (timer) clearTimeout(timer);
+      clock.stop();
     }
   }
 

@@ -305,6 +305,15 @@ type Recorder() =
                     | "test.signal" ->
                         this.Signalled.TrySetResult() |> ignore
                         return Ok(Value.Inline Json.Null)
+                    | "test.delay" ->
+                        // Answers after the milliseconds given, as a person deciding a grant would.
+                        let ms =
+                            match first with
+                            | Some(Value.Inline(Json.Number n)) -> JsonNumber.tryToInt64 n |> Option.defaultValue 0L
+                            | _ -> 0L
+
+                        do! Task.Delay(TimeSpan.FromMilliseconds(float ms), env.Scope.Cancellation)
+                        return Ok(Value.Inline(Json.int64 ms))
                     | "test.read" ->
                         // A file read as the core bindings do it, with content exclusions (T124).
                         match first with
@@ -346,6 +355,7 @@ let bindings =
         "test.inspect"
         "test.slow"
         "test.signal"
+        "test.delay"
         "test.read"
     ]
 
@@ -771,6 +781,38 @@ let private errors (subject: KernelSubject) =
                     expectJson encoded (Json.int 5) "x"
                     let! next = c.Run(s.Literal(Json.int 1))
                     completed next |> ignore
+                }
+
+            case subject "names a cell declared but did not assign before it stopped are reported unassigned"
+            <| fun c ->
+                task {
+                    let! fine = c.Run(s.Assign "u0" (Json.int 0))
+                    completed fine |> ignore
+                    Expect.isEmpty fine.Unassigned "a cell that completed has none"
+
+                    let! failed =
+                        c.Run(
+                            s.Statements [ s.Assign "u1" (Json.int 1); s.Throw "stop here"; s.Assign "u2" (Json.int 2) ]
+                        )
+
+                    runtimeError failed |> ignore
+                    Expect.containsAll failed.Declared [ "u1"; "u2" ] "both declared"
+                    Expect.equal failed.Unassigned [ "u2" ] "u2 never assigned"
+                    let! u1 = c.EncodeVariable "u1"
+                    expectJson u1 (Json.int 1) "u1 assigned before the error"
+
+                    let! stopped =
+                        c.RunCell
+                            {
+                                CellId = "stopped"
+                                Code = s.Statements [ s.SleepForever; s.Assign "u3" (Json.int 3) ]
+                                Intent = None
+                                TimeoutMs = Some 300
+                                Check = false
+                            }
+
+                    Expect.equal stopped.Outcome (CellOutcome.TimedOut 300) "timed out"
+                    Expect.equal stopped.Unassigned [ "u3" ] "u3 never assigned"
                 }
         ]
 
@@ -1243,6 +1285,41 @@ let private cancellation (subject: KernelSubject) =
             <| fun c ->
                 task {
                     let! result = c.RunCell(cell "slow" s.SleepForever (Some 300))
+                    Expect.equal result.Outcome (CellOutcome.TimedOut 300) "timed out"
+                }
+
+            case subject "time spent waiting for the host to answer a host call does not count toward the timeout"
+            <| fun c ->
+                task {
+                    // The host answers after three times the cell's timeout, as a person deciding a
+                    // grant may.
+                    let! result =
+                        c.RunCell(
+                            cell
+                                "patient"
+                                (s.Statements
+                                    [ s.Call "waited" "test.delay" [ Json.int 900 ]; s.Assign "after" (Json.int 1) ])
+                                (Some 300)
+                        )
+
+                    completed result |> ignore
+                    let! waited = c.EncodeVariable "waited"
+                    expectJson waited (Json.int 900) "the host's answer"
+                    let! after = c.EncodeVariable "after"
+                    expectJson after (Json.int 1) "the cell went on"
+                }
+
+            case subject "after a host call the cell's own time goes on, and runs out"
+            <| fun c ->
+                task {
+                    let! result =
+                        c.RunCell(
+                            cell
+                                "spent"
+                                (s.Statements [ s.Call "_d" "test.delay" [ Json.int 200 ]; s.SleepForever ])
+                                (Some 300)
+                        )
+
                     Expect.equal result.Outcome (CellOutcome.TimedOut 300) "timed out"
                 }
 

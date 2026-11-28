@@ -64,7 +64,8 @@ type CellRun =
         Code: string
         /// The cell's `// intent:` line, for activity and the transcript (spec §19.2).
         Intent: string option
-        /// Wall-clock limit; the kernel interrupts the cell after it.
+        /// Limit on the cell's own time: the kernel interrupts the cell after it. Time the cell spends
+        /// waiting for the host to answer its host calls does not count (the host bounds those).
         TimeoutMs: int option
         /// Type-check first and do not run on errors (kernels that announce `cell/check`).
         Check: bool
@@ -171,6 +172,9 @@ type CellResult =
         Output: BoundedText
         /// Top-level names the cell declared; they persist in the kernel.
         Declared: string list
+        /// Names of `Declared` that hold no value (`undefined`) because the cell stopped before it
+        /// assigned them: after a runtime error, a timeout or a cancellation. Empty otherwise.
+        Unassigned: string list
         /// The cell called `finish` and the host accepted it.
         Finished: bool
         /// How many `cell/output` and `cell/activity` notifications the kernel sent about this cell
