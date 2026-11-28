@@ -49,7 +49,7 @@ through one place, which runs the **model-egress hooks**; the built-in hooks kee
 - **Every sender uses it.** The host builds one `ModelAccess` from the contributions in effect (T129)
   and hands out `Llm`s made from it (`ModelAccess.llm`): the session's loop (T127), `fx.llm` from cells
   (a brokered host binding over the session's `ILlm`), agents (T213), the summarizer (T206), judgments
-  (T402), extensions (through `IExtensionEnv`, T109b). None of them holds a wire, credentials or an
+  (T402), extensions (through a capability in `IExtensionEnv`, when one needs it). None of them holds a wire, credentials or an
   HTTP client for a provider, so there is no other path to write. AGENTS.md makes it a rule.
 - Failures before the wire are a stream with one `failed` event; `egressBlocked {ask, reasons}` names
   the contribution and its reason (`fx.egress.exclusions/exclusions: content of .env, excluded by host
@@ -217,10 +217,10 @@ change:
 
 `fx.egress.exclusions` (`Product.extensionId "egress.exclusions"`, native, public SDK only) contributes
 the five slots (`variant-slot`), the transform and the gate (`exclusions`). `EgressExclusions.create
-settings` builds it; the host passes `ContentExclusions.ofVariants` over the resolution in effect (T129),
-and once extensions read their own slots through `IExtensionEnv` (T109b) the default becomes
-`ContentExclusions.read`, which reads the caller's resolution, so a session's project exclusions apply
-to its requests.
+settings` builds it (tests pass fixed settings); the built-in, `EgressExclusions.extension`, is
+`create ContentExclusions.read`: its manifest lists the `variants` capability and it reads its own
+slots through its environment (T109b), as the host resolved them (the host's layers under the
+policies). Session overrides of these slots do not reach it: an extension's slots are the host's.
 
 ## Upstream: bindings, render, activity
 
@@ -253,7 +253,6 @@ what reaches each provider; the deny action; invalid settings), on all eight tar
 | What | Task |
 |---|---|
 | `Sources` from a cell's `Read` activity (kernel-side reads the bridge does not see) | T205 |
-| Extensions reading their own slots (`ContentExclusions.read` in `IExtensionEnv`) | T109b |
 | Copilot organisation exclusions as a provider's own egress hooks | T210 |
 | Secret redaction by content | T601 |
 | Fingerprints of excluded files, to catch their content where provenance is unknown | later |
