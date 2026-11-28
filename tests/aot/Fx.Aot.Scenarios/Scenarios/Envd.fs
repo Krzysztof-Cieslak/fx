@@ -109,6 +109,29 @@ let private session (client: EnvClient) (workspace: string) : Task<string list> 
         for m in (orFail found).Matches do
             say $"search: {m}"
 
+        // ripgrep's defaults: a .gitignore, a hidden file, counts past the limit.
+        let! _ = client.Fs.WriteFile (at ".gitignore") (utf8 "*.log\n") none
+        let! _ = client.Fs.WriteFile (at "c.log") (utf8 "WORLD\n") none
+        let! _ = client.Fs.WriteFile (at ".hidden") (utf8 "WORLD\n") none
+        let! _ = client.Fs.WriteFile (at "d.txt") (utf8 "WORLD\nWORLD\n") none
+
+        let! ripgrep =
+            client.FsOps.Search
+                { SearchQuery.lines workspace "WOR" with
+                    Ignores = true
+                    IgnoresFrom = Some workspace
+                    Hidden = false
+                    MaxResults = 1
+                    CountAll = true
+                }
+                none
+
+        let ripgrep = orFail ripgrep
+        say $"ripgrep: {ripgrep.Matches.Length} shown, truncated {ripgrep.Truncated}, complete {ripgrep.CountsComplete}"
+
+        for count in ripgrep.Counts do
+            say $"ripgrep count: {count}"
+
         // Processes on pipes and on a terminal.
         let script =
             if windows then

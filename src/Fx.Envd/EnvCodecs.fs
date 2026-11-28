@@ -256,26 +256,43 @@ module EnvCodecs =
                     | PatchFsError e -> fs e
         }
 
-    let searchQuery: Codec<SearchQuery> =
+    /// `fs/search`'s params: the query and the roots its paths resolve beneath (`beneath`, T113b).
+    let searchParams: Codec<SearchQuery * string list> =
         Codec.record {
-            let! root = Codec.field "root" (fun (q: SearchQuery) -> q.Root) Codec.string
+            let! root =
+                Codec.field "root" (fun (q: SearchQuery, _: string list) -> q.Root) Codec.string
 
             and! includes =
-                Codec.defaultField "include" (fun q -> q.Include) [] (Codec.list Codec.string)
+                Codec.defaultField "include" (fun (q, _) -> q.Include) [] (Codec.list Codec.string)
 
             and! excludes =
-                Codec.defaultField "exclude" (fun q -> q.Exclude) [] (Codec.list Codec.string)
+                Codec.defaultField "exclude" (fun (q, _) -> q.Exclude) [] (Codec.list Codec.string)
 
-            and! pattern = Codec.optionalField "pattern" (fun q -> q.Pattern) Codec.string
+            and! pattern = Codec.optionalField "pattern" (fun (q, _) -> q.Pattern) Codec.string
 
             and! ignoreCase =
-                Codec.defaultField "ignoreCase" (fun q -> q.IgnoreCase) false Codec.bool
+                Codec.defaultField "ignoreCase" (fun (q, _) -> q.IgnoreCase) false Codec.bool
 
-            and! maxResults = Codec.field "maxResults" (fun q -> q.MaxResults) Codec.int
-            and! maxFileBytes = Codec.field "maxFileBytes" (fun q -> q.MaxFileBytes) Codec.int64
+            and! maxResults = Codec.field "maxResults" (fun (q, _) -> q.MaxResults) Codec.int
+
+            and! maxFileBytes =
+                Codec.field "maxFileBytes" (fun (q, _) -> q.MaxFileBytes) Codec.int64
+
+            and! ignores =
+                Codec.defaultField "ignores" (fun (q, _) -> q.Ignores) false Codec.bool
+
+            and! ignoresFrom =
+                Codec.optionalField "ignoresFrom" (fun (q, _) -> q.IgnoresFrom) Codec.string
+
+            and! hidden = Codec.defaultField "hidden" (fun (q, _) -> q.Hidden) true Codec.bool
+
+            and! countAll =
+                Codec.defaultField "countAll" (fun (q, _) -> q.CountAll) false Codec.bool
+
+            and! roots = Codec.defaultField "beneath" snd [] (Codec.list Codec.string)
 
             return
-                {
+                ({
                     Root = root
                     Include = includes
                     Exclude = excludes
@@ -283,8 +300,17 @@ module EnvCodecs =
                     IgnoreCase = ignoreCase
                     MaxResults = maxResults
                     MaxFileBytes = maxFileBytes
+                    Ignores = ignores
+                    IgnoresFrom = ignoresFrom
+                    Hidden = hidden
+                    CountAll = countAll
                 }
+                : SearchQuery),
+                roots
         }
+
+    let searchQuery: Codec<SearchQuery> =
+        searchParams |> Codec.map fst (fun query -> query, [])
 
     let searchMatch: Codec<SearchMatch> =
         Codec.record {
@@ -302,6 +328,13 @@ module EnvCodecs =
                 }
         }
 
+    let searchCount: Codec<SearchCount> =
+        Codec.record {
+            let! path = Codec.field "path" (fun (c: SearchCount) -> c.Path) Codec.string
+            and! matches = Codec.field "matches" (fun c -> c.Matches) Codec.int
+            return { Path = path; Matches = matches }
+        }
+
     let searchResult: Codec<SearchResult> =
         Codec.record {
             let! files =
@@ -310,11 +343,19 @@ module EnvCodecs =
             and! matches = Codec.field "matches" (fun r -> r.Matches) (Codec.list searchMatch)
             and! truncated = Codec.field "truncated" (fun r -> r.Truncated) Codec.bool
 
+            and! counts =
+                Codec.defaultField "counts" (fun r -> r.Counts) [] (Codec.list searchCount)
+
+            and! countsComplete =
+                Codec.defaultField "countsComplete" (fun r -> r.CountsComplete) true Codec.bool
+
             return
                 {
                     Files = files
                     Matches = matches
                     Truncated = truncated
+                    Counts = counts
+                    CountsComplete = countsComplete
                 }
         }
 

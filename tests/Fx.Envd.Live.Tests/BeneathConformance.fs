@@ -90,6 +90,10 @@ let tests (name: string) (create: string -> string -> Fixture) : Test =
                 | Error(PatchFsError(InvalidPath(_, reason))) when reason.StartsWith "through a symbolic link" -> ()
                 | other -> failtest $"patch: {other}"
 
+                match wait (f.Files.FsOps.Search (SearchQuery.lines (at [ "link" ]) "secret") none) with
+                | Error(SearchFsError(InvalidPath(_, reason))) when reason.StartsWith "through a symbolic link" -> ()
+                | other -> failtest $"search: {other}"
+
                 Expect.equal (File.ReadAllText(Path.Combine(f.Outside, "secret.txt"))) "secret" "the secret is intact"
                 Expect.isFalse (File.Exists(Path.Combine(f.Outside, "new.txt"))) "nothing written outside"
                 Expect.isFalse (Directory.Exists(Path.Combine(f.Outside, "d"))) "no directory made outside")

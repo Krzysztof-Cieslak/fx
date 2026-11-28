@@ -623,7 +623,7 @@ module EnvClient =
                     readRange peer roots path offset (Some count) cancellation
             WriteAtomic = writeFile peer roots true
             ApplyPatch = fun patches cancellation -> call peer EnvProtocol.fsPatch (patches, roots) cancellation
-            Search = fun query cancellation -> call peer EnvProtocol.fsSearch query cancellation
+            Search = fun query cancellation -> call peer EnvProtocol.fsSearch (query, roots) cancellation
             Watch =
                 fun spec cancellation ->
                     task {

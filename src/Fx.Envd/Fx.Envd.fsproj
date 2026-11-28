@@ -10,6 +10,7 @@
     <Compile Include="Platform.fs" />
     <Compile Include="FsOps.fs" />
     <Compile Include="Glob.fs" />
+    <Compile Include="Ignores.fs" />
     <Compile Include="TextPatch.fs" />
     <Compile Include="Search.fs" />
     <Compile Include="FsOpsOver.fs" />

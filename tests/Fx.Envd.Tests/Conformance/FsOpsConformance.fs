@@ -335,6 +335,109 @@ let tests (name: string) (create: unit -> Fixture) : Test =
                 Expect.equal limited.Matches.Length 2 "limited"
                 Expect.isTrue limited.Truncated "truncated")
 
+            test "skips what ignore files ignore and hidden entries, and counts matches per file" (fun f at ->
+                for dir in
+                    [
+                        [ ".git"; "info" ]
+                        [ "node_modules"; "m" ]
+                        [ "build" ]
+                        [ "src"; "build" ]
+                        [ "src"; "gen" ]
+                        [ ".github" ]
+                    ] do
+                    ok (wait (f.Fs.CreateDirectory (at dir) none))
+
+                write f (at [ ".gitignore" ]) "# deps\nnode_modules/\n*.log\n!keep.log\n/build\nspaced.txt   \n"
+                write f (at [ ".git"; "info"; "exclude" ]) "secret.txt\n"
+                write f (at [ "src"; ".gitignore" ]) "gen/\n"
+                write f (at [ "a.fs" ]) "needle\nneedle\n"
+                write f (at [ "app.log" ]) "needle\n"
+                write f (at [ "keep.log" ]) "needle\n"
+                write f (at [ "secret.txt" ]) "needle\n"
+                write f (at [ "spaced.txt" ]) "needle\n"
+                write f (at [ ".env" ]) "needle\n"
+                write f (at [ ".github"; "ci.yml" ]) "needle\n"
+                write f (at [ "node_modules"; "m"; "x.fs" ]) "needle\n"
+                write f (at [ "build"; "out.fs" ]) "needle\n"
+                write f (at [ "src"; "build"; "b.fs" ]) "needle\n"
+                write f (at [ "src"; "gen"; "g.fs" ]) "needle\n"
+                write f (at [ "src"; "x.log" ]) "needle\n"
+                write f (at [ "src"; "c.fs" ]) "needle needle\nnone\nneedle\n"
+
+                let search query = ok (wait (f.Ops.Search query none))
+
+                let ripgrep root =
+                    { SearchQuery.files root with
+                        Ignores = true
+                        IgnoresFrom = Some f.Root
+                        Hidden = false
+                    }
+
+                Expect.equal
+                    (search (ripgrep f.Root)).Files
+                    [ "a.fs"; "keep.log"; "src/c.fs"; "src/build/b.fs" ]
+                    "ignored, excluded and hidden entries skipped; a negation re-includes; /build is anchored"
+
+                Expect.equal
+                    (search { ripgrep f.Root with Hidden = true }).Files
+                    [
+                        ".env"
+                        ".gitignore"
+                        "a.fs"
+                        "keep.log"
+                        ".github/ci.yml"
+                        "src/.gitignore"
+                        "src/c.fs"
+                        "src/build/b.fs"
+                    ]
+                    "hidden entries when asked, never .git"
+
+                Expect.equal
+                    (search (ripgrep (at [ "src" ]))).Files
+                    [ "c.fs"; "build/b.fs" ]
+                    "below the base, the base's ignore files still apply"
+
+                Expect.equal
+                    (search (SearchQuery.files (at [ "src" ]))).Files
+                    [ ".gitignore"; "c.fs"; "x.log"; "build/b.fs"; "gen/g.fs" ]
+                    "without ignores, everything"
+
+                let counted =
+                    search
+                        { ripgrep f.Root with
+                            Pattern = Some "needle"
+                            MaxResults = 2
+                            CountAll = true
+                        }
+
+                Expect.equal
+                    (counted.Matches |> List.map (fun m -> m.Path, m.Line))
+                    [ "a.fs", 1; "a.fs", 2 ]
+                    "the first two"
+
+                Expect.isTrue counted.Truncated "truncated"
+
+                Expect.equal
+                    (counted.Counts |> List.map (fun c -> c.Path, c.Matches))
+                    [ "a.fs", 2; "keep.log", 1; "src/c.fs", 2; "src/build/b.fs", 1 ]
+                    "lines per file, past the limit"
+
+                Expect.isTrue counted.CountsComplete "all counted"
+
+                let stopped =
+                    search
+                        { ripgrep f.Root with
+                            Pattern = Some "needle"
+                            MaxResults = 1
+                        }
+
+                Expect.equal
+                    (stopped.Counts |> List.map (fun c -> c.Path, c.Matches))
+                    [ "a.fs", 1 ]
+                    "stops at the limit"
+
+                Expect.isFalse stopped.CountsComplete "not all counted")
+
             test "paths longer than Windows' old 260-character limit work" (fun f at ->
                 let segments = [ for i in 1..6 -> String('d', 45) + string i ]
                 let directory = at segments

@@ -64,6 +64,13 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
   (.NET regex on the linear-time `NonBacktracking` engine: no backreferences or lookaround), one match
   per matching line with its 1-based line and column, lines cut to 500 characters; binary files (a zero
   byte in the first 8000) and files over `MaxFileBytes` are skipped; `MaxResults` cuts (`Truncated`).
+  `Counts` gives the matching lines per file; with `CountAll` the walk goes on counting past
+  `MaxResults` (up to 1000 files, else `CountsComplete` is false). ripgrep's defaults (T202): with
+  `Ignores`, what `.gitignore` files ignore is skipped (`Ignores`, gitignore(5): negation, directory-only
+  and anchored patterns, deeper files later; case-sensitive), those of the walked directories and of the
+  directories from `IgnoresFrom` (the workspace) down to the root, and `.git/info/exclude` there;
+  without `Hidden`, names starting with `.` are skipped. `.ignore`, `.rgignore` and git's global
+  excludes file are not read.
   ripgrep semantics (`.gitignore`, file types, multiline) are T202's.
 - `Watch`: `FileSystemWatcher` (inotify, FSEvents, ReadDirectoryChangesW) into a `ChangeQueue`: the
   first change starts a `Debounce` on the clock, then everything pending is one `WatchBatch`, coalesced
@@ -102,7 +109,8 @@ decides where a path leads.
   non-atomic writes open the entry itself without following it.
 - **The protocol**: `fs/stat`, `fs/list`, `fs/read`, `fs/write`, `fs/createDirectory`, `fs/delete`,
   `fs/move` and `fs/patch` take `beneath` (absent or empty: none); `EnvClient.beneath roots client` sends
-  them with every request. `fs/search` and watches do not (no binding uses them).
+  them with every request, and so does `fs/search` (`repo.grep` and `repo.files` use it, T202): a search
+  whose root goes through a link is refused, and the walk never follows one. Watches do not take it.
 - **Tests**: the Fs and FsOps conformance suites pass beneath a root (directly, in process and through
   `fx envd --stdio`, with and without the one-call walk), and `BeneathConformance` covers links: on the
   way, deeper down, at the end, a directory swapped for a link between two calls, dot segments, and paths
@@ -280,7 +288,8 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
   beneath roots" above).
 - **T131** (done, [replay.md](replay.md)): capability calls journaled (process output as `Read`
   results). Recording terminals, and a deterministic `ScriptedTerminal` fake, come when sessions use them.
-- **T202**: ripgrep semantics for search; **T204a**: anchored edits on `FsOps.ApplyPatch`; **T205**:
+- **T202** (done): ripgrep's defaults for search (ignore files, hidden entries, counts); **T204a**:
+  anchored edits on `FsOps.ApplyPatch`; **T205**:
   per-step snapshots, retention and two-phase undo.
 - Signals other than kill and Ctrl+C (typed into a terminal), and starting pipe processes with default
   signal dispositions (pty.md, 8).

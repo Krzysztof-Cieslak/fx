@@ -69,6 +69,56 @@ let globs =
         ]
 
 [<Tests>]
+let ignores =
+    let ignored (text: string) (path: string) (isDirectory: bool) =
+        Ignores.isIgnored [ Ignores.ofText "" text ] path isDirectory
+
+    testList
+        "Ignores"
+        [
+            test "reads .gitignore as git does" {
+                let cases =
+                    [
+                        "*.log", "a.log", false, true
+                        "*.log", "deep/a.log", false, true
+                        "/build", "build", true, true
+                        "/build", "src/build", true, false
+                        "doc/out", "doc/out", true, true
+                        "doc/out", "x/doc/out", true, false
+                        "bin/", "bin", true, true
+                        "bin/", "bin", false, false
+                        "bin/", "src/bin", true, true
+                        "**/cache", "a/b/cache", true, true
+                        "logs/**", "logs/a/b.txt", false, true
+                        "\\#hash", "#hash", false, true
+                        "\\!bang", "!bang", false, true
+                        "trailing   ", "trailing", false, true
+                        "kept\\ ", "kept ", false, true
+                        "# a comment", "# a comment", false, false
+                        "*.log\n!keep.log", "keep.log", false, false
+                        "*.log\n!keep.log", "other.log", false, true
+                        "!keep.log\n*.log", "keep.log", false, true
+                        "[abc", "[abc", false, false
+                    ]
+
+                for text, path, isDirectory, expected in cases do
+                    Expect.equal (ignored text path isDirectory) expected $"{text} on {path} (directory: {isDirectory})"
+            }
+
+            test "deeper files' rules apply below their directory and come later" {
+                let rules =
+                    [ Ignores.ofText "" "*.gen\n"; Ignores.ofText "src" "!keep.gen\n/local\n" ]
+
+                Expect.isTrue (Ignores.isIgnored rules "a.gen" false) "the root's rule"
+                Expect.isFalse (Ignores.isIgnored rules "src/keep.gen" false) "re-included below src"
+                Expect.isTrue (Ignores.isIgnored rules "keep.gen" false) "not above src"
+                Expect.isTrue (Ignores.isIgnored rules "src/local" true) "anchored at src"
+                Expect.isFalse (Ignores.isIgnored rules "local" true) "not at the root"
+                Expect.isFalse (Ignores.isIgnored rules "srcx/local" true) "a sibling with the same prefix"
+            }
+        ]
+
+[<Tests>]
 let textPatch =
     testList
         "TextPatch"
