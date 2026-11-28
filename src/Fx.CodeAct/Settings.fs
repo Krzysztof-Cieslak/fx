@@ -198,6 +198,14 @@ module CodeActSlots =
             (count 1)
             2000
 
+    /// `codeact.read.maxChars`: the characters of a file one read or a cell's file value shows.
+    let readChars: Slot<int> =
+        Slot.create
+            "codeact.read.maxChars"
+            "The most characters of a file one read (or a cell ending with a file) shows: a larger file shows its head and tail, the lines left out and how to read them, and a Markdown file its headings."
+            (count 256)
+            16000
+
     /// `codeact.finish.evidence`: `optional` or `required`.
     let evidence: Slot<EvidencePolicy> =
         Slot.enum
@@ -285,6 +293,7 @@ module CodeActSlots =
             Slot.info outputChars
             Slot.info receiptChars
             Slot.info readLines
+            Slot.info readChars
             Slot.info evidence
             Slot.info snapshots
             Slot.info recallMaxBytes
@@ -338,6 +347,7 @@ type CodeActSettings =
         OutputChars: int
         ReceiptChars: int
         ReadLines: int
+        ReadChars: int
         Evidence: EvidencePolicy
         /// `values.previewLimits`: previews of cells' values.
         PreviewLimits: Limits
@@ -382,6 +392,7 @@ module CodeActSettings =
             let! outputChars = Variants.get CodeActSlots.outputChars
             let! receiptChars = Variants.get CodeActSlots.receiptChars
             let! readLines = Variants.get CodeActSlots.readLines
+            let! readChars = Variants.get CodeActSlots.readChars
             let! evidence = Variants.get CodeActSlots.evidence
             let! inlineBytes = Variants.get Slots.inlineValueMaxBytes
             let! argumentBytes = Variants.get Slots.argumentMaxBytes
@@ -414,6 +425,7 @@ module CodeActSettings =
                     OutputChars = outputChars
                     ReceiptChars = receiptChars
                     ReadLines = readLines
+                    ReadChars = readChars
                     Evidence = evidence
                     PreviewLimits = prompt.Limits
                     InlineBytes = inlineBytes

@@ -198,6 +198,8 @@ type CellLimits =
         OutputChars: int
         /// A file's lines shown (`codeact.read.maxLines`).
         ReadLines: int
+        /// A file's characters shown (`codeact.read.maxChars`).
+        ReadChars: int
     }
 
     override this.ToString() =
@@ -345,57 +347,215 @@ module Receipts =
             else
                 parts
 
-    /// Lines of a file read from line `first` (in the file), at most `count`, as a file piece (they
-    /// count as seen; exclusions withhold them), and a note when they are not the whole file, where
-    /// `more` says how to read on from a line.
-    let private fileLines (file: FileText) (first: int) (count: int) (more: int -> string) : Piece list =
-        let held = splitLines file.Text
+    /// A line as a file piece shows it: cut to `maxChars` with a note of how long it is (a minified
+    /// file's one line must not fill the context).
+    let private shownLine (maxChars: int) (line: string) : string =
+        if line.Length <= maxChars then
+            line
+        else
+            line.Substring(0, maxChars) + $"… [{line.Length} characters]"
 
-        let shown =
-            held
-            |> List.skip (min held.Length (max 0 (first - file.Start)))
-            |> List.truncate count
+    /// What a numbered line costs in a receipt: its text, its number and tab, its line ending.
+    let private lineCost (line: string) = line.Length + 8
 
+    /// The lines at the start of `lines` that fit in `maxLines` lines and `maxChars` characters (at
+    /// least one).
+    let private fitting (maxLines: int) (maxChars: int) (lines: string list) : int =
+        let rec go count chars rest =
+            match rest with
+            | line :: more when count < maxLines && (count = 0 || chars + lineCost line <= maxChars) ->
+                go (count + 1) (chars + lineCost line) more
+            | _ -> count
+
+        go 0 0 lines
+
+    /// The Markdown headings of a text (ATX: `#` to `######` at a line's start, outside fenced code), as
+    /// (line, heading) from line `first`.
+    let markdownHeadings (first: int) (lines: string list) : (int * string) list =
+        let mutable fence: string option = None
+
+        lines
+        |> List.mapi (fun i line -> first + i, line)
+        |> List.choose (fun (number, line) ->
+            let trimmed = line.TrimStart()
+            let indent = line.Length - trimmed.Length
+
+            match fence with
+            | Some marker ->
+                if indent < 4 && trimmed.StartsWith(marker, StringComparison.Ordinal) then
+                    fence <- None
+
+                None
+            | None when
+                indent < 4
+                && (trimmed.StartsWith("```", StringComparison.Ordinal)
+                    || trimmed.StartsWith("~~~", StringComparison.Ordinal))
+                ->
+                fence <- Some(trimmed.Substring(0, 3))
+                None
+            | None when indent < 4 && trimmed.StartsWith '#' ->
+                let level = trimmed.Length - trimmed.TrimStart('#').Length
+
+                if
+                    level <= 6
+                    && (trimmed.Length = level || trimmed[level] = ' ' || trimmed[level] = '\t')
+                then
+                    Some(number, trimmed.TrimEnd())
+                else
+                    None
+            | None -> None)
+
+    /// The most headings a Markdown outline lists.
+    [<Literal>]
+    let MaxHeadings = 80
+
+    let private isMarkdown (path: string) =
+        [ ".md"; ".markdown"; ".mdx" ]
+        |> List.exists (fun ext -> path.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+
+    /// A Markdown file's outline, when a receipt could not show all of it: its headings with their line
+    /// numbers as a file piece (they count as seen; exclusions withhold them). The deepest levels go
+    /// first when there are more than `MaxHeadings`.
+    let private outline (file: FileText) (held: string list) (maxChars: int) : Piece list =
+        if not (isMarkdown file.Path) || file.Start <> 1 || held.Length < file.Lines then
+            []
+        else
+            let headings = markdownHeadings 1 held
+
+            let level (heading: string) =
+                heading.Length - heading.TrimStart('#').Length
+
+            let kept =
+                [ 6..-1..1 ]
+                |> List.map (fun deepest -> headings |> List.filter (fun (_, h) -> level h <= deepest))
+                |> List.tryFind (fun hs -> hs.Length <= MaxHeadings)
+                |> Option.defaultWith (fun () ->
+                    headings |> List.filter (fun (_, h) -> level h = 1) |> List.truncate MaxHeadings)
+
+            let kept =
+                kept |> List.truncate (fitting MaxHeadings maxChars (kept |> List.map snd))
+
+            if kept.IsEmpty then
+                []
+            else
+                let text =
+                    kept
+                    |> List.map (fun (n, h) -> n.ToString().PadLeft(6) + "\t" + shownLine 200 h)
+                    |> String.concat "\n"
+
+                let omitted = headings.Length - kept.Length
+
+                [
+                    Piece.Text(
+                        if omitted > 0 then
+                            $"[Its headings ({kept.Length} of {headings.Length}, the deeper ones left out):]"
+                        else
+                            "[Its headings:]"
+                    )
+                    Piece.File
+                        {
+                            Path = Paths.normalize file.Path
+                            Digest = string file.Digest
+                            Lines = kept |> List.map (fun (n, _) -> LineRange.create n n)
+                            Text = text
+                        }
+                ]
+
+    /// How much of a file a receipt shows (`codeact.read.maxLines`, `codeact.read.maxChars`).
+    type ReadBounds = { MaxLines: int; MaxChars: int }
+
+    /// A file piece of the lines `first` to `first + shown.Length - 1`.
+    let private filePiece (file: FileText) (first: int) (shown: string list) (whole: bool) (maxChars: int) : Piece =
         let last = first + shown.Length - 1
-        let whole = first = 1 && shown.Length = file.Lines
 
-        let view: FileView =
+        Piece.File
             {
                 Path = Paths.normalize file.Path
                 Digest = string file.Digest
-                Lines =
-                    if whole || shown.IsEmpty then
-                        []
-                    else
-                        [ LineRange.create first last ]
-                Text = numbered first shown
+                Lines = if whole then [] else [ LineRange.create first last ]
+                Text = numbered first (shown |> List.map (shownLine maxChars))
             }
 
-        [
-            if shown.IsEmpty && file.Lines > 0 then
-                Piece.Text $"{file.Path} has {file.Lines} lines; nothing at line {first}."
-            elif file.Lines = 0 then
-                Piece.Text $"{file.Path} is empty."
-            else
-                Piece.File view
+    /// The lines of a file read (from where the read starts), all of them if they fit the bounds, else
+    /// their head and their tail (half the bounds each) as two file pieces (they count as seen;
+    /// exclusions withhold them), a note of the lines left out and how to read them (`gap`), and for a
+    /// Markdown file its headings (spec §6.7 "smart previews").
+    let private headAndTail (file: FileText) (bounds: ReadBounds) (gap: int -> int -> string) : Piece list =
+        let held = splitLines file.Text
+        let total = held.Length
+        let lineChars = max 80 (bounds.MaxChars / 2)
 
+        if file.Lines = 0 then
+            [ Piece.Text $"{file.Path} is empty." ]
+        elif held.IsEmpty then
+            [
+                Piece.Text $"{file.Path} has {file.Lines} lines; nothing at line {file.Start}."
+            ]
+        elif fitting bounds.MaxLines bounds.MaxChars held = total then
+            let whole = file.Start = 1 && total = file.Lines
+
+            [
+                filePiece file file.Start held whole lineChars
                 if not whole then
-                    Piece.Text $"[Lines {first}–{last} of {file.Lines}.{more (last + 1)}]"
-        ]
+                    Piece.Text $"[Lines {file.Start}–{file.Start + total - 1} of {file.Lines}.]"
+            ]
+        else
+            let halfLines = max 1 (bounds.MaxLines / 2)
+            let halfChars = bounds.MaxChars / 2
+            let headCount = fitting halfLines halfChars held
 
-    /// `read`'s receipt: the lines shown, as a file piece (they count as seen; exclusions withhold
-    /// them), and how to see more.
-    let read (file: FileText) (offset: int option) (limit: int option) (maxLines: int) : Piece list =
-        fileLines file (defaultArg offset file.Start) (min maxLines (defaultArg limit maxLines)) (fun next ->
-            $" Read on with offset {next}.")
+            let tailCount =
+                min (total - headCount - 1) (fitting halfLines halfChars (List.rev held))
+                |> max 0
 
-    /// A cell's `FileText` value: its lines from where it starts (a ranged read's), up to `maxLines`.
-    let private fileValue (file: FileText) (maxLines: int) : Piece list =
-        fileLines file file.Start maxLines (fun next ->
-            if next <= file.End then
-                $" Read on with `{Fx.Product.kernelGlobal}.fs.read({Json.quote file.Path}, {{ lines: [{next}, {file.End}] }})`."
+            let firstLeft = file.Start + headCount
+            let lastLeft = file.Start + total - tailCount - 1
+
+            [
+                filePiece file file.Start (List.truncate headCount held) false lineChars
+                Piece.Text(gap firstLeft lastLeft)
+                if tailCount > 0 then
+                    filePiece file (lastLeft + 1) (List.skip (total - tailCount) held) false lineChars
+                yield! outline file held halfChars
+            ]
+
+    /// `read`'s receipt: without an offset or a limit, the file as `headAndTail` shows it; with one,
+    /// the lines from the offset that fit the bounds, and how to read on.
+    let read (file: FileText) (offset: int option) (limit: int option) (bounds: ReadBounds) : Piece list =
+        match offset, limit with
+        | None, None ->
+            headAndTail file bounds (fun first last ->
+                $"[Lines {first}–{last} of {file.Lines} not shown: read them with offset {first}.]")
+        | _ ->
+            let first = defaultArg offset file.Start
+            let held = splitLines file.Text
+            let from = held |> List.skip (min held.Length (max 0 (first - file.Start)))
+
+            let wanted =
+                from |> List.truncate (min bounds.MaxLines (defaultArg limit bounds.MaxLines))
+
+            let shown = wanted |> List.truncate (fitting bounds.MaxLines bounds.MaxChars wanted)
+            let last = first + shown.Length - 1
+            let whole = first = 1 && shown.Length = file.Lines
+
+            if shown.IsEmpty && file.Lines > 0 then
+                [ Piece.Text $"{file.Path} has {file.Lines} lines; nothing at line {first}." ]
+            elif file.Lines = 0 then
+                [ Piece.Text $"{file.Path} is empty." ]
             else
-                "")
+                [
+                    filePiece file first shown whole (max 80 (bounds.MaxChars / 2))
+                    if not whole then
+                        Piece.Text $"[Lines {first}–{last} of {file.Lines}. Read on with offset {last + 1}.]"
+                ]
+
+    /// A cell's `FileText` value: the lines it holds as `headAndTail` shows them, and how to read the
+    /// ones left out.
+    let private fileValue (file: FileText) (bounds: ReadBounds) : Piece list =
+        let g = Fx.Product.kernelGlobal
+
+        headAndTail file bounds (fun first last ->
+            $"[Lines {first}–{last} of {file.Lines} not shown: `{g}.fs.read({Json.quote file.Path}, {{ lines: [{first}, {last}] }})` reads them.]")
 
     /// `edit`'s receipt, and a cell's `Edited` value's: what changed, then the lines it left as file
     /// pieces of the new version (they count as seen). `around`: the lines around them, read after the
@@ -775,7 +935,12 @@ module Receipts =
         | Some(CellValue.File file) ->
             restarted note
             @ [ quoted limits.ReceiptChars reads head ]
-            @ fileValue file limits.ReadLines
+            @ fileValue
+                file
+                {
+                    MaxLines = limits.ReadLines
+                    MaxChars = limits.ReadChars
+                }
             @ (if tail = "" then [] else [ Piece.Text tail ])
         | Some(CellValue.Edited value) ->
             restarted note
