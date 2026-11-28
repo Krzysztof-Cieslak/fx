@@ -92,6 +92,33 @@ type Overflow =
         | Some path -> $"Overflow({this.Bytes} bytes at {path})"
         | None -> $"Overflow({this.Bytes} bytes, {this.Hash})"
 
+/// Which part of a blob's text `blobs.read` gives.
+type BlobReadOptions =
+    {
+        /// A character offset (a `next` it gave); 0 by default.
+        From: int option
+        /// At most this many characters; `CoreSettings.OutputChars` by default.
+        MaxChars: int option
+    }
+
+    override this.ToString() =
+        $"BlobReadOptions({this.From}, {this.MaxChars})"
+
+/// Text of a blob from a character offset (`blobs.read`): all of an output that was cut (T201a).
+type BlobText =
+    {
+        Hash: BlobHash
+        /// The offset of `Text`, in characters.
+        From: int
+        /// The offset after `Text`: pass it as `from` to read on; `TotalChars` at the end.
+        Next: int
+        TotalChars: int
+        Text: string
+    }
+
+    override this.ToString() =
+        $"BlobText({this.Hash}, {this.From}-{this.Next} of {this.TotalChars})"
+
 /// What a command did (spec §4.1 `RunResult`). Its output is bounded: the head and the tail of each
 /// stream, with a marker where the middle was left out. A command that timed out keeps what it
 /// printed until it was killed.
@@ -391,6 +418,57 @@ module CoreBindings =
             }
             |> Codec.describe "Where all of a text that was cut is: a blob of the environment's blob store."
             |> Codec.named "Overflow"
+
+        let blobReadOptions: Codec<BlobReadOptions> =
+            Codec.record {
+                let! from =
+                    Codec.optionalField
+                        "from"
+                        (fun (o: BlobReadOptions) -> o.From)
+                        (Codec.int
+                         |> Codec.atLeast 0
+                         |> Codec.describe "A character offset (a next you got); 0 by default.")
+
+                and! maxChars =
+                    Codec.optionalField
+                        "maxChars"
+                        (fun o -> o.MaxChars)
+                        (Codec.int |> Codec.atLeast 1 |> Codec.describe "At most this many characters.")
+
+                return { From = from; MaxChars = maxChars }
+            }
+            |> Codec.describe "Which part of a blob's text to read."
+            |> Codec.named "BlobReadOptions"
+
+        let blobText: Codec<BlobText> =
+            Codec.record {
+                let! hash = Codec.field "hash" (fun (t: BlobText) -> t.Hash) digest
+                and! from = Codec.field "from" (fun t -> t.From) (Codec.int |> Codec.atLeast 0)
+
+                and! next =
+                    Codec.field
+                        "next"
+                        (fun t -> t.Next)
+                        (Codec.int
+                         |> Codec.atLeast 0
+                         |> Codec.describe "The offset after text: pass it as from to read on.")
+
+                and! total =
+                    Codec.field "totalChars" (fun t -> t.TotalChars) (Codec.int |> Codec.atLeast 0)
+
+                and! text = Codec.field "text" (fun t -> t.Text) Codec.string
+
+                return
+                    {
+                        Hash = hash
+                        From = from
+                        Next = next
+                        TotalChars = total
+                        Text = text
+                    }
+            }
+            |> Codec.describe "Text of a blob from a character offset."
+            |> Codec.named "BlobText"
 
         let runResult: Codec<RunResult> =
             Codec.record {
@@ -846,6 +924,7 @@ module CoreBindings =
         [
             "shell", "Commands in the workspace's shell."
             "fs", "The workspace's files."
+            "blobs", "The environment's blob store: all of output that was cut."
         ]
 
     /// A path as content exclusions match it: normalized (`..` resolved, so `../repo/x` inside the
@@ -1263,6 +1342,57 @@ module CoreBindings =
                 |> EffResult.map (entry settings)
                 |> EffResult.mapError fsFailed)
 
+    /// `blobs.read(hash, options?)`: the text of a blob of the environment's blob store (all of an
+    /// output that was cut, T201a) from a character offset, at most `maxChars` of it (never half a
+    /// surrogate pair).
+    let blobsRead<'R when 'R :> IBlobs and 'R :> IScope> (settings: CoreSettings) : HostBinding<'R> =
+        HostBinding.create2
+            "blobs.read"
+            "Reads the text of a blob (all of an output that was cut, as an overflow names it) from a character offset, bounded. Pass `next` as `from` to read on."
+            (Arg.required "hash" "The blob's hash (sha256:…), from an overflow." Codecs.digest,
+             Arg.optional "options" "" Codecs.blobReadOptions)
+            Codecs.blobText
+            (fun (hash, options) ->
+                eff {
+                    match! Blobs.get hash with
+                    | Error(BlobError.NotFound _) ->
+                        return Error(failure "notFound" $"the environment's blob store has no blob {hash}")
+                    | Error e -> return Error(failure "unreadable" (string e))
+                    | Ok bytes ->
+                        let text = utf8.GetString bytes
+                        let options = options |> Option.defaultValue { From = None; MaxChars = None }
+                        let from = min text.Length (options.From |> Option.defaultValue 0)
+
+                        let from =
+                            if from > 0 && from < text.Length && Char.IsLowSurrogate text[from] then
+                                from - 1
+                            else
+                                from
+
+                        let count =
+                            min (text.Length - from) (options.MaxChars |> Option.defaultValue settings.OutputChars)
+
+                        let count =
+                            if
+                                count > 0
+                                && from + count < text.Length
+                                && Char.IsHighSurrogate text[from + count - 1]
+                            then
+                                count - 1
+                            else
+                                count
+
+                        return
+                            Ok
+                                {
+                                    Hash = hash
+                                    From = from
+                                    Next = from + count
+                                    TotalChars = text.Length
+                                    Text = text.Substring(from, count)
+                                }
+                })
+
     /// `fs.patch(patches)`: structured edits (envd's apply-patch), all checked before any is written.
     let fsPatch<'R when 'R :> IFsOps and 'R :> IScope> (settings: CoreSettings) : HostBinding<'R> =
         let absolute (patch: FilePatch) =
@@ -1486,4 +1616,5 @@ module CoreBindings =
             fsPatch settings
             fsEdit settings
             fsEditRange settings
+            blobsRead settings
         ]

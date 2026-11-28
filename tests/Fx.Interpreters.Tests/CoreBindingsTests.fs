@@ -222,6 +222,51 @@ let tests =
                             | Error e -> failtest (string e)
                         | None -> failtest $"not a hash: {hash}"
 
+                    testCase "blobs.read gives a stored output's text from an offset, bounded, and reads on"
+                    <| fun () ->
+                        let printed = String.replicate 3000 "0123456789" + "😀end"
+                        let f = fakes (fun _ -> Some(Ok(ScriptedShell.output 0 printed "")))
+                        let ran = call f "shell.run" [ str "yes" ] |> json
+                        let hash = field "hash" (field "stdoutOverflow" ran)
+
+                        let first =
+                            call f "blobs.read" [ Value.Inline hash; inline' """{"maxChars": 25}""" ]
+                            |> json
+
+                        Expect.equal (text (field "text" first)) "0123456789012345678901234" "the head"
+                        Expect.equal (field "next" first) (Json.int 25) "where to read on"
+                        Expect.equal (field "totalChars" first) (Json.int printed.Length) "how much there is"
+
+                        let last =
+                            call
+                                f
+                                "blobs.read"
+                                [
+                                    Value.Inline hash
+                                    inline' $"""{{"from": {printed.Length - 6}, "maxChars": 100}}"""
+                                ]
+                            |> json
+
+                        Expect.equal (text (field "text" last)) "9😀end" "the end"
+                        Expect.equal (field "next" last) (field "totalChars" last) "at the end"
+
+                        let split =
+                            call
+                                f
+                                "blobs.read"
+                                [
+                                    Value.Inline hash
+                                    inline' $"""{{"from": {printed.Length - 5}, "maxChars": 1}}"""
+                                ]
+                            |> json
+
+                        Expect.equal (text (field "text" split)) "" "never half a surrogate pair"
+
+                        let missing = call f "blobs.read" [ str ("sha256:" + String.replicate 64 "0") ]
+
+                        Expect.equal (failedCode missing) "notFound" "a blob the store does not have"
+
+
                     testCase "without files, the marker names the blob"
                     <| fun () ->
                         let f =
@@ -1276,6 +1321,7 @@ let tests =
                         "fs.patch"
                         "fs.edit"
                         "fs.editRange"
+                        "blobs.read"
                     ]
                     "paths"
         ]
