@@ -90,7 +90,9 @@ type PatchError =
         | PatchFsError e -> string e
 
 /// What to search: files under `Root` whose relative path (with `/`) matches a glob, and, with a
-/// pattern, their lines that match a regular expression. Basic semantics; ripgrep's are T202's.
+/// pattern, their lines that match a regular expression. With `Ignores` and without `Hidden`, the walk
+/// skips what ripgrep skips by default: what `.gitignore` files ignore, and hidden files and
+/// directories (spec §6.7, T202).
 type SearchQuery =
     {
         /// The directory to search (absolute).
@@ -108,6 +110,17 @@ type SearchQuery =
         MaxResults: int
         /// Files larger than this are not searched for the pattern.
         MaxFileBytes: int64
+        /// Skip what `.gitignore` files ignore (`Ignores`): those in the directories walked, in the
+        /// directories from `IgnoresFrom` down to `Root`, and `.git/info/exclude` there.
+        Ignores: bool
+        /// An ancestor of `Root` (absolute; the workspace, say) whose ignore files also apply, with those
+        /// of the directories between it and `Root`; `None`: `Root`'s own.
+        IgnoresFrom: string option
+        /// Walk hidden files and directories (names starting with `.`); `.git` is never walked.
+        Hidden: bool
+        /// Once `MaxResults` matches are found, go on counting matches per file (up to
+        /// `MaxCountedFiles` files) instead of stopping.
+        CountAll: bool
     }
 
     override this.ToString() =
@@ -125,7 +138,15 @@ module SearchQuery =
             IgnoreCase = false
             MaxResults = 1000
             MaxFileBytes = 4L * 1024L * 1024L
+            Ignores = false
+            IgnoresFrom = None
+            Hidden = true
+            CountAll = false
         }
+
+    /// The most files `SearchResult.Counts` holds.
+    [<Literal>]
+    let MaxCountedFiles = 1000
 
     /// Lines matching `pattern` in files under `root`.
     let lines (root: string) (pattern: string) : SearchQuery =
@@ -149,6 +170,16 @@ type SearchMatch =
     override this.ToString() =
         $"{this.Path}:{this.Line}:{this.Column}: {this.Text}"
 
+/// How many lines of a file matched.
+type SearchCount =
+    {
+        /// Relative to the root, with `/` separators.
+        Path: string
+        Matches: int
+    }
+
+    override this.ToString() = $"{this.Path}: {this.Matches}"
+
 type SearchResult =
     {
         /// The files that matched (relative, `/` separators), in walk order (sorted by name).
@@ -157,6 +188,11 @@ type SearchResult =
         Matches: SearchMatch list
         /// Whether a limit cut the results short.
         Truncated: bool
+        /// With a pattern, the matching lines per file, in walk order: of every file searched with
+        /// `CountAll`, else of the files in `Files`.
+        Counts: SearchCount list
+        /// `Counts` covers every file that matched (no limit stopped the counting).
+        CountsComplete: bool
     }
 
     override this.ToString() =

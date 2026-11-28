@@ -238,8 +238,9 @@ module EnvProtocol =
             })
         |> Method.withErrors EnvCodecs.patchError
 
+    /// `fs/search`: `{root, …the query, beneath?}` → the result.
     let fsSearch =
-        Method.define "fs/search" EnvCodecs.searchQuery EnvCodecs.searchResult
+        Method.define "fs/search" EnvCodecs.searchParams EnvCodecs.searchResult
         |> Method.withErrors EnvCodecs.searchError
 
     // ---- Watching -------------------------------------------------------------------------------

@@ -111,7 +111,7 @@ module EnvdServer =
             Handler.request EnvProtocol.fsMove (fun _ (source, destination, roots) ->
                 run ((files roots).Fs.Move source destination))
             Handler.request EnvProtocol.fsPatch (fun _ (patches, roots) -> run ((files roots).FsOps.ApplyPatch patches))
-            Handler.request EnvProtocol.fsSearch (fun _ query -> run (services.FsOps.Search query))
+            Handler.request EnvProtocol.fsSearch (fun _ (query, roots) -> run ((files roots).FsOps.Search query))
             Handler.request EnvProtocol.watchStart (fun context (watch, spec) ->
                 run (fun ct -> envd.StartWatch(context.Peer, watch, spec, ct)))
             Handler.request EnvProtocol.watchStop (fun context watch ->
