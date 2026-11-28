@@ -57,6 +57,7 @@ type private HandsEnv =
         Fs: Fs
         FsOps: FsOps
         Shell: Shell
+        Ids: Ids
         Scope: Scope
     }
 
@@ -78,6 +79,9 @@ type private HandsEnv =
 
     interface Fx.Store.IBlobs with
         member _.Blobs = HandsEnv.Stored.Blobs
+
+    interface IIds with
+        member env.Ids = env.Ids
 
     interface IScopeWith<HandsEnv> with
         member env.Scope = env.Scope
@@ -184,6 +188,7 @@ let private record () : Task<string list> =
                 Env =
                     {
                         Clock = SystemClock.clock
+                        Ids = SystemIds.create SystemClock.clock
                         FsRead = fs.FsRead
                         Fs = fs.Fs
                         FsOps = FsOpsOver.create fs.FsRead fs.Fs
@@ -214,6 +219,7 @@ let private record () : Task<string list> =
                     fun taps env ->
                         { env with
                             Clock = taps.Clock env.Clock
+                            Ids = taps.Ids env.Ids
                             FsRead = taps.FsRead env.FsRead
                             Fs = taps.Fs env.Fs
                             FsOps = taps.FsOps env.FsOps

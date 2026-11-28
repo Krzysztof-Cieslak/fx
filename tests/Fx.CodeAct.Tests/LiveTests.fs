@@ -164,6 +164,7 @@ let private localEnvironmentWith
 
     EnvHands.ofHandle
         Fx.Effects.Live.SystemClock.clock
+        (Fx.Effects.Live.SystemIds.create Fx.Effects.Live.SystemClock.clock)
         Scope.root
         plan
         "s1"

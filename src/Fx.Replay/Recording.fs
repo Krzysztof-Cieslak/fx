@@ -61,6 +61,8 @@ type HandsTaps =
         FsRead: FsRead -> FsRead
         Fs: Fs -> Fs
         FsOps: FsOps -> FsOps
+        /// Random bytes (handle ids, T201b): they reach the kernel in the host's replies.
+        Ids: Ids -> Ids
         /// Refuses: terminals are not recorded.
         Terminal: Fx.Pty.Terminal -> Fx.Pty.Terminal
     }
@@ -444,6 +446,7 @@ type private Recorded<'R, 'K
     and 'K :> IFs
     and 'K :> IFsOps
     and 'K :> IBlobs
+    and 'K :> IIds
     and 'K :> IClock
     and 'K :> IScopeWith<'K>> =
     {
@@ -465,6 +468,7 @@ type RecordedCodeAct<'R, 'K
     and 'K :> IFs
     and 'K :> IFsOps
     and 'K :> IBlobs
+    and 'K :> IIds
     and 'K :> IClock
     and 'K :> IScopeWith<'K>>(recorder: Recorder, wraps: Wraps<'R, 'K>, config: CodeActConfig<'R, 'K>) =
     let sessions =
@@ -485,6 +489,7 @@ type RecordedCodeAct<'R, 'K
                 FsRead = Record.fsRead journal lane
                 Fs = Record.fs journal lane
                 FsOps = Record.fsOps journal lane
+                Ids = Record.ids journal lane
                 Terminal = Record.terminal
             }
 
@@ -857,6 +862,7 @@ module Recording =
         and 'K :> IFs
         and 'K :> IFsOps
         and 'K :> IBlobs
+        and 'K :> IIds
         and 'K :> IClock
         and 'K :> IScopeWith<'K>>
         (recorder: Recorder)

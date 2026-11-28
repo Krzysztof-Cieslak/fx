@@ -163,35 +163,40 @@ module HistoryBindings =
             (Codec.list HistoryCodecs.collapsedInfo)
             (fun () -> transcript |> Eff.map (Originals.list exclusions >> Ok))
 
-    /// `history.read(range, options?)`: the originals of a collapsed part, bounded, from a character
-    /// offset; files content exclusions keep from models stay withheld.
+    /// The kind of `HistoryRange` handles over a session's table: their object is the range's id.
+    let rangeKind (table: HandleTable<string>) : HandleKind<string> =
+        HandleKind.create "HistoryRange" "A part of this conversation that compaction replaced with a summary." table
+
+    let private notFound (id: string) =
+        HostCallError.Failed("notFound", $"no collapsed range {Json.quote id} (history.list gives their ids)", None)
+
+    /// `history.read(range, options?)`: the originals of a collapsed part (an id, or a `HistoryRange`
+    /// handle), bounded, from a character offset; files content exclusions keep from models stay withheld.
     let read<'K>
         (transcript: Eff<'K, Transcript>)
+        (kind: HandleKind<string>)
         (exclusions: Fx.Models.Exclusions)
         (outputChars: int)
         : HostBinding<'K> =
         HostBinding.create2
             "history.read"
-            "Reads back the originals of a part of this conversation that compaction replaced (an id from history.list), from a character offset, bounded. Pass `next` as `from` to read on."
-            (Arg.required "range" "A range's id, from history.list." Codec.string,
+            "Reads back the originals of a part of this conversation that compaction replaced (an id from history.list, or a HistoryRange from history.open), from a character offset, bounded. Pass `next` as `from` to read on."
+            (Arg.valueOrHandle "range" "A range's id from history.list, or a HistoryRange." Codec.string kind,
              Arg.optional "options" "" HistoryCodecs.readOptions)
             HistoryCodecs.historyText
-            (fun (id, options) ->
+            (fun (range, options) ->
                 eff {
+                    let id =
+                        match range with
+                        | Choice1Of2 id
+                        | Choice2Of2 id -> id
+
                     let! t = transcript
 
                     match Originals.find t id with
-                    | None ->
-                        return
-                            Error(
-                                HostCallError.Failed(
-                                    "notFound",
-                                    $"no collapsed range {Json.quote id} (history.list gives their ids)",
-                                    None
-                                )
-                            )
-                    | Some range ->
-                        let text = Originals.text exclusions t range
+                    | None -> return Error(notFound id)
+                    | Some found ->
+                        let text = Originals.text exclusions t found
                         let from, maxChars = options |> Option.defaultValue (None, None)
 
                         let from, count =
@@ -209,4 +214,35 @@ module HistoryBindings =
                                     TotalChars = text.Length
                                     Text = text.Substring(from, count)
                                 }
+                })
+
+    /// `history.open(id)`: a `HistoryRange` handle for a collapsed part, which `history.read` takes (T201b).
+    let openRange<'K when 'K :> IIds>
+        (transcript: Eff<'K, Transcript>)
+        (kind: HandleKind<string>)
+        (exclusions: Fx.Models.Exclusions)
+        : HostBinding<'K> =
+        HostBinding.createHandle1
+            "history.open"
+            "A HistoryRange for a part of this conversation that compaction replaced (an id from history.list): pass it to history.read."
+            (Arg.required "id" "A range's id, from history.list." Codec.string)
+            kind
+            (fun id ->
+                eff {
+                    let! t = transcript
+
+                    match Originals.list exclusions t |> List.tryFind (fun info -> info.Id = id) with
+                    | None -> return Error(notFound id)
+                    | Some info ->
+                        let summary = info.Summary.Replace('\n', ' ')
+                        let cut = summary.Length > 120
+
+                        let text =
+                            $"{id}, entries {info.First}-{info.Last}: "
+                            + (if cut then
+                                   summary.Substring(0, snd (CoreBindings.window summary 0 119)) + "…"
+                               else
+                                   summary)
+
+                        return Ok(id, { Text = text; Truncated = cut })
                 })

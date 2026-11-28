@@ -85,6 +85,12 @@ type private HandsEnv =
     interface Fx.Store.IBlobs with
         member _.Blobs = HandsEnv.Stored.Blobs
 
+    /// Ids of handles (T201b): seeded, the same in every run.
+    static member val SeededIds = Fx.Effects.Fakes.FakeIds(7UL, Fx.Effects.Fakes.FakeClock(Instant.unixEpoch).Clock)
+
+    interface IIds with
+        member _.Ids = HandsEnv.SeededIds.Ids
+
     interface IScopeWith<HandsEnv> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }

@@ -293,6 +293,9 @@ let tests =
                                         Say.cell
                                             "// intent: read\ncall t = history.read [\"r1\", {\"maxChars\": 100000}]\nt"
                                         Say.cell "// intent: missing\ncall m = history.read [\"r9\"]\nm"
+                                        Say.cell "// intent: open\ncall h = history.open [\"r1\"]\nh"
+                                        Say.cell
+                                            "// intent: read by handle\ncall th = history.read [\"$h\", {\"maxChars\": 100000}]\nth"
                                         Say.finish "Done"
                                     ]
 
@@ -310,6 +313,11 @@ let tests =
                                 Expect.stringContains read "print one" "the first cell, read back"
 
                                 Expect.stringContains (text rs[4]) "notFound" "a range that is not there"
+                                let opened = text rs[5]
+                                Expect.stringContains opened "HistoryRange" "a handle of its type"
+                                Expect.stringContains opened "r1, entries" "its preview"
+                                Expect.isFalse (opened.Contains "h-") "never its id"
+                                Expect.stringContains (text rs[6]) "Count the sheep" "read through the handle"
                                 do! expectReplays f "s1"
                             })
                         ()
