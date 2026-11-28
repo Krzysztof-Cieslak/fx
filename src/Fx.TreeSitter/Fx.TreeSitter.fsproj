@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The tree-sitter binding (T008, docs/spikes/tree-sitter.md): blittable DllImports of the pinned
+    tree-sitter and grammars built from native/tree-sitter, safe wrappers (parse, nodes, queries) and
+    the outline prototype. An imperative shell: interpreters (fx.repo, T202) use it; the pure core
+    never does.
+
+    FxTreeSitterBinding makes native/tree-sitter/TreeSitter.targets build the library for this project
+    and copy the shared library to the output of every project that references it.
+  -->
+
+  <PropertyGroup>
+    <FxTreeSitterBinding>true</FxTreeSitterBinding>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)Pinned.g.fs" Link="Pinned.g.fs" />
+    <Compile Include="Native.fs" />
+    <Compile Include="Library.fs" />
+    <Compile Include="Languages.fs" />
+    <Compile Include="Syntax.fs" />
+    <Compile Include="Query.fs" />
+    <Compile Include="Queries.fs" />
+    <Compile Include="Outline.fs" />
+  </ItemGroup>
+
+  <!-- Turns the pin in native/tree-sitter/TreeSitter.props into F# literals: the DllImport name and the archives the library must be built from. -->
+  <Target Name="GenerateTreeSitterPin" BeforeTargets="BeforeCompile;CoreCompile">
+    <PropertyGroup>
+      <TreeSitterPinFile>$(IntermediateOutputPath)Pinned.g.fs</TreeSitterPinFile>
+      <TreeSitterPinArchives>@(FxTreeSitterArchive->'%(Identity)', ' ')</TreeSitterPinArchives>
+    </PropertyGroup>
+    <ItemGroup>
+      <TreeSitterPinLine Include="// &lt;auto-generated /&gt; from native/tree-sitter/TreeSitter.props by Fx.TreeSitter.fsproj. Do not edit." />
+      <TreeSitterPinLine Include="[&lt;RequireQualifiedAccess&gt;]" />
+      <TreeSitterPinLine Include="module internal Fx.TreeSitter.Pinned" />
+      <TreeSitterPinLine Include="[&lt;Literal&gt;]" />
+      <TreeSitterPinLine Include="let Library = &quot;$(FxTreeSitterLibraryName)&quot;" />
+      <TreeSitterPinLine Include="[&lt;Literal&gt;]" />
+      <TreeSitterPinLine Include="let Version = &quot;$(FxTreeSitterVersion)&quot;" />
+      <TreeSitterPinLine Include="[&lt;Literal&gt;]" />
+      <TreeSitterPinLine Include="let Archives = &quot;$(TreeSitterPinArchives)&quot;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(TreeSitterPinFile)" Lines="@(TreeSitterPinLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(TreeSitterPinFile)" />
+    </ItemGroup>
+  </Target>
+</Project>

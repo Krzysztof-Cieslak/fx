@@ -20,6 +20,7 @@
     <Project Path="src/Fx.Machines/Fx.Machines.fsproj" />
     <Project Path="src/Fx.Machines.Host/Fx.Machines.Host.fsproj" />
     <Project Path="src/Fx.Sqlite/Fx.Sqlite.fsproj" />
+    <Project Path="src/Fx.TreeSitter/Fx.TreeSitter.fsproj" />
     <Project Path="src/Fx.Store/Fx.Store.fsproj" />
     <Project Path="src/Fx.Store.Live/Fx.Store.Live.fsproj" />
     <Project Path="src/Fx.Variants/Fx.Variants.fsproj" />
@@ -45,6 +46,11 @@
     <Project Path="src/Fx.CodeAct/Fx.CodeAct.fsproj" />
     <Project Path="src/Fx.Auth/Fx.Auth.fsproj" />
     <Project Path="src/Fx.Replay/Fx.Replay.fsproj" />
+  </Folder>
+  <Folder Name="/native/tree-sitter/">
+    <File Path="native/tree-sitter/TreeSitter.props" />
+    <File Path="native/tree-sitter/TreeSitter.targets" />
+    <File Path="native/tree-sitter/library.c" />
   </Folder>
   <Folder Name="/native/sqlite/">
     <File Path="native/sqlite/Sqlite.props" />
@@ -97,6 +103,7 @@
     <Project Path="tests/Fx.Machines.Tests/Fx.Machines.Tests.fsproj" />
     <Project Path="tests/Fx.Machines.Host.Tests/Fx.Machines.Host.Tests.fsproj" />
     <Project Path="tests/Fx.Sqlite.Tests/Fx.Sqlite.Tests.fsproj" />
+    <Project Path="tests/Fx.TreeSitter.Tests/Fx.TreeSitter.Tests.fsproj" />
     <Project Path="tests/Fx.Pty.Tests/Fx.Pty.Tests.fsproj" />
     <Project Path="tests/Fx.Store.Tests/Fx.Store.Tests.fsproj" />
     <Project Path="tests/Fx.Store.Live.Tests/Fx.Store.Live.Tests.fsproj" />

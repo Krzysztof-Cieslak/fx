@@ -83,6 +83,11 @@
       "reason": "The SQLite binding itself: its P/Invoke layer (EFF008) and its own API (EFF009)."
     },
     {
+      "codes": ["EFF008"],
+      "files": ["src/Fx.TreeSitter/**"],
+      "reason": "The tree-sitter binding itself: its P/Invoke layer. tree-sitter does no I/O (it parses bytes it is given), so its callers need no entry."
+    },
+    {
       "codes": ["EFF009"],
       "files": ["src/Fx.Cli/Cli.fs"],
       "reason": "--build-info reports the version of the SQLite linked into the binary; it touches no database."
