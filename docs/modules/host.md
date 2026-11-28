@@ -94,8 +94,10 @@ In this order; any expected failure is an `Error` with every line, and what star
    so their slots, grant actions and component definitions are not read.
 4. **The variant registry**: `HostSlots.core` (the variants module's, the render's, CodeAct's,
    identity's, service credentials', the sandbox's (`SandboxSlots`, privileged: `sandbox.driver`,
-   `sandbox.writable`, `sandbox.denied`) and the host's) plus the contributed slots; then the host's resolution. Content
-   exclusions read it (`ContentExclusions.ofVariants`) until extensions read their own slots (T109b).
+   `sandbox.writable`, `sandbox.denied`) and the host's) plus the contributed slots; then the host's resolution.
+   Extensions read their own slots from it (`ExtensionServices.SetVariants`: content exclusions among
+   them); `ExtensionServices` also gives them the extensions in effect (`SetHost`, after each phase)
+   and, once it runs, the grants log (`SetGrants`), each attenuated to the extension's manifest.
 5. **Stores**: `SqliteEventStore` and `FileBlobStore` with `host.store.durability`.
 6. **Grants**: `GrantsService.start` on the host-local store, with the contributed actions, policy
    rules and gates.

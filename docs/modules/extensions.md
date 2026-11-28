@@ -1,6 +1,6 @@
 # Module spec: the extension system (`src/Fx.Sdk`, `src/Fx.Extensions`)
 
-Spec: §16 (with §1 principle 9, §3, §4.2–4.4, §11.5, §13, §15, §17, §18). Task: T108.
+Spec: §16 (with §1 principle 9, §3, §4.2–4.4, §11.5, §13, §15, §17, §18). Tasks: T108, T109b (capabilities).
 Code: [`src/Fx.Sdk`](../../src/Fx.Sdk) (the public F# SDK), [`src/Fx.Sdk.Process`](../../src/Fx.Sdk.Process)
 (the extension protocol and its F# server), [`src/Fx.Extensions`](../../src/Fx.Extensions) (the core:
 registry, catalog, runtimes, the host's side of the protocol, bootstrap), [`extensions/`](../../extensions)
@@ -68,7 +68,8 @@ trust it, how it runs (in the binary, as data, or in another process), and how i
   scripts) is a component (`requires`), whose digests the component installer checks
   ([components.md](components.md)).
 - **Capabilities** are names; the host builds the extension's environment from them (below). Their
-  syntax is checked; which names exist grows with the host capabilities (T109b).
+  syntax is checked here; admission refuses names the host does not offer (`Capability.known`:
+  `clock`, `grants`, `packages`, `variants`). Listing one changes the hash like any member.
 
 ## Contribution types and the registry
 
@@ -101,7 +102,7 @@ let fsMiddle  : ContributionType<Middleware<Fs>> = Hook.interpret "fs" "…"    
 
 | Command | Events | Rejections |
 |---|---|---|
-| `Admit request` (before any code runs) | `Disabled(replaced, ReplacedBy id)`…, `Admitted` | `extension.duplicate`, `extension.replaced`, `extension.placement`, `extension.sdk`, `extension.protocol`, `trust.untrusted-project`, `trust.hash-mismatch`, `trust.unpinned`, `contribution.unknown-type`, `trust.privileged`, `trust.replace`, `contribution.conflict` |
+| `Admit request` (before any code runs) | `Disabled(replaced, ReplacedBy id)`…, `Admitted` | `extension.duplicate`, `extension.replaced`, `extension.placement`, `extension.sdk`, `extension.protocol`, `trust.untrusted-project`, `trust.hash-mismatch`, `trust.unpinned`, `contribution.unknown-type`, `extension.capability`, `trust.privileged`, `trust.replace`, `contribution.conflict` |
 | `Activate(id, provided, methods)` | `Activated` | `extension.not-admitted`, `extension.mismatch` (not exactly what the manifest declares) |
 | `Fail(id, reason)` | `ActivationFailed` | `extension.not-admitted` |
 | `Disable(id, reason)` | `Disabled(id, Requested)` | `trust.policy`, `extension.not-enabled` |
@@ -140,11 +141,25 @@ Hooks are contribution types whose values are code. `Hooks` runs them over the c
 ## The extension environment
 
 `IExtensionEnv` is the environment of all extension code: its extension's id, the capabilities the
-host grants it (today a clock), and the caller's scope. The host builds one per extension
-(`HostSettings.EnvFor manifest`), attenuated to the manifest's `capabilities`: an extension's authority
-is that value, never the caller's environment. `BasicExtensionEnv` (in `Fx.Sdk`) is the environment
-every extension gets today; T109b adds capabilities (each checked against the manifest), also over the
-protocol for extension processes.
+host grants it, and the caller's scope. The host builds one per extension (`HostSettings.EnvFor
+manifest`, usually `BasicExtensionEnv.attenuated clock services`), attenuated to the manifest's
+`capabilities`: an extension's authority is that value, never the caller's environment.
+
+| Capability | Interface | What it gives |
+|---|---|---|
+| `clock` | `IClock` | the clock; every extension has it |
+| `variants` | `IVariants` | the extension's own slots (those it contributes) with the host's values and sources; other slots are not registered for it |
+| `packages` | `IPackages` | the active extensions (`PackageInfo`) and the data contributions of a type as JSON; code stays with the host |
+| `grants` | `IGrants` | checks, and requests as the extension: the requester is `system` on its behalf with `Extension = id`, keys are prefixed `ext/<id>/`, and it awaits and withdraws only its own requests |
+
+- `HostServices` (`Slots`, `Packages`, `Grants`) is what the host offers before attenuation;
+  `ExtensionCapabilities.attenuate services id capabilities` is what one extension gets, and
+  `IExtensionEnv.Capabilities` exposes it so environments that wrap another pass it on.
+- A capability the manifest does not list throws `CapabilityDeniedException` where it is used: a defect
+  of the extension, which its hook reports as its failure.
+- `ExtensionHost.packages current` implements `IPackages` over the extensions in effect; the host's
+  `ExtensionServices` ([host.md](host.md)) fills the slots, the extensions and the grants log in as it
+  starts.
 
 ## Extensions, methods and activation
 
@@ -247,7 +262,36 @@ Typed errors (`ExtensionProtocolError`, by `kind`; a contribution's `address` is
   admitted manifest's and that it provides what the manifest declares.
 - Defects in the process are JSON-RPC `InternalError`s: a gate denies, a transform fails, a method is
   `Crashed`. A process that is gone makes its contributions `Unreachable`.
-- Calls from the extension to the host (host capabilities over RPC) come with T109b.
+
+#### Requests from the process: `host/*`
+
+The process is a client too: its extensions' capabilities are requests to the host on the same
+connection (`HostClient` in `Fx.Sdk.Process`, `host.ts` in `@fx/sdk`). Every request names the
+extension; the host answers with that extension's environment, which `RemoteActivation.activate`
+attaches to the connection (`RemotePeer.Attach`) before it activates the extension and which
+deactivation detaches (`RpcRemote.Attached`, `RpcRemote.hostHandlers`).
+
+| Method | Params | Result | Capability |
+|---|---|---|---|
+| `host/variants` | `{extension}` | `{slots: [{slot, value, source}]}` | `variants` |
+| `host/packages` | `{extension}` | `{packages: [PackageInfo]}` | `packages` |
+| `host/contributions` | `{extension, type}` | `{contributions: [{extension, id, value}]}` | `packages` |
+| `host/grants/check` | `{extension, query}` | `GrantCheck` | `grants` |
+| `host/grants/request` | `{extension, ask}` | `AskOutcome` | `grants` |
+| `host/grants/await` | `{extension, request}` | `GrantResolution` | `grants` |
+| `host/grants/withdraw` | `{extension, request, reason}` | `null` | `grants` |
+
+Typed errors (`HostError`, by `kind`): `unknownExtension` (`extension`: none active on this connection),
+`notGranted` (`extension`, `capability`), `unknownType` (`type`), `notData` (`type`,
+`contributionKind`), `grant` (`error`: the grants capability's `GrantError`).
+
+- **Slots are read once.** A server asks `host/variants` when it activates an extension whose manifest
+  lists `variants` (before `Activate`, also for packages a runtime loads) and keeps the answer: the
+  host's values do not change while it runs, and reads stay synchronous as `IVariants` is. A host that
+  does not answer fails the activation (`the host did not answer host/variants`).
+- A server checks the manifest first: a capability it does not list throws without asking the host.
+  `notGranted` from the host is `CapabilityDeniedException` there too; a host that does not answer is a
+  defect (`HostUnreachableException`) except for grants, whose typed error is `Unavailable`.
 
 ## Bootstrap (spec §16.1)
 
@@ -300,7 +344,7 @@ processes with the sandbox drivers ([sandbox.md](sandbox.md); Windows v1 runs th
 | What | Task |
 |---|---|
 | Recording the registry's events in the event store (the static list of built-ins, the bootstrap and `ext/<id>/<name>` on the client protocol are the host's: [host.md](host.md)) | with host-config extensions |
-| Host capabilities in `IExtensionEnv` (and over the protocol, `host/*`) | T109b |
+| More capabilities for extensions (`ILlm`, `IFs`, …), each a name in `Capability.known` and a `host/*` request | when an extension needs one |
 | Extensions from host config (process and Bun packages, pins); the host's components phase installs what they require already ([host.md](host.md)) | with host-config extensions |
 | Disabling and pinning from host config and policy; variants selecting extensions (`IVariants`) and profiles recording extension versions (spec §15) | T106 |
 

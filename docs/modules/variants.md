@@ -298,11 +298,20 @@ text, ids, order independence, reading back, diffs, matrices) and the capability
 recording, replay, the defects) on the JIT and as a native binary on every target. The module uses no
 reflection; slots are generic records of closures, and SHA-256 comes from the base class library.
 
+## Extensions reading their slots (T109b)
+
+An extension whose manifest lists the `variants` capability reads its own slots through its
+environment (`IExtensionEnv` inherits `IVariants`): the slots it contributes, with the values and
+sources of the host's resolution (`HostServices.Slots`; the host's `ExtensionServices` fills them in
+once the in-binary phase is resolved). Other slots read as not registered; without the capability a
+read throws `CapabilityDeniedException`. An extension process gets the same values once, when the
+extension activates (`host/variants`, [extensions.md](extensions.md#the-extension-protocol)): the
+host's values do not change while it runs.
+
 ## Left for later
 
 | What | Task |
 |---|---|
-| Reading an extension's slots from its code (`IVariants` in `IExtensionEnv`, and over the extension protocol) | T109b |
 | Batch and page sizes and actor retry delays as slots (durability and the subscribe gap are the host's: [host.md](host.md)) | when tuned |
 | Binding profiles in run streams (sessions bind theirs: [sessions.md](sessions.md)) | T212 |
 | Journaling reads with step results, `ReplayEnv` | done: T131, [replay.md](replay.md) |

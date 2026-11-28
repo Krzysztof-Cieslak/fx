@@ -264,7 +264,7 @@ this connection" (`Attribution`, or `NotAPerson`). The TypeScript types are gene
 | **T110 installs** | `Approvals.viaGrants` (`component.install`), keyed by what asks: the install, the holder whose `Ensure` started the attempt and the attempt (`component.install/<install>/<holder>/<attempt>`, [components.md](components.md)). An answer is final for that attempt only: "once" (or a request withdrawn because nobody could answer) never stands for a later run's environment; a host-wide grant (`fx grants allow component.install bun@*`) approves every later install at once |
 | **T118/T124 egress, T208/T210 models** | A model-egress gate or model routing asks `provider.expose`, `model.enable` or `model.paidFallback` through `Grants.gate` / `Grants.authorize` |
 | **T214 goals, T306 gates, T405 safe outputs** | `budget.raise`, `workflow.approval`, `safeOutput.apply` |
-| **T109b** | `IGrants` in `IExtensionEnv` (attenuated by the manifest) so extension code can ask |
+| **T109b** | `IGrants` in `IExtensionEnv` when the manifest lists `grants` (`ExtensionCapabilities.grantsFor`): requests name the extension as the requester (`system` on its behalf, never a person's or a session's), their keys are prefixed `ext/<id>/`, and it waits for and withdraws only the requests it made; checks pass through. Extension processes reach it over `host/grants/*` ([extensions.md](extensions.md#the-extension-protocol)) |
 
 ## Left for later
 
@@ -272,5 +272,4 @@ this connection" (`Attribution`, or `NotAPerson`). The TypeScript types are gene
 |---|---|
 | The installer forwarding approvals from an environment on another machine (the host's composition: [host.md](host.md)) | T501 |
 | Several stores at once (a repository-policy store's grants next to the host-local ones) | when such a store exists |
-| `IGrants` for extensions (`IExtensionEnv`), and over the extension protocol | T109b |
 | Snapshots of the grants log, bounding the history kept in the state | when a long-lived host needs it |

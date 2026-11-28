@@ -235,8 +235,8 @@ the composition root from the contributions in effect and the host's HTTP and cr
 
 `WireRequest`'s constructor is internal to `Fx.Sdk` and only step 3 makes one: a wire cannot be
 handed a request that skipped the hooks, and code that has only an `Llm` cannot reach a wire at all.
-Sessions, agents, the summarizer and judgments get the `Llm`; extensions will get it through
-`IExtensionEnv` (T109b). The hook points are `ModelEgress.transforms` and `ModelEgress.gates`
+Sessions, agents, the summarizer and judgments get the `Llm`; extensions will get it as a capability
+in `IExtensionEnv` when one needs it. The hook points are `ModelEgress.transforms` and `ModelEgress.gates`
 (privileged); `fx.egress.exclusions` contributes the built-in content exclusions, and the
 architecture tests check the compiled SDK for any other way to a wire ([egress.md](egress.md)).
 Failures before the wire are a stream with one `failed` event, like failures inside it.
@@ -669,4 +669,4 @@ prompt's placement) on all eight targets.
 | Journaling streams for exact replay | done: T131, [replay.md](replay.md) (`Record.llm`: each pull) |
 | Catalog discovery, probes, roles as variant slots, fallback chains; timeouts and replay policies from variants | T208 |
 | Decision and embedding wires (`DecisionWire`, `EmbedWire`) | T401 and later |
-| Runtime codecs of the canonical model in `@fx/sdk` (the types are generated now), for TypeScript extensions that call models through `ILlm` or wires written in TypeScript | T109b, or the first TypeScript wire |
+| Runtime codecs of the canonical model in `@fx/sdk` (the types are generated now), for TypeScript extensions that call models through `ILlm` or wires written in TypeScript | with `ILlm` for extensions, or the first TypeScript wire |

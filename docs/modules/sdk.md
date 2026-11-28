@@ -21,7 +21,7 @@ they are packaged and versioned, and how to write an extension with them. The ex
 
 | Package | Project | Who uses it | Contents |
 |---|---|---|---|
-| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), environment providers (`EnvProvider`, `IProviderEnv`, specs and leases, [environments.md](environments.md)), sandbox drivers (`SandboxDriver`, `ISandboxEnv`, `SandboxPolicy`, `SandboxOverrides`, [sandbox.md](sandbox.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)), content exclusions (`ContentExclusions`, [egress.md](egress.md)), the grants capability (`IGrants`), `GrantStore` and the grants' contribution types ([grants.md](grants.md)), the `IdentityProvider` contract and its contribution type ([identity.md](identity.md)), service credentials (`AuthMethod`, `CredentialStore` and `CredentialStoreDef`, `SecretSource`, their environments `IAuthEnv`, `IStoreEnv`, `ISecretSourceEnv` and contribution types, [auth.md](auth.md)) |
+| `<Name>.Sdk` (`Product.nugetPackage "Sdk"`) | `src/Fx.Sdk` | every F# extension; the core | manifests, contribution types, the hook algebra, extension methods, `Extension`, `ExtensionRuntime`, `IExtensionEnv` and `BasicExtensionEnv`, the extension capabilities (`Capability`, `HostServices`, `ExtensionCapabilities`, `IPackages`, `CapabilityDeniedException`), the `RemotePeer` shape, components, runtimes, interpreters (`InterpreterProvider`, [interpreters.md](interpreters.md)), environment providers (`EnvProvider`, `IProviderEnv`, specs and leases, [environments.md](environments.md)), sandbox drivers (`SandboxDriver`, `ISandboxEnv`, `SandboxPolicy`, `SandboxOverrides`, [sandbox.md](sandbox.md)), variant slots (`VariantSlots`), the chat wire contract, the model-egress hook points and `ModelAccess` ([models.md](models.md)), content exclusions (`ContentExclusions`, [egress.md](egress.md)), the grants capability (`IGrants`), `GrantStore` and the grants' contribution types ([grants.md](grants.md)), the `IdentityProvider` contract and its contribution type ([identity.md](identity.md)), service credentials (`AuthMethod`, `CredentialStore` and `CredentialStoreDef`, `SecretSource`, their environments `IAuthEnv`, `IStoreEnv`, `ISecretSourceEnv` and contribution types, [auth.md](auth.md)) |
 | `<Name>.Prelude`, `.Contracts`, `.Contracts.TypeScript`, `.Effects`, `.Variants`, `.Models`, `.Grants`, `.Identity` | exposed by `Fx.Sdk` | through `Fx.Sdk` | `Product`; JSON, `Schema` and codecs; TypeScript declarations from schemas; `Eff` and the capabilities (`IHttp`, and for service credentials `IKeyring`, `IPrivateFiles`, `IHostVariables`, `SecretText`); variant slots and `IVariants`; the canonical chat model, `ILlm` and cassettes; the grants log's model (actions, patterns, grants, requests, the effective rules); principals (ids, roles, credentials, `initialize`'s identity members) |
 | `<Name>.Sdk.Process` (`Product.nugetPackage "Sdk.Process"`) | `src/Fx.Sdk.Process` | F# extensions that run as their own process; the core (the protocol's messages) | `ExtensionProtocol` (messages and codecs), `ExtensionServer`, `ExtensionProcess.run` |
 | `<Name>.Rpc`, `.Effects.Live` | exposed by `Fx.Sdk.Process` | through it | the JSON-RPC engine and transports; the real interpreters a process's `main` (a composition root) uses |
@@ -65,7 +65,7 @@ they are packaged and versioned, and how to write an extension with them. The ex
   with it); session tokens and the authenticator stay in `Fx.Identity.Host`, which is not public
   ([identity.md](identity.md)).
 - **`Fx.Variants` is exposed**: extensions define slots (`VariantSlots.contributionType`, `variant-slot`,
-  in the core catalog) and will read them through `IVariants` (T109b). It is pure and references only
+  in the core catalog) and read their own through `IVariants` (the `variants` capability). It is pure and references only
   Contracts and Effects.
 - **TypeScript values are the JSON shapes.** A TypeScript record is a plain object with the record's
   fields, a union an object with its tag, so the generated types (from the F# codecs) are the values'
@@ -205,8 +205,12 @@ await runStdio([{
 - Hook points belong to the host (or a native extension): name them with `Hook.gate`, `transform`,
   `observe` or `contribute` and the codec of what flows through them. A TypeScript extension cannot
   define contribution types or contribute interpreter middleware (both are in-process F#).
-- Code runs in `ExtensionEnv` (`extension`, `signal`: the request's cancellation, `clock`). Throwing is a
-  defect: a gate denies, a transform fails the pipeline, an observer is reported, a method is `Crashed`.
+- Code runs in `ExtensionEnv` (`extension`, `signal`: the request's cancellation, `clock`, and the
+  capabilities its manifest lists: `variants` (`read(slot)`, `slots()`: its own slots, read when it
+  activated), `packages` (`list()`, `data(type)`), `grants` (`check`, `request`, `await`, `withdraw`);
+  one it does not list throws `CapabilityDenied`). They reach the host over the connection (`host/*`,
+  [extensions.md](extensions.md#requests-from-the-process-host)); `basicEnv(id)` is an environment
+  with the clock only, for tests. Throwing is a defect: a gate denies, a transform fails the pipeline, an observer is reported, a method is `Crashed`.
   Expected failures of a method are its typed errors (`err(...)`).
 - `activationMismatches(manifest, activation)` lists what an activation provides beyond or short of its
   manifest, as the host checks it; use it in the extension's tests.
@@ -238,7 +242,10 @@ await runStdio([{
   as a child, from the packages, and the TypeScript server on Bun pass it. A server in another language
   is done when it passes it with a sample implementing `Fx.Ext.Sample`'s contract.
 - **The samples' contract:** the TypeScript sample's manifest is the F# sample's, member for member and
-  hash for hash (`packages/sample-extension/test/fixtures/manifest.json`).
+  hash for hash (`packages/sample-extension/test/fixtures/manifest.json`). Both list every capability
+  and have a slot (`sample.style`) and methods that use them (`style`, `packages`, `data`, `check`,
+  `ask`), so the transcript covers `host/*` on every runtime; the test host's capabilities are
+  `SampleHost.services`.
 - **The pinned Bun** comes from `tests/Fx.Kernel.Tests/PinnedBun.fs` (linked into the extension tests);
   CI caches it. Offline, those tests are skipped locally and fail in CI. The launch is
   `fx.runtime.bun`'s (`RuntimeBun.launch`), with its owned directories under the package directory.
@@ -250,5 +257,4 @@ await runStdio([{
 
 | What | Task |
 |---|---|
-| Host capabilities in `IExtensionEnv` beyond the clock, attenuated to the manifest's `capabilities` (`IVariants` reads of an extension's slots, …), and over the protocol for extension processes (`host/*` requests from the process, in both SDKs); `IPackages`; reading contributions from extension code | T109b |
 | Publishing the packages to nuget.org and npm | with the first release |
