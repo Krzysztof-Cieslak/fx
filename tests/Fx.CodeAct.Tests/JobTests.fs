@@ -277,6 +277,17 @@ let tests =
                                 Expect.stringContains (text first) "one" "the job's output"
                                 Expect.stringContains (text first) "two" "all of it"
 
+                                Expect.equal
+                                    first.Jobs
+                                    [
+                                        {
+                                            Id = "j1"
+                                            Name = "build"
+                                            Command = "echo one; echo two"
+                                        }
+                                    ]
+                                    "the receipt names the job it started, for people"
+
                                 match jobEvents f with
                                 | [ StepEvent.JobStarted started; StepEvent.JobEnded ended ] ->
                                     Expect.equal started.Job "j1" "numbered"

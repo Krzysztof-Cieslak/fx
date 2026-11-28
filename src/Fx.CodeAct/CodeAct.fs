@@ -623,6 +623,7 @@ type CodeAct<'R, 'K
                             IsError = true
                             Restarted = None
                             Approvals = []
+                            Jobs = []
                         },
                         None
                 | Ok(_, note), Error reason ->
@@ -632,6 +633,7 @@ type CodeAct<'R, 'K
                             IsError = true
                             Restarted = Receipts.restart note
                             Approvals = []
+                            Jobs = []
                         },
                         None
                 | Ok(running, note), Ok() ->
@@ -682,6 +684,7 @@ type CodeAct<'R, 'K
                                 IsError = Receipts.isError result.Outcome
                                 Restarted = Receipts.restart note
                                 Approvals = []
+                                Jobs = []
                             },
                             record.Finished
                     | Error failure ->
@@ -693,6 +696,7 @@ type CodeAct<'R, 'K
                                 IsError = true
                                 Restarted = Receipts.restart note
                                 Approvals = []
+                                Jobs = []
                             },
                             None
         }
@@ -743,6 +747,7 @@ type CodeAct<'R, 'K
                 return
                     { executed with
                         Approvals = journaled.Approvals
+                        Jobs = journaled.Jobs
                     },
                     finished
             finally
@@ -858,6 +863,7 @@ type CodeAct<'R, 'K
                                         IsError = true
                                         Restarted = None
                                         Approvals = []
+                                        Jobs = []
                                     },
                                     None
                                 )
@@ -886,6 +892,7 @@ type CodeAct<'R, 'K
                                     IsError = isError
                                     Restarted = None
                                     Approvals = []
+                                    Jobs = []
                                 },
                                 None
                             )
@@ -903,6 +910,7 @@ type CodeAct<'R, 'K
                                     IsError = executed.IsError
                                     Restarted = executed.Restarted
                                     Approvals = executed.Approvals
+                                    Jobs = executed.Jobs
                                 })
 
                     match finished with
@@ -927,6 +935,7 @@ type CodeAct<'R, 'K
                                         IsError = true
                                         Restarted = None
                                         Approvals = []
+                                        Jobs = []
                                     })
 
                     state.Step <- halted.Step
@@ -1132,6 +1141,7 @@ type CodeAct<'R, 'K
                                                             IsError = true
                                                             Restarted = None
                                                             Approvals = []
+                                                            Jobs = []
                                                         },
                                                         None
                                                     )
@@ -1142,6 +1152,7 @@ type CodeAct<'R, 'K
                                                             IsError = true
                                                             Restarted = None
                                                             Approvals = []
+                                                            Jobs = []
                                                         },
                                                         None
                                                     )
@@ -1179,6 +1190,7 @@ type CodeAct<'R, 'K
                                                             IsError = executed.IsError
                                                             Restarted = executed.Restarted
                                                             Approvals = executed.Approvals
+                                                            Jobs = executed.Jobs
                                                         })
 
                                             match finished with

@@ -67,6 +67,8 @@ type CallView =
         Restarted: KernelRestart option
         /// How its host calls ran that no grant in force allowed: auto approvals, or a person's answer.
         Approvals: Approval list
+        /// The background jobs it started (T143).
+        Jobs: StartedJob list
     }
 
     override this.ToString() = $"{this.Label} {this.Detail}"
@@ -295,6 +297,7 @@ module Timeline =
             Output = ""
             Restarted = None
             Approvals = []
+            Jobs = []
         }
 
     let private atOf (meta: EventMeta) = meta.At.UnixMicroseconds
@@ -500,6 +503,7 @@ module Timeline =
                             Output = text
                             Restarted = receipt.Restarted
                             Approvals = receipt.Approvals
+                            Jobs = receipt.Jobs
                         }
 
                     match current, receipt.Call with

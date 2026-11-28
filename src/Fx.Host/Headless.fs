@@ -249,23 +249,46 @@ module Headless =
                 ()
         }
 
-    /// Waits for the first turn that ends after a sequence number of the session's log.
-    let private ended (host: Host) (session: string) (after: int64) : Eff<HostEnv, (int * TurnEnd) option> =
+    /// Waits for the first turn that ends after a sequence number of the session's log and leaves the
+    /// session waiting for nothing: a turn that ends waiting for background jobs resumes when they end
+    /// (T143), and the run goes on with it (the jobs die with the host); `show` says what it waits for
+    /// and how the jobs ended. An interrupt while it waits ends it.
+    let private ended
+        (host: Host)
+        (session: string)
+        (after: int64)
+        (show: string -> unit)
+        : Eff<HostEnv, (int * TurnEnd) option> =
         eff {
-            let mutable result = None
+            let result = ref None
+            let waiting = ref None
 
             let! _ =
                 SessionHost.subscribe host.Sessions session after (fun feed ->
                     match feed with
                     | Feed.Next recorded ->
                         match recorded.Event with
+                        | Event.TurnEnded(turn, (TurnEnd.Completed(TurnResult.Waiting _) as ending), _) ->
+                            for line in Activity.ending [] ending do
+                                show line
+
+                            waiting.Value <- Some turn
+                            Eff.ret true
                         | Event.TurnEnded(turn, ending, _) ->
-                            result <- Some(turn, ending)
+                            result.Value <- Some(turn, ending)
+                            Eff.ret false
+                        | Event.JobNotified input ->
+                            for line in Activity.ofInput input do
+                                show line
+
+                            Eff.ret true
+                        | Event.Interrupted(None, _) when waiting.Value.IsSome ->
+                            result.Value <- waiting.Value |> Option.map (fun turn -> turn, TurnEnd.Interrupted)
                             Eff.ret false
                         | _ -> Eff.ret true
                     | Feed.Reset _ -> Eff.ret true)
 
-            return result
+            return result.Value
         }
 
     /// Whether a new session's turns could call their model: one is configured for the main role, and
@@ -405,7 +428,7 @@ module Headless =
 
                             let env = Host.within host waiting.Token
 
-                            let! ended = Eff.run env (Eff.catch (ended host id appended.After))
+                            let! ended = Eff.run env (Eff.catch (ended host id appended.After io.Show))
                             watching.Cancel()
                             do! follow
                             do! decisions

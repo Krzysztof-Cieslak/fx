@@ -1192,6 +1192,17 @@ module JobBindings =
                             do! jobs.End(started.Job, JobEnd.Failed reason, None)
                             return Error(failure "notStarted" $"could not start the job: {reason}")
                         | Ok info ->
+                            // The action's receipt names it, for people (`Receipt.Jobs`).
+                            match writer.Running with
+                            | Some action ->
+                                action.Started
+                                    {
+                                        Id = started.Job
+                                        Name = started.Name
+                                        Command = command
+                                    }
+                            | None -> ()
+
                             do! jobs.Observe info
 
                             return

@@ -166,6 +166,7 @@ let private protocol () : string list =
                                 IsError = false
                                 Restarted = None
                                 Approvals = []
+                                Jobs = []
                             }
                     Meta =
                         {

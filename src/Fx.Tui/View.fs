@@ -365,7 +365,16 @@ module View =
         | InputContent.Resolved(request, resolution) ->
             paragraph width [ s t.Muted "↩ " ] t.Muted $"{request} {resolution}"
         | InputContent.JobFinished(job, note) ->
-            paragraph width [ s t.Muted "↩ " ] t.Muted $"job {job} finished: {note}"
+            // A background job's end (T143): its notice's first line says how; the model reads its
+            // last lines too.
+            Row.fit
+                width
+                [
+                    indent 2
+                    s t.Accent "▸ "
+                    s t.Muted (Text.truncate (max 1 (width - 4)) $"job {job} ended: {Text.firstLine note}")
+                ]
+            |> List.singleton
 
     /// The most lines of what an action returned (and of a compaction's summary) the verbose detail
     /// shows; an item expanded on its own shows them all.
@@ -440,6 +449,22 @@ module View =
                     lines width 6 t.Warning (Text.truncate (max 1 (width - 6)) (Text.firstLine text))
             | None -> []
 
+        // The background jobs it started (T143), one line each: they run on after it.
+        let jobs =
+            call.Jobs
+            |> List.collect (fun job ->
+                let what =
+                    if job.Name = job.Command then
+                        job.Command
+                    else
+                        $"{job.Name}: {job.Command}"
+
+                lines
+                    width
+                    6
+                    t.Muted
+                    (Text.truncate (max 1 (width - 6)) (Text.firstLine $"▸ job {job.Id} started  {what}")))
+
         let error =
             if call.IsError && verbosity <> Verbosity.Quiet then
                 lines width 6 t.Error (Text.truncate (max 1 (width - 6)) (Text.firstLine call.Output))
@@ -477,7 +502,7 @@ module View =
             else
                 []
 
-        line :: restart @ error @ detail
+        line :: restart @ jobs @ error @ detail
 
     /// The requests a turn ended needing that it did not ask in its items (their ids: nothing else is
     /// known of them).

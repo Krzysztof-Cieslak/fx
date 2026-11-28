@@ -88,10 +88,20 @@ module Activity =
             // What ran on yolo approvals: whatever it reached.
             if not yolo.IsEmpty then
                 "  ✓ yolo-approved  " + firstLine 160 (String.concat ", " yolo)
+            // Background jobs it started (T143): they run on after it.
+            for job in receipt.Jobs do
+                "  ▸ job " + job.Id + " started  " + firstLine 160 job.Command
             if receipt.IsError then
                 let text = pieces |> List.map Piece.render |> String.concat "\n"
                 "  ✗ " + firstLine 120 text
         ]
+
+    /// An input a turn did not get from a person: a background job's end (T143), its notice's first
+    /// line.
+    let ofInput (input: Input) : string list =
+        match input.Content with
+        | InputContent.JobFinished(job, note) -> [ "▸ job " + job + " ended  " + firstLine 160 note ]
+        | _ -> []
 
     /// A compaction: the summary that now stands for the conversation's oldest part.
     let ofCollapse (collapse: Collapse) : string list =

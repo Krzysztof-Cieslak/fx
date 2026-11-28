@@ -283,6 +283,7 @@ let tests =
                                         IsError = false
                                         Restarted = None
                                         Approvals = []
+                                        Jobs = []
                                     }
                             )
                             Fx.Prompt.LogItem.Context(
@@ -297,6 +298,7 @@ let tests =
                                         IsError = false
                                         Restarted = None
                                         Approvals = []
+                                        Jobs = []
                                     }
                             )
                         ]

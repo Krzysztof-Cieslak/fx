@@ -133,7 +133,8 @@ type Session(id: string) =
             text: string,
             ?error: bool,
             ?restarted: KernelRestart,
-            ?approvals: Approval list
+            ?approvals: Approval list,
+            ?jobs: StartedJob list
         ) =
         this.Context(
             ContextEvent.Returned
@@ -153,6 +154,7 @@ type Session(id: string) =
                     IsError = defaultArg error false
                     Restarted = restarted
                     Approvals = defaultArg approvals []
+                    Jobs = defaultArg jobs []
                 }
         )
 

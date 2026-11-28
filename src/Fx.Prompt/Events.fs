@@ -81,6 +81,18 @@ type Approval =
     override this.ToString() =
         $"{this.Action} {this.Resource} by {this.By}"
 
+/// A background job an action started (T143): for people (clients show it as an activity line under
+/// the action); the render never reads it.
+type StartedJob =
+    {
+        /// Its id in the session (`j1`).
+        Id: string
+        Name: string
+        Command: string
+    }
+
+    override this.ToString() = $"job {this.Id} ({this.Name})"
+
 /// A stable receipt: the result of a tool call or cell, as the model will see it from now on (NOOA).
 /// It is recorded once, bounded, with large values by reference, so later events never change it.
 type Receipt =
@@ -99,10 +111,15 @@ type Receipt =
         /// How its host calls ran that no grant in force allowed: auto approvals, or a person's
         /// answer (the first `Receipt.MaxApprovals`; empty in receipts recorded before they were kept).
         Approvals: Approval list
+        /// The background jobs it started (T143; empty in receipts recorded before they were kept).
+        Jobs: StartedJob list
     }
 
     /// The most approvals a receipt keeps (a cell may run many commands; the step journal has each).
     static member MaxApprovals = 16
+
+    /// The most started jobs a receipt keeps (the step journal has each).
+    static member MaxJobs = 16
 
     override this.ToString() =
         let call = this.Call |> Option.defaultValue "-"
@@ -337,6 +354,22 @@ module ContextCodecs =
                 | approvals -> Some approvals)
             (Codec.list approval)
 
+    let startedJob: Codec<StartedJob> =
+        Codec.record {
+            let! id = Codec.field "id" (fun (j: StartedJob) -> j.Id) Codec.string
+            and! name = Codec.field "name" (fun j -> j.Name) Codec.string
+            and! command = Codec.field "command" (fun j -> j.Command) Codec.string
+
+            return
+                {
+                    Id = id
+                    Name = name
+                    Command = command
+                }
+        }
+        |> Codec.describe "A background job an action started: its id, name and command."
+        |> Codec.named "StartedJob"
+
     let receipt: Codec<Receipt> =
         Codec.record {
             let! turn = Codec.field "turn" (fun (r: Receipt) -> r.Turn) count
@@ -348,6 +381,16 @@ module ContextCodecs =
             and! restarted = Codec.optionalField "restarted" (fun r -> r.Restarted) kernelRestart
             and! approved = approvals (fun (r: Receipt) -> r.Approvals)
 
+            // Added with background jobs (T143): absent when none, so earlier receipts re-encode the same.
+            and! jobs =
+                Codec.optionalField
+                    "jobs"
+                    (fun (r: Receipt) ->
+                        match r.Jobs with
+                        | [] -> None
+                        | jobs -> Some jobs)
+                    (Codec.list startedJob)
+
             return
                 {
                     Turn = turn
@@ -358,6 +401,7 @@ module ContextCodecs =
                     IsError = isError
                     Restarted = restarted
                     Approvals = approved |> Option.defaultValue []
+                    Jobs = jobs |> Option.defaultValue []
                 }
         }
         |> Codec.named "Receipt"

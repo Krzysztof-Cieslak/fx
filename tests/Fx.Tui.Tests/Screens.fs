@@ -473,6 +473,55 @@ let collapsed (width: int) (height: int) : Model =
              key KeyCode.Escape
          ])
 
+/// Background jobs (T143): a cell starts one and its turn ends waiting for it; the job's end starts
+/// the next turn, which reads its notice.
+let jobs (width: int) (height: int) : Model =
+    let s = Session "01JD2W7Z9Q000000000000000J"
+
+    let ci: Fx.Prompt.StartedJob =
+        {
+            Id = "j1"
+            Name = "CI"
+            Command = "gh pr checks --watch --fail-fast"
+        }
+
+    let msgs =
+        [
+            yield! s.Start None
+            yield! s.Prompt "push the fix and watch CI"
+            yield! s.Boundary 1
+            s.Advance 1.0
+
+            yield
+                s.Reply(
+                    1,
+                    [
+                        cell
+                            "toolu_1"
+                            "// intent: watch CI outside the turn\nconst ci = await fx.jobs.start(\"gh pr checks --watch --fail-fast\", { name: \"CI\" })\nawait fx.finish({ kind: \"waiting\", jobs: [ci.id], note: \"the pull request's checks\" })"
+                    ]
+                )
+            s.Advance 0.4
+            yield s.Receipt(1, "toolu_1", "cell", "The turn's result was accepted.", jobs = [ ci ])
+            yield! s.End(TurnResult.Waiting([ "j1" ], "the pull request's checks"))
+            s.Advance 300.0
+
+            yield!
+                s.Send(
+                    Command.NotifyJob(
+                        "j1",
+                        "`gh pr checks --watch --fail-fast` exited with code 1 after printing 812 bytes.\nIts last lines:\nX test (ubuntu-latest) failed"
+                    ),
+                    Fx.Machines.Attribution.system "jobs"
+                )
+
+            yield! s.Boundary 1
+            s.Advance 2.0
+            yield s.Reply(1, [ text "CI failed on ubuntu-latest; I will read the test's log." ])
+        ]
+
+    ready s width height msgs
+
 /// A new session with no turns yet: the start screen.
 let fresh (width: int) (height: int) : Model =
     let s = Session "01JD2W7Z9Q0000000000000009"
@@ -500,6 +549,7 @@ let all: (string * (int -> int -> Model)) list =
         "restarted", restarted
         "approvals", approvals
         "approvals-sandboxed", approvalsSandboxed
+        "jobs", jobs
         "markdown", markdown
         "usage", usage
         "palette", palette
