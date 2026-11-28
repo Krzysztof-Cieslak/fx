@@ -154,26 +154,32 @@ let tests =
                                 let first = receipts f "s1" |> List.head
                                 Expect.stringContains (text first) "hello" "the file's content"
 
+                                // The cell ends with what fs.read returned: its lines show as read
+                                // shows them, a file piece that counts as seen (T203a).
                                 match first.Pieces with
-                                | [ Piece.Quote quote ] ->
+                                | Piece.Quote quote :: Piece.File view :: _ ->
                                     Expect.equal
                                         (quote.Sources |> List.map (fun s -> s.Path))
                                         [ "greeting.txt" ]
                                         "provenance"
+
+                                    Expect.equal view.Path "greeting.txt" "the file"
+                                    Expect.equal view.Text "     1\thello" "numbered lines"
                                 | other -> failtest $"{other}"
 
                                 let result = toolResults requests[1] |> List.head
                                 Expect.equal result.CallId "call-1" "answers the call"
 
+                                // The quoted text and the file piece both name it.
                                 Expect.equal
-                                    (result.Sources |> List.map (fun s -> s.Path))
+                                    (result.Sources |> List.map (fun s -> s.Path) |> List.distinct)
                                     [ "greeting.txt" ]
                                     "the tool result quotes the file"
 
                                 Expect.stringContains
                                     (text (receipts f "s1").[1])
-                                    "hello, world"
-                                    "the command's output"
+                                    "(RunResult):\n$ cat greeting.txt\nexit code 0\nhello, world"
+                                    "the command's result, as bash shows it"
 
                                 // Every request is a prefix of the next.
                                 for a, b in List.pairwise requests do

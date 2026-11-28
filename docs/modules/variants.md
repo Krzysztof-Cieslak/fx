@@ -244,7 +244,7 @@ with the model routes (T208, T217).
 |---|---|---|---|
 | `agent.actionSurface` | `cells-only` \| `hybrid` | `cells-only` (provisional; both ship without a baseline preference, T218 decides) | §6.9 |
 | `edit.guard` | `off` \| `warn` \| `require` | `warn` | §6.8 |
-| `values.previewLimits` | `Limits` (`maxChars`, `maxItems`, `maxDepth`, `maxStringChars`) | `Limits.defaults` | §6.6, §6.7 |
+| `values.previewLimits` | `Limits` (`maxChars`, `maxItems`, `maxDepth`, `maxStringChars`) | 4000, 50, 4, 1000 (larger than `Limits.defaults`, T203a) | §6.6, §6.7 |
 | `values.inlineMaxBytes` | integer, 0 to 1 MiB | 16384 | §6.6 |
 | `values.argumentMaxBytes` | integer, 1 KiB to 12 MiB | 8388608 | §6.6 |
 | `shell.windows` | `pwsh` \| `powershell` | `pwsh` | §6.5 |

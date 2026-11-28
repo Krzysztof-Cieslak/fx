@@ -225,12 +225,24 @@ finishes again.
 
 Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `ContextEvent.withhold`:
 
-- **Cells**: what the cell printed, its value's preview or its error (syntax, type, runtime, timeout,
-  cancellation), the names it declared, whether its `finish` was accepted, a note when the kernel was
-  new, and a reminder when the `// intent:` line is missing. **Provenance:** the files the cell read
-  through the bridge (`fs.read` calls attributed to its cell id) make the receipt a `Piece.Quote` with
-  those sources: the egress hooks redact it, and the render withholds it, if one of them is excluded;
-  it never counts as seen. What a command printed (`shell.run`) has no provenance (egress.md).
+- **Cells**: what the cell printed, the value it ended with or its error (syntax, type, runtime,
+  timeout, cancellation), the names it declared, whether its `finish` was accepted, a note when the
+  kernel was new, and a reminder when the `// intent:` line is missing. **Provenance:** the files the
+  cell read through the bridge (`fs.read` calls attributed to its cell id) make the receipt a
+  `Piece.Quote` with those sources: the egress hooks redact it, and the render withholds it, if one of
+  them is excluded; it never counts as seen. What a command printed (`shell.run`) has no provenance
+  (egress.md).
+- **A cell's value** (T203a, `CellValue.ofValue`) shows from its JSON, the one `recall` keeps (so up to
+  `codeact.recall.maxBytes`; beyond, or with recall off, the kernel's preview):
+  - a string as its text (`Value of Out["…"] (string, N chars):`), cut in the middle at
+    `codeact.output.maxChars` as printed output is;
+  - what one of the cell's host calls returned, matched by the digest of its canonical JSON (the
+    kernel tells the host nothing more, so this works for any kernel): `shell.run`'s `RunResult` as
+    `bash` shows it (command, exit code, output), `fs.read`'s `FileText` as `read` shows it (numbered
+    lines in a `Piece.File`: they count as seen, and exclusions withhold them), `fs.write` and
+    `fs.patch` as the files written;
+  - anything else as the kernel's preview, within `values.previewLimits` (4000 characters, 50 items, 4
+    levels, 1000 characters per string).
 - **`read`**: a `Piece.File` (path, digest, the lines shown), numbered, and where to read on.
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
   new version.

@@ -38,7 +38,17 @@ let tests =
                 let defaults = Resolution.defaults core
                 Expect.equal (Resolution.value Slots.actionSurface defaults) ActionSurface.CellsOnly "action surface"
                 Expect.equal (Resolution.value Slots.editGuard defaults) EditGuard.Warn "edit guard"
-                Expect.equal (Resolution.value Slots.previewLimits defaults) Limits.defaults "preview limits"
+
+                Expect.equal
+                    (Resolution.value Slots.previewLimits defaults)
+                    {
+                        MaxChars = 4000
+                        MaxItems = 50
+                        MaxDepth = 4
+                        MaxStringChars = 1000
+                    }
+                    "preview limits"
+
                 Expect.equal (Resolution.value Slots.inlineValueMaxBytes defaults) 16384 "inline values"
 
                 Expect.equal (Resolution.value Slots.argumentMaxBytes defaults) (8 * 1024 * 1024) "host-call arguments"

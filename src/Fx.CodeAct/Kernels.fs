@@ -219,6 +219,9 @@ type CellRecord =
         Finished: TurnResult option
         /// The files the cell read through the bridge.
         Reads: Reads
+        /// What the cell's host calls returned, in order: its receipt shows a value the cell ends with
+        /// as its binding's result when it is one of them (T203a).
+        Returned: Returned list
         /// The kernel ended during the cell or right after it, and how: the next cell starts a new one.
         Ended: KernelEnd option
     }
@@ -229,6 +232,7 @@ type CellRecord =
 type private RunningCell(id: string) =
     member val Id = id
     member val Reads = Reads.none with get, set
+    member val Returned: Returned list = [] with get, set
     member val Finished: TurnResult option = None with get, set
 
 /// A session's kernel across turns (spec §6.5: kept across turns, restarted when it dies, with Jupyter
@@ -308,6 +312,16 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                     | Some cell when call.CellId = Some cell.Id -> cell.Reads <- Reads.add file.Path cell.Reads
                     | _ -> ())
             | Error _ -> ()
+        | _ -> ()
+
+        match result with
+        | Ok(Value.Inline json) ->
+            let returned = Returned.ofResult call.Binding json
+
+            lock gate (fun () ->
+                match running with
+                | Some cell when call.CellId = Some cell.Id -> cell.Returned <- cell.Returned @ [ returned ]
+                | _ -> ())
         | _ -> ()
 
     /// A session's kernel without a step journal (launches count from 1 in this process).
@@ -571,6 +585,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                                 Result = answered
                                 Finished = state.Finished
                                 Reads = state.Reads
+                                Returned = state.Returned
                                 Ended = ended'
                             })
             finally

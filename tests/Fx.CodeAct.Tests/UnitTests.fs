@@ -9,6 +9,7 @@ open Fx.Machines
 open Fx.Machines.Host
 open Fx.Models
 open Fx.Envd
+open Fx.Kernel
 open Fx.Interpreters
 open Fx.Sessions
 open Fx.Prompt
@@ -169,6 +170,143 @@ let tests =
                 match Receipts.read file None None 3 with
                 | [ Piece.File _; Piece.Text more ] -> Expect.stringContains more "offset 4" "bounded"
                 | other -> failtest $"{other}"
+            }
+
+            test "a cell's value shows as its binding's direct tool would, matched by its JSON's digest" {
+                let info: ValueInfo =
+                    {
+                        Type = "object"
+                        Preview = { Text = "{…}"; Truncated = true }
+                    }
+
+                let ran: RunResult =
+                    {
+                        Command = "ls"
+                        ExitCode = Some 0
+                        Stdout = "a.txt\nb.txt\n"
+                        Stderr = ""
+                        Truncated = false
+                        TimedOut = false
+                    }
+
+                let ranJson = CoreBindings.Codecs.runResult.Encode ran
+
+                let file: FileText =
+                    {
+                        Path = "a.txt"
+                        Text = "one\ntwo\n"
+                        Lines = 2
+                        Size = 8L
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                    }
+
+                let fileJson = CoreBindings.Codecs.fileText.Encode file
+
+                let returned =
+                    [ Returned.ofResult "shell.run" ranJson; Returned.ofResult "fs.read" fileJson ]
+
+                Expect.equal
+                    (CellValue.ofValue info (Some(Json.String "hi")) [])
+                    (CellValue.Text "hi")
+                    "a string is its text"
+
+                Expect.equal (CellValue.ofValue info (Some ranJson) returned) (CellValue.Ran ran) "a command's result"
+                Expect.equal (CellValue.ofValue info (Some fileJson) returned) (CellValue.File file) "a file read"
+
+                Expect.equal
+                    (CellValue.ofValue info (Some ranJson) [ Returned.ofResult "fs.read" fileJson ])
+                    (CellValue.Preview info)
+                    "the same shape, not a result of this cell: the preview"
+
+                Expect.equal (CellValue.ofValue info None returned) (CellValue.Preview info) "not encoded: the preview"
+            }
+
+            test "a cell's receipt shows a string, a command and a file as their tools would" {
+                let limits: CellLimits =
+                    {
+                        ReceiptChars = 20000
+                        OutputChars = 200
+                        ReadLines = 100
+                    }
+
+                let result: CellResult =
+                    {
+                        CellId = "t1-s1-1"
+                        Outcome =
+                            CellOutcome.Completed(
+                                Some
+                                    {
+                                        Type = "string"
+                                        Preview = { Text = "\"…\""; Truncated = true }
+                                    }
+                            )
+                        Output =
+                            {
+                                Text = ""
+                                Truncated = false
+                                TotalChars = 0L
+                            }
+                        Declared = [ "x" ]
+                        Finished = false
+                        Notified = 0
+                        DurationMs = 0L
+                    }
+
+                let text (pieces: Piece list) =
+                    pieces |> List.map Piece.render |> String.concat "\n"
+
+                let long = String.replicate 100 "0123456789"
+
+                let shown =
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.Text long)) result
+                    |> text
+
+                Expect.stringContains shown "Value of Out[\"t1-s1-1\"] (string, 1000 chars):\n0123456789" "the text"
+                Expect.stringContains shown "characters omitted" "cut in the middle at the output's limit"
+                Expect.stringContains shown "Declared: x" "the names"
+
+                let ran: RunResult =
+                    {
+                        Command = "ls"
+                        ExitCode = Some 1
+                        Stdout = "a.txt\n"
+                        Stderr = "oops\n"
+                        Truncated = false
+                        TimedOut = false
+                    }
+
+                let shownRan =
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.Ran ran)) result
+                    |> text
+
+                Expect.stringContains
+                    shownRan
+                    "(RunResult):\n$ ls\nexit code 1\na.txt\n[stderr]\noops"
+                    "as bash shows it"
+
+                let file: FileText =
+                    {
+                        Path = "a.txt"
+                        Text = "one\ntwo\n"
+                        Lines = 2
+                        Size = 8L
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                    }
+
+                match Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.File file)) result with
+                | [ Piece.Text head; Piece.File view; Piece.Text tail ] ->
+                    Expect.stringContains head "(FileText): a.txt, 2 lines" "what it is"
+                    Expect.equal view.Text "     1\tone\n     2\ttwo" "numbered lines, a file piece (seen)"
+                    Expect.equal tail "Declared: x" "then the rest"
+                | other -> failtest $"{other}"
+
+                let preview =
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none None result |> text
+
+                Expect.stringContains
+                    preview
+                    "Value of Out[\"t1-s1-1\"] (string): \"…\""
+                    "no value: the kernel's preview"
             }
 
             test "context events go after the session event their cause names" {

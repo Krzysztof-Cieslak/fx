@@ -346,6 +346,41 @@ let private largeArguments (f: Fixture) : Task<unit> =
             Expect.isLessThanOrEqual s.Args.Length (StepJournal.ArgsChars + 1) $"{s.Binding}'s arguments, bounded"
     }
 
+/// TypeScript cells end with what bindings returned and with a long string: their receipts show them
+/// as the direct tools would, from the values' JSON the kernel encodes (T203a).
+let private readable (f: Fixture) : Task<unit> =
+    task {
+        f.Write("greeting.txt", "hello\n")
+
+        f.Model.AddAll
+            [
+                Say.cell $"// intent: run a command\nconst found = await {g}.shell.run(\"echo hi\")\nfound"
+                Say.cell $"// intent: read the greeting\nawait {g}.fs.read(\"greeting.txt\")"
+                Say.cell "// intent: a long string\n\"x\".repeat(500)"
+                Say.cell $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"looked\" }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Look around"
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed ending) (TurnResult.Done("looked", [], None)) $"finished: {seen f}"
+
+        let rs = receipts f "s1"
+        Expect.stringContains (text rs[0]) "(RunResult):\n$ echo hi\nexit code 0\nhi" $"a command's result: {seen f}"
+
+        match
+            rs[1].Pieces
+            |> List.tryPick (fun p ->
+                match p with
+                | Piece.File view -> Some view
+                | _ -> None)
+        with
+        | Some view -> Expect.equal view.Text "     1\thello" "a file's numbered lines"
+        | None -> failtest $"no file piece: {seen f}"
+
+        Expect.stringContains (text rs[2]) "(string, 500 chars):\nxxxxx" "a string's text"
+    }
+
 let private rejected (f: Fixture) : Task<unit> =
     task {
         f.Model.AddAll
@@ -444,6 +479,10 @@ let tests =
 
             testTask "a cell passes a large file and a large input in one host call each" {
                 do! live "live-large" [] largeArguments ()
+            }
+
+            testTask "TypeScript cells' values show as their bindings' tools would" {
+                do! live "live-readable" [] readable ()
             }
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {

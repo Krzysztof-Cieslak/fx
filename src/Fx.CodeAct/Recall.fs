@@ -24,7 +24,8 @@ module Recall =
     let private get (blobs: Blobs) (hash: BlobHash) : Eff<'K, Result<byte array, BlobError>> when 'K :> IScope =
         fun env -> blobs.Get hash env.Scope.Cancellation
 
-    /// Keeps a cell's value: what the journal records about it (`ValueKept`, or `ValueLost` and why).
+    /// Keeps a cell's value: what the journal records about it (`ValueKept`, or `ValueLost` and why),
+    /// and its JSON when the kernel encoded it (the cell's receipt shows it from that, T203a).
     let keep<'K when 'K :> IScope>
         (blobs: Blobs option)
         (inlineBytes: int)
@@ -33,7 +34,7 @@ module Recall =
         (call: CallRef)
         (cell: string)
         (info: ValueInfo)
-        : Eff<'K, StepEvent> =
+        : Eff<'K, StepEvent * Json option> =
         eff {
             let lost (reason: string) =
                 StepEvent.ValueLost
@@ -42,16 +43,18 @@ module Recall =
                         Cell = cell
                         Type = info.Type
                         Reason = reason
-                    }
+                    },
+                None
 
-            let kept (value: KeptJson) =
+            let kept (value: KeptJson) (json: Json) =
                 StepEvent.ValueKept
                     {
                         Call = call
                         Cell = cell
                         Value = value
                         Type = info.Type
-                    }
+                    },
+                Some json
 
             if maxBytes <= 0 then
                 return lost "values are not kept (codeact.recall.maxBytes is 0)"
@@ -61,14 +64,17 @@ module Recall =
                     let bytes = Encoding.UTF8.GetBytes(Json.serializeCanonical json)
 
                     if bytes.Length <= inlineBytes then
-                        return kept (KeptJson.Inline json)
+                        return kept (KeptJson.Inline json) json
                     else
                         match blobs with
                         | Some blobs ->
                             let! stored = put blobs bytes
-                            return kept (KeptJson.Stored stored)
+                            return kept (KeptJson.Stored stored) json
                         | None ->
-                            return lost $"its JSON has {bytes.Length} bytes, more than are kept without a blob store"
+                            let event, _ =
+                                lost $"its JSON has {bytes.Length} bytes, more than are kept without a blob store"
+
+                            return event, Some json
                 | Ok(Value.Blob _) -> return lost "a value in the environment's blob store is not kept yet"
                 | Ok(Value.Handle _) -> return lost "a live object of the host (a handle) is not kept"
                 | Error(KernelFailure.Refused(KernelError.TooLarge(bytes, limit))) ->
