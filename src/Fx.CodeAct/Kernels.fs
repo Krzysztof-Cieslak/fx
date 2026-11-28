@@ -224,16 +224,89 @@ type CellRecord =
         Returned: Returned list
         /// The kernel ended during the cell or right after it, and how: the next cell starts a new one.
         Ended: KernelEnd option
+        /// The cell's host calls the guard had not answered when the cell ended, in the order they came:
+        /// they were waiting for a person's approval, and a cell that was stopped stopped them too.
+        Waiting: HostCall list
     }
 
     override this.ToString() = $"cell record ({this.Reads})"
 
+/// Commands a cell runs (`shell.run`) share its timeout (T141): kernels stop a cell's clock while one
+/// of its host calls is in flight, so that a person's wait for a grant never counts, and the host bounds
+/// the commands instead. Their time counts from after the guard: approval waits never do. Pure.
+[<RequireQualifiedAccess>]
+module CellCommands =
+    /// The binding whose calls share the cell's timeout.
+    [<Literal>]
+    let Binding = "shell.run"
+
+    /// What is left of a cell's timeout for its commands once they ran for `spent`: `None` once used up.
+    let remaining (timeoutMs: int) (spent: TimeSpan) : int option =
+        let left = int64 timeoutMs - int64 (Math.Ceiling spent.TotalMilliseconds)
+        if left >= 1L then Some(int left) else None
+
+    /// The call with its options' `timeoutMs` at most `limit`: added when it has none, lowered when it is
+    /// longer. Arguments that do not decode are left for the binding to refuse.
+    let bound (limit: int) (call: HostCall) : HostCall =
+        let limited = Json.int limit
+
+        let options (members: (string * Json) list) =
+            match members |> List.tryFind (fun (name, _) -> name = "timeoutMs") with
+            | None -> members @ [ "timeoutMs", limited ]
+            | Some(_, Json.Null) ->
+                members
+                |> List.map (fun (name, value) -> if name = "timeoutMs" then name, limited else name, value)
+            | Some(_, Json.Number own) ->
+                match JsonNumber.tryToInt64 own with
+                | Some ms when ms > int64 limit ->
+                    members
+                    |> List.map (fun (name, value) -> if name = "timeoutMs" then name, limited else name, value)
+                | _ -> members
+            | Some _ -> members
+
+        match call.Args with
+        | [ command ]
+        | [ command; Value.Inline Json.Null ] ->
+            { call with
+                Args = [ command; Value.Inline(Json.Object [ "timeoutMs", limited ]) ]
+            }
+        | [ command; Value.Inline(Json.Object members) ] ->
+            { call with
+                Args = [ command; Value.Inline(Json.Object(options members)) ]
+            }
+        | _ -> call
+
+    /// A command refused because the cell's commands used up its timeout.
+    let usedUp (timeoutMs: int) : HostCallError =
+        HostCallError.Failed(
+            "cellTimeout",
+            $"not run: this cell's commands already ran for its whole timeout ({timeoutMs} ms); run it in a cell of its own",
+            None
+        )
+
 /// The cell running in a session's kernel: what its host calls and `finish` are attributed to.
-type private RunningCell(id: string) =
+type private RunningCell(id: string, timeoutMs: int option) =
+    let mutable entered = 0
     member val Id = id
+    /// The cell's `timeoutMs`, which its commands share.
+    member val TimeoutMs = timeoutMs
     member val Reads = Reads.none with get, set
     member val Returned: Returned list = [] with get, set
     member val Finished: TurnResult option = None with get, set
+    /// How long its commands ran.
+    member val Spent = TimeSpan.Zero with get, set
+    /// Its host calls in the guard: numbered as they enter.
+    member val Guarded: (int * HostCall) list = [] with get, set
+
+    /// A host call enters the guard; its number.
+    member this.Enter(call: HostCall) : int =
+        entered <- entered + 1
+        this.Guarded <- this.Guarded @ [ entered, call ]
+        entered
+
+    /// The guard answered the call.
+    member this.Answered(number: int) =
+        this.Guarded <- this.Guarded |> List.filter (fun (n, _) -> n <> number)
 
 /// A session's kernel across turns (spec §6.5: kept across turns, restarted when it dies, with Jupyter
 /// semantics), and the host's side of its protocol: the bridge's bindings for the current turn's
@@ -364,16 +437,56 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
             lock gate (fun () -> guard <- value)
 
     /// A host call, from a cell or a direct tool: the guard, then the binding with the turn's settings.
+    /// A command of the running cell (`CellCommands`) runs for at most what is left of the cell's
+    /// timeout, counted from after the guard, so a person's wait for a grant never counts.
     member _.Call
         (guard: HostCall -> Eff<'K, Result<Approval list, HostCallError>>)
         : HostCall -> Eff<'K, Result<Value, HostCallError>> =
         fun call ->
             eff {
-                match! guard call with
-                | Error e -> return Error e
-                | Ok approvals ->
+                let cell, entered =
+                    lock gate (fun () ->
+                        match running with
+                        | Some cell when call.CellId = Some cell.Id -> Some cell, Some(cell.Enter call)
+                        | _ -> None, None)
+
+                let! allowed = guard call
+
+                // Answered; a call whose wait was cancelled stays guarded: it was stopped while it waited.
+                match cell, entered with
+                | Some cell, Some number -> lock gate (fun () -> cell.Answered number)
+                | _ -> ()
+
+                // The time left for the cell's commands, if this is one.
+                let budget =
+                    match cell with
+                    | Some cell when call.Binding = CellCommands.Binding ->
+                        cell.TimeoutMs
+                        |> Option.map (fun timeoutMs ->
+                            cell, timeoutMs, CellCommands.remaining timeoutMs (lock gate (fun () -> cell.Spent)))
+                    | _ -> None
+
+                match allowed, budget with
+                | Error e, _ -> return Error e
+                | Ok _, Some(_, timeoutMs, None) -> return Error(CellCommands.usedUp timeoutMs)
+                | Ok approvals, _ ->
+                    let call =
+                        match budget with
+                        | Some(_, _, Some left) -> CellCommands.bound left call
+                        | _ -> call
+
                     let! journaled = watch.Calling call approvals
-                    let! result = HostBinding.dispatch (bindings (current ())) call
+                    let dispatch = HostBinding.dispatch (bindings (current ())) call
+
+                    let! result =
+                        match budget with
+                        | Some(cell, _, _) ->
+                            eff {
+                                let! result, took = Clock.timed dispatch
+                                lock gate (fun () -> cell.Spent <- cell.Spent + took)
+                                return result
+                            }
+                        | None -> dispatch
 
                     match journaled with
                     | Some index -> do! watch.Called index result
@@ -495,7 +608,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
     /// goes on. A kernel that exited or was killed is dropped; the next cell starts a new one.
     member _.Run(k: Kernel, cell: CellRun, turn: CancellationToken) : Eff<'K, CellRecord> =
         eff {
-            let state = RunningCell cell.CellId
+            let state = RunningCell(cell.CellId, cell.TimeoutMs)
             lock gate (fun () -> running <- Some state)
 
             // `true` once the turn was cancelled while the cell ran, `false` once the cell answered.
@@ -587,6 +700,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                                 Reads = state.Reads
                                 Returned = state.Returned
                                 Ended = ended'
+                                Waiting = state.Guarded |> List.map snd
                             })
             finally
                 lock gate (fun () -> running <- None)

@@ -469,8 +469,14 @@ module GrantGuard =
             match! Eff.catch outcome with
             | Ok outcome -> return outcome
             | Error e ->
-                // Interrupted (or the host stopped): the requests are withdrawn, the cancellation goes on.
-                do! withdraw setup "the turn was interrupted" (left.Value |> List.map snd)
+                // Cancelled (the turn was interrupted, the cell stopped, or the host stopped): the requests
+                // are withdrawn, the cancellation goes on.
+                do!
+                    withdraw
+                        setup
+                        "the call was cancelled: the turn was interrupted or its cell stopped"
+                        (left.Value |> List.map snd)
+
                 return raise e
         }
 

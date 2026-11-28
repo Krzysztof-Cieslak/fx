@@ -459,7 +459,51 @@ module Receipts =
 
             $"Value of {label} (Written): {written}"
 
-    /// A cell's receipt: what it printed, the value it ended with or its error, the names it declared,
+    /// The most characters of a host call's first argument a receipt names it by.
+    [<Literal>]
+    let CallChars = 120
+
+    /// A host call in a line: its binding and its first argument (a command, a path), cut to
+    /// `CallChars`, e.g. `shell.run: strace -f ls`.
+    let callTitle (call: HostCall) : string =
+        let argument =
+            match call.Args with
+            | Value.Inline(Json.String text) :: _ -> Some text
+            | Value.Inline json :: _ -> Some(Json.serialize json)
+            | _ -> None
+
+        match argument with
+        | None -> call.Binding
+        | Some text ->
+            let text = text.Replace("\r", "").Replace('\n', ' ').Trim()
+
+            let cut =
+                if text.Length <= CallChars then
+                    text
+                else
+                    let n =
+                        if Char.IsHighSurrogate text[CallChars - 1] then
+                            CallChars - 1
+                        else
+                            CallChars
+
+                    text.Substring(0, n) + "…"
+
+            $"{call.Binding}: {cut}"
+
+    /// The host calls a stopped cell (timed out, cancelled) stopped while the guard had them wait for a
+    /// person's approval (their requests are withdrawn): one line each.
+    let private stoppedWaiting (outcome: CellOutcome) (waiting: HostCall list) : string =
+        match outcome with
+        | CellOutcome.TimedOut _
+        | CellOutcome.Cancelled ->
+            waiting
+            |> List.map (fun call -> $"{callTitle call} (stopped while it waited for its approval)")
+            |> lines
+        | _ -> ""
+
+    /// A cell's receipt: what it printed, the value it ended with or its error, the host calls it
+    /// stopped while they waited for approval, the names it declared and those it never assigned,
     /// whether its `finish` was accepted, and a note if the kernel started afresh. The value shows as
     /// `value` says (`CellValue.ofValue`): a string as its text, a command's result as `bash` shows it,
     /// a file it read as numbered lines (a file piece: they count as seen); anything else as the
@@ -470,6 +514,7 @@ module Receipts =
         (note: KernelNote)
         (intent: string option)
         (reads: Reads)
+        (waiting: HostCall list)
         (value: CellValue option)
         (result: CellResult)
         : Piece list =
@@ -483,15 +528,24 @@ module Receipts =
             | Some value -> valueText limits.OutputChars result.CellId value
             | None -> outcomeText result.CellId result.Outcome
 
-        let head = lines [ result.Output.Text.TrimEnd(); outcome ]
+        let head =
+            lines [ result.Output.Text.TrimEnd(); outcome; stoppedWaiting result.Outcome waiting ]
+
+        let assigned =
+            result.Declared
+            |> List.filter (fun name -> not (List.contains name result.Unassigned))
 
         let tail =
             lines
                 [
-                    (if result.Declared.IsEmpty then
+                    (if assigned.IsEmpty then
                          ""
                      else
-                         "Declared: " + String.concat ", " result.Declared)
+                         "Declared: " + String.concat ", " assigned)
+                    (if result.Unassigned.IsEmpty then
+                         ""
+                     else
+                         "Not assigned (the cell stopped first): " + String.concat ", " result.Unassigned)
                     (if result.Finished then
                          "The turn's result was accepted."
                      else

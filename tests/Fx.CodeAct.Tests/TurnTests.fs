@@ -501,6 +501,106 @@ let tests =
                         ()
             }
 
+            testTask "a cell's commands share its timeout: one is cut at what is left, the next refused" {
+                do!
+                    within
+                        "commands-share"
+                        [ "codeact.cell.timeoutMs", Json.int 1500 ]
+                        (fun f ->
+                            task {
+                                f.Model.AddAll
+                                    [
+                                        Say.cell
+                                            "// intent: run long\ncall slow = shell.run [\"sleep 5\"]\ncall next = shell.run [\"echo after\"]"
+                                        Say.finish "Stopped"
+                                    ]
+
+                                do! kickoff f "Run it"
+                                let! ending = ended f "s1" 1
+                                completed ending |> ignore
+                                let receipt = (receipts f "s1").Head
+                                let shown = text receipt
+                                Expect.isTrue receipt.IsError shown
+                                Expect.stringContains shown "already ran for its whole timeout (1500 ms)" "refused"
+                                Expect.stringContains shown "Declared: slow" "the first ran"
+
+                                Expect.stringContains
+                                    shown
+                                    "Not assigned (the cell stopped first): next"
+                                    "the second did not"
+
+                                // The step journal shows the bound the host gave the first command.
+                                let calls =
+                                    journal f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | StepEvent.HostCallStarted call -> Some call
+                                        | _ -> None)
+
+                                match calls with
+                                | first :: _ -> Expect.stringContains first.Args "\"timeoutMs\":1500" "bounded"
+                                | [] -> failtest "no host call journaled"
+                            })
+                        ()
+            }
+
+            testTask "a cell stopped while a host call waits for approval: its receipt names the call" {
+                let entered =
+                    TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+                // A guard that waits for a person who never answers.
+                let handsOf root workspace cleanup =
+                    { localHands (fun _ -> scriptKernel kernelOptions) root workspace cleanup with
+                        Guard =
+                            fun _ ->
+                                fun (env: HandsEnv) ->
+                                    task {
+                                        entered.TrySetResult() |> ignore
+                                        do! Task.Delay(Threading.Timeout.Infinite, env.Scope.Cancellation)
+                                        return Ok []
+                                    }
+                    }
+
+                let body (f: Fixture) : Task<unit> =
+                    task {
+                        f.Model.AddAll
+                            [
+                                Say.cell "// intent: trace\ncall t = shell.run [\"strace -f ls\"]\nt"
+                                Say.finish "Stopped"
+                            ]
+
+                        do! kickoff f "Trace it"
+                        do! entered.Task.WaitAsync(TimeSpan.FromSeconds 30.0)
+
+                        // The cell is stopped, not the turn (an interrupt ends the turn, and with it the
+                        // tool call's receipt).
+                        match f.Kernel "s1" with
+                        | Some k ->
+                            let! _ = run f (Kernel.cancel k "t1-s1-1")
+                            ()
+                        | None -> failtest "no kernel"
+
+                        let! ending = ended f "s1" 1
+                        completed ending |> ignore
+                        let shown = text (receipts f "s1").Head
+                        Expect.stringContains shown "The cell was cancelled." "the outcome"
+
+                        Expect.stringContains
+                            shown
+                            "shell.run: strace -f ls (stopped while it waited for its approval)"
+                            "the call it stopped"
+
+                        Expect.stringContains shown "Not assigned (the cell stopped first): t" "what it never assigned"
+                    }
+
+                let f = createOn "stopped-waiting" [] handsOf None (fun _ -> None)
+
+                try
+                    do! (body f).WaitAsync(TimeSpan.FromSeconds 120.0)
+                finally
+                    (f :> IDisposable).Dispose()
+            }
+
             testTask "one kernel for the session: names declared in earlier cells and turns stay" {
                 do!
                     within
