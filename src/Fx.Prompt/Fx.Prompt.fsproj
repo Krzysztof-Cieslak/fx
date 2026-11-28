@@ -15,6 +15,7 @@
     <Compile Include="Views.fs" />
     <Compile Include="Render.fs" />
     <Compile Include="Compaction.fs" />
+    <Compile Include="Originals.fs" />
     <Compile Include="Sections.fs" />
     <Compile Include="Settings.fs" />
   </ItemGroup>

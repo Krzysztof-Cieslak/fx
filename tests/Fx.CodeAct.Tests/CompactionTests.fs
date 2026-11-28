@@ -276,6 +276,45 @@ let tests =
                         ()
             }
 
+            testTask
+                "after compaction, history.list names the collapsed range and history.read gives its originals back (T201b)" {
+                do!
+                    compacting
+                        "read-back"
+                        []
+                        (fun f ->
+                            task {
+                                f.Model.AddAll
+                                    [
+                                        Say.cell "// intent: one\nprint one"
+                                        Say.cell "// intent: compact\ncall r = history.compact\nr"
+                                        Say.text summaryText
+                                        Say.cell "// intent: list\ncall l = history.list\nl"
+                                        Say.cell
+                                            "// intent: read\ncall t = history.read [\"r1\", {\"maxChars\": 100000}]\nt"
+                                        Say.cell "// intent: missing\ncall m = history.read [\"r9\"]\nm"
+                                        Say.finish "Done"
+                                    ]
+
+                                do! kickoff f "Count the sheep"
+                                let! ending = ended f "s1" 1
+                                Expect.equal (completed ending) (done' "Done") "done"
+
+                                let rs = receipts f "s1"
+                                let listed = text rs[2]
+                                Expect.stringContains listed "\"r1\"" "the range's id"
+                                Expect.stringContains listed summaryText "its summary"
+
+                                let read = text rs[3]
+                                Expect.stringContains read "Count the sheep" "the prompt, read back"
+                                Expect.stringContains read "print one" "the first cell, read back"
+
+                                Expect.stringContains (text rs[4]) "notFound" "a range that is not there"
+                                do! expectReplays f "s1"
+                            })
+                        ()
+            }
+
             testTask "a cell that asks and finishes: the collapse is recorded before the turn ends" {
                 do!
                     compacting
