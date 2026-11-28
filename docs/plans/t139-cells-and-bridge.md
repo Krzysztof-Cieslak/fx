@@ -74,9 +74,12 @@ NOOA's agents have. **The default action surface does not change** (T218 decides
    need them, so that big content does not travel to the host and back.
 2. **Text without escaping:** an optional `texts` member on the `cell` tool, not a separate write
    tool. It serves both surfaces, since `hybrid` includes `cell`.
-3. **Approval waits:** the kernel holds a cell's clock while one of its host calls waits for a person
-   (`cell/hold`). Not "exclude every host call's time": a cell looping over commands must still time
-   out.
+3. **Approval waits:** a person's wait never counts against a cell. Not "exclude every host call's
+   time" without a bound: a cell looping over commands must still time out. *Changed in the T141 lane:*
+   the kernel stops a cell's clock while any of its host calls is in flight, and the host bounds the
+   cell's commands with the cell's timeout instead, timed after the grants guard. The planned `cell/hold`
+   notification was dropped: replay answers the guard from one journal entry without running it, so a
+   notification sent from the guard would be missing in replay and the kernel's input would diverge.
 4. **Kernel protocol stays version 1:** changes are optional fields and notifications that an older
    kernel or host ignores. If a lane finds a change an old peer would misread, it is version 2
    ([kernel-protocol.md](../modules/kernel-protocol.md)).
@@ -173,44 +176,46 @@ The rest of T203 (outlines of large files, logs, data) becomes T203b.
 
 ## T141 Cells: outcomes that say why
 
-**What:**
-- **Approval waits stop the clock.** While a host call of a cell waits for a person (a grant request is
-  open), the cell's clock stops; an interrupt still stops the cell.
-- **A cell stopped while waiting says so.** If a cell ends while a request is open (interrupted, or
-  its kernel killed), the receipt names the call and what it waited for, e.g.
-  `shell.exec: strace -f …, waiting for approval`. The request is withdrawn with that reason ("the
-  cell was interrupted", "the cell timed out"), not "the turn was interrupted".
-- **Unassigned names.** When a cell fails, the names it declared but never assigned are listed apart:
-  `Declared: tk, tl, i` and `Not assigned (the cell stopped first): c1`.
+**What** (as built; the lane changed the design of the clock, see decision 3):
+- **Approval waits do not count.** The kernel counts only a cell's own time: its clock stops while any
+  host call of the cell is in flight; an interrupt still stops the cell at once. So that a cell looping
+  over commands still ends, the host gives a cell's `shell.run` calls at most the cell's timeout between
+  them, timed around the binding after the grants guard (a person's wait counts against neither).
+- **A cell stopped while waiting says so.** A timed-out or cancelled cell's receipt names the host
+  calls it stopped while the guard had them wait for approval, e.g.
+  `shell.run: strace -f ls (stopped while it waited for its approval)`. Their requests are withdrawn
+  with "the call was cancelled: the turn was interrupted or its cell stopped", not "the turn was
+  interrupted". (An interrupted turn has no cell receipt: the render closes its calls.)
+- **Unassigned names.** When a cell stops early, the names it declared but never assigned are listed
+  apart: `Declared: tk, tl, i` and `Not assigned (the cell stopped first): c1`.
+
+**Why not `cell/hold`** (the plan's host-to-kernel notification while the guard waits): replay answers
+the guard (`Hands.Guard`) from one journal entry without running it, so a notification sent from inside
+the guard would be missing in replay, and the kernel's input (journaled writes) would diverge.
 
 **Code map:**
-- **Kernel protocol:** a host-to-kernel notification `cell/hold {cellId, held}`. The kernel stops
-  counting the cell's `timeoutMs` while it is held: in bun-ts, the timer around `timedOut` in
-  `kernel.ts`; the script kernel too. A kernel that does not know the notification ignores it, which
-  is today's behaviour.
-- **Host:**
-  - The guard knows when a host call waits for an answer (`src/Fx.CodeAct/GrantGuard.fs`); the
-    session's kernel (`SessionKernel`, `Kernels.fs`) holds and releases the cell around that wait.
-  - The withdrawal's reason comes from what ended the wait (today the fixed text at
-    `GrantGuard.fs`'s `withdraw … "the turn was interrupted"`).
+- **Kernels:** bun-ts's `CellClock` (`kernel.ts`) pauses around `hostCall`; the script kernel pauses its
+  `CancelAfter` around its host call. No protocol message.
+- **Host:** `CellCommands` and `SessionKernel.Call` (`src/Fx.CodeAct/Kernels.fs`): the bound added to
+  `shell.run`'s `timeoutMs`, `Clock.timed` on the hands' clock (recorded), `cellTimeout` once used up;
+  the calls the guard has not answered (`CellRecord.Waiting`). `GrantGuard.fs`: the withdrawal reason.
 - **Unassigned names:**
-  - `CellResult` gains an optional `unassigned`: the names replMode hoisted that are still
-    `undefined` after a runtime error or a timeout (`packages/kernel-bun-ts/src/positions.ts`
-    `hoistedNames`, `kernel.ts`'s `result`).
+  - `CellResult` gains an optional `unassigned`: the declared names (replMode's hoisted ones) still
+    `undefined` after a runtime error, a timeout or a cancellation (`kernel.ts`'s `result`; the script
+    kernel: names not bound).
   - `Receipts.cell` renders it.
 
 **Tests:**
-- Kernel conformance, on both kernels:
-  - a held cell outlives its timeout, and times out after it is released;
-  - unassigned names after a throw.
-- CodeAct with a scripted model on a fake clock: a grant answered after more than the cell timeout;
-  the call runs and the cell completes.
-- Receipt golden files; the withdrawal reason in the grants log.
+- Kernel conformance, on both kernels: a host call answered after three times the cell's timeout lets
+  the cell complete; the cell's own time goes on after a host call and runs out; unassigned names after
+  a throw and a timeout.
+- CodeAct: a grant answered after more than the cell timeout (the call runs, the cell completes); a
+  long command cut at the cell's timeout and the next refused; a cell stopped while its call waits for
+  approval; the receipt's lines as units; the withdrawal reason in the grants log.
 
 **Docs:**
-- `kernel-protocol.md` (`cell/hold`, `unassigned`).
-- `codeact.md` (the cell timeout, receipts).
-- `grants.md`, if it lists withdrawal reasons.
+- `kernel-protocol.md` (`timeoutMs`, `unassigned`), `codeact.md` (the cell timeout, receipts, grants),
+  spec §6.5.
 
 **Done when:** a cell that asks to run a command not on the auto list can wait as long as the person
 takes, and no receipt says "timed out" because of a person.
@@ -422,5 +427,6 @@ without copying its text.
 - **Until T140 lands and the person rebuilds `fx`,** never put F# or Markdown inside a TypeScript
   template literal. Use double-quoted strings or arrays of lines (`fs.patch`'s `lines`), where backticks
   need no escaping. Once it has, pass such text in the `cell` tool's `texts` and use it by name.
-- **Until T141 lands,** a command not on the auto list waits for the person, and a cell that waits
-  longer than 10 minutes is stopped with only "timed out". Ask the person; do not retry with `pkill`.
+- **Until T141 lands and the person rebuilds `fx`,** a command not on the auto list waits for the
+  person, and a cell that waits longer than 10 minutes is stopped with only "timed out". Ask the
+  person; do not retry with `pkill`.

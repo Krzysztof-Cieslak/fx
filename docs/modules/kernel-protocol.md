@@ -122,7 +122,13 @@ Their typed error is `KernelError`: `busy {running}`, `duplicateCell`, `invalidC
 **`cell/run`.** Cell ids are 1 to 64 of `A-Z a-z 0-9 _ -` and unique per kernel (`duplicateCell`). A
 kernel runs one cell at a time (`busy`). `intent` is the cell's `// intent:` line (spec §19.2); it does
 not change what the cell does. `check: true` asks a kernel that handles `cell/check` not to run a cell
-with type errors. The result:
+with type errors. `timeoutMs` limits the cell's **own** time: the kernel stops counting while any of the
+cell's host calls is in flight and goes on with what was left when the last one returns, so a host call
+that waits for a person's approval never times the cell out (T141). The host bounds what its host calls
+do itself (CodeAct gives a cell's `shell.run` calls at most the cell's timeout between them,
+codeact.md "Kernels"). A cell stopped by `cell/cancel` or an interrupt stops at once, host calls in
+flight or not. A kernel written before this counted host calls too: it is still version 1 (its cells
+time out sooner; nothing is misread). The result:
 
 ```json
 {"cellId":"c3","outcome":{"kind":"completed","value":{"type":"Array","preview":{"text":"[1, 2, …+5]","truncated":true}}},
@@ -137,6 +143,10 @@ with type errors. The result:
   tail, plus one marker line of at most 64 characters where the middle was left out; `totalChars`
   counts everything. Overflow into a blob with a grep-able path is T201's.
 - `declared`: top-level names the cell declared (they persist).
+- `unassigned` (optional, absent when empty): the names of `declared` that hold no value
+  (`undefined` in TypeScript, unbound in the script kernel) because the cell stopped before it assigned
+  them: after a runtime error, a timeout or a cancellation. A name an earlier cell gave a value keeps it
+  (replMode hoists declarations as `var`s, which do not reset), so it is not listed.
 - `finished`: the cell called `finish` and the host accepted it.
 - `notified`: how many `cell/output` and `cell/activity` notifications (not late) the kernel sent about
   this cell before the result. Fx.Rpc completes a call in its reader while notifications wait for the
@@ -236,7 +246,11 @@ A cell stops in three stages (`Kernel.interrupt`), as the Bun kernel spike found
    reference kernel, disposing its `ModuleGraph`: timers, sockets, child processes), cancels its host
    calls, and answers the `cell/run` with `cancelled`. The kernel and its state live on.
 2. `timeoutMs`: the kernel interrupts the cell itself, a synchronous busy loop included (the VM's
-   watchdog), and answers `timedOut`.
+   watchdog), and answers `timedOut`. Only the cell's own time counts: the clock stops while a host
+   call of the cell is in flight (the reference kernel's `CellClock`; the script kernel pauses its
+   `CancelAfter`). The host never tells the kernel to hold the clock (a `cell/hold` notification was
+   planned and dropped): replay answers the host's grants guard from one journal entry without running
+   it, so a message the guard sent would be missing in replay and the kernel's input would diverge.
 3. A cell the kernel cannot interrupt (a busy loop after an `await` blocks the event loop, so the
    kernel never reads `cell/cancel`): after `ExitGrace` the host kills the kernel (`Interruption.Killed`):
    it ends the connection, then the process, so how the connection ended never depends on whether the
@@ -290,12 +304,12 @@ stays language-neutral and checks everything through the protocol. Version 1 cov
 | Handshake | protocol 1, a language, the required methods, `caps.snapshot` ⇔ snapshot and restore, refusing a host without a common version |
 | State | persistence across cells, redefinition, declared names, completion values and `Out`, cell ids run once, one cell at a time |
 | Output | in the result, streamed before it in order, bounded (head, tail, counts, streamed bound), late output attributed |
-| Errors | runtime errors with their message, syntax errors that run nothing, state surviving errors |
+| Errors | runtime errors with their message, syntax errors that run nothing, state surviving errors, `unassigned` names after a throw and a timeout (none after a cell that completed) |
 | Previews | within default and given limits for long strings, long lists and deep values; small values whole; `notFound` |
 | Marshalling | JSON round trips (Unicode, int64 within 2^53, nesting), values visible to cells, `tooLarge`, `notEncodable`, `invalidName` (also the bridge's global), handles back to the host unchanged, plain data never a handle, blobs as references |
 | Host calls | results, typed errors with their kind as code, missing bindings, cancellation with the cell, arguments beyond `inlineBytes` within `argumentBytes` whole, beyond `argumentBytes` refused in the cell (`invalidArguments`) |
 | Finish | accepted, rejected by the codec, rejected by an `Ensure` check, with the issues in the cell |
-| Cancellation | `cell/cancel`, `$/cancelRequest`, timeouts of waits and busy loops (the kernel survives), a busy loop the kernel cannot interrupt: killed, a new kernel, `recall` |
+| Cancellation | `cell/cancel`, `$/cancelRequest`, timeouts of waits and busy loops (the kernel survives), a host call answered after three times the cell's timeout (the cell completes: waits for the host do not count), the cell's own time going on after a host call and running out, a busy loop the kernel cannot interrupt: killed, a new kernel, `recall` |
 | Activity | reported for its cell before the result (if cells can report it), intent lines |
 | Optional | snapshot/restore into a new kernel, `cell/check`, determinism (when announced) |
 | Launch hygiene | (process kernels) exactly the launch's environment, injection vectors refused, stray stdout survived, exit on close |
