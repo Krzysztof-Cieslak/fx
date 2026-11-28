@@ -524,6 +524,18 @@ module Receipts =
                 cut
         | _ -> bounded maxChars text
 
+    /// A kernel's cut output (`… [n chars omitted] …`, kernel-protocol.md) with `where` (all of it is) in
+    /// its marker line; text without the marker as it is.
+    let nameOverflow (where: string) (text: string) : string =
+        System.Text.RegularExpressions
+            .Regex("\n… \\[([0-9]+) chars omitted\\] …\n")
+            .Replace(
+                text,
+                (fun (m: System.Text.RegularExpressions.Match) ->
+                    $"\n… [{m.Groups[1].Value} chars omitted; {where}] …\n"),
+                1
+            )
+
     /// Where all of each stream of a command is, when the command's own bound cut it.
     let private streamOverflows (result: RunResult) : string =
         lines

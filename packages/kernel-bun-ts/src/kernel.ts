@@ -160,8 +160,9 @@ class Cell {
     readonly id: string,
     limit: number,
     send: (text: string) => void,
+    overflow?: number,
   ) {
-    this.output = new OutputBuffer(limit);
+    this.output = new OutputBuffer(limit, overflow);
     this.stream = new OutputStream(limit, send);
     this.interrupted = new Promise<never>((_, reject) => (this.interrupt = reject));
     this.interrupted.catch(() => {});
@@ -409,7 +410,7 @@ export class Kernel {
     if (this.cells.has(cellId)) throw failure({ kind: "duplicateCell", cellId }, `cell ${cellId} already ran`);
     if (this.active) throw failure({ kind: "busy", running: this.active.id }, `cell ${this.active.id} is running`);
     const t0 = performance.now();
-    const cell = new Cell(cellId, this.limits.outputChars, (text) => this.peer.notify("cell/output", { cellId, kind: "text", text, late: false }));
+    const cell = new Cell(cellId, this.limits.outputChars, (text) => this.peer.notify("cell/output", { cellId, kind: "text", text, late: false }), this.limits.overflowChars);
     this.cells.set(cellId, cell);
     this.active = cell;
     const onAbort = () => this.interrupt(cell, new Interrupt({ kind: "cancelled" }));

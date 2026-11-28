@@ -126,6 +126,7 @@ let tests =
                                         Text = "hi\n"
                                         Truncated = false
                                         TotalChars = 3L
+                                        Whole = None
                                     }
                                 Declared = [ "x"; "y" ]
                                 Unassigned = unassigned
@@ -145,6 +146,7 @@ let tests =
                                 Text = ""
                                 Truncated = false
                                 TotalChars = 0L
+                                Whole = None
                             }
                         Declared = [ "x" ]
                         Unassigned = unassigned

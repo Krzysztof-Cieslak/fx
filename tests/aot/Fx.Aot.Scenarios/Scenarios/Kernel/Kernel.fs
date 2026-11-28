@@ -113,6 +113,7 @@ let private codecs () : string list =
                     Text = "x\n"
                     Truncated = false
                     TotalChars = 2L
+                    Whole = None
                 }
             Declared = [ "x"; "y" ]
             Unassigned = [ "y" ]

@@ -27,6 +27,8 @@ export interface BoundedText {
   truncated: boolean;
   /** Integer, at least 0. */
   totalChars: number;
+  /** All of the text, when it was cut and the host asked for it. */
+  whole?: string;
 }
 
 export interface Cancelled {
@@ -332,6 +334,11 @@ export interface KernelLimits {
    * Integer, at least 1.
    */
   argumentBytes?: number;
+  /**
+   * When a cell's output is cut, the most characters of all of it to return as output.whole; never when absent.
+   * Integer, at least 1.
+   */
+  overflowChars?: number;
 }
 
 /** The notifications a kernel sends to its host. */

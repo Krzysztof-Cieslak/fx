@@ -206,13 +206,20 @@ let parse (code: string) : Result<(int * Statement) list, SyntaxFailure> =
     | None -> Ok(List.ofSeq statements)
 
 /// A cell's output: head and tail within the limit, as kernels keep it.
-type private OutputBuffer(limit: int) =
+type private OutputBuffer(limit: int, overflow: int option) =
     let head = StringBuilder()
     let mutable tail = ""
     let mutable total = 0L
+    // All of it, while it stays within `overflow` (T201a).
+    let whole = StringBuilder()
 
     member _.Append(text: string) =
         total <- total + int64 text.Length
+
+        match overflow with
+        | Some most when total <= int64 most -> whole.Append text |> ignore
+        | _ -> whole.Clear() |> ignore
+
         let headLimit = (limit + 1) / 2
         let take = min text.Length (max 0 (headLimit - head.Length))
         head.Append(text, 0, take) |> ignore
@@ -235,6 +242,11 @@ type private OutputBuffer(limit: int) =
                     string head + tail
             Truncated = truncated
             TotalChars = total
+            Whole =
+                if truncated && overflow.IsSome && total <= int64 overflow.Value then
+                    Some(string whole)
+                else
+                    None
         }
 
 exception private CellStopped of RuntimeFailure
@@ -617,7 +629,7 @@ type Kernel(stray: string -> unit) =
                         ran.Add cell.CellId |> ignore
                         running <- Some(cell.CellId, cancel))
 
-                    let output = OutputBuffer limits.OutputChars
+                    let output = OutputBuffer(limits.OutputChars, limits.OverflowChars)
                     let streamed = ref 0
                     let notified = ref 0
                     let finished = ref false

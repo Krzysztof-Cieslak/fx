@@ -16,6 +16,9 @@ type KernelLimits =
         /// input): arguments are copied up to this, beyond `InlineBytes`. `None` (an older host):
         /// `InlineBytes`.
         ArgumentBytes: int option
+        /// When a cell's output is cut, the most characters of all of it the kernel also returns
+        /// (`BoundedText.Whole`), so the host can store it (T201a). `None`: never.
+        OverflowChars: int option
     }
 
     /// The largest argument of a host call a kernel sends.
@@ -81,6 +84,9 @@ type BoundedText =
         Truncated: bool
         /// Characters produced in total.
         TotalChars: int64
+        /// All of the text, when it was cut and the host asked for it within
+        /// `KernelLimits.OverflowChars` (T201a).
+        Whole: string option
     }
 
     override this.ToString() =

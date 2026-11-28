@@ -679,6 +679,41 @@ type CodeAct<'R, 'K
                                 ReadLines = settings.ReadLines
                             }
 
+                        let overflowSettings =
+                            { CoreSettings.defaults hands.Workspace hands.Os with
+                                BlobRoot = hands.BlobRoot
+                            }
+
+                        // What the cell printed, when the kernel cut it and gave all of it back: stored
+                        // in the environment's blob store, its marker naming where (T201a).
+                        let! result =
+                            match result.Output.Whole with
+                            | Some whole when result.Output.Truncated ->
+                                eff {
+                                    let! overflow =
+                                        Eff.provide
+                                            env
+                                            (CoreBindings.storeOverflow
+                                                overflowSettings
+                                                (Text.Encoding.UTF8.GetBytes whole))
+
+                                    let text = Receipts.nameOverflow (CoreBindings.whereAll overflow) result.Output.Text
+
+                                    return
+                                        { result with
+                                            Output =
+                                                { result.Output with
+                                                    Text = text
+                                                    Whole = None
+                                                }
+                                        }
+                                }
+                            | _ ->
+                                Eff.ret
+                                    { result with
+                                        Output = { result.Output with Whole = None }
+                                    }
+
                         // A value the receipt cuts is stored whole in the environment's blob store,
                         // and the receipt says where (T201a).
                         let! stored =
@@ -686,11 +721,7 @@ type CodeAct<'R, 'K
                             | Some body when body.Length > settings.OutputChars ->
                                 Eff.provide
                                     env
-                                    (CoreBindings.storeOverflow
-                                        { CoreSettings.defaults hands.Workspace hands.Os with
-                                            BlobRoot = hands.BlobRoot
-                                        }
-                                        (Text.Encoding.UTF8.GetBytes body)
+                                    (CoreBindings.storeOverflow overflowSettings (Text.Encoding.UTF8.GetBytes body)
                                      |> Eff.map Some)
                             | _ -> Eff.ret None
 
@@ -814,6 +845,9 @@ type CodeAct<'R, 'K
                         Preview = settings.PreviewLimits
                         InlineBytes = settings.InlineBytes
                         ArgumentBytes = Some settings.ArgumentBytes
+                        // All of a cut output comes back to be stored (T201a): at most a third of
+                        // the argument bound in characters, so its JSON stays under it.
+                        OverflowChars = Some(max 1 (settings.ArgumentBytes / 3))
                     }
 
                 let caching =

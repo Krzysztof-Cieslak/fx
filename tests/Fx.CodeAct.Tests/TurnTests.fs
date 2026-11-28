@@ -713,6 +713,44 @@ let tests =
                         ()
             }
 
+            testTask "what a cell printed beyond the limit is stored whole, and its marker says where (T201a)" {
+                do!
+                    within
+                        "printed"
+                        []
+                        (fun f ->
+                            task {
+                                let lines = List.init 2000 (fun i -> $"line {i:D4} 0123456789")
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cell (
+                                            "// intent: print a lot\n"
+                                            + (lines |> List.map (fun l -> "print " + l) |> String.concat "\n")
+                                        )
+                                        Say.finish "printed"
+                                    ]
+
+                                do! kickoff f "Print"
+                                let! _ = ended f "s1" 1
+                                let shown = text (receipts f "s1").Head
+                                let whole = (lines |> List.map (fun l -> l + "\n") |> String.concat "")
+                                let hash = Fx.Store.BlobHash.ofBytes (System.Text.Encoding.UTF8.GetBytes whole)
+
+                                Expect.isTrue
+                                    (shown.Contains("chars omitted; all of it: blob " + string hash + "] …"))
+                                    $"the marker names the blob: {shown.Substring(0, min 300 shown.Length)}"
+
+                                match
+                                    (HandsEnv.Stored.Blobs.Get hash System.Threading.CancellationToken.None).Result
+                                with
+                                | Ok bytes ->
+                                    Expect.equal (System.Text.Encoding.UTF8.GetString bytes) whole "all of it"
+                                | Error e -> failtest (string e)
+                            })
+                        ()
+            }
+
             testTask "one kernel for the session: names declared in earlier cells and turns stay" {
                 do!
                     within
