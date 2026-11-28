@@ -954,7 +954,34 @@ module Permissions =
                         |> concat
         }
 
-    /// `fs.read(path)`.
+    /// An edit of a file (`fs.edit`, `fs.editRange`): it writes the file, and its result (and a stale
+    /// range's error) shows its lines, so outside the workspace it is a read and a write.
+    let private edit (settings: GrantSettings) (place: Workplace) (via: string) (path: string) : CallNeeds =
+        concat [ read place via path; write settings place place.Workspace via path ]
+
+    /// `fs.edit(path, changes)`.
+    let fsEditRule: BindingRule =
+        {
+            Binding = "fs.edit"
+            Needs =
+                fun settings place call ->
+                    match arg Codec.string 0 call with
+                    | None -> CallNeeds.Needs []
+                    | Some path -> edit settings place "fs.edit" path
+        }
+
+    /// `fs.editRange(range, text)`: the range's file.
+    let fsEditRangeRule: BindingRule =
+        {
+            Binding = "fs.editRange"
+            Needs =
+                fun settings place call ->
+                    match arg CoreBindings.Codecs.fileRange 0 call with
+                    | None -> CallNeeds.Needs []
+                    | Some range -> edit settings place "fs.editRange" range.Path
+        }
+
+    /// `fs.read(path, options?)`.
     let fsReadRule: BindingRule =
         {
             Binding = "fs.read"
@@ -1015,7 +1042,8 @@ module Permissions =
 
     /// The core bindings' rules (`fs.list` and `fs.stat` show names and sizes, not content: they need
     /// nothing).
-    let core: BindingRule list = [ shellRun; fsWriteRule; fsPatchRule; fsReadRule ]
+    let core: BindingRule list =
+        [ shellRun; fsWriteRule; fsPatchRule; fsEditRule; fsEditRangeRule; fsReadRule ]
 
     /// What a call needs, by its binding's rule; nothing for bindings without one.
     let needs (rules: BindingRule list) (settings: GrantSettings) (place: Workplace) (call: HostCall) : CallNeeds =

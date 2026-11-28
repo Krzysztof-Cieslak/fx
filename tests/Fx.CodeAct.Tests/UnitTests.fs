@@ -1,4 +1,4 @@
-/// The strategy's pure parts: tools from codecs, the loop guard, line edits, receipts, the merged
+/// The strategy's pure parts: tools from codecs, the loop guard, receipts, the merged
 /// history, the checks of a result, questions and the recorded surface.
 module Fx.CodeAct.Tests.UnitTests
 
@@ -195,28 +195,6 @@ let tests =
                 Expect.equal off LoopVerdict.Fine "off"
             }
 
-            test "an edit becomes the lines between the common head and tail" {
-                Expect.equal
-                    (Hybrid.lineEdit [ "a"; "b"; "c" ] [ "a"; "B"; "c" ])
-                    { Line = 2; Count = 1; Lines = [ "B" ] }
-                    "one line"
-
-                Expect.equal
-                    (Hybrid.lineEdit [ "a"; "c" ] [ "a"; "b"; "c" ])
-                    { Line = 2; Count = 0; Lines = [ "b" ] }
-                    "an insertion"
-
-                Expect.equal
-                    (Hybrid.lineEdit [ "a"; "b"; "b" ] [ "a"; "b" ])
-                    { Line = 3; Count = 1; Lines = [] }
-                    "a deletion"
-
-                let applied =
-                    TextPatch.applyText "x\r\ny\r\nz\r\n" [ Hybrid.lineEdit [ "x"; "y"; "z" ] [ "x"; "Y"; "z" ] ]
-
-                Expect.equal applied (Ok("x\r\nY\r\nz\r\n", 3)) "line endings kept"
-            }
-
             test "a read shows numbered lines as a file piece, and says how to read on" {
                 let file: FileText =
                     {
@@ -225,6 +203,8 @@ let tests =
                         Lines = 4
                         Size = 19L
                         Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = 4
                     }
 
                 match Receipts.read file (Some 2) (Some 2) 100 with
@@ -269,6 +249,8 @@ let tests =
                         Lines = 2
                         Size = 8L
                         Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = 2
                     }
 
                 let fileJson = CoreBindings.Codecs.fileText.Encode file
@@ -363,6 +345,8 @@ let tests =
                         Lines = 2
                         Size = 8L
                         Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Start = 1
+                        End = 2
                     }
 
                 match
@@ -559,6 +543,183 @@ let tests =
                     Expect.equal code "cellTimeout" "code"
                     Expect.stringContains message "1000 ms" "the timeout"
                 | other -> failtest $"{other}"
+            }
+
+            test "a cell's ranged read shows its lines from where they start; an edit the lines it left" {
+                let limits: CellLimits =
+                    {
+                        ReceiptChars = 20000
+                        OutputChars = 200
+                        ReadLines = 3
+                    }
+
+                let result: CellResult =
+                    {
+                        CellId = "t1-s1-1"
+                        Outcome =
+                            CellOutcome.Completed(
+                                Some
+                                    {
+                                        Type = "object"
+                                        Preview = { Text = "{…}"; Truncated = true }
+                                    }
+                            )
+                        Output =
+                            {
+                                Text = ""
+                                Truncated = false
+                                TotalChars = 0L
+                            }
+                        Declared = []
+                        Unassigned = []
+                        Finished = false
+                        Notified = 0
+                        DurationMs = 0L
+                    }
+
+                let digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+
+                let range: FileText =
+                    {
+                        Path = "a.txt"
+                        Text = "three\nfour\n"
+                        Lines = 10
+                        Size = 60L
+                        Digest = digest
+                        Start = 3
+                        End = 4
+                    }
+
+                let rangeJson = CoreBindings.Codecs.fileText.Encode range
+
+                let info =
+                    (match result.Outcome with
+                     | CellOutcome.Completed(Some i) -> i
+                     | _ -> failtest "no value")
+
+                Expect.equal
+                    (CellValue.ofValue info (Some rangeJson) [ Returned.ofResult "fs.read" rangeJson ])
+                    (CellValue.File range)
+                    "a ranged read is a file read"
+
+                match
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File range)) result
+                with
+                | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
+                    Expect.equal view.Text "     3\tthree\n     4\tfour" "numbered from where it starts"
+                    Expect.equal view.Lines [ LineRange.create 3 4 ] "those lines are seen"
+                    Expect.equal more "[Lines 3–4 of 10.]" "where they are"
+                | other -> failtest $"{other}"
+
+                let long =
+                    { range with
+                        Text = "a\nb\nc\nd\ne\n"
+                        Start = 1
+                        End = 5
+                    }
+
+                match Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File long)) result with
+                | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
+                    Expect.equal view.Lines [ LineRange.create 1 3 ] "up to the receipt's lines"
+                    Expect.stringContains more "fs.read(\"a.txt\", { lines: [4, 5] })" "how to read on"
+                | other -> failtest $"{other}"
+
+                let edited: Edited =
+                    {
+                        Path = "a.txt"
+                        Digest = digest
+                        Lines = 10
+                        Replacements = 3
+                        Ranges =
+                            [
+                                {
+                                    Path = "a.txt"
+                                    Start = 2
+                                    End = 3
+                                    Text = "b2\nb3\n"
+                                    Digest = digest
+                                    Lines = 10
+                                }
+                                {
+                                    Path = "a.txt"
+                                    Start = 6
+                                    End = 5
+                                    Text = ""
+                                    Digest = digest
+                                    Lines = 10
+                                }
+                                {
+                                    Path = "a.txt"
+                                    Start = 8
+                                    End = 9
+                                    Text = "h\ni\n"
+                                    Digest = digest
+                                    Lines = 10
+                                }
+                            ]
+                    }
+
+                let editedJson = CoreBindings.Codecs.edited.Encode edited
+
+                Expect.equal
+                    (CellValue.ofValue info (Some editedJson) [ Returned.ofResult "fs.edit" editedJson ])
+                    (CellValue.Edited edited)
+                    "an edit's result"
+
+                match
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Edited edited)) result
+                with
+                | [ Piece.Text head
+                    Piece.Text summary
+                    Piece.File first
+                    Piece.Text removed
+                    Piece.File second
+                    Piece.Text more ] ->
+                    Expect.stringContains head "(Edited): a.txt, 10 lines" "what it is"
+                    Expect.equal summary "Edited a.txt (3 replacements)." "what changed"
+                    Expect.equal first.Text "     2\tb2\n     3\tb3" "the lines a change left"
+                    Expect.equal first.Lines [ LineRange.create 2 3 ] "seen"
+                    Expect.equal removed "[Lines removed before line 6.]" "a removal"
+                    Expect.equal second.Text "     8\th" "up to the receipt's lines"
+                    Expect.equal more "[1 more changed line is not shown.]" "the rest"
+                | other -> failtest $"{other}"
+            }
+
+            test "the sandbox guard sees the paths edits write" {
+                let call (binding: string) (args: Json list) : HostCall =
+                    {
+                        CellId = Some "c1"
+                        Binding = binding
+                        Args = args |> List.map Value.Inline
+                    }
+
+                let range =
+                    Json.Object
+                        [
+                            "path", Json.String "src/b.ts"
+                            "start", Json.int 1
+                            "end", Json.int 1
+                            "text", Json.String "a\n"
+                            "digest", Json.String(string (Fx.Store.BlobHash.ofBytes [| 1uy |]))
+                            "lines", Json.int 1
+                        ]
+
+                let change = Json.Object [ "old", Json.String "a"; "new", Json.String "b" ]
+
+                Expect.equal
+                    (SandboxGuard.paths "/w" Fx.Sdk.Os.Linux (call "fs.edit" [ Json.String "src/a.ts"; change ]))
+                    [ "/w/src/a.ts", Fx.Sdk.PathAccess.ReadWrite ]
+                    "fs.edit"
+
+                Expect.equal
+                    (SandboxGuard.paths "/w" Fx.Sdk.Os.Linux (call "fs.editRange" [ range; Json.String "b" ]))
+                    [ "/w/src/b.ts", Fx.Sdk.PathAccess.ReadWrite ]
+                    "fs.editRange: the range's file"
+
+                Expect.equal
+                    (SandboxGuard.paths "/w" Fx.Sdk.Os.Linux (call "fs.read" [ Json.String "a"; Json.Object [] ]))
+                    [ "/w/a", Fx.Sdk.PathAccess.ReadOnly ]
+                    "a ranged read"
             }
 
             test "context events go after the session event their cause names" {

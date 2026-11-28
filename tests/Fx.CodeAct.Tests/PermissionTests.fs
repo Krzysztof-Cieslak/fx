@@ -392,6 +392,50 @@ let tests =
                     "a read outside"
 
                 Expect.equal (show (needsOf unix "fs.read" [ Json.String "src/a.fs" ])) [] "a read in the workspace"
+
+                let changes = Json.Object [ "old", Json.String "a"; "new", Json.String "b" ]
+
+                Expect.equal
+                    (show (needsOf unix "fs.edit" [ Json.String "src/a.fs"; changes ]))
+                    []
+                    "an edit in the workspace"
+
+                Expect.equal
+                    (show (needsOf unix "fs.edit" [ Json.String "/etc/hosts"; changes ]))
+                    [ "fs.read /etc/hosts"; "fs.write /etc/hosts" ]
+                    "an edit outside: its lines come back, so a read and a write"
+
+                Expect.equal
+                    (show (needsOf unix "fs.edit" [ Json.String ".git/config"; changes ]))
+                    [ "fs.write .git/config" ]
+                    "an edit of a protected path"
+
+                let range (path: string) =
+                    Json.Object
+                        [
+                            "path", Json.String path
+                            "start", Json.int 1
+                            "end", Json.int 1
+                            "text", Json.String "a\n"
+                            "digest", Json.String(string (Fx.Store.BlobHash.ofBytes [| 1uy |]))
+                            "lines", Json.int 1
+                        ]
+
+                Expect.equal
+                    (show (needsOf unix "fs.editRange" [ range "src/a.fs"; Json.String "b" ]))
+                    []
+                    "a range in it"
+
+                Expect.equal
+                    (show (needsOf unix "fs.editRange" [ range "../../x"; Json.String "b" ]))
+                    [ "fs.read /home/x"; "fs.write /home/x" ]
+                    "a range outside"
+
+                Expect.equal
+                    (show (needsOf unix "fs.editRange" [ Json.int 1; Json.String "b" ]))
+                    []
+                    "not a range: refused by the binding"
+
                 Expect.equal (show (needsOf unix "fs.list" [ Json.String "/" ])) [] "listing needs nothing"
             }
 
