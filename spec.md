@@ -101,7 +101,7 @@ Topology: **host** (brain: agent loop, sessions, model keys), **environments** (
     ▼
  ENVIRONMENT — "hands"  (fx envd, same binary; Linux, macOS, Windows)
     • exec/PTY (ConPTY on Windows) with sequence-numbered, resumable output
-    • fs: batch stat, search, apply-patch, watch   • repo navigation (tree-sitter, LSP proxy)
+    • fs: batch stat, search, apply-patch, watch   • repo search (grep, files)
     • content-addressed blob store   • workspace snapshots   • git, port forwarding
     • component installer   • sandbox drivers (opt-in; none on Windows initially)
     • CodeAct kernels from interpreter extensions (bun-ts by default)
@@ -336,17 +336,8 @@ type Value =
 
 ### 6.7 Reading and navigation
 
-- **Smart previews:** small files shown in full, larger files as a structural outline (line ranges, path, line count, digest); logs/runs head+tail+summary; data shape+samples.
-
-```
-FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=[
-  type RetryConfig = {…}                    14–31
-  let execute (cfg) (op: unit -> Task<_>)   60–141
-  let executeWithClock (clock) (cfg) (op)   143–230
-  module Http = let retry n f               232–260   [deprecated]  … ])
-```
-
-- **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics), `fx.fs.read(path, { lines: [a, b] })`, symbols/refs/definitions/callers (tree-sitter + LSP proxy), plain shell `rg`/`sed`.
+- **Smart previews:** small files shown in full; larger files as their head and tail with the path, line count and digest, so a ranged read picks the part needed; logs/runs head+tail+summary; data shape+samples. Structural outlines (tree-sitter) were spiked and deferred: no evidence yet that agents need them, and the grammars are large (`docs/spikes/tree-sitter.md`).
+- **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics, matches as ranges) and `fx.repo.files`, `fx.fs.read(path, { lines: [a, b] })`, plain shell `rg`/`sed`. Definitions, references and symbols through language servers (T607) only if measurements show agents need them.
 - **Shell results with structure** (T142): a command that runs out of time (`timeoutMs`) is killed with its children and keeps what it printed until then (`timedOut`, no exit code). A plain search, `grep -n`, `rg -n` or `git grep -n` as one simple command that exited 0 with nothing cut, also returns `matches`: its lines as one-line `FileRange`s that `fx.fs.editRange` takes, attached only when every line equals its file's line now (files in the workspace, read as `fx.fs.read` reads them: content exclusions and a confining sandbox's policy apply), so an anchor is never wrong; otherwise none. The receipt of a search with matches ends with how to edit one. Module spec: `docs/modules/interpreters.md`.
 - Optional repo map in the cached prefix; ledger anchors as hints.
 
@@ -1159,7 +1150,7 @@ Action surface (`cells-only` / `hybrid`), TUI style (`tui.theme`: `auto` / `dark
 | Protocols | Own JSON-RPC 2.0; WebSocket + SSE; kernel protocol over stdio |
 | Contracts / SDKs | F# contracts (Fable-compatible); **codec combinators first**; `Fx.Sdk` (F#), `@fx/sdk` (TypeScript) |
 | Models | Built-in F# wire adapters |
-| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI, tree-sitter, static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains in our own `Fx.Keyring` (Security.framework, Credential Manager + DPAPI, Secret Service over our own minimal D-Bus client rather than libsecret; see `docs/spikes/keychains.md`), archive extraction |
+| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI (tree-sitter was spiked and deferred: `docs/spikes/tree-sitter.md`), static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains in our own `Fx.Keyring` (Security.framework, Credential Manager + DPAPI, Secret Service over our own minimal D-Bus client rather than libsecret; see `docs/spikes/keychains.md`), archive extraction |
 | CodeAct / workflows | `fx.runtime.bun` + `fx.interpreter.bun-ts`; host-side workflow worker |
 | Clients | Own Elm-style F# TUI (v1); Fable web; Tauri desktop; ACP |
 
