@@ -62,6 +62,20 @@ let private pdeathsig () : string option =
     else
         None
 
+/// Whether a process of this machine still runs (a zombie, killed and not reaped yet, does not).
+let private alive (pid: int) : bool =
+    try
+        if OperatingSystem.IsLinux() then
+            let stat = File.ReadAllText $"/proc/{pid}/stat"
+            // The state follows the command's name, which ends with the last `)`.
+            let close = stat.LastIndexOf ')'
+            close > 0 && close + 2 < stat.Length && not ("ZX".Contains stat[close + 2])
+        else
+            use proc = Diagnostics.Process.GetProcessById pid
+            not proc.HasExited
+    with _ ->
+        false
+
 /// Tests that the shells made by `create` conform. `create` gets an existing directory with one file,
 /// `marker.txt`, which must be the shell's default working directory; it is called once per test.
 /// `release` cleans up after a shell.
@@ -235,6 +249,73 @@ let tests (name: string) (create: string -> Shell) (release: Shell -> unit) : Te
                     | Ok(output, code) ->
                         Expect.equal output "ready\ngot x\n" "output"
                         Expect.equal code 0 "exit code"
+                    | Error e -> failtest (string e))
+            }
+
+            // T142: `shell.run` kills a command that ran out of time with `Kill`, and a command line
+            // that started more processes must not leave them running (or holding its output open).
+            test "killing a spawned process kills its children" {
+                withEnv (fun env ->
+                    let spec =
+                        {
+                            Program =
+                                Script(
+                                    if windows then
+                                        "$p = Start-Process -FilePath pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 60' -NoNewWindow -PassThru; Write-Output \"child $($p.Id)\"; $p.WaitForExit()"
+                                    else
+                                        "sleep 60 & echo \"child $!\"; wait"
+                                )
+                            Cwd = None
+                            Env = Inherit []
+                        }
+
+                    let program =
+                        eff {
+                            match! Shell.spawn spec with
+                            | Error e -> return Error e
+                            | Ok proc ->
+                                let output = StringBuilder()
+                                let mutable child = None
+
+                                while child.IsNone do
+                                    match! Shell.read proc with
+                                    | Some(Stdout bytes) ->
+                                        output.Append(Encoding.UTF8.GetString bytes) |> ignore
+                                        let text = lines (output.ToString())
+                                        let at = text.IndexOf "child "
+
+                                        if at >= 0 && text.IndexOf('\n', at) > at then
+                                            child <-
+                                                Some(
+                                                    int (
+                                                        text.Substring(at + 6, text.IndexOf('\n', at) - at - 6).Trim()
+                                                    )
+                                                )
+                                    | Some(Stderr _) -> ()
+                                    | None -> failtest $"it ended first: {output}"
+
+                                do! Shell.kill proc
+                                let mutable reading = true
+
+                                // Its output ends: nothing it started holds it open.
+                                while reading do
+                                    match! Shell.read proc with
+                                    | Some _ -> ()
+                                    | None -> reading <- false
+
+                                let! _ = Shell.wait proc
+                                return Ok child.Value
+                        }
+
+                    match runIn env program with
+                    | Ok child ->
+                        let mutable waited = 0
+
+                        while alive child && waited < 100 do
+                            Threading.Thread.Sleep 100
+                            waited <- waited + 1
+
+                        Expect.isFalse (alive child) $"the child ({child}) was killed too"
                     | Error e -> failtest (string e))
             }
 
