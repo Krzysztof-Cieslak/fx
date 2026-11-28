@@ -950,6 +950,21 @@ let private marshalling (subject: KernelSubject) =
                     | other -> failtest $"decode into an invalid name: {show other}"
                 }
 
+            case subject "the bridge's global is refused as a name"
+            <| fun c ->
+                task {
+                    match!
+                        Eff.run c.Env (Kernel.decode c.Kernel Product.kernelGlobal (Value.Inline(Json.String "x")) None)
+                        |> within
+                    with
+                    | Error(KernelFailure.Refused(KernelError.InvalidName name)) ->
+                        Expect.equal name Product.kernelGlobal "the name"
+                    | other -> failtest $"decode into the bridge's global: {show other}"
+
+                    let! result = c.Run(s.Call "sum" "test.add" [ Json.int 1; Json.int 2 ])
+                    completed result |> ignore
+                }
+
             case subject "handles from the host go back to it unchanged"
             <| fun c ->
                 task {
