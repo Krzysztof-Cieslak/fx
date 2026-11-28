@@ -745,8 +745,193 @@ let private compaction () : Task<string list> =
             cell 4 "// intent: finish\nfinish {\"kind\":\"done\",\"summary\":\"Counted\"}"
         ]
 
+/// A process for a background job: it writes these chunks, then exits with 3; or, `held`, it writes
+/// them and runs until it is killed (exit -1). No OS process.
+let private jobProc (chunks: byte array list) (held: bool) : Proc =
+    let gate = obj ()
+    let mutable left = chunks
+
+    let killed =
+        TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+    {
+        Pid = 7
+        Write = fun _ _ -> Task.FromResult()
+        CloseStdin = fun () -> Task.FromResult()
+        Read =
+            fun cancellation ->
+                task {
+                    let next =
+                        lock gate (fun () ->
+                            match left with
+                            | chunk :: rest ->
+                                left <- rest
+                                Some chunk
+                            | [] -> None)
+
+                    match next with
+                    | Some chunk -> return Some(Stdout chunk)
+                    | None ->
+                        if held then
+                            do! killed.Task.WaitAsync(cancellation)
+
+                        return None
+                }
+        Wait =
+            fun cancellation ->
+                task {
+                    if held then
+                        do! killed.Task.WaitAsync(cancellation)
+                        return -1
+                    else
+                        return 3
+                }
+        Kill =
+            fun () ->
+                killed.TrySetResult() |> ignore
+                Task.FromResult()
+    }
+
+/// Background jobs (T143): the hands' live jobs over a shell whose processes are scripted (multi-byte
+/// text cut between writes, one that runs until killed), the notice of a job that ended, its output
+/// from offsets, the bindings' JSON and the step journal's job events.
+let private jobs () : Task<string list> =
+    task {
+        let utf8 = UTF8Encoding(false)
+        let bytes = utf8.GetBytes "café ✓ built\nline two\n"
+        let told = Collections.Concurrent.ConcurrentQueue<JobNotice>()
+
+        let live =
+            LiveJobs<HandsEnv>(fun notice ->
+                told.Enqueue notice
+                Task.FromResult())
+
+        let fs = InMemoryFs(SystemClock.clock, false)
+
+        let env: HandsEnv =
+            {
+                Clock = SystemClock.clock
+                FsRead = fs.FsRead
+                Fs = fs.Fs
+                FsOps = Fx.Envd.FsOpsOver.create fs.FsRead fs.Fs
+                Shell =
+                    {
+                        Run = fun _ _ -> Task.FromResult(Error(NotStarted("run", "no commands here")))
+                        Spawn =
+                            fun spec _ ->
+                                match spec.Program with
+                                | Program.Script "serve" ->
+                                    Task.FromResult(Ok(jobProc [ utf8.GetBytes "listening\n" ] true))
+                                | _ -> Task.FromResult(Ok(jobProc [ bytes[0..3]; bytes[4..] ] false))
+                    }
+                Scope = Scope.root
+            }
+
+        let launch (id: string) (command: string) : JobLaunch =
+            {
+                Session = "s1"
+                Id = id
+                Command = command
+                Cwd = workspace
+                Env = Inherit []
+                Stdin = None
+            }
+
+        let reference (id: string) : JobRef = { Session = "s1"; Id = id }
+        let run (effect: Eff<HandsEnv, 'T>) = Eff.run env effect
+        let lines = ResizeArray<string>()
+
+        let! started = run (live.Jobs.Start(launch "j1" "make"))
+        lines.Add $"started: {Result.isOk started}"
+
+        let! ended =
+            run (
+                live.Jobs.Wait
+                    {
+                        Job = reference "j1"
+                        TimeoutMs = None
+                    }
+            )
+
+        lines.Add $"ended: {ended |> Option.map string}"
+
+        for from in [ Some 0L; Some 4L; None ] do
+            let! (output: JobOutput option) =
+                run (
+                    live.Jobs.Read
+                        {
+                            Job = reference "j1"
+                            From = from
+                            MaxChars = 16
+                        }
+                )
+
+            match output with
+            | Some output -> lines.Add(Json.serialize (JobCodecs.output.Encode output))
+            | None -> lines.Add "no output"
+
+        let! _ = run (live.Jobs.Start(launch "j2" "serve"))
+        let! killed = run (live.Jobs.Kill(reference "j2"))
+        lines.Add $"killed: {killed |> Option.map string}"
+        let! all = run (live.Jobs.List "s1")
+
+        for info in all do
+            lines.Add(Json.serialize (JobCodecs.info.Encode info))
+
+        // Closing waits for every job's end: the notices are all told by then.
+        do! live.Close()
+
+        for notice in told do
+            lines.Add $"notice {notice.Job}: {notice.Note}"
+
+        let status: JobStatus =
+            {
+                Id = "j1"
+                Name = "build"
+                Command = "make"
+                State = "exited"
+                ExitCode = Some 3
+                Reason = None
+                Bytes = 22L
+            }
+
+        lines.Add(Json.serialize (JobBindingCodecs.status.Encode status))
+
+        for event in
+            [
+                StepEvent.JobStarted
+                    {
+                        Job = "j1"
+                        Name = "build"
+                        Command = "make"
+                        Cwd = None
+                        Call = None
+                    }
+                StepEvent.JobEnded
+                    {
+                        Job = "j1"
+                        How = JobEnd.Exited 3
+                        Bytes = Some 22L
+                    }
+                StepEvent.JobEnded
+                    {
+                        Job = "j2"
+                        How = JobEnd.Reported "lost"
+                        Bytes = None
+                    }
+            ] do
+            let json = StepCodecs.event.Encode event
+
+            match StepCodecs.event.Decode json with
+            | Ok back when back = event -> lines.Add(Json.serialize json)
+            | other -> lines.Add $"did not read back: {other}"
+
+        return List.ofSeq lines
+    }
+
 let scenarios: Scenario list =
     [
+        Scenario.task "codeact-jobs" jobs
         Scenario.task "codeact-hybrid" hybrid
         Scenario.task "codeact-compaction" compaction
         Scenario.task "codeact-text-only" textOnly
