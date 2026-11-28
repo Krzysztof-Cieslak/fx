@@ -668,7 +668,7 @@ type CodeAct<'R, 'K
 
                         return
                             {
-                                Pieces = Receipts.cell cellLimits note intent record.Reads value result
+                                Pieces = Receipts.cell cellLimits note intent record.Reads record.Waiting value result
                                 IsError = Receipts.isError result.Outcome
                                 Restarted = Receipts.restart note
                                 Approvals = []

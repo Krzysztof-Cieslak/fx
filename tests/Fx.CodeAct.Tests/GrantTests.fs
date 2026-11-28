@@ -132,6 +132,15 @@ let private withdrawn (service: GrantsService<GrantsEnv>) (id: RequestId) =
     | RequestStatus.Closed { Why = CloseReason.Withdrawn _ } -> ()
     | other -> failtest $"{id} is not withdrawn: {other}"
 
+/// The reason a cancelled call's requests are withdrawn with.
+let private cancelledCall =
+    "the call was cancelled: the turn was interrupted or its cell stopped"
+
+let private withdrawnBecause (service: GrantsService<GrantsEnv>) (id: RequestId) (reason: string) =
+    match status service id with
+    | RequestStatus.Closed { Why = CloseReason.Withdrawn why } -> Expect.equal why reason "why it was withdrawn"
+    | other -> failtest $"{id} is not withdrawn: {other}"
+
 // ---- The guard on its own ---------------------------------------------------------------------------
 
 let private turn: TurnStart =
@@ -783,7 +792,7 @@ let private guardTests =
                     }
 
                 Expect.equal outcome "cancelled" "the cancellation goes on"
-                withdrawn b.Service requests.Head.Id
+                withdrawnBecause b.Service requests.Head.Id cancelledCall
             }
 
             testTask "a request nobody answers in time refuses the call" {
@@ -1159,9 +1168,28 @@ let private turnTests =
                                           && DateTime.UtcNow < deadline do
                                         do! Task.Delay 10
 
-                                    withdrawn g.Service requests.Head.Id
+                                    withdrawnBecause g.Service requests.Head.Id cancelledCall
                                     Expect.isFalse (Directory.Exists(g.F.File "made")) "nothing ran"
                                 })
+            }
+
+            testTask "cells: a grant answered after longer than the cell's timeout still runs, and the cell completes" {
+                // The cell's clock stops while its host call waits for the person (T141).
+                do!
+                    withGrants "grant-cell-slow-answer" [ "codeact.cell.timeoutMs", Json.int 1000 ] [] (fun g ->
+                        task {
+                            g.F.Model.AddAll [ cellRun "mkdir made"; Say.finish "Made it" ]
+                            do! kickoff g.F "Make a directory"
+                            let! (requests: GrantRequest list) = g.Pending 1
+                            do! Task.Delay 2500
+                            g.Answer(requests.Head, allow ScopeChoice.Once None)
+                            let! ending = ended g.F "s1" 1
+                            Expect.equal (completed ending) (TurnResult.Done("Made it", [], None)) "done"
+                            Expect.isTrue (Directory.Exists(g.F.File "made")) "it ran"
+                            let receipt = (receipts g.F "s1").Head
+                            Expect.isFalse receipt.IsError (text receipt)
+                            Expect.isFalse ((text receipt).Contains "timed out") "no timeout"
+                        })
             }
 
             testTask "a steer while a call waits withdraws the request; the model reads the steer next" {

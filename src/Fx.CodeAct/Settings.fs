@@ -157,9 +157,13 @@ module CodeActSlots =
             (Codec.option (count 1))
             None
 
-    /// `codeact.cell.timeoutMs`: how long a cell may run.
+    /// `codeact.cell.timeoutMs`: how long a cell may run (its own time; its commands get as much again).
     let cellTimeoutMs: Slot<int> =
-        Slot.create "codeact.cell.timeoutMs" "Milliseconds a cell may run before the kernel stops it." (count 1) 600000
+        Slot.create
+            "codeact.cell.timeoutMs"
+            "Milliseconds a cell may run before the kernel stops it. Time its host calls take does not count (a person's approval may take long); the commands it runs share as much again."
+            (count 1)
+            600000
 
     /// `codeact.cell.typeCheck`: whether cells with type errors are refused.
     let typeCheck: Slot<bool> =

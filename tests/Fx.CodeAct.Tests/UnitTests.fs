@@ -318,6 +318,7 @@ let tests =
                                 TotalChars = 0L
                             }
                         Declared = [ "x" ]
+                        Unassigned = []
                         Finished = false
                         Notified = 0
                         DurationMs = 0L
@@ -329,7 +330,7 @@ let tests =
                 let long = String.replicate 100 "0123456789"
 
                 let shown =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.Text long)) result
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Text long)) result
                     |> text
 
                 Expect.stringContains shown "Value of Out[\"t1-s1-1\"] (string, 1000 chars):\n0123456789" "the text"
@@ -347,7 +348,7 @@ let tests =
                     }
 
                 let shownRan =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.Ran ran)) result
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Ran ran)) result
                     |> text
 
                 Expect.stringContains
@@ -364,7 +365,9 @@ let tests =
                         Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
                     }
 
-                match Receipts.cell limits KernelNote.Same (Some "x") Reads.none (Some(CellValue.File file)) result with
+                match
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File file)) result
+                with
                 | [ Piece.Text head; Piece.File view; Piece.Text tail ] ->
                     Expect.stringContains head "(FileText): a.txt, 2 lines" "what it is"
                     Expect.equal view.Text "     1\tone\n     2\ttwo" "numbered lines, a file piece (seen)"
@@ -372,12 +375,190 @@ let tests =
                 | other -> failtest $"{other}"
 
                 let preview =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none None result |> text
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] None result
+                    |> text
 
                 Expect.stringContains
                     preview
                     "Value of Out[\"t1-s1-1\"] (string): \"…\""
                     "no value: the kernel's preview"
+            }
+
+            test "a stopped cell's receipt names what it never assigned and the calls it stopped waiting for approval" {
+                let limits: CellLimits =
+                    {
+                        ReceiptChars = 20000
+                        OutputChars = 200
+                        ReadLines = 100
+                    }
+
+                let result (outcome: CellOutcome) : CellResult =
+                    {
+                        CellId = "t1-s1-1"
+                        Outcome = outcome
+                        Output =
+                            {
+                                Text = ""
+                                Truncated = false
+                                TotalChars = 0L
+                            }
+                        Declared = [ "tk"; "tl"; "c1" ]
+                        Unassigned = [ "c1" ]
+                        Finished = false
+                        Notified = 0
+                        DurationMs = 0L
+                    }
+
+                let waiting: HostCall list =
+                    [
+                        {
+                            CellId = Some "t1-s1-1"
+                            Binding = "shell.run"
+                            Args = [ Value.Inline(Json.String "strace -f ls") ]
+                        }
+                        {
+                            CellId = Some "t1-s1-1"
+                            Binding = "fs.write"
+                            Args = [ Value.Inline(Json.String "/etc/hosts"); Value.Inline(Json.String "x") ]
+                        }
+                    ]
+
+                let text (pieces: Piece list) =
+                    pieces |> List.map Piece.render |> String.concat "\n"
+
+                let receipt outcome =
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none waiting None (result outcome)
+                    |> text
+
+                Expect.equal
+                    (receipt CellOutcome.Cancelled)
+                    (String.concat
+                        "\n"
+                        [
+                            "The cell was cancelled."
+                            "shell.run: strace -f ls (stopped while it waited for its approval)"
+                            "fs.write: /etc/hosts (stopped while it waited for its approval)"
+                            "Declared: tk, tl"
+                            "Not assigned (the cell stopped first): c1"
+                        ])
+                    "the receipt"
+
+                Expect.stringContains
+                    (receipt (CellOutcome.TimedOut 600000))
+                    "shell.run: strace -f ls (stopped while it waited for its approval)"
+                    "a timeout too"
+
+                let failed =
+                    receipt (
+                        CellOutcome.RuntimeError
+                            {
+                                Name = "Error"
+                                Message = "boom"
+                                Code = None
+                                Location = None
+                                Stack = ""
+                            }
+                    )
+
+                Expect.isFalse (failed.Contains "stopped while it waited") "an error does not stop the calls"
+                Expect.stringContains failed "Not assigned (the cell stopped first): c1" "unassigned after an error"
+            }
+
+            test "a host call is named by its binding and its first argument, cut" {
+                let call (args: Value list) : HostCall =
+                    {
+                        CellId = None
+                        Binding = "shell.run"
+                        Args = args
+                    }
+
+                Expect.equal (Receipts.callTitle (call [])) "shell.run" "no arguments"
+
+                Expect.equal
+                    (Receipts.callTitle (call [ Value.Inline(Json.String "a\nb") ]))
+                    "shell.run: a b"
+                    "one line"
+
+                let long =
+                    Receipts.callTitle (call [ Value.Inline(Json.String(String.replicate 200 "x")) ])
+
+                Expect.equal long ("shell.run: " + String.replicate Receipts.CallChars "x" + "…") "cut"
+
+                Expect.equal
+                    (Receipts.callTitle (call [ Value.Inline(Json.Object [ "a", Json.int 1 ]) ]))
+                    "shell.run: {\"a\":1}"
+                    "JSON"
+            }
+
+            test "a cell's commands share its timeout: options bounded, then refused once used up" {
+                let command = Value.Inline(Json.String "make")
+
+                let call (args: Value list) : HostCall =
+                    {
+                        CellId = Some "c"
+                        Binding = "shell.run"
+                        Args = args
+                    }
+
+                let optionsOf (bounded: HostCall) =
+                    match bounded.Args with
+                    | [ _; Value.Inline json ] -> Json.serializeCanonical json
+                    | other -> failtest $"{other}"
+
+                Expect.equal (optionsOf (CellCommands.bound 500 (call [ command ]))) """{"timeoutMs":500}""" "added"
+
+                Expect.equal
+                    (optionsOf (CellCommands.bound 500 (call [ command; Value.Inline Json.Null ])))
+                    """{"timeoutMs":500}"""
+                    "null options"
+
+                Expect.equal
+                    (optionsOf (
+                        CellCommands.bound
+                            500
+                            (call [ command; Value.Inline(Json.Object [ "cwd", Json.String "src" ]) ])
+                    ))
+                    """{"cwd":"src","timeoutMs":500}"""
+                    "added to the options"
+
+                Expect.equal
+                    (optionsOf (
+                        CellCommands.bound
+                            500
+                            (call [ command; Value.Inline(Json.Object [ "timeoutMs", Json.int 9000 ]) ])
+                    ))
+                    """{"timeoutMs":500}"""
+                    "lowered"
+
+                Expect.equal
+                    (optionsOf (
+                        CellCommands.bound
+                            500
+                            (call [ command; Value.Inline(Json.Object [ "timeoutMs", Json.int 100 ]) ])
+                    ))
+                    """{"timeoutMs":100}"""
+                    "a shorter one kept"
+
+                let invalid = call [ command; Value.Inline(Json.String "fast") ]
+                Expect.equal (CellCommands.bound 500 invalid) invalid "what does not decode is the binding's to refuse"
+
+                Expect.equal (CellCommands.remaining 1000 System.TimeSpan.Zero) (Some 1000) "all of it"
+
+                Expect.equal
+                    (CellCommands.remaining 1000 (System.TimeSpan.FromMilliseconds 999.2))
+                    None
+                    "less than a millisecond left"
+
+                Expect.equal
+                    (CellCommands.remaining 1000 (System.TimeSpan.FromMilliseconds 400.0))
+                    (Some 600)
+                    "the rest"
+
+                match CellCommands.usedUp 1000 with
+                | HostCallError.Failed(code, message, _) ->
+                    Expect.equal code "cellTimeout" "code"
+                    Expect.stringContains message "1000 ms" "the timeout"
+                | other -> failtest $"{other}"
             }
 
             test "context events go after the session event their cause names" {
