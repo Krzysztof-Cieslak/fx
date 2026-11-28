@@ -8,7 +8,8 @@
 
 import type { Validation } from "./codec.ts";
 import type { Activated, ExtensionProtocolError, Manifest } from "./generated/contracts.d.ts";
-import { type Activation, type Clock, type Extension, type ExtensionEnv, type ExtensionRuntime, ExtensionRuntimes, systemClock } from "./extension.ts";
+import { type Activation, type Clock, type Extension, type ExtensionEnv, type ExtensionRuntime, ExtensionRuntimes, basicEnv, systemClock } from "./extension.ts";
+import { connectedEnv, prefetchSlots } from "./host.ts";
 import {
   ExtensionProtocol,
   activateParamsCodec,
@@ -24,6 +25,8 @@ import { type PeerInfo, RpcError, RpcPeer, errorCodes } from "./rpc.ts";
 interface Served {
   readonly manifest: Manifest;
   readonly activation: Activation;
+  /** Its environment for a request: its capabilities reach the host over the connection. */
+  readonly env: (signal: AbortSignal) => ExtensionEnv;
 }
 
 /** How a server runs extension code. */
@@ -61,7 +64,13 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
   if (statics.size !== extensions.length) throw new TypeError("Two extensions served by one process have the same id.");
   const active = new Map<string, Served>();
   const clock = options.clock ?? systemClock;
-  const envOf = (extension: string, signal: AbortSignal): ExtensionEnv => ({ extension, signal, clock });
+  const envOf = (extension: string, signal: AbortSignal): ExtensionEnv => active.get(extension)?.env(signal) ?? basicEnv(extension, signal, clock);
+  /** The environment of an extension served on this connection; its slots are asked for first. */
+  const connected = async (manifest: Manifest, signal: AbortSignal) => {
+    const slots = await prefetchSlots(peer, manifest, signal);
+    if (!slots.ok) throw typed({ kind: "activationFailed", extension: manifest.id, reason: slots.error });
+    return connectedEnv(peer, manifest, slots.value, clock);
+  };
   const answer = (activated: Activated) => activatedCodec.encode(activated);
   /** A runtime with this name contributed by an active extension, with that extension's id. */
   const runtimeNamed = (name: string): { runtime: ExtensionRuntime; owner: string } | undefined => {
@@ -92,8 +101,9 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
       if (served !== undefined) return answer(describeActivation(served.manifest, served.activation));
       const extension = statics.get(params.extension);
       if (extension !== undefined) {
-        const activation = await extension.activate(envOf(extension.manifest.id, signal));
-        active.set(extension.manifest.id, { manifest: extension.manifest, activation });
+        const env = await connected(extension.manifest, signal);
+        const activation = await extension.activate(env(signal));
+        active.set(extension.manifest.id, { manifest: extension.manifest, activation, env });
         return answer(describeActivation(extension.manifest, activation));
       }
       const manifest = params.manifest;
@@ -102,12 +112,10 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
         if (found === undefined) {
           throw typed({ kind: "activationFailed", extension: manifest.id, reason: `this process has no extension runtime ${manifest.runtime}` });
         }
-        const loaded = await found.runtime.activate(
-          { manifest, root: params.root, environment: envOf(manifest.id, signal) },
-          envOf(found.owner, signal),
-        );
+        const env = await connected(manifest, signal);
+        const loaded = await found.runtime.activate({ manifest, root: params.root, environment: env(signal) }, envOf(found.owner, signal));
         if (!loaded.ok) throw typed({ kind: "activationFailed", extension: manifest.id, reason: loaded.error });
-        active.set(manifest.id, { manifest, activation: loaded.value });
+        active.set(manifest.id, { manifest, activation: loaded.value, env });
         return answer(describeActivation(manifest, loaded.value));
       }
       throw typed({ kind: "unknownExtension", extension: params.extension });
@@ -144,7 +152,7 @@ export function serveExtensions(peer: RpcPeer, extensions: readonly Extension[],
       const served = active.get(params.extension);
       if (served === undefined) throw typed({ kind: "notActive", extension: params.extension });
       active.delete(params.extension);
-      await served.activation.deactivate?.(envOf(params.extension, signal));
+      await served.activation.deactivate?.(served.env(signal));
       return null;
     });
 }

@@ -1,4 +1,5 @@
-/// The sample extension: one of each hook kind, data, and methods with typed errors, written once
+/// The sample extension: one of each hook kind, data, methods with typed errors, a variant slot and
+/// methods that use each host capability (its slot, the packages in effect, grants), written once
 /// against the public SDK. The transport-parity tests run it in the host (`native` runtime) and in a
 /// child process (`process` runtime) and expect the same behaviour; it is the reference for writing
 /// a built-in. It is not bundled.
@@ -105,6 +106,17 @@ module Points =
             ContributionType.info notes
         ]
 
+/// The sample's variant slot.
+module Slots =
+    /// How the sample would style its output: `plain` or `fancy`. Read with the `variants`
+    /// capability (only an extension's own slots).
+    let style: Fx.Variants.Slot<string> =
+        Fx.Variants.Slot.enum
+            "sample.style"
+            "How the sample styles its output."
+            [ "plain", "plain"; "fancy", "fancy" ]
+            "plain"
+
 /// The sample's RPC contract: `ext/<id>/<name>`.
 module Methods =
     let echo =
@@ -124,12 +136,41 @@ module Methods =
         ExtMethod.define "fail" Codec.unit Codec.unit
         |> ExtMethod.describe "Throws: a defect."
 
+    let style =
+        ExtMethod.define "style" Codec.unit Codec.string
+        |> ExtMethod.describe "The value of the sample's style slot (the variants capability)."
+
+    let packages =
+        ExtMethod.define "packages" Codec.unit (Codec.list Codec.string)
+        |> ExtMethod.describe "The ids of the extensions in effect (the packages capability)."
+
+    let data =
+        ExtMethod.define "data" Codec.string (Codec.list Codec.json)
+        |> ExtMethod.withErrors Codec.string
+        |> ExtMethod.describe "The data contributions of a type in effect (the packages capability)."
+
+    let check =
+        ExtMethod.define "check" Codec.json Codec.json
+        |> ExtMethod.withErrors Codec.string
+        |> ExtMethod.describe "Checks a grant query (the grants capability): a GrantQuery in, a GrantCheck out."
+
+    let ask =
+        ExtMethod.define "ask" Codec.json Codec.json
+        |> ExtMethod.withErrors Codec.string
+        |> ExtMethod.describe "Asks for a permission (the grants capability): a GrantAsk in, an AskOutcome out."
+
 let id = Product.extensionId "sample"
 
 let manifest: Manifest =
     { Manifest.create id "1.0.0" Runtimes.Native with
         Description = Some "The sample extension: one of each hook kind, data and methods."
-        Capabilities = [ "clock" ]
+        Capabilities =
+            [
+                Capability.Clock
+                Capability.Grants
+                Capability.Packages
+                Capability.Variants
+            ]
         Contributions =
             [
                 Declare.contribution Points.greeting "polite"
@@ -142,6 +183,7 @@ let manifest: Manifest =
                 Declare.contribution Points.words "beta"
                 Declare.contribution Points.notes "recorder"
                 Declare.contribution Points.notes "flaky"
+                Declare.contribution VariantSlots.contributionType (string Slots.style.Id)
             ]
         Rpc =
             {
@@ -151,6 +193,11 @@ let manifest: Manifest =
                         Declare.method Methods.divide
                         Declare.method Methods.observed
                         Declare.method Methods.fail
+                        Declare.method Methods.style
+                        Declare.method Methods.packages
+                        Declare.method Methods.data
+                        Declare.method Methods.check
+                        Declare.method Methods.ask
                     ]
             }
     }
@@ -231,6 +278,10 @@ let activate: Eff<IExtensionEnv, Activation> =
                     Contribution.create Points.words "beta" "beta"
                     Contribution.create Points.notes "recorder" recorder
                     Contribution.create Points.notes "flaky" flaky
+                    Contribution.create
+                        VariantSlots.contributionType
+                        (string Slots.style.Id)
+                        (Fx.Variants.Slot.info Slots.style)
                 ]
                 [
                     ExtMethod.handle Methods.echo (fun note -> EffResult.ok note)
@@ -241,6 +292,42 @@ let activate: Eff<IExtensionEnv, Activation> =
                             EffResult.ok (d.Dividend / d.Divisor))
                     ExtMethod.handle Methods.observed (fun () -> EffResult.ok (List.ofSeq notes))
                     ExtMethod.handle Methods.fail (fun () -> invalidOp "the sample failed")
+                    ExtMethod.handle Methods.style (fun () -> Fx.Variants.Variants.get Slots.style |> Eff.map Ok)
+                    ExtMethod.handle Methods.packages (fun () ->
+                        fun env ->
+                            task {
+                                let! packages = env.Packages.List env.Scope.Cancellation
+                                return Ok(packages |> List.map _.Id)
+                            })
+                    ExtMethod.handle Methods.data (fun contributionType ->
+                        fun env ->
+                            task {
+                                match! env.Packages.Data contributionType env.Scope.Cancellation with
+                                | Ok data -> return Ok(data |> List.map _.Value)
+                                | Error e -> return Error(string e)
+                            })
+                    ExtMethod.handle Methods.check (fun json ->
+                        fun env ->
+                            task {
+                                let query =
+                                    Fx.Grants.Codecs.query.Decode json
+                                    |> Result.defaultWith (fun _ -> invalidOp "not a query")
+
+                                match! env.Grants.Check query env.Scope.Cancellation with
+                                | Ok check -> return Ok(Fx.Grants.Codecs.check.Encode check)
+                                | Error e -> return Error(string e)
+                            })
+                    ExtMethod.handle Methods.ask (fun json ->
+                        fun env ->
+                            task {
+                                let ask =
+                                    Fx.Grants.Codecs.ask.Decode json
+                                    |> Result.defaultWith (fun _ -> invalidOp "not an ask")
+
+                                match! env.Grants.Request ask env.Scope.Cancellation with
+                                | Ok outcome -> return Ok(Fx.Grants.Codecs.askOutcome.Encode outcome)
+                                | Error e -> return Error(string e)
+                            })
                 ]
     }
 

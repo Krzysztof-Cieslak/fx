@@ -81,8 +81,7 @@ module Commands =
             (effResult {
                 let! config = Setup.readConfig options
 
-                let! extensions =
-                    Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none)
+                let! extensions = Setup.bootstrap options config
 
                 let! registry = Setup.registry extensions
 
@@ -205,11 +204,7 @@ module Commands =
                 else
                     let! config = Setup.readConfig options
 
-                    return!
-                        Eff.bracket
-                            (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
-                            ExtensionHost.stop
-                            (replayed config)
+                    return! Eff.bracket (Setup.bootstrap options config) ExtensionHost.stop (replayed config)
             })
 
     /// `fx grants …` (host.md): the person who runs it — the OS user, signed in in process through
@@ -359,11 +354,7 @@ module Commands =
             (effResult {
                 let! config = Setup.readConfig options
 
-                return!
-                    Eff.bracket
-                        (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
-                        ExtensionHost.stop
-                        (withExtensions config)
+                return! Eff.bracket (Setup.bootstrap options config) ExtensionHost.stop (withExtensions config)
             })
 
     /// `fx auth …` (auth.md): runs the command against the service credentials the host would start
@@ -399,11 +390,7 @@ module Commands =
             effResult {
                 let! config = Setup.readConfig options
 
-                return!
-                    Eff.bracket
-                        (Setup.bootstrap options config (Eff.ret Fx.Sdk.ContentExclusions.none))
-                        ExtensionHost.stop
-                        (withExtensions config)
+                return! Eff.bracket (Setup.bootstrap options config) ExtensionHost.stop (withExtensions config)
             }
 
         underLock options locked

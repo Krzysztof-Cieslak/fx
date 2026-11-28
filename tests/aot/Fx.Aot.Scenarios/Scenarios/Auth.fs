@@ -170,6 +170,7 @@ let private contributed
             {
                 Extension = extension
                 Clock = (FakeClock.Create()).Clock
+                Capabilities = ExtensionCapabilities.none extension
                 Scope = Scope.root
             }
             :> IExtensionEnv

@@ -8,12 +8,20 @@ import type {
   ActivateParams,
   Activated,
   CallParams,
+  ContributedData,
+  DataParams,
   Decision,
   ExtensionConstants,
   ExtensionProtocolError,
   ExtensionRef,
+  HostData,
+  HostError,
+  HostPackages,
+  HostSlots,
   InvokeParams,
   Output,
+  PackageInfo,
+  ResolvedVariant,
   SlotDecl,
 } from "./generated/contracts.d.ts";
 import { protocolVersion, sdkVersion } from "./generated/product.ts";
@@ -22,11 +30,26 @@ import { Manifest } from "./manifest.ts";
 export type {
   ActivateParams,
   Activated,
+  AskOutcome,
   CallParams,
+  ContributedData,
+  DataParams,
   ExtensionProtocolError,
   ExtensionRef,
+  GrantAsk,
+  GrantCheck,
+  GrantError,
+  GrantQuery,
+  GrantResolution,
+  HostData,
+  HostError,
+  HostPackages,
+  HostRequests,
+  HostSlots,
   InvokeParams,
   Output,
+  PackageInfo,
+  ResolvedVariant,
   SlotDecl,
 } from "./generated/contracts.d.ts";
 
@@ -164,4 +187,92 @@ export const ExtensionProtocol = {
     call: "extension/call",
     deactivate: "extension/deactivate",
   },
+  /** The requests a process sends the host for its extensions' capabilities (`HostRequests`). */
+  hostMethods: {
+    variants: "host/variants",
+    packages: "host/packages",
+    contributions: "host/contributions",
+    grantsCheck: "host/grants/check",
+    grantsRequest: "host/grants/request",
+    grantsAwait: "host/grants/await",
+    grantsWithdraw: "host/grants/withdraw",
+  },
 } as const;
+
+// ---- host/* (the extension's capabilities, T109b) -----------------------------------------------
+
+const packageContributionCodec = Codec.record({ type: Codec.string, id: Codec.string }).named("PackageContribution");
+
+/** An extension in effect (`HostCodecs.packageInfo`). */
+export const packageInfoCodec: Codec<PackageInfo> = Codec.record({
+  id: Codec.string,
+  version: Codec.string,
+  description: Codec.optional(Codec.string),
+  runtime: Codec.string,
+  source: Codec.string,
+  contributions: Codec.array(packageContributionCodec),
+  methods: Codec.array(Codec.string),
+})
+  .describe("An extension in effect, as the packages capability describes it.")
+  .named("PackageInfo") as Codec<PackageInfo>;
+
+export const contributedDataCodec: Codec<ContributedData> = Codec.record({
+  extension: Codec.string,
+  id: Codec.string,
+  value: Codec.json,
+}).named("ContributedData") as Codec<ContributedData>;
+
+export const dataParamsCodec: Codec<DataParams> = Codec.record({ extension: Codec.string, type: Codec.string }).named("DataParams");
+
+const variantSourceCodec = Codec.record({
+  layer: Codec.enum(["default", "host", "project", "session", "explicit", "policy"]).describe(
+    "Where a value comes from: default, host, project, session, explicit or policy.",
+  ),
+  origin: Codec.withDefault(Codec.string, ""),
+})
+  .describe("Where a variant value comes from.")
+  .named("VariantSource");
+
+const resolvedVariantCodec: Codec<ResolvedVariant> = Codec.record({
+  slot: Codec.string.describe('A variant slot id: dotted segments, e.g. "agent.actionSurface".'),
+  value: Codec.json,
+  source: variantSourceCodec,
+})
+  .describe("The value of a variant slot and where it came from.")
+  .named("ResolvedVariant") as Codec<ResolvedVariant>;
+
+export const hostSlotsCodec: Codec<HostSlots> = Codec.record({ slots: Codec.array(resolvedVariantCodec) }).named("HostSlots") as Codec<HostSlots>;
+
+export const hostPackagesCodec: Codec<HostPackages> = Codec.record({ packages: Codec.array(packageInfoCodec) }).named(
+  "HostPackages",
+) as Codec<HostPackages>;
+
+export const hostDataCodec: Codec<HostData> = Codec.record({ contributions: Codec.array(contributedDataCodec) }).named("HostData") as Codec<HostData>;
+
+/**
+ * The typed errors of the `host/*` requests. A grant error travels as JSON (its codec is the host's);
+ * `hostErrorMessage` renders the others as the host does.
+ */
+export const hostErrorCodec: Codec<HostError> = Codec.union("kind", {
+  unknownExtension: { extension: Codec.string },
+  notGranted: { extension: Codec.string, capability: Codec.string },
+  unknownType: { type: Codec.string },
+  notData: { type: Codec.string, contributionKind: Codec.string },
+  grant: { error: Codec.json },
+}).named("HostError") as Codec<HostError>;
+
+/** The message of a `host/*` typed error (`HostError.ToString`). */
+export function hostErrorMessage(error: HostError): string {
+  switch (error.kind) {
+    case "unknownExtension":
+      return "no active extension " + error.extension + " on this connection";
+    case "notGranted":
+      return error.extension + " has no capability " + error.capability + ": list it in its manifest's capabilities";
+    case "unknownType":
+      return "unknown contribution type " + error.type;
+    case "notData":
+      return error.type + " is not data (its values are " + error.contributionKind + " code)";
+    case "grant":
+      return JSON.stringify(error.error);
+  }
+}

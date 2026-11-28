@@ -56,10 +56,9 @@ module Builtins =
         bundled extensions |> List.tryFind (fun p -> p.Id = id) |> Option.map _.Root
 
     /// The built-ins, in bootstrap order, bundled packages' directories under `extensions`:
-    /// `fx.egress.exclusions` reads its settings through `exclusions` (the host's resolution, until
-    /// extensions read their own slots: T109b). `fx.exthost.bun` is a process extension on the pinned
-    /// Bun, which the bootstrap's components phase installs.
-    let candidates (extensions: string) (exclusions: Eff<IExtensionEnv, ExclusionSettings>) : Candidate list =
+    /// `fx.egress.exclusions` reads its own slots (the `variants` capability). `fx.exthost.bun` is a
+    /// process extension on the pinned Bun, which the bootstrap's components phase installs.
+    let candidates (extensions: string) : Candidate list =
         [
             Package.Native Fx.Ext.EnvLocal.EnvLocal.extension
             // Sandbox drivers: `auto` takes the first that confines processes on an environment's OS,
@@ -74,7 +73,7 @@ module Builtins =
             Package.Native Fx.Ext.AuthStandard.AuthStandard.extension
             Package.Native Fx.Ext.ModelAnthropic.Anthropic.extension
             Package.Native Fx.Ext.ModelOpenAI.OpenAI.extension
-            Package.Native(Fx.Ext.EgressExclusions.EgressExclusions.create exclusions)
+            Package.Native Fx.Ext.EgressExclusions.EgressExclusions.extension
             Package.Native Fx.Ext.InterpreterBunTs.BunTs.extension
             Package.Manifest(Fx.Ext.RuntimeBun.RuntimeBun.manifest, None)
             Package.Manifest(
@@ -86,8 +85,7 @@ module Builtins =
 
     /// The ids of the built-ins.
     let ids: string list =
-        candidates "extensions" (Eff.ret ContentExclusions.none)
-        |> List.map (fun c -> (Package.manifest c.Package).Id)
+        candidates "extensions" |> List.map (fun c -> (Package.manifest c.Package).Id)
 
 /// Writes bundled packages' files into their directories (spec §16.4: extracted with hash checks).
 [<RequireQualifiedAccess>]

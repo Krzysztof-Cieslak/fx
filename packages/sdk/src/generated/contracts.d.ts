@@ -12,6 +12,18 @@ export interface Activated {
   methods: string[];
 }
 
+/** What became of an ask: settled by the rules, or a pending request. */
+export type AskOutcome =
+  | { kind: "settled"; resolution: GrantResolution }
+  | {
+      kind: "pending";
+      /**
+       * A grant request's id.
+       * From 1 to 512 characters.
+       */
+      request: string;
+    };
+
 export interface AuthMethodRef {
   /** Non-empty. */
   kind: string;
@@ -247,6 +259,12 @@ export interface ContentSource {
   lines?: LineRange;
 }
 
+export interface ContributedData {
+  extension: string;
+  id: string;
+  value: unknown;
+}
+
 /** A contribution: its type and id. Declarative extensions give its value; other runtimes provide it when they activate. */
 export interface ContributionDecl {
   /**
@@ -268,6 +286,11 @@ export interface Cost {
   output: number;
   cacheRead?: number;
   cacheWrite?: number;
+}
+
+export interface DataParams {
+  extension: string;
+  type: string;
 }
 
 /** What a gate decides: allow, ask a human, or deny. */
@@ -336,6 +359,200 @@ export interface ExtensionRequests {
   };
   /** Deactivates an extension. */
   "extension/deactivate": { params: ExtensionRef; result: null; error: ExtensionProtocolError };
+}
+
+/** What a requester asks for; the key makes asking again the same request. */
+export interface GrantAsk {
+  /** Non-empty. */
+  key: string;
+  /** An action, e.g. `shell.exec`: dotted segments, each a lowercase letter then letters and digits. */
+  action: string;
+  /** Non-empty. */
+  resource: string;
+  /** @default {} */
+  context?: GrantContext;
+  requester: Requester;
+  /** Non-empty. */
+  summary: string;
+  /** @default [] */
+  evidence?: GrantEvidence[];
+  /**
+   * Items: Non-empty.
+   *
+   * @default []
+   */
+  suggestions?: string[];
+  /** @default [] */
+  scopes?: ScopeKind[];
+  /**
+   * Microseconds since the Unix epoch, UTC.
+   * Integer.
+   */
+  expires?: number;
+}
+
+export interface GrantAwaitParams {
+  extension: string;
+  /**
+   * A grant request's id.
+   * From 1 to 512 characters.
+   */
+  request: string;
+}
+
+/** What the effective rules say now: allowed by a grant, ask a person, or denied. */
+export type GrantCheck =
+  | {
+      kind: "allowed";
+      /**
+       * A grant's id.
+       * From 1 to 512 characters.
+       */
+      grant: string;
+    }
+  | { kind: "ask"; reasons: string[] }
+  | { kind: "denied"; reasons: string[] };
+
+export interface GrantCheckParams {
+  extension: string;
+  query: GrantQuery;
+}
+
+/** The context of a check or request, which the scopes of grants are compared with. */
+export interface GrantContext {
+  /** Non-empty. */
+  session?: string;
+  /** Non-empty. */
+  run?: string;
+  repo?: RepoPlace;
+}
+
+/** Why the grants log refused a command, or a check or request could not be made. */
+export type GrantError =
+  | { kind: "unknownAction"; action: string }
+  | { kind: "invalidResource"; resource: string; reason: string }
+  | { kind: "invalidPattern"; pattern: string; reason: string }
+  | { kind: "invalidRequest"; reason: string }
+  | { kind: "invalidAnswer"; reason: string }
+  | { kind: "invalidGrant"; reason: string }
+  | {
+      kind: "unknownRequest";
+      /**
+       * A grant request's id.
+       * From 1 to 512 characters.
+       */
+      request: string;
+    }
+  | {
+      kind: "notPending";
+      /**
+       * A grant request's id.
+       * From 1 to 512 characters.
+       */
+      request: string;
+    }
+  | {
+      kind: "unknownGrant";
+      /**
+       * A grant's id.
+       * From 1 to 512 characters.
+       */
+      grant: string;
+    }
+  | {
+      kind: "notActive";
+      /**
+       * A grant's id.
+       * From 1 to 512 characters.
+       */
+      grant: string;
+    }
+  | { kind: "notAPerson"; principal: string }
+  | { kind: "notDue"; what: string }
+  | { kind: "duplicateId"; id: string }
+  | { kind: "conflict"; code: string; message: string }
+  | { kind: "unavailable"; reason: string };
+
+/** Something the person deciding sees. */
+export interface GrantEvidence {
+  /** Non-empty. */
+  label: string;
+  text: string;
+}
+
+/** May this action happen on this resource in this context? */
+export interface GrantQuery {
+  /** An action, e.g. `shell.exec`: dotted segments, each a lowercase letter then letters and digits. */
+  action: string;
+  /** Non-empty. */
+  resource: string;
+  /** @default {} */
+  context?: GrantContext;
+}
+
+export interface GrantRequestParams {
+  extension: string;
+  ask: GrantAsk;
+}
+
+/** How a request ended: allowed by a grant, denied, or cancelled unanswered. */
+export type GrantResolution =
+  | {
+      kind: "allowed";
+      /**
+       * A grant's id.
+       * From 1 to 512 characters.
+       */
+      grant: string;
+    }
+  | { kind: "denied"; reasons: string[] }
+  | { kind: "cancelled"; reason: string };
+
+export interface GrantWithdrawParams {
+  extension: string;
+  /**
+   * A grant request's id.
+   * From 1 to 512 characters.
+   */
+  request: string;
+  reason: string;
+}
+
+export interface HostData {
+  contributions: ContributedData[];
+}
+
+export type HostError =
+  | { kind: "unknownExtension"; extension: string }
+  | { kind: "notGranted"; extension: string; capability: string }
+  | { kind: "unknownType"; type: string }
+  | { kind: "notData"; type: string; contributionKind: string }
+  | { kind: "grant"; error: GrantError };
+
+export interface HostPackages {
+  packages: PackageInfo[];
+}
+
+/** The requests an extension process sends to the host for the capabilities its extensions' manifests list: params, result, and the typed error carried as the data of an ApplicationError (-32000). */
+export interface HostRequests {
+  /** The values of the extension's own variant slots (variants), asked once when it activates. */
+  "host/variants": { params: ExtensionRef; result: HostSlots; error: HostError };
+  /** The extensions in effect (packages). */
+  "host/packages": { params: ExtensionRef; result: HostPackages; error: HostError };
+  /** The data contributions of a type in effect (packages). */
+  "host/contributions": { params: DataParams; result: HostData; error: HostError };
+  /** What the effective rules say about a query (grants). */
+  "host/grants/check": { params: GrantCheckParams; result: GrantCheck; error: HostError };
+  /** Asks for a permission as the extension (grants). */
+  "host/grants/request": { params: GrantRequestParams; result: AskOutcome; error: HostError };
+  /** Waits for a request the extension made (grants). */
+  "host/grants/await": { params: GrantAwaitParams; result: GrantResolution; error: HostError };
+  /** Withdraws a request the extension made (grants). */
+  "host/grants/withdraw": { params: GrantWithdrawParams; result: null; error: HostError };
+}
+
+export interface HostSlots {
+  slots: ResolvedVariant[];
 }
 
 export type HttpError =
@@ -544,6 +761,22 @@ export type OutputFormat =
       strict?: boolean;
     };
 
+export interface PackageContribution {
+  type: string;
+  id: string;
+}
+
+/** An extension in effect, as the packages capability describes it. */
+export interface PackageInfo {
+  id: string;
+  version: string;
+  description?: string;
+  runtime: string;
+  source: string;
+  contributions: PackageContribution[];
+  methods: string[];
+}
+
 /** A typed part of a message. */
 export type Part =
   | {
@@ -639,6 +872,14 @@ export interface ReasoningRequest {
   visible?: boolean;
 }
 
+/** Where in a repository an action happens: a repo-relative, `/`-separated path ("" for the root). */
+export interface RepoPlace {
+  /** Non-empty. */
+  repo: string;
+  /** @default "" */
+  path?: string;
+}
+
 export interface RequestTransform {
   /** @default {} */
   setHeaders?: { [key: string]: string };
@@ -660,6 +901,24 @@ export interface RequestTransform {
         path: string[];
       }
   )[];
+}
+
+/** Who asks: on whose behalf, and the agent or extension that asks. */
+export interface Requester {
+  /** Non-empty. */
+  principal: string;
+  /** Non-empty. */
+  agent?: string;
+  /** Non-empty. */
+  extension?: string;
+}
+
+/** The value of a variant slot and where it came from. */
+export interface ResolvedVariant {
+  /** A variant slot id: dotted segments, e.g. "agent.actionSurface". */
+  slot: string;
+  value: unknown;
+  source: VariantSource;
 }
 
 export type Role = "user" | "assistant";
@@ -803,6 +1062,9 @@ export type SchemaPresence =
   | { kind: "optional" }
   | { kind: "defaulted"; value: unknown };
 
+/** A scope a person can choose: once, session, repo or host. */
+export type ScopeKind = "once" | "session" | "repo" | "host";
+
 /** A variant slot: its id, what it changes, its default and the values it may take. */
 export interface SlotDecl {
   /** Matches /^[a-z][A-Za-z0-9_-]*(\.[a-z][A-Za-z0-9_-]*)+$/. */
@@ -915,4 +1177,12 @@ export interface Usage {
    * @default 0
    */
   reasoning?: number;
+}
+
+/** Where a variant value comes from. */
+export interface VariantSource {
+  /** Where a value comes from: default, host, project, session, explicit or policy. */
+  layer: "default" | "host" | "project" | "session" | "explicit" | "policy";
+  /** @default "" */
+  origin?: string;
 }

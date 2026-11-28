@@ -46,18 +46,22 @@ let inProcess: Connect =
 
         Eff.run
             env
-            (ExtensionServer.serve info [ Sample.extension ] (BasicExtensionEnv.forManifest SystemClock.clock) server)
+            (ExtensionServer.serve info [ Sample.extension ] (BasicExtensionEnv.create SystemClock.clock) server)
         |> ignore
 
         task {
+            let attached = RpcRemote.Attached()
+
             let! connected =
-                within (Eff.run env (Rpc.connect (Service.create info []) members client))
+                within (
+                    Eff.run env (Rpc.connect (Service.create info (RpcRemote.hostHandlers attached)) members client)
+                )
 
             return
                 connected
                 |> Result.map (fun peer ->
                     {
-                        Remote = RpcRemote.ofPeer peer
+                        Remote = RpcRemote.ofPeer attached peer
                         Peer = peer
                         Close = fun () -> within (Eff.run env (Rpc.close peer)) :> Task
                     })
@@ -97,7 +101,15 @@ let child (root: string) (launch: LaunchSpec) : Connect =
                                 do! Eff.run env (Shell.kill proc)
                         }
 
-                    match! within (Eff.run env (Rpc.connect (Service.create info []) members transport)) with
+                    let attached = RpcRemote.Attached()
+
+                    match!
+                        within (
+                            Eff.run
+                                env
+                                (Rpc.connect (Service.create info (RpcRemote.hostHandlers attached)) members transport)
+                        )
+                    with
                     | Error e ->
                         do! Eff.run env (Shell.kill proc)
                         return Error e
@@ -105,7 +117,7 @@ let child (root: string) (launch: LaunchSpec) : Connect =
                         return
                             Ok
                                 {
-                                    Remote = RpcRemote.ofPeer peer
+                                    Remote = RpcRemote.ofPeer attached peer
                                     Peer = peer
                                     Close =
                                         fun () ->
@@ -130,7 +142,17 @@ let private using (connect: Connect) (members: (string * Json) list) (body: Conn
                 (connection.Close()).Wait(TimeSpan.FromSeconds 30.0) |> ignore
     }
 
+/// The sample's environment on the host's side: what answers its `host/*` requests.
+let private sampleEnv: IExtensionEnv =
+    BasicExtensionEnv.attenuated
+        SystemClock.clock
+        (services (fun () -> ExtensionHost.empty (Catalog.create Sample.Points.all)))
+        Sample.manifest
+
+/// Activates an extension, as the host does: its environment answers its `host/*` requests first.
 let private activate (peer: RemotePeer) (id: string) =
+    peer.Attach id sampleEnv
+
     within (
         peer.Activate
             {
@@ -220,10 +242,24 @@ let tests (name: string) (connect: Connect) : Test =
                                         """{"priority":0}"""
                                         "\"alpha\""
                                         "\"beta\""
+                                        """{"id":"sample.style","description":"How the sample styles its output.","default":"plain","choices":["plain","fancy"],"privileged":false}"""
                                     ]
-                                    "the JSON forms: transform priorities and data"
+                                    "the JSON forms: transform priorities, data and the slot's declaration"
 
-                                Expect.equal first.Methods [ "echo"; "divide"; "observed"; "fail" ] "methods"
+                                Expect.equal
+                                    first.Methods
+                                    [
+                                        "echo"
+                                        "divide"
+                                        "observed"
+                                        "fail"
+                                        "style"
+                                        "packages"
+                                        "data"
+                                        "check"
+                                        "ask"
+                                    ]
+                                    "methods"
                             | other -> failtest (string other)
                         })
             }
@@ -325,6 +361,62 @@ let tests (name: string) (connect: Connect) : Test =
 
                             match! call "fail" Json.Null with
                             | Error(MethodFailure.Crashed _) -> ()
+                            | other -> failtest (string other)
+                        })
+            }
+
+            testTask "an extension's capabilities reach the host: its slots at activation, packages and grants on use" {
+                do!
+                    using connect RpcRemote.initializeMembers (fun c ->
+                        task {
+                            let! _ = activate c.Remote Sample.id
+
+                            let call name parameters =
+                                within (c.Remote.Call Sample.id name parameters CancellationToken.None)
+
+                            let! style = call "style" Json.Null
+                            Expect.equal style (Ok(Json.String "fancy")) "its slot, from the host"
+
+                            let! packages = call "packages" Json.Null
+                            Expect.equal packages (Ok(Json.Array [])) "the host's packages (none here)"
+
+                            match! call "data" (Json.String "nope") with
+                            | Error(MethodFailure.Failed(message, _)) ->
+                                Expect.equal message "unknown contribution type nope" "the host's typed error"
+                            | other -> failtest (string other)
+
+                            let ask =
+                                Json.parse
+                                    """{"key": "k", "action": "file.read", "resource": "x", "context": {}, "requester": {"principal": "user:p:1"}, "summary": "s"}"""
+                                |> Result.defaultWith (fun e -> failtest (string e))
+
+                            match! call "ask" ask with
+                            | Ok outcome ->
+                                Expect.stringContains
+                                    (Json.serialize outcome)
+                                    $"ext/{Sample.id}/k by system extension {Sample.id}"
+                                    "the host names the extension as the requester"
+                            | other -> failtest (string other)
+                        })
+            }
+
+            testTask "an extension whose slots the host does not give does not activate" {
+                do!
+                    using connect RpcRemote.initializeMembers (fun c ->
+                        task {
+                            let! activated =
+                                within (
+                                    c.Remote.Activate
+                                        {
+                                            Extension = Sample.id
+                                            Manifest = None
+                                            Root = None
+                                        }
+                                        CancellationToken.None
+                                )
+
+                            match activated with
+                            | Error(RemoteFailure.Failed reason) -> Expect.stringContains reason "host/variants" "why"
                             | other -> failtest (string other)
                         })
             }

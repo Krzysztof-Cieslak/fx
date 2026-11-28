@@ -281,6 +281,13 @@ module ExtensionHost =
                             Known = info.IsSome
                             Privileged = info |> Option.exists (fun i -> i.Privileged)
                         })
+                Capabilities =
+                    manifest.Capabilities
+                    |> List.map (fun name ->
+                        {
+                            Name = name
+                            Known = Capability.isKnown name
+                        })
                 Methods = manifest.Rpc.Methods |> List.map (fun m -> m.Name)
                 Replaces = manifest.Replaces
                 Pin = candidate.Pin
@@ -404,6 +411,7 @@ module ExtensionHost =
                                 Manifest = manifest
                                 Root = root
                                 Load = Catalog.load work.Catalog
+                                Env = env
                             }
 
                         // The runtime's code runs in its own extension's environment.
@@ -667,4 +675,59 @@ module ExtensionHost =
                 match host.Loaded.TryFind id with
                 | Some loaded -> do! stopLoaded loaded
                 | None -> ()
+        }
+
+    /// The packages capability (`IPackages`) over the extensions in effect: `current` is read at each
+    /// call, so later phases and changes show. Data contributions only, as their JSON forms; code stays
+    /// with the host, which runs it through its hook points.
+    let packages (current: unit -> Host) : Packages =
+        {
+            List =
+                fun _ ->
+                    let host = current ()
+
+                    Registry.active host.State
+                    |> List.choose (fun id ->
+                        host.Loaded.TryFind id
+                        |> Option.map (fun loaded ->
+                            let manifest = loaded.Manifest
+
+                            {
+                                Id = manifest.Id
+                                Version = manifest.Version
+                                Description = manifest.Description
+                                Runtime = manifest.Runtime
+                                Source = string loaded.Source
+                                Contributions =
+                                    loaded.Activation.Contributions
+                                    |> List.map (fun c -> ({ Type = c.Type; Id = c.Id }: PackageContribution))
+                                Methods = loaded.Activation.Methods |> List.map _.Name
+                            }))
+                    |> System.Threading.Tasks.Task.FromResult
+            Data =
+                fun name _ ->
+                    let host = current ()
+
+                    let outcome =
+                        match Catalog.tryFind name host.Catalog with
+                        | None -> Error(PackagesError.UnknownType name)
+                        | Some info when info.Kind <> ContributionKind.Data ->
+                            Error(PackagesError.NotData(name, string info.Kind))
+                        | Some _ ->
+                            Ok
+                                [
+                                    for id in Registry.active host.State do
+                                        match host.Loaded.TryFind id with
+                                        | Some loaded ->
+                                            for c in loaded.Activation.Contributions do
+                                                if c.Type = name then
+                                                    {
+                                                        Extension = id
+                                                        Id = c.Id
+                                                        Value = c.Json |> Option.defaultValue Json.Null
+                                                    }
+                                        | None -> ()
+                                ]
+
+                    System.Threading.Tasks.Task.FromResult outcome
         }

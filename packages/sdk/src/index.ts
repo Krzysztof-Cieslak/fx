@@ -4,6 +4,7 @@
 
 export * from "./codec.ts";
 export * from "./extension.ts";
+export * from "./host.ts";
 export * from "./manifest.ts";
 export * from "./protocol.ts";
 export * from "./rpc.ts";

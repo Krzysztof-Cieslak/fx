@@ -8,6 +8,12 @@ import {
   activateParamsCodec,
   activatedCodec,
   callParamsCodec,
+  contributedDataCodec,
+  dataParamsCodec,
+  hostDataCodec,
+  hostPackagesCodec,
+  hostSlotsCodec,
+  packageInfoCodec,
   decisionCodec,
   extensionRefCodec,
   invokeParamsCodec,
@@ -33,6 +39,12 @@ const codecs: Record<string, Codec<any>> = {
   extensionRef: extensionRefCodec,
   output: outputCodec,
   protocolError: protocolErrorCodec,
+  packageInfo: packageInfoCodec,
+  contributedData: contributedDataCodec,
+  dataParams: dataParamsCodec,
+  hostSlots: hostSlotsCodec,
+  hostPackages: hostPackagesCodec,
+  hostData: hostDataCodec,
 };
 
 describe("the contracts mirror the F# codecs", () => {

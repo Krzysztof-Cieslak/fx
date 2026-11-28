@@ -20,6 +20,16 @@ type private ExtEnv =
 
     interface IExtensionEnv with
         member _.Extension = OpenAI.id
+        member _.Capabilities = ExtensionCapabilities.none OpenAI.id
+
+    interface Fx.Variants.IVariants with
+        member _.Variants = (ExtensionCapabilities.none OpenAI.id).Variants
+
+    interface IPackages with
+        member _.Packages = (ExtensionCapabilities.none OpenAI.id).Packages
+
+    interface IGrants with
+        member _.Grants = (ExtensionCapabilities.none OpenAI.id).Grants
 
     interface IClock with
         member env.Clock = env.Clock

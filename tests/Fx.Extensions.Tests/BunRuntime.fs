@@ -185,8 +185,10 @@ let load () : Task<Loaded> =
                 Env = []
             }
 
+        let current = ref (ExtensionHost.empty settings.Catalog)
+
         let settings =
-            { settings with
+            { settingsFor (fun () -> current.Value) with
                 InstallComponents = fun _ -> EffResult.ok [ installed ]
             }
 
@@ -208,6 +210,8 @@ let load () : Task<Loaded> =
                                 ))
                         ])
             )
+
+        current.Value <- host
 
         return
             {

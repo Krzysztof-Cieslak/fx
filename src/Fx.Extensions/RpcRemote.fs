@@ -2,6 +2,7 @@
 [<RequireQualifiedAccess>]
 module Fx.Extensions.RpcRemote
 
+open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
 open Fx.Contracts
@@ -53,8 +54,81 @@ let private methodFailure (name: string) (error: CallError<ProtocolError>) : Met
     | CallError.Rejected e when e.Code = Protocol.ErrorCode.InternalError -> MethodFailure.Crashed(string e)
     | other -> MethodFailure.Unreachable(string (failure other))
 
-/// The extension protocol over a connection whose server is the extension process.
-let ofPeer (peer: Peer) : RemotePeer =
+/// The extensions a connection answers `host/*` requests for, with their environments (attenuated to
+/// their manifests): those activated through it (`RemotePeer.Attach`), until they are deactivated.
+type Attached() =
+    let envs =
+        ConcurrentDictionary<string, IExtensionEnv>(System.StringComparer.Ordinal)
+
+    member _.Attach(extension: string, env: IExtensionEnv) = envs[extension] <- env
+
+    member _.Detach(extension: string) = envs.TryRemove extension |> ignore
+
+    member _.TryFind(extension: string) : IExtensionEnv option =
+        match envs.TryGetValue extension with
+        | true, env -> Some env
+        | _ -> None
+
+    override _.ToString() = $"Attached({envs.Count})"
+
+/// The host's handlers of the `host/*` requests an extension process sends (T109b): each answers with
+/// the named extension's environment, so with exactly the capabilities its manifest lists.
+let hostHandlers<'R when 'R :> IScope> (attached: Attached) : Handler<'R> list =
+    let granted (extension: string) (capability: string) (run: IExtensionEnv -> Task<Result<'T, HostError>>) =
+        match attached.TryFind extension with
+        | None -> Task.FromResult(Error(HostError.UnknownExtension extension))
+        | Some env when not (env.Capabilities.Granted.Contains capability) ->
+            Task.FromResult(Error(HostError.NotGranted(extension, capability)))
+        | Some env -> run env
+
+    let grant (outcome: Task<Result<'T, Fx.Grants.GrantError>>) =
+        task {
+            let! outcome = outcome
+            return outcome |> Result.mapError HostError.Grant
+        }
+
+    [
+        Handler.request hostVariants (fun _ (p: ExtensionRef) ->
+            fun (_: 'R) ->
+                granted p.Extension Capability.Variants (fun env ->
+                    Task.FromResult(Ok { Slots = env.Capabilities.OwnSlots() })))
+        Handler.request hostPackages (fun _ (p: ExtensionRef) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Packages (fun ext ->
+                    task {
+                        let! packages = ext.Packages.List env.Scope.Cancellation
+                        return Ok { Packages = packages }
+                    }))
+        Handler.request hostContributions (fun _ (p: DataParams) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Packages (fun ext ->
+                    task {
+                        match! ext.Packages.Data p.Type env.Scope.Cancellation with
+                        | Ok data -> return Ok { Contributions = data }
+                        | Error(PackagesError.UnknownType name) -> return Error(HostError.UnknownType name)
+                        | Error(PackagesError.NotData(name, kind)) -> return Error(HostError.NotData(name, kind))
+                    }))
+        Handler.request hostGrantsCheck (fun _ (p: GrantCheckParams) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Grants (fun ext ->
+                    grant (ext.Grants.Check p.Query env.Scope.Cancellation)))
+        Handler.request hostGrantsRequest (fun _ (p: GrantRequestParams) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Grants (fun ext ->
+                    grant (ext.Grants.Request p.Ask env.Scope.Cancellation)))
+        Handler.request hostGrantsAwait (fun _ (p: GrantAwaitParams) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Grants (fun ext ->
+                    grant (ext.Grants.Await p.Request env.Scope.Cancellation)))
+        Handler.request hostGrantsWithdraw (fun _ (p: GrantWithdrawParams) ->
+            fun (env: 'R) ->
+                granted p.Extension Capability.Grants (fun ext ->
+                    grant (ext.Grants.Withdraw p.Request p.Reason env.Scope.Cancellation)))
+    ]
+
+/// The extension protocol over a connection whose server is the extension process; `attached` is
+/// what its `host/*` handlers answer with (`hostHandlers`).
+let ofPeer (attached: Attached) (peer: Peer) : RemotePeer =
     {
         Activate =
             fun parameters cancellation ->
@@ -105,8 +179,10 @@ let ofPeer (peer: Peer) : RemotePeer =
                     let! outcome =
                         run cancellation (Rpc.call peer deactivate ({ Extension = extension }: ExtensionRef))
 
+                    attached.Detach extension
                     return outcome |> Result.mapError failure
                 }
+        Attach = fun extension env -> attached.Attach(extension, env)
     }
 
 /// What the host sends in `initialize`.

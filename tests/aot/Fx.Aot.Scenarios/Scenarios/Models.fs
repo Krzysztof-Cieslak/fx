@@ -238,6 +238,16 @@ type private HookEnv =
 
     interface IExtensionEnv with
         member _.Extension = "acme.egress"
+        member _.Capabilities = ExtensionCapabilities.none "acme.egress"
+
+    interface Fx.Variants.IVariants with
+        member _.Variants = (ExtensionCapabilities.none "acme.egress").Variants
+
+    interface IPackages with
+        member _.Packages = (ExtensionCapabilities.none "acme.egress").Packages
+
+    interface IGrants with
+        member _.Grants = (ExtensionCapabilities.none "acme.egress").Grants
 
     interface IClock with
         member env.Clock = env.Clock

@@ -6,7 +6,21 @@
 // codec of what flows through them.
 
 import { Codec, createCodec, type Validation, Validation as V } from "./codec.ts";
-import type { ContributionDecl, Decision as DecisionJson, Manifest, MethodDecl } from "./generated/contracts.d.ts";
+import type {
+  AskOutcome,
+  ContributedData,
+  ContributionDecl,
+  Decision as DecisionJson,
+  GrantAsk,
+  GrantCheck,
+  GrantError,
+  GrantQuery,
+  GrantResolution,
+  Manifest,
+  MethodDecl,
+  PackageInfo,
+  ResolvedVariant,
+} from "./generated/contracts.d.ts";
 import type { Json } from "./json.ts";
 import { decisionCodec, slotDeclCodec, transformSettings, type SlotDecl } from "./protocol.ts";
 import { toJsonSchema } from "./schema.ts";
@@ -14,6 +28,10 @@ import { toJsonSchema } from "./schema.ts";
 /**
  * The environment extension code runs in: its extension's id, the capabilities the host grants it,
  * and the caller's cancellation (`IExtensionEnv`). An extension's authority is this value.
+ *
+ * Every extension has the clock. `variants`, `packages` and `grants` work only if its manifest lists
+ * them (`capabilities`); otherwise using them throws `CapabilityDenied`. They reach the host over the
+ * connection (`host/*`), which answers with the extension's environment there.
  */
 export interface ExtensionEnv {
   /** The id of the extension whose code runs. */
@@ -22,6 +40,91 @@ export interface ExtensionEnv {
   readonly signal: AbortSignal;
   /** The clock capability. */
   readonly clock: Clock;
+  /** The extension's own variant slots (`variants`). */
+  readonly variants: Variants;
+  /** The extensions in effect and their data (`packages`). */
+  readonly packages: Packages;
+  /** Permissions, asked as the extension (`grants`). */
+  readonly grants: Grants;
+}
+
+/** The capability names a manifest may list (`Capability`); the host refuses others. */
+export const Capability = {
+  clock: "clock",
+  variants: "variants",
+  packages: "packages",
+  grants: "grants",
+  /** Every name the host knows, sorted. */
+  known: ["clock", "grants", "packages", "variants"] as readonly string[],
+} as const;
+
+/** Extension code used a capability its manifest does not list (`CapabilityDeniedException`). */
+export class CapabilityDenied extends Error {
+  constructor(
+    readonly extension: string,
+    readonly capability: string,
+  ) {
+    super(`${extension} has no capability ${capability}: list it in its manifest's capabilities`);
+    this.name = "CapabilityDenied";
+  }
+}
+
+/**
+ * The extension's own variant slots, as the host resolved them (`IVariants`): read when it activated,
+ * since the host's values do not change while it runs. Other slots are not there.
+ */
+export interface Variants {
+  /** One of its slots, with its value and where it came from; `undefined` for other slots. */
+  read(slot: string): ResolvedVariant | undefined;
+  /** All its slots. */
+  slots(): readonly ResolvedVariant[];
+}
+
+/** Why the packages capability did not list the contributions of a type (`PackagesError`). */
+export type PackagesError = { readonly kind: "unknownType"; readonly type: string } | { readonly kind: "notData"; readonly type: string; readonly contributionKind: string };
+
+/** The extensions in effect and the data contributions of a type (`IPackages`). */
+export interface Packages {
+  /** The active extensions, in admission order. */
+  list(): Promise<PackageInfo[]>;
+  /** The data contributions of a type in effect, as JSON, in registration order. */
+  data(type: string): Promise<MethodResult<ContributedData[], PackagesError>>;
+}
+
+/**
+ * Permissions (`IGrants`): checks and requests, never grants. Requests name the extension as the
+ * requester (the host sets it), and it waits for and withdraws only its own requests.
+ */
+export interface Grants {
+  check(query: GrantQuery): Promise<MethodResult<GrantCheck, GrantError>>;
+  request(ask: GrantAsk): Promise<MethodResult<AskOutcome, GrantError>>;
+  await(request: string): Promise<MethodResult<GrantResolution, GrantError>>;
+  withdraw(request: string, reason: string): Promise<MethodResult<null, GrantError>>;
+}
+
+/** Capabilities that throw `CapabilityDenied` on use: what an extension gets for what its manifest does not list. */
+export function deniedCapabilities(extension: string): { variants: Variants; packages: Packages; grants: Grants } {
+  const denied = (capability: string) => () => {
+    throw new CapabilityDenied(extension, capability);
+  };
+  const denyAsync = (capability: string) => async () => {
+    throw new CapabilityDenied(extension, capability);
+  };
+  return {
+    variants: { read: denied(Capability.variants), slots: denied(Capability.variants) },
+    packages: { list: denyAsync(Capability.packages), data: denyAsync(Capability.packages) },
+    grants: {
+      check: denyAsync(Capability.grants),
+      request: denyAsync(Capability.grants),
+      await: denyAsync(Capability.grants),
+      withdraw: denyAsync(Capability.grants),
+    },
+  };
+}
+
+/** The environment of an extension with the clock only, e.g. to test its activation. */
+export function basicEnv(extension: string, signal: AbortSignal = new AbortController().signal, clock: Clock = systemClock): ExtensionEnv {
+  return { extension, signal, clock, ...deniedCapabilities(extension) };
 }
 
 /** The current time, as the clock capability gives it. */

@@ -70,17 +70,27 @@ let private noCatalog: ContributionDecl -> Remote option -> Validation<Contribut
             ]
 
 /// The protocol's handlers over these extensions. `envFor` builds the environment each extension's
-/// code runs in (in a child process: its own clock, …); requests give it their scope.
+/// code runs in from its capabilities, which reach the host over the connection (`HostClient`), e.g.
+/// `BasicExtensionEnv.create clock`; requests give it their scope. An extension whose manifest lists
+/// `variants` gets its slots' values from the host when it activates.
 let handlers<'R when 'R :> IScope>
     (extensions: Extension list)
-    (envFor: Manifest -> IExtensionEnv)
+    (envFor: ExtensionCapabilities -> IExtensionEnv)
     : string list * Handler<'R> list =
     let table = Table extensions
 
     let scoped (served: Served) (env: 'R) = served.Env.WithScope env.Scope
 
+    /// The environment of an extension served on this connection: its capabilities reach the host.
+    let connected (context: RequestContext) (manifest: Manifest) (env: 'R) =
+        task {
+            match! HostClient.prefetch context.Peer manifest env.Scope.Cancellation with
+            | Error reason -> return Error(ProtocolError.ActivationFailed(manifest.Id, reason))
+            | Ok slots -> return Ok(envFor (HostClient.capabilities context.Peer manifest slots))
+        }
+
     let activateHandler =
-        Handler.request activate (fun _ parameters ->
+        Handler.request activate (fun context parameters ->
             fun (env: 'R) ->
                 task {
                     match table.TryActive parameters.Extension with
@@ -88,17 +98,19 @@ let handlers<'R when 'R :> IScope>
                     | None ->
                         match table.Static parameters.Extension, parameters.Manifest with
                         | Some extension, _ ->
-                            let extensionEnv = envFor extension.Manifest
-                            let! activation = extension.Activate(extensionEnv.WithScope env.Scope)
+                            match! connected context extension.Manifest env with
+                            | Error e -> return Error e
+                            | Ok extensionEnv ->
+                                let! activation = extension.Activate(extensionEnv.WithScope env.Scope)
 
-                            table.Add
-                                {
-                                    Manifest = extension.Manifest
-                                    Env = extensionEnv
-                                    Activation = activation
-                                }
+                                table.Add
+                                    {
+                                        Manifest = extension.Manifest
+                                        Env = extensionEnv
+                                        Activation = activation
+                                    }
 
-                            return Ok(Activation.describe extension.Manifest activation)
+                                return Ok(Activation.describe extension.Manifest activation)
                         | None, Some manifest when manifest.Id = parameters.Extension ->
                             match table.Runtime manifest.Runtime with
                             | None ->
@@ -110,24 +122,28 @@ let handlers<'R when 'R :> IScope>
                                         )
                                     )
                             | Some(runtime, runtimeEnv) ->
-                                let request =
-                                    {
-                                        Manifest = manifest
-                                        Root = parameters.Root
-                                        Load = noCatalog
-                                    }
-
-                                match! runtime.Activate request (runtimeEnv.WithScope env.Scope) with
-                                | Error reason -> return Error(ProtocolError.ActivationFailed(manifest.Id, reason))
-                                | Ok activation ->
-                                    table.Add
+                                match! connected context manifest env with
+                                | Error e -> return Error e
+                                | Ok packageEnv ->
+                                    let request =
                                         {
                                             Manifest = manifest
-                                            Env = envFor manifest
-                                            Activation = activation
+                                            Root = parameters.Root
+                                            Load = noCatalog
+                                            Env = packageEnv
                                         }
 
-                                    return Ok(Activation.describe manifest activation)
+                                    match! runtime.Activate request (runtimeEnv.WithScope env.Scope) with
+                                    | Error reason -> return Error(ProtocolError.ActivationFailed(manifest.Id, reason))
+                                    | Ok activation ->
+                                        table.Add
+                                            {
+                                                Manifest = manifest
+                                                Env = packageEnv
+                                                Activation = activation
+                                            }
+
+                                        return Ok(Activation.describe manifest activation)
                         | None, _ -> return Error(ProtocolError.UnknownExtension parameters.Extension)
                 })
 
@@ -203,7 +219,7 @@ let handlers<'R when 'R :> IScope>
 let service<'R when 'R :> IScope>
     (info: PeerInfo)
     (extensions: Extension list)
-    (envFor: Manifest -> IExtensionEnv)
+    (envFor: ExtensionCapabilities -> IExtensionEnv)
     : Service<'R> =
     let served, handlers = handlers extensions envFor
 
@@ -230,7 +246,7 @@ let service<'R when 'R :> IScope>
 let serve<'R when 'R :> IClock and 'R :> IScopeWith<'R>>
     (info: PeerInfo)
     (extensions: Extension list)
-    (envFor: Manifest -> IExtensionEnv)
+    (envFor: ExtensionCapabilities -> IExtensionEnv)
     (transport: Transport)
     : Eff<'R, Result<Peer, ConnectError>> =
     Rpc.accept (service info extensions envFor) transport

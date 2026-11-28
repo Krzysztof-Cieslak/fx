@@ -202,6 +202,7 @@ let extensionEnv (extension: string) (clock: Clock) (scope: Scope) : IExtensionE
     {
         BasicExtensionEnv.Extension = extension
         Clock = clock
+        Capabilities = ExtensionCapabilities.none extension
         Scope = scope
     }
     :> IExtensionEnv

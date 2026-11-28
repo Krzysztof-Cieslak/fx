@@ -490,22 +490,20 @@ module Host =
 
             let! config = Setup.readConfig options
 
-            // Extensions. Content exclusions read the host's resolution, made below.
-            let exclusionsFrom =
-                ref (Variants.ofResolution (Resolution.defaults SlotRegistry.empty))
-
-            let exclusions: Eff<IExtensionEnv, ExclusionSettings> =
-                fun e -> ContentExclusions.ofVariants exclusionsFrom.Value e
+            // Extensions, with what the host offers them (their own slots, the packages in effect,
+            // grants), filled in below as each is made.
+            let services = ExtensionServices Builtins.catalog
 
             // The bootstrap's first phase (in the binary); the variant registry, grants and the
             // components are made from what it loads, then the later phases run (below).
-            let! inBinary = Setup.bootstrap options config exclusions
+            let! inBinary = Setup.bootstrapWith options config services
+            services.SetHost inBinary
             let loaded = ref inBinary
             cleanup.Push(fun () -> Eff.run env0 (ExtensionHost.stop loaded.Value) :> Task)
             let! registry = Setup.registry inBinary
             let! resolution = Setup.resolve registry config
             let variants = Variants.ofResolution resolution
-            exclusionsFrom.Value <- variants
+            services.SetVariants(registry, resolution)
             let env1 = { env0 with Variants = variants }
 
             // Stores.
@@ -547,6 +545,7 @@ module Host =
                         })
 
             cleanup.Push(fun () -> Eff.run env2 (GrantsService.stop grants) :> Task)
+            services.SetGrants(GrantsService.grants grants)
 
             // Sessions (read before components: yolo approvals of a session approve its environment's
             // first installs).
@@ -651,9 +650,10 @@ module Host =
                         manifest
 
             let! extensions =
-                Eff.provide env2 (Setup.bootstrapRest options config exclusions installFor inBinary)
+                Eff.provide env2 (Setup.bootstrapRest options config services installFor inBinary)
 
             loaded.Value <- extensions
+            services.SetHost extensions
 
             warnings.AddRange(
                 Setup.problems
@@ -661,8 +661,7 @@ module Host =
                         Report =
                             extensions.Report
                             |> List.skip inBinary.Report.Length
-                            |> List.filter (fun entry ->
-                                not (Setup.unneeded (Setup.candidates options exclusions) entry))
+                            |> List.filter (fun entry -> not (Setup.unneeded (Setup.candidates options) entry))
                     }
             )
 

@@ -101,7 +101,11 @@ let start<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
                     let transport =
                         ProcTransport.create (ConnectionLimits.frames settings.Limits) proc tail.Append
 
-                    let service = Service.create settings.Info [] |> Service.withLimits settings.Limits
+                    let attached = RpcRemote.Attached()
+
+                    let service =
+                        Service.create settings.Info (RpcRemote.hostHandlers attached)
+                        |> Service.withLimits settings.Limits
 
                     match! Rpc.connect service RpcRemote.initializeMembers transport with
                     | Error e ->
@@ -114,7 +118,7 @@ let start<'R when 'R :> IShell and 'R :> IClock and 'R :> IScopeWith<'R>>
                                 {
                                     Peer = peer
                                     Proc = proc
-                                    Remote = RpcRemote.ofPeer peer
+                                    Remote = RpcRemote.ofPeer attached peer
                                     Stderr = tail.Text
                                 }
     }
@@ -132,14 +136,17 @@ let stop (settings: ProcessSettings) (running: Running) : Eff<IExtensionEnv, uni
             ()
     }
 
-/// Activates the manifest's extension in a started process: the process must answer for the
-/// manifest's id and version, and provide what the host's catalog can load.
+/// Activates the manifest's extension in a started process, in its environment (which answers the
+/// process's `host/*` requests for it): the process must answer for the manifest's id and version,
+/// and provide what the host's catalog can load.
 let activate
     (running: Running)
     (manifest: Manifest)
     (load: ContributionDecl -> Remote option -> Fx.Contracts.Validation<Contribution, Fx.Contracts.Issue>)
     : Eff<IExtensionEnv, Result<Activation, string>> =
     eff {
+        let! env = Eff.ask
+
         let! outcome =
             RemoteActivation.activate
                 running.Remote
@@ -149,6 +156,7 @@ let activate
                     Root = None
                 }
                 manifest
+                env
                 load
 
         return outcome |> Result.mapError (withStderr running.Stderr)

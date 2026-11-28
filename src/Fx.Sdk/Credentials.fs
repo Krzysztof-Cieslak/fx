@@ -269,9 +269,19 @@ type StoreEnv =
 
     interface IExtensionEnv with
         member env.Extension = env.Extension.Extension
+        member env.Capabilities = env.Extension.Capabilities
 
     interface IClock with
         member env.Clock = env.Extension.Clock
+
+    interface Fx.Variants.IVariants with
+        member env.Variants = env.Extension.Variants
+
+    interface IPackages with
+        member env.Packages = env.Extension.Packages
+
+    interface IGrants with
+        member env.Grants = env.Extension.Grants
 
     interface IScopeWith<IExtensionEnv> with
         member env.Scope = env.Extension.Scope
@@ -334,9 +344,19 @@ type SecretSourceEnv =
 
     interface IExtensionEnv with
         member env.Extension = env.Extension.Extension
+        member env.Capabilities = env.Extension.Capabilities
 
     interface IClock with
         member env.Clock = env.Extension.Clock
+
+    interface Fx.Variants.IVariants with
+        member env.Variants = env.Extension.Variants
+
+    interface IPackages with
+        member env.Packages = env.Extension.Packages
+
+    interface IGrants with
+        member env.Grants = env.Extension.Grants
 
     interface IScopeWith<IExtensionEnv> with
         member env.Scope = env.Extension.Scope

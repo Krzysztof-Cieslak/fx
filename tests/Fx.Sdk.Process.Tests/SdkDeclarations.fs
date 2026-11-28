@@ -71,6 +71,23 @@ let extensionRequests: Schema =
             request ExtensionProtocol.deactivate "Deactivates an extension."
         ]
 
+/// The requests an extension process sends to the host (`host/*`, T109b).
+let hostRequests: Schema =
+    record
+        "HostRequests"
+        "The requests an extension process sends to the host for the capabilities its extensions' manifests list: params, result, and the typed error carried as the data of an ApplicationError (-32000)."
+        [
+            request
+                ExtensionProtocol.hostVariants
+                "The values of the extension's own variant slots (variants), asked once when it activates."
+            request ExtensionProtocol.hostPackages "The extensions in effect (packages)."
+            request ExtensionProtocol.hostContributions "The data contributions of a type in effect (packages)."
+            request ExtensionProtocol.hostGrantsCheck "What the effective rules say about a query (grants)."
+            request ExtensionProtocol.hostGrantsRequest "Asks for a permission as the extension (grants)."
+            request ExtensionProtocol.hostGrantsAwait "Waits for a request the extension made (grants)."
+            request ExtensionProtocol.hostGrantsWithdraw "Withdraws a request the extension made (grants)."
+        ]
+
 /// The JSON-RPC error codes (`Fx.Rpc.Protocol.ErrorCode`), as literal types.
 let errorCodes: Schema =
     let code (name: string) (value: int) =
@@ -134,6 +151,22 @@ let contracts: DeclarationFile =
                     ExtensionProtocol.Codecs.output.Schema
                 ExtensionProtocol.Codecs.protocolError.Schema
                 extensionRequests
+                ExtensionProtocol.HostCodecs.hostError.Schema
+                ExtensionProtocol.HostCodecs.packageInfo.Schema
+                ExtensionProtocol.HostCodecs.contributedData.Schema
+                ExtensionProtocol.HostCodecs.dataParams.Schema
+                ExtensionProtocol.HostCodecs.hostSlots.Schema
+                ExtensionProtocol.HostCodecs.hostPackages.Schema
+                ExtensionProtocol.HostCodecs.hostData.Schema
+                ExtensionProtocol.HostCodecs.grantCheckParams.Schema
+                ExtensionProtocol.HostCodecs.grantRequestParams.Schema
+                ExtensionProtocol.HostCodecs.grantAwaitParams.Schema
+                ExtensionProtocol.HostCodecs.grantWithdrawParams.Schema
+                Fx.Grants.Codecs.check.Schema
+                Fx.Grants.Codecs.askOutcome.Schema
+                Fx.Grants.Codecs.resolution.Schema
+                Fx.Grants.Codecs.error.Schema
+                hostRequests
                 errorCodes
                 constants
                 Handshake.initializeParams.Schema

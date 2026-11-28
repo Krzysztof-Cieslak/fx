@@ -26,6 +26,16 @@ type private ExtEnv =
 
     interface IExtensionEnv with
         member env.Extension = env.Extension
+        member env.Capabilities = ExtensionCapabilities.none env.Extension
+
+    interface Fx.Variants.IVariants with
+        member env.Variants = (ExtensionCapabilities.none env.Extension).Variants
+
+    interface IPackages with
+        member env.Packages = (ExtensionCapabilities.none env.Extension).Packages
+
+    interface IGrants with
+        member env.Grants = (ExtensionCapabilities.none env.Extension).Grants
 
     interface IClock with
         member env.Clock = env.Clock

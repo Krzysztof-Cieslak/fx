@@ -9,7 +9,10 @@
     "runtime": "bun",
     "requires": [],
     "capabilities": [
-      "clock"
+      "clock",
+      "grants",
+      "packages",
+      "variants"
     ],
     "contributions": [
       {
@@ -51,6 +54,10 @@
       {
         "type": "observe:sample.note",
         "id": "flaky"
+      },
+      {
+        "type": "variant-slot",
+        "id": "sample.style"
       }
     ],
     "rpc": {
@@ -125,10 +132,56 @@
           "result": {
             "type": "null"
           }
+        },
+        {
+          "name": "style",
+          "description": "The value of the sample's style slot (the variants capability).",
+          "params": {
+            "type": "null"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "packages",
+          "description": "The ids of the extensions in effect (the packages capability).",
+          "params": {
+            "type": "null"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "name": "data",
+          "description": "The data contributions of a type in effect (the packages capability).",
+          "params": {
+            "type": "string"
+          },
+          "result": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        {
+          "name": "check",
+          "description": "Checks a grant query (the grants capability): a GrantQuery in, a GrantCheck out.",
+          "params": {},
+          "result": {}
+        },
+        {
+          "name": "ask",
+          "description": "Asks for a permission (the grants capability): a GrantAsk in, an AskOutcome out.",
+          "params": {},
+          "result": {}
         }
       ]
     },
     "replaces": []
   },
-  "hash": "sha256:7cb00eef20b9d13e680f48e521d96b3cfc59139aa6bfbbdd2d3e0ca755421398"
+  "hash": "sha256:6e14e790a973e56ad92eabdf5aba33d6b67ce084358c266ec1e4f63457be0519"
 }
