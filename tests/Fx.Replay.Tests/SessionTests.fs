@@ -111,6 +111,38 @@ let hybridTurn (f: Fixture) : Task<string> =
         return "s1"
     }
 
+/// Anchored edits (T204a): a cell reads a range and replaces its lines, another edits by text and
+/// ends with the result; a range gone stale fails; hybrid's `edit` runs through the same binding.
+let anchored (f: Fixture) : Task<string> =
+    task {
+        f.Fs.AddText(file "notes.md", "# Notes\nfirst\nsecond\nthird\n")
+
+        f.Model.AddAll
+            [
+                Say.cell "// intent: read two lines\ncall r = fs.read [\"notes.md\", {\"lines\": [2, 3]}]\nr"
+                Say.cell
+                    "// intent: replace them\ncall e = fs.editRange [{\"path\": \"notes.md\", \"start\": 2, \"end\": 3, \"text\": \"first\\nsecond\\n\", \"digest\": \"sha256:0000000000000000000000000000000000000000000000000000000000000000\", \"lines\": 4}, \"1st\\n2nd\"]\ne"
+                Say.cell
+                    "// intent: edit by text\ncall e = fs.edit [\"notes.md\", [{\"old\": \"# Notes\", \"new\": \"# All notes\"}, {\"old\": \"third\", \"new\": \"3rd\"}]]\ne"
+                Say.cell
+                    "// intent: a stale range\ncall e = fs.editRange [{\"path\": \"notes.md\", \"start\": 2, \"end\": 3, \"text\": \"first\\nsecond\\n\", \"digest\": \"sha256:0000000000000000000000000000000000000000000000000000000000000000\", \"lines\": 4}, \"x\"]\ne"
+                Say.tool
+                    "edit"
+                    [
+                        "path", Json.String "notes.md"
+                        "old", Json.String "3rd"
+                        "new", Json.String "3rd\nfourth"
+                    ]
+                Say.finish "Edited the notes"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Edit the notes"
+        let! ending = ended f "s1" 1
+        completed ending
+        return "s1"
+    }
+
 /// A steer sent while the model answers reaches it at the next step boundary.
 let steered (f: Fixture) : Task<string> =
     task {
@@ -366,6 +398,21 @@ let tests =
 
             recordsAndReplays "cells with texts, bound before they run" (fun () -> create []) withTexts (fun f report ->
                 Expect.equal report.Requests f.Model.Requests.Length "every request")
+
+            recordsAndReplays
+                "anchored edits: a ranged read, edits by range and by text"
+                (fun () -> create hybrid)
+                anchored
+                (fun f report ->
+                    Expect.equal report.Requests f.Model.Requests.Length "every request"
+
+                    match (f.Fs.FsRead.ReadFile (file "notes.md") CancellationToken.None).Result with
+                    | Ok bytes ->
+                        Expect.equal
+                            (System.Text.Encoding.UTF8.GetString bytes)
+                            "# All notes\n1st\n2nd\n3rd\nfourth\n"
+                            "edited"
+                    | Error e -> failtest (string e))
 
             recordsAndReplays "a steer delivered at the next boundary" (fun () -> create []) steered ignore2
 
