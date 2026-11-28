@@ -28,10 +28,10 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
 - **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
-- **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
-- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203a Readable results, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
-- **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T139 Cells: large arguments, T141 Cells: outcomes that say why, T143 Background jobs, T203b Smart previews, T204a Anchored edits, T212 Run kernel, T217 Eval harness, T608 Agent teams
-- **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T204b Edit guard, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
+- **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201a Values: blobs and output overflow, T510 First cloud env (E2B)
+- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T201b Values: handles and history, T203a Readable results, T205 Activity, diffs, undo, T206 Steering + compaction, T604 Memory, T605 MCP bridge
+- **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T139 Cells: large arguments, T141 Cells: outcomes that say why, T143 Background jobs, T201c Values: context pins, T203b Smart previews, T204a Anchored edits, T212 Run kernel, T213 Agents, T217 Eval harness
+- **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T204b Edit guard, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor, T608 Agent teams
 - **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
 - **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
 - **Wave 14:** T133c TUI: Markdown, T134b Yolo approvals, T307 Runs panel (graph), T609 Desktop
@@ -121,7 +121,9 @@ flowchart LR
     T143["T143 Background jobs"]
   end
   subgraph P2["Phase 2 — Agent quality, UX, models, agents, goals, evals"]
-    T201["T201 Values & references"]
+    T201a["T201a Values: blobs and output overflow"]
+    T201b["T201b Values: handles and history"]
+    T201c["T201c Values: context pins"]
     T202["T202 Repo navigation"]
     T203a["T203a Readable results"]
     T203b["T203b Smart previews"]
@@ -315,17 +317,19 @@ flowchart LR
   T127b --> T143
   T131 --> T143
   T203a --> T143
-  T117 --> T201
-  T126 --> T201
+  T117 --> T201a
+  T126 --> T201a
+  T201a --> T201b
+  T201b --> T201c
   T008 --> T202
   T111 --> T202
   T126 --> T203a
   T127 --> T203a
-  T201 --> T203b
+  T201a --> T203b
   T202 --> T203b
   T203a --> T203b
   T203a --> T204a
-  T201 --> T204b
+  T201b --> T204b
   T202 --> T204b
   T126 --> T204b
   T204a --> T204b
@@ -352,7 +356,7 @@ flowchart LR
   T113 --> T213
   T115 --> T213
   T127 --> T213
-  T201 --> T213
+  T201b --> T213
   T205 --> T214
   T212 --> T214
   T213 --> T214
@@ -431,7 +435,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T203a,T204a,T206 done
-  class T132 inprogress
+  class T132,T201a inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -521,12 +525,14 @@ flowchart LR
 
 | ID | Task | Depends on | Spec | Status | Done when |
 |---|---|---|---|---|---|
-| T201 | Values & references | T117, T126 | §6.6 | todo | `Value` inline/blob/handle wire type, unforgeable session-scoped handles, `fx.context.pin`/`pinFile`, `fx.recall`/`Out[n]`. |
+| T201a | Values: blobs and output overflow | T117, T126 | §6.6 | in-progress | `Value.Blob` in practice: a cell's value larger than `values.inlineMaxBytes` and printed output beyond `outputChars` are stored in the environment's blob store, and the receipt names them by a grep-able path besides the bounded preview; kernels read blobs (`fx.blobs`); kept values that are blobs are journaled by reference and restored by `recall`; host-call arguments may travel as blobs; kernel conformance covers them. |
+| T201b | Values: handles and history | T201a | §6.6, §5 | todo | `Value.Handle` in practice: handles inside data, handles in the journal (kept by reference, reported lost after a restart), `Piece.Ref` in receipts; `fx.history.*` beyond `compact` reads collapsed originals back as handles; kernel conformance covers handles in data. |
+| T201c | Values: context pins | T201b | §6.6, §5 | todo | `IContext`; `fx.context.pin(name, value)` and `fx.context.pinFile(path, range)` (a live view of the file) shown in the `pins` view, listed in `/context` with their cost, unpinned by name; replayed from the context log. |
 | T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. |
 | T203a | Readable results | T126, T127 | §6.6, §6.7 | done | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
-| T203b | Smart previews | T201, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
+| T203b | Smart previews | T201a, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
 | T204a | Anchored edits | T203a | §6.8 | done | `fx.fs.read(path, {lines})` returns a range; `fx.fs.edit(path, {old, new, all?} or a list)`, checked against the digest read, and `fx.fs.editRange(range, text)`, stale if the lines changed; both return fresh ranges. Hybrid's `edit` becomes a host call of it; grants, the sandbox guard, content exclusions and replay cover it. Dogfooding sessions stop defining their own replace helpers. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
-| T204b | Edit guard | T201, T202, T126, T204a | §6.8 | todo | Edit guard over `SeenRanges` with off/warn/require modes; `fx.repo` matches as anchors. |
+| T204b | Edit guard | T201b, T202, T126, T204a | §6.8 | todo | Edit guard over `SeenRanges` with off/warn/require modes; `fx.repo` matches as anchors. |
 | T205 | Activity, diffs, undo | T111, T127 | §6.5, §5 | todo | Semantic activity events, per-cell workspace diffs, step snapshots, two-phase undo of agent-attributed changes. |
 | T206 | Steering + compaction | T126, T127 | §5 | done | Steer vs queue at step boundaries; `Collapsed` compaction with cache-sharing summaries, background preparation, model-callable APIs. |
 | T207 | openai.chat | T118 | §10.1 | todo | Chat Completions adapter for local models and gateways; passes wire conformance. |
@@ -535,7 +541,7 @@ flowchart LR
 | T210 | Copilot provider | T119, T120, T121, T124, T207 | §10.6 | todo | `fx.model.copilot`: identity profiles (`vscode-chat`, `copilot-cli`), switching, device flow, endpoint discovery, routing, content-exclusion fetch, premium-request usage. On by default. |
 | T211 | Install methods | T110, T113 | §6.1 | todo | `ReleaseIndex` (vendor-index trust default), `Package`, `System`, sandboxed `Script`; mirrors; `fx runtime bundle|import`. |
 | T212 | Run kernel | T104, T131 | §8.1 | todo | Run machine shared by goals/workflows: journal + replay resume, budgets (atomic), nesting with carved budgets, `run/*` protocol. |
-| T213 | Agents | T109, T113, T115, T127, T201 | §7 | todo | `Agent` values; Markdown + TS authoring; typed handoffs; capability attenuation (types + sandbox); child sessions; built-ins (implementer, reviewer, qa, planner, explorer); Claude Code/OpenCode import. |
+| T213 | Agents | T109, T113, T115, T127, T201b | §7 | todo | `Agent` values; Markdown + TS authoring; typed handoffs; capability attenuation (types + sandbox); child sessions; built-ins (implementer, reviewer, qa, planner, explorer); Claude Code/OpenCode import. |
 | T214 | Goals | T205, T212, T213 | §8.2 | todo | Goal machine: verify checks (command/hidden/evaluator), protected paths, stop rules, FreshHandoff default, progress plan + checkpoints, `/goal`. |
 | T215 | Runs panel (timeline) | T130, T212 | §19.3 | todo | `RunView` projection shared via Fable; TUI timeline layout with run/step controls. |
 | T216 | Benchmark env provider | T010, T112 | §15 | todo | Docker-based benchmark-task environment provider for SWE-bench / Terminal-Bench containers. |
