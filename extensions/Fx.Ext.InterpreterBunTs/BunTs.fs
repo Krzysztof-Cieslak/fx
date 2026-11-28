@@ -137,6 +137,7 @@ let promptPack: PromptPack =
                         "- Start every cell with one line `// intent: <what the cell is for>`."
                         "- Work through the `{global}` bridge declared below, e.g. `await {global}.shell.run(\"git status\")` or `await {global}.fs.read(\"src/app.ts\")`. Paths are relative to the workspace. The host checks every call: a call that fails throws an error with a `code`: `invalidArguments` (with the reasons), or `failed`, whose `data.code` says why (e.g. `notFound`)."
                         "- The value of a cell's last expression comes back to you and stays available as `Out[\"<cell id>\"]`: a string as its text, a command's result as its output and exit code, a file you read as its numbered lines, anything else as a preview. End a cell with what you want to see; print with `console.log` only to see several things. Keep large values in variables and pass them on by name; text beyond a limit is cut in the middle."
+                        "- Put file bodies, commit messages, patches, a command's input and any text with backticks or more than a few lines in the `cell` tool's `texts`, never in a template literal: `{\"code\": \"…\", \"texts\": {\"notes\": \"…\"}}` makes `notes` a string constant before the code runs, with nothing to escape. Pass texts on by name."
                         "- `process`, `Bun` and `require` are not globals: import what you need, e.g. `const path = await import(\"node:path\")`."
                         "- End the turn with `await {global}.finish(result)`, with a result of the type `finish` declares. The host checks it; if it is rejected, the call throws with the reasons: fix the result and finish again."
                     ]
@@ -168,6 +169,21 @@ let promptPack: PromptPack =
                                     "await {global}.fs.write(file.path, file.text.replaceAll(\"retryOld\", \"retryNew\"))"
                                     "const run = await {global}.shell.run(\"bun test test/retry.test.ts\")"
                                     "run"
+                                ]
+                        )
+                }
+                {
+                    Title =
+                        "Write a file and commit it, their texts in `texts` (here `\"texts\": {\"notes\": \"# Notes…\", \"message\": \"Add the notes…\"}`):"
+                    Code =
+                        withGlobal (
+                            String.concat
+                                "\n"
+                                [
+                                    "// intent: add the release notes and commit them"
+                                    "await {global}.fs.write(\"docs/notes.md\", notes)"
+                                    "const commit = await {global}.shell.run(\"git add docs/notes.md && git commit -F -\", { stdin: message })"
+                                    "commit"
                                 ]
                         )
                 }

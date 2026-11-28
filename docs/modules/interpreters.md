@@ -170,7 +170,7 @@ interpreter `bun-ts`: TypeScript cells on the pinned Bun (`fx.runtime.bun`, `bun
 | Caps | no snapshot (Jupyter semantics plus the journal, spec §6.5), host calls awaited, no packages, not deterministic |
 | Check | `CheckSpec.Kernel`: `cell/check`, and `cell/run` with `check` |
 | Bindings | `<global>.d.ts`: `DeclarationFile.render` with `Layout.Global(global, description)`; every binding as `<global>.<group>.<name>(…): Promise<Result>`, plus `finish(result): Promise<null>`, and every named type they use; groups without bindings left out |
-| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, imports, `finish`), the declarations, three examples |
+| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, the `cell` tool's `texts` for file bodies, messages and anything with backticks or several lines, imports, `finish`), the declarations, four examples (one writes a file and commits it from `texts`) |
 
 ### How the kernel ships (spec §16.4)
 
@@ -215,7 +215,13 @@ protocol (T116) and finished here:
   is the carried-over line). `--no-script` is mandatory: otherwise a `check` script in a `package.json`
   above the directory runs. Modules have no declarations in the binary (bun-types would add
   megabytes): `node:*` and `bun` imports type-check as `any`. Without a bindings directory the global
-  is `any`. `cell/run` with `check` runs nothing that has type errors (`typeError`).
+  is `any`. `cell/run` with `check` runs nothing that has type errors (`typeError`). Values the host
+  binds (`value/decode`: a cell's texts, T140) are carried the same way with their declared type
+  (`type`, or the JSON's: `declare let notes: string`).
+- **Names** (`value/decode`): identifiers a cell could write, so not a reserved word (ECMAScript's,
+  strict mode's, TypeScript's) and not one of the context's own globals (ECMAScript's, `globals.ts`'s,
+  `Out`) or the bridge's global: replacing those would break every later cell. Others are
+  `invalidName`.
 - **Cancellation** in three stages, `recall`, previews and values: kernel-protocol.md.
 
 ## Conformance
@@ -232,8 +238,9 @@ protocol (T116) and finished here:
   environment full of injection vectors that must not reach the kernel.
 - **End to end** (`tests/Fx.Ext.InterpreterBunTs.Tests/LiveTests.fs`, embedded mode): the core bindings
   over the local filesystem and shell, failures and their codes, `finish` accepted and rejected,
-  `cell/check` against the generated declarations and earlier cells, `check: true`, and the prompt's
-  examples type-checking.
+  `cell/check` against the generated declarations and earlier cells, `check: true`, values the host
+  bound declared to the checker and names a cell could not use refused, and the prompt's examples
+  type-checking (with the texts they use bound).
 
 ## Native AOT
 
