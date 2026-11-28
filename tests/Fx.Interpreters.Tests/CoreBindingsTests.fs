@@ -1188,6 +1188,251 @@ let tests =
                 ]
 
             testList
+                "repo.grep and repo.files"
+                [
+                    let repo () =
+                        let f = fakes (fun _ -> None)
+
+                        for dir in [ "src"; "src/gen"; "node_modules"; ".github"; "secrets" ] do
+                            f.Fs.AddDirectory(inWorkspace dir)
+
+                        f.Fs.AddText(inWorkspace ".gitignore", "node_modules/\ngen/\n")
+                        f.Fs.AddText(inWorkspace "src/retry.ts", "let a = 1\nretry(3)\nlet b = 2\nretry(4)\n")
+                        f.Fs.AddText(inWorkspace "src/loop.ts", "\uFEFFretry(1)\r\nwhile (true) {}\r\n")
+                        f.Fs.AddText(inWorkspace "src/gen/out.ts", "retry(9)\n")
+                        f.Fs.AddText(inWorkspace "node_modules/m.ts", "retry(9)\n")
+                        f.Fs.AddText(inWorkspace ".github/ci.yml", "retry: 2\n")
+                        f.Fs.AddText(inWorkspace ".env", "retry=SECRET\n")
+                        f.Fs.AddText(inWorkspace "secrets/k.txt", "retry SECRET\n")
+                        f.Fs.AddText(inWorkspace "notes.md", "a.b(c) and retry\n")
+                        f
+
+                    let callWith (s: CoreSettings) (f: Fakes) (binding: string) (args: Value list) =
+                        run
+                            f.Env
+                            (HostBinding.dispatch
+                                (CoreBindings.all s)
+                                {
+                                    CellId = Some "c1"
+                                    Binding = binding
+                                    Args = args
+                                })
+
+                    let grepWith (s: CoreSettings) (f: Fakes) (args: Value list) =
+                        match callWith s f "repo.grep" args with
+                        | Ok value ->
+                            match Value.decode CoreBindings.Codecs.grepResult value with
+                            | Ok result -> result
+                            | Error issues -> failtest (string issues)
+                        | Error e -> failtest (string e)
+
+                    let grep = grepWith settings
+
+                    let places (result: GrepResult) =
+                        result.Matches |> List.map (fun m -> m.Range.Path, m.Range.Start, m.Column)
+
+                    let counts (result: GrepResult) =
+                        result.Files |> List.map (fun f -> f.Path, f.Matches)
+
+                    let files (s: CoreSettings) (f: Fakes) (args: Value list) =
+                        match callWith s f "repo.files" args with
+                        | Ok value ->
+                            match Value.decode CoreBindings.Codecs.repoFiles value with
+                            | Ok result -> result
+                            | Error issues -> failtest (string issues)
+                        | Error e -> failtest (string e)
+
+                    let exclusions =
+                        match
+                            Fx.Models.Exclusions.create
+                                [
+                                    {
+                                        Origin = "host"
+                                        Patterns = [ "secrets/"; "*.md" ]
+                                    }
+                                ]
+                        with
+                        | Ok e -> e
+                        | Error issues -> failtest (string issues)
+
+                    testCase "matches are ranges of the files, skipping ignored, hidden and binary files"
+                    <| fun () ->
+                        let f = repo ()
+                        f.Fs.AddFile(inWorkspace "src/bin.dat", Array.append (Encoding.UTF8.GetBytes "retry") [| 0uy |])
+                        let result = grep f [ str "retry\\(" ]
+
+                        Expect.equal
+                            (places result)
+                            [ "src/loop.ts", 1, 2; "src/retry.ts", 2, 1; "src/retry.ts", 4, 1 ]
+                            "in walk order; the byte order mark counts as a column"
+
+                        Expect.equal (counts result) [ "src/loop.ts", 1; "src/retry.ts", 2 ] "lines per file"
+
+                        Expect.isFalse result.Truncated "all of them"
+                        let first = result.Matches.Head.Range
+
+                        Expect.equal
+                            first.Text
+                            "retry(1)\r\n"
+                            "the line as the file has it, without the byte order mark"
+
+                        Expect.equal first.Lines 2 "the file's lines"
+
+                        let read = call f "fs.read" [ str "src/loop.ts" ] |> json
+
+                        Expect.equal
+                            (field "digest" read)
+                            (CoreBindings.Codecs.digest.Encode first.Digest)
+                            "the digest fs.read gives"
+
+                    testCase "a match is an anchor fs.editRange takes"
+                    <| fun () ->
+                        let f = repo ()
+                        let result = grep f [ str "retry\\(4\\)" ]
+                        let matchJson = field "matches" (CoreBindings.Codecs.grepResult.Encode result)
+
+                        let whole =
+                            match matchJson with
+                            | Json.Array [ m ] -> m
+                            | other -> failtest (Json.serialize other)
+
+                        Expect.equal (Codec.decode Codec.int (field "column" whole)) (Ok 1) "with its column"
+                        call f "fs.editRange" [ Value.Inline whole; str "retry(5)\n" ] |> json |> ignore
+                        Expect.equal (readText f "src/retry.ts") "let a = 1\nretry(3)\nlet b = 2\nretry(5)\n" "edited"
+
+                    testCase "options: path, globs, case, literal text, context, max and hidden files"
+                    <| fun () ->
+                        let f = repo ()
+                        let options (text: string) = inline' text
+
+                        Expect.equal
+                            (places (grep f [ str "retry"; options """{"path":"src","glob":["retry.*"]}""" ]))
+                            [ "src/retry.ts", 2, 1; "src/retry.ts", 4, 1 ]
+                            "a directory and a glob"
+
+                        Expect.equal
+                            (places (grep f [ str "retry"; options """{"glob":["!loop.ts","*.ts"]}""" ]))
+                            [ "src/retry.ts", 2, 1; "src/retry.ts", 4, 1 ]
+                            "a glob that excludes"
+
+                        Expect.equal
+                            (places (grep f [ str "RETRY\\(3"; options """{"ignoreCase":true}""" ]))
+                            [ "src/retry.ts", 2, 1 ]
+                            "ignoring case"
+
+                        Expect.equal
+                            (places (grep f [ str "a.b(c)"; options """{"literal":true}""" ]))
+                            [ "notes.md", 1, 1 ]
+                            "literal text"
+
+                        let around = grep f [ str "retry\\(3"; options """{"context":1}""" ]
+
+                        Expect.equal
+                            (around.Matches.Head.Context |> Option.map (fun r -> r.Start, r.End, r.Text))
+                            (Some(1, 3, "let a = 1\nretry(3)\nlet b = 2\n"))
+                            "context as a range"
+
+                        let capped = grep f [ str "retry"; options """{"max":1}""" ]
+                        Expect.equal (places capped) [ "notes.md", 1, 12 ] "the first"
+                        Expect.isTrue capped.Truncated "more there"
+
+                        Expect.equal
+                            (counts capped)
+                            [ "notes.md", 1; "secrets/k.txt", 1; "src/loop.ts", 1; "src/retry.ts", 2 ]
+                            "every file counted"
+
+                        Expect.equal
+                            (places (grep f [ str "retry:"; options """{"hidden":true}""" ]))
+                            [ ".github/ci.yml", 1, 1 ]
+                            "hidden files when asked"
+
+                    testCase "excluded files and files the sandbox denies are never shown"
+                    <| fun () ->
+                        let f = repo ()
+
+                        let excluding =
+                            { settings with
+                                Exclusions = exclusions
+                            }
+
+                        let result = grepWith excluding f [ str "retry"; inline' """{"hidden":true}""" ]
+                        let shownPaths = counts result |> List.map fst
+                        Expect.isFalse (List.contains "secrets/k.txt" shownPaths) "an excluded directory"
+                        Expect.isFalse (List.contains "notes.md" shownPaths) "an excluded file"
+                        Expect.isTrue (List.contains ".env" shownPaths) "the rest"
+
+                        Expect.equal
+                            (failedCode (callWith excluding f "repo.grep" [ str "x"; inline' """{"path":"secrets"}""" ]))
+                            "excluded"
+                            "searching an excluded directory"
+
+                        let policy: SandboxPolicy =
+                            {
+                                Workspace = workspace
+                                WorkspaceAccess = WorkspaceAccess.ReadWrite
+                                Writable = []
+                                Readable = []
+                                Protected = []
+                                Denied = [ inWorkspace ".env" ]
+                                Temp = None
+                                Network = NetworkAccess.Allowed
+                            }
+
+                        let confined =
+                            grepWith
+                                { settings with Sandbox = Some policy }
+                                f
+                                [ str "SECRET"; inline' """{"hidden":true}""" ]
+
+                        Expect.equal (counts confined) [ "secrets/k.txt", 1 ] "denied by the sandbox"
+
+                    testCase "searches stay in the workspace, and bad patterns say why"
+                    <| fun () ->
+                        let f = repo ()
+
+                        Expect.equal
+                            (failedCode (call f "repo.grep" [ str "x"; inline' """{"path":".."}""" ]))
+                            "outside"
+                            "above the workspace"
+
+                        Expect.equal
+                            (failedCode (call f "repo.grep" [ str "(unclosed" ]))
+                            "invalidQuery"
+                            "a bad pattern"
+
+                        Expect.equal (failedCode (call f "repo.grep" [ str "(a)\\1" ])) "invalidQuery" "a backreference"
+
+                    testCase "repo.files lists the workspace's files ripgrep's way"
+                    <| fun () ->
+                        let f = repo ()
+
+                        Expect.equal
+                            (files settings f []).Files
+                            [ "notes.md"; "secrets/k.txt"; "src/loop.ts"; "src/retry.ts" ]
+                            "ignored and hidden files skipped"
+
+                        Expect.equal
+                            (files
+                                { settings with
+                                    Exclusions = exclusions
+                                }
+                                f
+                                [])
+                                .Files
+                            [ "src/loop.ts"; "src/retry.ts" ]
+                            "excluded files skipped"
+
+                        Expect.equal
+                            (files settings f [ inline' """{"path":"src","glob":["loop.*"]}""" ]).Files
+                            [ "src/loop.ts" ]
+                            "a directory and a glob"
+
+                        let capped = files settings f [ inline' """{"max":2,"hidden":true}""" ]
+                        Expect.equal capped.Files [ ".env"; ".gitignore" ] "the first two, hidden ones too"
+                        Expect.isTrue capped.Truncated "more there"
+                ]
+
+            testList
                 "shell.run on this machine"
                 [
                     let withWorkspace (body: Env -> CoreSettings -> unit) =
@@ -1322,6 +1567,8 @@ let tests =
                         "fs.edit"
                         "fs.editRange"
                         "blobs.read"
+                        "repo.grep"
+                        "repo.files"
                     ]
                     "paths"
         ]

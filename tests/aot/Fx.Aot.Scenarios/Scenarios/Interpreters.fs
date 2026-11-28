@@ -240,6 +240,11 @@ let bridgeScenario =
                         str "x"
                     ]
                     "fs.read", [ str "src/app.ts" ]
+                    "repo.grep", [ str "tw|x"; parse """{"context": 1}""" ]
+                    "repo.grep", [ str "("; parse """{"literal": true}""" ]
+                    "repo.grep", [ str "(" ]
+                    "repo.grep", [ str "x"; parse """{"path": ".."}""" ]
+                    "repo.files", [ parse """{"glob": ["*.ts"]}""" ]
                     "shell.run", [ str "make test"; parse """{"cwd": "src", "stdin": "in"}""" ]
                     "shell.run", [ str "missing-tool" ]
                     "shell.run", [ parse "42" ]
