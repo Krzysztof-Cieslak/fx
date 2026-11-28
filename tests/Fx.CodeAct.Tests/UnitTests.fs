@@ -315,12 +315,44 @@ let tests =
                 let long = String.replicate 100 "0123456789"
 
                 let shown =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Text long)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.Text long))
+                        None
+                        result
                     |> text
 
                 Expect.stringContains shown "Value of Out[\"t1-s1-1\"] (string, 1000 chars):\n0123456789" "the text"
                 Expect.stringContains shown "characters omitted" "cut in the middle at the output's limit"
                 Expect.stringContains shown "Declared: x" "the names"
+
+                let overflow: Overflow =
+                    {
+                        Hash = Fx.Store.BlobHash.ofBytes (System.Text.Encoding.UTF8.GetBytes long)
+                        Bytes = 1000L
+                        Path = Some "/env/envd/blobs/sha256/ab/cd"
+                    }
+
+                let shownStored =
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.Text long))
+                        (Some overflow)
+                        result
+                    |> text
+
+                Expect.stringContains
+                    shownStored
+                    "characters omitted; all of it: /env/envd/blobs/sha256/ab/cd …"
+                    "the marker names the blob's file (T201a)"
 
                 let ran: RunResult =
                     {
@@ -336,7 +368,7 @@ let tests =
                     }
 
                 let shownRan =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Ran ran)) result
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Ran ran)) None result
                     |> text
 
                 Expect.stringContains
@@ -345,6 +377,29 @@ let tests =
                     "as bash shows it"
 
                 Expect.isFalse (shownRan.Contains "editRange") "no matches, no hint"
+                Expect.isFalse (shownRan.Contains "was cut") "nothing cut, no overflow line"
+
+                let shownCut =
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(
+                            CellValue.Ran
+                                { ran with
+                                    StdoutOverflow = Some overflow
+                                }
+                        ))
+                        None
+                        result
+                    |> text
+
+                Expect.stringContains
+                    shownCut
+                    "[stdout was cut; all of it: /env/envd/blobs/sha256/ab/cd]"
+                    "where all of stdout is"
 
                 let found: RunResult =
                     { ran with
@@ -368,7 +423,15 @@ let tests =
                 let g = Fx.Product.kernelGlobal
 
                 let shownFound =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Ran found)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.Ran found))
+                        None
+                        result
                     |> text
 
                 Expect.stringContains
@@ -394,7 +457,15 @@ let tests =
                     }
 
                 match
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File file)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.File file))
+                        None
+                        result
                 with
                 | [ Piece.Text head; Piece.File view; Piece.Text tail ] ->
                     Expect.stringContains head "(FileText): a.txt, 2 lines" "what it is"
@@ -403,7 +474,7 @@ let tests =
                 | other -> failtest $"{other}"
 
                 let preview =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] None result
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] None None result
                     |> text
 
                 Expect.stringContains
@@ -455,7 +526,7 @@ let tests =
                     pieces |> List.map Piece.render |> String.concat "\n"
 
                 let receipt outcome =
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none waiting None (result outcome)
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none waiting None None (result outcome)
                     |> text
 
                 Expect.equal
@@ -647,7 +718,15 @@ let tests =
                     "a ranged read is a file read"
 
                 match
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File range)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.File range))
+                        None
+                        result
                 with
                 | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
                     Expect.equal view.Text "     3\tthree\n     4\tfour" "numbered from where it starts"
@@ -663,7 +742,15 @@ let tests =
                     }
 
                 match
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File long)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.File long))
+                        None
+                        result
                 with
                 | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
                     Expect.equal view.Lines [ LineRange.create 1 3 ] "up to the receipt's lines"
@@ -713,7 +800,15 @@ let tests =
                     "an edit's result"
 
                 match
-                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.Edited edited)) result
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.Edited edited))
+                        None
+                        result
                 with
                 | [ Piece.Text head
                     Piece.Text summary

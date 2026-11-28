@@ -679,9 +679,25 @@ type CodeAct<'R, 'K
                                 ReadLines = settings.ReadLines
                             }
 
+                        // A value the receipt cuts is stored whole in the environment's blob store,
+                        // and the receipt says where (T201a).
+                        let! stored =
+                            match value |> Option.bind Receipts.valueBody with
+                            | Some body when body.Length > settings.OutputChars ->
+                                Eff.provide
+                                    env
+                                    (CoreBindings.storeOverflow
+                                        { CoreSettings.defaults hands.Workspace hands.Os with
+                                            BlobRoot = hands.BlobRoot
+                                        }
+                                        (Text.Encoding.UTF8.GetBytes body)
+                                     |> Eff.map Some)
+                            | _ -> Eff.ret None
+
                         return
                             {
-                                Pieces = Receipts.cell cellLimits note intent record.Reads record.Waiting value result
+                                Pieces =
+                                    Receipts.cell cellLimits note intent record.Reads record.Waiting value stored result
                                 IsError = Receipts.isError result.Outcome
                                 Restarted = Receipts.restart note
                                 Approvals = []
