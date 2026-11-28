@@ -213,7 +213,17 @@ module Session =
                         |> List.exists (fun pending -> pending.Request.Id = id && pending.Request.Reply = Reply.AsInput)
 
                     List.distinct requests |> List.filter awaited, []
-                | TurnEnd.Completed(TurnResult.Waiting(jobs, _)) -> [], List.distinct jobs
+                | TurnEnd.Completed(TurnResult.Waiting(jobs, _)) ->
+                    // A job whose notice came while the turn was ending (it is in the inbox) has ended:
+                    // waiting for it would wait for ever.
+                    let notified (job: string) =
+                        state.Inbox
+                        |> List.exists (fun input ->
+                            match input.Content with
+                            | InputContent.JobFinished(finished, _) -> finished = job
+                            | _ -> false)
+
+                    [], List.distinct jobs |> List.filter (fun job -> not (notified job))
                 | _ -> [], []
 
             { state with
