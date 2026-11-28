@@ -148,8 +148,12 @@ with type errors. The result:
 `value/preview` renders within the kernel's preview limits or the ones given. `value/encode` returns
 the value as a `Value` (below): a reference as the kernel holds it, otherwise inline JSON within
 `maxBytes` (default `inlineBytes`; beyond, `tooLarge`), and `notEncodable` for what has no JSON form.
-`value/decode` binds a `Value` to a top-level variable (task inputs, the prefill cell, spec §6.6);
-`type` is the value's declared type in the kernel's language, for its type checker. `recall` restores a
+`value/decode` binds a `Value` to a top-level variable (task inputs, the prefill cell, a cell's texts:
+spec §6.6, §6.9); `type` is the value's declared type in the kernel's language, for its type checker
+(later cells' checks see the name). A name the language cannot have as a variable (a reserved word),
+or one the kernel keeps (the bridge's global, its own globals such as `Out`), is `invalidName`: binding
+it would break later cells. There is no size limit beyond the transport's; the host bounds what it
+sends (a cell's text by `values.argumentMaxBytes`). `recall` restores a
 cell's completion value (`Out[cellId]`), e.g. from the journal into a restarted kernel (spec §5).
 
 **Snapshots.** `snapshot` returns the kernel's state as a `Value` in its own format (inline JSON, or a
@@ -288,7 +292,7 @@ stays language-neutral and checks everything through the protocol. Version 1 cov
 | Output | in the result, streamed before it in order, bounded (head, tail, counts, streamed bound), late output attributed |
 | Errors | runtime errors with their message, syntax errors that run nothing, state surviving errors |
 | Previews | within default and given limits for long strings, long lists and deep values; small values whole; `notFound` |
-| Marshalling | JSON round trips (Unicode, int64 within 2^53, nesting), values visible to cells, `tooLarge`, `notEncodable`, `invalidName`, handles back to the host unchanged, plain data never a handle, blobs as references |
+| Marshalling | JSON round trips (Unicode, int64 within 2^53, nesting), values visible to cells, `tooLarge`, `notEncodable`, `invalidName` (also the bridge's global), handles back to the host unchanged, plain data never a handle, blobs as references |
 | Host calls | results, typed errors with their kind as code, missing bindings, cancellation with the cell, arguments beyond `inlineBytes` within `argumentBytes` whole, beyond `argumentBytes` refused in the cell (`invalidArguments`) |
 | Finish | accepted, rejected by the codec, rejected by an `Ensure` check, with the issues in the cell |
 | Cancellation | `cell/cancel`, `$/cancelRequest`, timeouts of waits and busy loops (the kernel survives), a busy loop the kernel cannot interrupt: killed, a new kernel, `recall` |

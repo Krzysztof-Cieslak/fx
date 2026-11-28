@@ -82,6 +82,22 @@ describe("checker", () => {
   );
 
   test(
+    "values the host bound have their declared types; a cell's own declaration wins",
+    withChecker(async (checker) => {
+      checker.bind("notes", "string");
+      const ok = "// intent: use the text\nconst size: number = notes.length\nnotes.split('`')";
+      expect(await checker.check("c1", ok, declared(ok))).toEqual([]);
+      const wrong = "const n: number = notes";
+      expect((await checker.check("c2", wrong, declared(wrong))).map((d) => d.code)).toEqual(["TS2322"]);
+      const own = "const notes = 3\nconst m: number = notes";
+      checker.record("c3", own, declared(own));
+      const after = "const k: number = notes";
+      expect(await checker.check("c4", after, declared(after))).toEqual([]);
+    }),
+    30_000,
+  );
+
+  test(
     "finish takes the result type",
     withChecker(async (checker) => {
       const ok = 'await host.finish({ kind: "done", summary: "ok" })';

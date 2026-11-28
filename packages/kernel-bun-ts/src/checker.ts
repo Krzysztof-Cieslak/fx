@@ -9,7 +9,8 @@
 //   declare let items: typeof import("./cell-c3.ts").items; type Item = import("./cell-c3.ts").Item;
 // `declare let` (not `import`) keeps them assignable, as they are at run time, where replMode turns
 // every declaration into a `var` on the context. Only names the cell mentions are carried, so the
-// checker loads the cells it needs, not the whole history.
+// checker loads the cells it needs, not the whole history. Values the host bound (`value/decode`, e.g.
+// a cell's texts) are carried the same way with their declared type: `declare let notes: string;`.
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -41,6 +42,8 @@ interface Binding {
   file: string;
   value: boolean;
   type: boolean;
+  /** The declared type of a value the host bound (`value/decode`), which no cell's module exports. */
+  declared?: string;
 }
 
 const TYPE_DECL = /^(?:export\s+)?(?:declare\s+)?(?:interface|type)\s+([A-Za-z_$][\w$]*)/gm;
@@ -84,7 +87,8 @@ export class Checker {
     const header: string[] = [];
     for (const [name, b] of this.visible) {
       if (own.has(name) || !identifiers.has(name)) continue;
-      if (b.value) header.push(`declare let ${name}: typeof import("./${b.file}").${name};`);
+      if (b.declared !== undefined) header.push(`declare let ${name}: ${b.declared};`);
+      else if (b.value) header.push(`declare let ${name}: typeof import("./${b.file}").${name};`);
       if (b.type) header.push(`type ${name} = import("./${b.file}").${name};`);
     }
     const exported = [...new Set([...values, ...types])];
@@ -101,6 +105,11 @@ export class Checker {
     for (const name of new Set([...values, ...types])) {
       this.visible.set(name, { file, value: values.includes(name), type: typeSet.has(name) });
     }
+  }
+
+  /** Records a value the host bound (`value/decode`), so later cells see it with this type. */
+  bind(name: string, type: string): void {
+    this.visible.set(name, { file: "", value: true, type: false, declared: type });
   }
 
   /** The diagnostics of a cell, at its own lines (line 0: the names carried over from earlier cells). */

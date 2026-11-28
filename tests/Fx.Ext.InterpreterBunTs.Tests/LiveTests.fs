@@ -352,11 +352,59 @@ let tests =
                         ()
             }
 
+            testTask "values the host binds are declared to the checker; names a cell could not use are refused" {
+                do!
+                    live
+                        (fun l ->
+                            task {
+                                match!
+                                    Eff.run
+                                        l.Env
+                                        (Kernel.decode l.Kernel "notes" (Value.Inline(Json.String "a `b`")) None)
+                                with
+                                | Ok _ -> ()
+                                | Error e -> failtest $"{e}"
+
+                                let! fine = l.Check "// intent: use the text\nconst n: number = notes.length"
+                                Expect.isEmpty fine "a string"
+                                let! wrong = l.Check "const n: number = notes"
+                                Expect.equal (wrong |> List.map (fun d -> d.Code)) [ "TS2322" ] "not a number"
+                                let! ran = l.Run("notes.split(\"`\").length", check = true)
+                                completed ran |> ignore
+
+                                // Reserved words, the context's own globals and the bridge's global.
+                                for name in [ "class"; "await"; "eval"; "console"; "Out"; "JSON"; "undefined"; g ] do
+                                    match!
+                                        Eff.run
+                                            l.Env
+                                            (Kernel.decode l.Kernel name (Value.Inline(Json.String "x")) None)
+                                    with
+                                    | Error(KernelFailure.Refused(KernelError.InvalidName refused)) ->
+                                        Expect.equal refused name "the name"
+                                    | other -> failtest $"{name}: {other}"
+
+                                let! still = l.Run "console.log(JSON.stringify(Object.keys(Out)))"
+                                completed still |> ignore
+                                Expect.stringContains still.Output.Text "[" "console and Out still work"
+                            })
+                        ()
+            }
+
             testTask "the prompt's examples type-check against the core bridge" {
                 do!
                     live
                         (fun l ->
                             task {
+                                // The examples use texts the cell tool binds (T140), bound here the same way.
+                                for name in [ "notes"; "message" ] do
+                                    match!
+                                        Eff.run
+                                            l.Env
+                                            (Kernel.decode l.Kernel name (Value.Inline(Json.String "text")) None)
+                                    with
+                                    | Ok _ -> ()
+                                    | Error e -> failtest $"{name}: {e}"
+
                                 for example in BunTs.promptPack.Examples do
                                     let! diagnostics = l.Check example.Code
                                     Expect.isEmpty (diagnostics |> List.map string) example.Title

@@ -58,6 +58,14 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const CELL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 /** Names of the global that are the kernel's own, not host bindings. */
 const RESERVED = new Set(["finish", "activity"]);
+/** Words a cell cannot use as a variable's name (ECMAScript's reserved words, strict mode's and TypeScript's). */
+const RESERVED_WORDS = new Set(
+  (
+    "await break case catch class const continue debugger default delete do else enum export extends false finally for function if import in " +
+    "instanceof new null return super switch this throw true try typeof var void while with yield let static implements interface package " +
+    "private protected public arguments eval"
+  ).split(" "),
+);
 
 /** How the kernel process was started (its command line). */
 export interface KernelOptions {
@@ -105,6 +113,12 @@ function isErrorLike(e: unknown): e is { name?: unknown; message?: unknown; stac
   return typeof e === "object" && e !== null && "message" in e;
 }
 
+/** The type the checker gives a value the host bound without declaring one. */
+function declaredType(value: unknown): string {
+  if (value === null) return "null";
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? typeof value : "any";
+}
+
 export class Kernel {
   private readonly context: vm.Context;
   private readonly transpiler = new Bun.Transpiler({ loader: "tsx", replMode: true, macro: false } as unknown as Bun.TranspilerOptions);
@@ -113,6 +127,8 @@ export class Kernel {
   private readonly byGraph = new Map<ModuleGraphLike, Cell>();
   private readonly realm: values.Realm;
   private readonly outputs: Record<string, unknown>;
+  /** The context's own globals (ECMAScript's, the kernel's and `Out`): `value/decode` never replaces them. */
+  private readonly builtins: Set<string>;
   private readonly ContextError: ErrorConstructor;
   private active: Cell | undefined;
   private setup: KernelSetup | undefined;
@@ -131,6 +147,7 @@ export class Kernel {
     this.ContextError = vm.runInContext("Error", this.context);
     this.outputs = this.realm.object();
     this.context.Out = this.outputs;
+    this.builtins = new Set([...Object.getOwnPropertyNames(vm.runInContext("globalThis", this.context)), ...Object.keys(this.context)]);
   }
 
   // ---- Handshake ---------------------------------------------------------------------------------
@@ -459,10 +476,17 @@ export class Kernel {
     }
   }
 
+  /** `value/decode`: binds a value to a top-level variable, which later cells (and their checks) see. */
   decodeValue(params: DecodeParams): ValueInfo {
-    if (!IDENTIFIER.test(params.name) || params.name === this.setup?.global) throw failure({ kind: "invalidName", name: params.name }, `invalid name ${params.name}`);
+    const name = params.name;
+    // A name a cell could not write, or one of the context's own (the bridge's global, `Out`,
+    // `console`, …): replacing those would break every later cell.
+    if (!IDENTIFIER.test(name) || RESERVED_WORDS.has(name) || this.builtins.has(name) || name === this.setup?.global) {
+      throw failure({ kind: "invalidName", name }, `invalid name ${name}`);
+    }
     const value = values.decode(this.realm, params.value);
-    this.context[params.name] = value;
+    this.context[name] = value;
+    if (this.checker instanceof Checker) this.checker.bind(name, params.type ?? declaredType(value));
     return values.info(value, this.limits.preview);
   }
 

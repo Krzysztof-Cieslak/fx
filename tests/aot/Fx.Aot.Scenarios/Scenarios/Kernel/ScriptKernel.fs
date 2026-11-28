@@ -89,6 +89,26 @@ let private callPattern =
 let private bindPattern = Regex($"^(env|out)\\s+({identifier})\\s*=\\s*(\\S+)$")
 let private namePattern = Regex($"^{identifier}$")
 
+/// The words statements start with: a variable of that name could not be read (`value/decode` refuses
+/// them, as a language's reserved words).
+let private keywords =
+    [
+        "let"
+        "value"
+        "print"
+        "call"
+        "finish"
+        "throw"
+        "sleep"
+        "loop"
+        "spin"
+        "later"
+        "activity"
+        "env"
+        "stray"
+        "out"
+    ]
+
 let private rest (line: string) (word: string) = line.Substring(word.Length).TrimStart()
 
 /// Parses a cell: its statements with their 1-based lines, or the first syntax error.
@@ -712,7 +732,14 @@ type Kernel(stray: string -> unit) =
             task {
                 do! unfrozen ()
 
-                if not (namePattern.IsMatch p.Name) then
+                let bridge = setup |> Option.map _.Global
+
+                // The bridge's global stays the bridge's; a statement's word cannot be read as a name.
+                if
+                    not (namePattern.IsMatch p.Name)
+                    || bridge = Some p.Name
+                    || List.contains p.Name keywords
+                then
                     return Error(KernelError.InvalidName p.Name)
                 else
                     lock gate (fun () -> variables[p.Name] <- p.Value)
