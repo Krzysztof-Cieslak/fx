@@ -70,6 +70,18 @@ declare namespace fx {
     write(path: string, text: string): Promise<Written>;
   };
 
+  /** Searches of the workspace that skip what .gitignore ignores and hidden files, as ripgrep does. */
+  const repo: {
+    /** Lists the workspace's files (recursively, in name order, directories after the files beside them), skipping what .gitignore ignores, hidden files and excluded ones. */
+    files(options?: FilesOptions): Promise<RepoFiles>;
+    /**
+     * Searches the workspace's files for lines matching a regular expression (ripgrep's syntax: no backreferences or lookaround), skipping what .gitignore ignores, hidden files, binary files and excluded ones. Matches are one-line ranges fs.editRange takes; files counts every file's matching lines, also past max.
+     *
+     * @param pattern A regular expression, or text with options.literal. Non-empty.
+     */
+    grep(pattern: string, options?: GrepOptions): Promise<GrepResult>;
+  };
+
   /** Commands in the workspace's shell. */
   const shell: {
     /**
@@ -239,6 +251,127 @@ declare namespace fx {
     end: number;
   }
 
+  /** Which files to list. */
+  interface FilesOptions {
+    /** The directory searched, relative to the workspace; the workspace by default. */
+    path?: string;
+    /**
+     * Globs a file's path must match (any of them), as ripgrep's -g: *.fs, src/**, {a,b}; one starting with ! excludes.
+     *
+     * @default []
+     */
+    glob?: string[];
+    /**
+     * Also search hidden files and directories (names starting with .); .git never.
+     *
+     * @default false
+     */
+    hidden?: boolean;
+    /**
+     * At most this many files (1000 by default).
+     * Integer, from 1 to 10000.
+     *
+     * @default 1000
+     */
+    max?: number;
+  }
+
+  interface GrepFile {
+    path: string;
+    /**
+     * Its lines that matched.
+     * Integer.
+     */
+    matches: number;
+  }
+
+  /** A line that matched: a one-line range that fs.editRange takes. */
+  interface GrepMatch {
+    path: string;
+    /**
+     * The first line, 1-based.
+     * Integer, at least 1.
+     */
+    start: number;
+    /**
+     * The last line, inclusive; start - 1 when there are none.
+     * Integer, at least 0.
+     */
+    end: number;
+    /** The line, with its ending. */
+    text: string;
+    /**
+     * SHA-256 of the content: sha256:<hex>.
+     * Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    digest: string;
+    /**
+     * The whole file's line count.
+     * Integer, at least 0.
+     */
+    lines: number;
+    /**
+     * Where on the line the match starts, 1-based.
+     * Integer, at least 1.
+     */
+    column: number;
+    /** With options.context, the lines around the match. */
+    context?: FileRange;
+  }
+
+  /** How to search. */
+  interface GrepOptions {
+    /** The directory searched, relative to the workspace; the workspace by default. */
+    path?: string;
+    /**
+     * Globs a file's path must match (any of them), as ripgrep's -g: *.fs, src/**, {a,b}; one starting with ! excludes.
+     *
+     * @default []
+     */
+    glob?: string[];
+    /** @default false */
+    ignoreCase?: boolean;
+    /**
+     * The pattern is plain text, not a regular expression (as ripgrep's -F).
+     *
+     * @default false
+     */
+    literal?: boolean;
+    /**
+     * Lines before and after each match, given as the match's context range.
+     * Integer, from 0 to 20.
+     *
+     * @default 0
+     */
+    context?: number;
+    /**
+     * At most this many matches (100 by default); files still counts them all.
+     * Integer, from 1 to 1000.
+     *
+     * @default 100
+     */
+    max?: number;
+    /**
+     * Also search hidden files and directories (names starting with .); .git never.
+     *
+     * @default false
+     */
+    hidden?: boolean;
+  }
+
+  /** What a search found. */
+  interface GrepResult {
+    pattern: string;
+    /** The first matches, in file and line order. */
+    matches: GrepMatch[];
+    /** Every file with matches and how many, also past max. */
+    files: GrepFile[];
+    /** More lines matched than matches holds. */
+    truncated: boolean;
+    /** More files matched than files holds (1000). */
+    filesTruncated: boolean;
+  }
+
   /** Where all of a text that was cut is: a blob of the environment's blob store. */
   interface Overflow {
     /**
@@ -259,6 +392,14 @@ declare namespace fx {
   interface ReadOptions {
     /** The first and the last line to read, 1-based and inclusive; lines past the end are left out. */
     lines?: [number, number];
+  }
+
+  /** The files of the workspace a listing found. */
+  interface RepoFiles {
+    /** Relative to the workspace, with /. */
+    files: string[];
+    /** More files matched than files holds. */
+    truncated: boolean;
   }
 
   /** How to run a command. */

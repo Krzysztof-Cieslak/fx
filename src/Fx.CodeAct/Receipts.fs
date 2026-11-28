@@ -70,6 +70,10 @@ type CellValue =
     | Edited of Edited
     /// A handle of the host (T201b): its type and preview, by reference (`Piece.Ref`), never its id.
     | Handle of typeRef: TypeRef * preview: Preview
+    /// What `repo.grep` returned: its matches as ripgrep prints them, and how to edit them.
+    | Grep of GrepResult
+    /// What `repo.files` returned: the paths.
+    | Files of RepoFiles
 
     override this.ToString() =
         match this with
@@ -80,6 +84,8 @@ type CellValue =
         | Written files -> $"written ({files.Length} files)"
         | Edited edited -> $"edited {edited.Path}"
         | Handle(typeRef, _) -> $"handle ({typeRef})"
+        | Grep result -> $"grep {result.Pattern} ({result.Matches.Length} matches)"
+        | Files files -> $"files ({files.Files.Length})"
 
 [<RequireQualifiedAccess>]
 module CellValue =
@@ -104,6 +110,8 @@ module CellValue =
             | Some r when r.Binding = "fs.patch" -> decoded (Codec.list CoreBindings.Codecs.written) CellValue.Written
             | Some r when r.Binding = "fs.edit" || r.Binding = "fs.editRange" ->
                 decoded CoreBindings.Codecs.edited CellValue.Edited
+            | Some r when r.Binding = "repo.grep" -> decoded CoreBindings.Codecs.grepResult CellValue.Grep
+            | Some r when r.Binding = "repo.files" -> decoded CoreBindings.Codecs.repoFiles CellValue.Files
             | _ -> CellValue.Preview info
         | None -> CellValue.Preview info
 
@@ -473,6 +481,56 @@ module Receipts =
 
         $"[{matchCount result}, each checked against its file: `edit` one with its line as `old`; in a cell, `{g}.shell.run` gives them as `matches`, ranges `{g}.fs.editRange` replaces.]"
 
+    /// What a search found, in a line: `3 matches in 2 files`, or `the first 100 of 250 matches in 12
+    /// files` when `max` cut them.
+    let private grepSummary (result: GrepResult) : string =
+        let total = result.Files |> List.sumBy _.Matches
+        let atLeast = if result.FilesTruncated then "at least " else ""
+
+        let files =
+            if result.Files.Length = 1 then
+                "1 file"
+            else
+                $"{atLeast}{result.Files.Length} files"
+
+        let pattern = $" for {Json.quote result.Pattern}"
+
+        if result.Files.IsEmpty then
+            $"no matches{pattern}"
+        elif result.Truncated then
+            $"the first {result.Matches.Length} of {atLeast}{total} matches in {files}{pattern}"
+        elif total = 1 then
+            $"1 match{pattern}"
+        else
+            $"{total} matches in {files}{pattern}"
+
+    /// A search's matches as ripgrep prints them: `path:line: text`; with context, its lines as
+    /// `path-line- text`, and `--` between groups.
+    let grepLines (result: GrepResult) : string =
+        let line (path: string) (number: int) (sep: char) (text: string) =
+            $"{path}{sep}{number}{sep} {text.TrimEnd([| '\r'; '\n' |])}"
+
+        let shown =
+            result.Matches
+            |> List.map (fun m ->
+                match m.Context with
+                | None -> line m.Range.Path m.Range.Start ':' m.Range.Text
+                | Some context ->
+                    context.Text.Split('\n')
+                    |> Array.truncate (context.End - context.Start + 1)
+                    |> Array.mapi (fun i text ->
+                        let number = context.Start + i
+                        line context.Path number (if number = m.Range.Start then ':' else '-') text)
+                    |> String.concat "\n")
+
+        let withContext = result.Matches |> List.exists (fun m -> m.Context.IsSome)
+        String.concat (if withContext then "\n--\n" else "\n") shown
+
+    /// How to edit what a cell's search found, whose value is `label`.
+    let private grepEdit (label: string) : string =
+        let g = Fx.Product.kernelGlobal
+        $"[Each match is a line checked against its file: `{g}.fs.editRange({label}.matches[0], text)` replaces the first one's line.]"
+
     /// A cell's, whose value is `Out[cell]`.
     let private cellMatches (label: string) (result: RunResult) : string =
         let g = Fx.Product.kernelGlobal
@@ -505,6 +563,8 @@ module Receipts =
         match value with
         | CellValue.Text text -> Some text
         | CellValue.Ran result -> Some(snd (ranParts result))
+        | CellValue.Grep result -> Some(grepLines result)
+        | CellValue.Files files -> Some(String.concat "\n" files.Files)
         | _ -> None
 
     /// `text` cut to `maxChars` (as `bounded`), the marker naming where all of it is when it was stored.
@@ -588,6 +648,30 @@ module Receipts =
             $"Value of {label} (Written): {written}"
         | CellValue.Edited edited -> $"Value of {label} (Edited): {edited.Path}, {edited.Lines} lines, {edited.Digest}"
         | CellValue.Handle(typeRef, _) -> $"Value of {label} ({typeRef}, a handle: pass it on as it is):"
+        | CellValue.Grep result ->
+            lines
+                [
+                    $"Value of {label} (GrepResult): {grepSummary result}"
+                    (if result.Matches.IsEmpty then
+                         ""
+                     else
+                         boundedStored outputChars stored (grepLines result))
+                    (if result.Matches.IsEmpty then "" else grepEdit label)
+                ]
+        | CellValue.Files files ->
+            let count =
+                if files.Truncated then
+                    $"the first {files.Files.Length} files (more were found)"
+                elif files.Files.Length = 1 then
+                    "1 file"
+                else
+                    $"{files.Files.Length} files"
+
+            lines
+                [
+                    $"Value of {label} (RepoFiles): {count}"
+                    boundedStored outputChars stored (String.concat "\n" files.Files)
+                ]
 
     /// The most characters of a host call's first argument a receipt names it by.
     [<Literal>]

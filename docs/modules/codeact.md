@@ -362,7 +362,11 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
     `codeact.read.maxLines` at most, then how to read on),
     `fs.edit`'s and `fs.editRange`'s `Edited` as `edit` shows it (what changed, then each fresh range's
     lines as a `Piece.File`, up to `codeact.read.maxLines` lines in all), `fs.write` and `fs.patch` as
-    the files written;
+    the files written; `repo.grep`'s `GrepResult` (T202) as ripgrep prints it: a line of what it found
+    (``the first 100 of 250 matches in 12 files for "retry"``), the matches as `path:line: text`
+    (context lines `path-line- text`, groups apart with `--`), cut as output is, and a last line on
+    editing one with `fx.fs.editRange(Out["…"].matches[0], text)`; `repo.files`'s `RepoFiles` as
+    its count and the paths, one a line;
   - anything else as the kernel's preview, within `values.previewLimits` (4000 characters, 50 items, 4
     levels, 1000 characters per string).
 - **A cell whose texts could not be bound** (T140): which text and why (`invalidName`, or over

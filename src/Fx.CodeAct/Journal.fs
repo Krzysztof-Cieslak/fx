@@ -593,6 +593,8 @@ module StepJournal =
             "fs.read"
             "fs.list"
             "fs.stat"
+            "repo.grep"
+            "repo.files"
             "recall"
             "jobs.list"
             "jobs.status"
