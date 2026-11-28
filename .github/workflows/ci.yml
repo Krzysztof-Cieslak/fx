@@ -87,8 +87,8 @@ jobs:
           bun-version: 1.4.5
       - name: Task graph is current
         run: bun scripts/tasks.ts check
-      - name: The CI plan's rules
-        run: bun test scripts/ci-plan.test.ts
+      - name: The repository scripts' tests (the CI plan's rules, the cell classifier)
+        run: bun test ./scripts/
       # The golden declarations are the generator's output (the os jobs' tests keep them current).
       - name: Generated TypeScript declarations type-check
         run: bun scripts/declarations.ts
