@@ -13,6 +13,16 @@ You act by writing TypeScript cells. They run one at a time in a persistent kern
 ```ts
 /** The host bridge: what cells can call, and the types it uses. */
 declare namespace fx {
+  /** The environment's blob store: all of output that was cut. */
+  const blobs: {
+    /**
+     * Reads the text of a blob (all of an output that was cut, as an overflow names it) from a character offset, bounded. Pass `next` as `from` to read on.
+     *
+     * @param hash The blob's hash (sha256:…), from an overflow. SHA-256 of the content: sha256:<hex>. Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    read(hash: string, options?: BlobReadOptions): Promise<BlobText>;
+  };
+
   /** Ends the turn with a result the host checks. If it is rejected, this throws with the reasons (code finishRejected): fix the result and call it again. */
   function finish(result: TurnResult): Promise<null>;
 
@@ -69,6 +79,39 @@ declare namespace fx {
      */
     run(command: string, options?: RunOptions): Promise<RunResult>;
   };
+
+  /** Which part of a blob's text to read. */
+  interface BlobReadOptions {
+    /**
+     * A character offset (a next you got); 0 by default.
+     * Integer, at least 0.
+     */
+    from?: number;
+    /**
+     * At most this many characters.
+     * Integer, at least 1.
+     */
+    maxChars?: number;
+  }
+
+  /** Text of a blob from a character offset. */
+  interface BlobText {
+    /**
+     * SHA-256 of the content: sha256:<hex>.
+     * Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    hash: string;
+    /** Integer, at least 0. */
+    from: number;
+    /**
+     * The offset after text: pass it as from to read on.
+     * Integer, at least 0.
+     */
+    next: number;
+    /** Integer, at least 0. */
+    totalChars: number;
+    text: string;
+  }
 
   /** A file as an edit left it. */
   interface Edited {
