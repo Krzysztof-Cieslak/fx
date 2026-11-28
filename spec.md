@@ -207,6 +207,7 @@ type TurnResult =
   - The control path cancels work in flight at once and goes before queued commands.
 - **Durable pending requests:** decision cards, grant requests, workflow gates, forms, auth flows, installs — re-offered to capable clients, expiry policy.
 - **Reconnect:** `subscribe(id, afterSeq)` replays then goes live; large gaps get snapshot + tail.
+- **Background jobs:** a cell starts a command that runs on while cells and turns go on (`fx.jobs`, §6.5). When a job ends on its own the session gets a `JobFinished` input (the job, how it ended, its last lines): a running turn sees it between steps, as a steer; a turn that ended `Waiting` on jobs resumes once they all ended (a notice that came while the turn ended counts). Jobs live in the host: a host that starts tells sessions waiting for jobs that they were lost, and the next turn of every session is told of its lost ones. Details: `docs/modules/codeact.md`, `docs/modules/sessions.md`.
 - **Crash recovery:** step results journaled; **in-flight tool calls become `OutcomeUnknown` → the run pauses and opens a session-scoped decision with evidence**; nothing auto-resumes. `fx.recall(callId)` / `Out[n]` restore values. A call's start is journaled before it acts and its receipt is its end; the decision's answer (completed, failed, run again, inspect) becomes the call's receipt. Details: `docs/modules/codeact.md`.
 - **Prompt = pure render:**
 
@@ -303,13 +304,14 @@ and InterpreterCaps =
 
 ### 6.5 Kernel behaviour (all interpreters)
 
-- **Host bridge:** generated `fx` module. Env-side: `fx.shell`, `fx.fs`, `fx.repo`, `fx.blobs`. Host-side (brokered): `fx.ledger`, `fx.grants` (request only), `fx.llm`, `fx.judge`, `fx.agents`, `fx.runs`, `fx.workflow`, `fx.goal`, `fx.ask`, `fx.context`, `fx.history`, `fx.envs`, `fx.recall`.
+- **Host bridge:** generated `fx` module. Env-side: `fx.shell`, `fx.fs`, `fx.jobs`, `fx.repo`, `fx.blobs`. Host-side (brokered): `fx.ledger`, `fx.grants` (request only), `fx.llm`, `fx.judge`, `fx.agents`, `fx.runs`, `fx.workflow`, `fx.goal`, `fx.ask`, `fx.context`, `fx.history`, `fx.envs`, `fx.recall`.
 - **Every model-bound payload passes the model-egress hooks.**
 - **Finishing:** validated by codecs + `Ensure`; evidence from values, never retyped.
 - **Activity:** semantic events (Read, Refs, Edit, Run, Test, Review, Agent, Applies D-n), best-effort wrappers, per-cell diff, content exclusions.
 - **Durability:** snapshot if supported; otherwise Jupyter semantics + journal.
 - **Lifetime:** one kernel per session, kept across cells and turns; it ends only when it is killed (an interrupt's escalation), dies, or the host stops. Every restart is journaled with how the kernel before it ended, and the model and people are told that names from earlier cells are gone, and why.
-- **Cell timeout:** counts only the cell's own time: kernels stop its clock while its host calls are in flight, so a person's wait for a grant never times a cell out; the host bounds what those calls do (a cell's commands share its timeout, measured after the grants guard). An interrupt still stops a cell at once. A cell that stopped early reports the names it declared but never assigned, and the calls it stopped while they waited for approval.
+- **Background jobs:** `fx.jobs.start(command, {name, cwd, stdin})` runs a command line in the environment's shell, sandboxed and granted as `fx.shell.run` is, and returns at once with the job (`j1`, `j2`, … in the session); `list`, `status`, `output(id, {from, maxChars})` (stdout and stderr as they arrived, from a byte offset, bounded), `wait(id, {timeoutMs})` and `kill`. Jobs outlive cells and turns, not the host. Long builds, test runs and CI watches run as jobs, and a turn that needs one to end ends `Waiting` on it (§5).
+- **Cell timeout:** counts only the cell's own time: kernels stop its clock while its host calls are in flight, so a person's wait for a grant never times a cell out; the host bounds what those calls do (a cell's commands and its waits for jobs share its timeout, measured after the grants guard). An interrupt still stops a cell at once. A cell that stopped early reports the names it declared but never assigned, and the calls it stopped while they waited for approval.
 - **Windows shell:** `fx.shell.run` defaults to **PowerShell 7** (`pwsh`), falling back to Windows PowerShell; configurable (variant).
 
 ### 6.6 Values and references

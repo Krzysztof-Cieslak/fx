@@ -136,13 +136,17 @@ In this order; any expected failure is an `Error` with every line, and what star
     is off; profiles loaded from the blob store, hands per turn, the catalog, the step journal
     `steps/<session>` on the same store, the blob store for cells' values) behind `SessionHost` (`Questions.kinds`, with crash recovery's `decision.outcomeUnknown`;
     `sessions.*` slots), profiles bound with `ProfileBinder.ofVariants` over the host's layers (with the
-    extensions' versions and the lockfile's hash); then every indexed session's actor starts, so
-    recovery runs (spec §5; [codeact.md](codeact.md#crash-recovery-spec-5-65-121-191)): a turn that
-    stopped in the middle of a call waits for a person's decision about it, one that stopped elsewhere
-    is abandoned; timers are armed again.
+    extensions' versions and the lockfile's hash); the environments' background jobs (`LiveJobs`, T143:
+    every turn's hands get them, and a job that ends on its own sends its session a `NotifyJob`); then
+    every indexed session's actor starts, so recovery runs (spec §5;
+    [codeact.md](codeact.md#crash-recovery-spec-5-65-121-191)): a turn that stopped in the middle of a
+    call waits for a person's decision about it, one that stopped elsewhere is abandoned; timers are
+    armed again; a session that waits for jobs is told they were lost (`JobNotices.lostAll`: no job
+    survives its host), so it goes on.
 
-`Host.stop` undoes it in reverse: sessions (turns cancelled), kernels, environments (envds stop, leases
-stay), the installer, grants, extensions, the stores, the lock.
+`Host.stop` undoes it in reverse: sessions (turns cancelled), background jobs (killed, their sessions not
+told), kernels, environments (envds stop, leases stay), the installer, grants, extensions, the stores, the
+lock.
 
 `HostOptions` carries what the host reads the world through. `Live.options` builds the live ones: the
 OS keyring (`LocalKeyring.create` with `LocalHostFacts.read`), private files in `credentials/`
@@ -330,7 +334,11 @@ A host in the process, on the current directory (spec §3 embedded mode, §19.5)
    question, the call, what it printed, and its options (`completed`, `failed`, `rerun`, `inspect`); without a terminal (or with an empty
    answer) the run ends with an error saying what waits, and the decision stays open.
 4. The prompt is steered in; activity lines go to standard error (`◇ cell  <intent>`, `◆ edit`, `✗`
-   for failures, `◇ compacted` when the conversation's oldest part was summarized); when the turn ends, the result card goes to standard output, or with `--json` one
+   for failures, `◇ compacted` when the conversation's oldest part was summarized, `  ▸ job j1 started
+   …` and `▸ job j1 ended  …` for background jobs). A turn that ends waiting for jobs (`… Waiting
+   <note>`) does not end the run: the jobs die with the host, so the run goes on until the session's
+   next turn, which their notices start, ends without waiting (Ctrl+C while it waits ends the run,
+   interrupted). When the turn ends, the result card goes to standard output, or with `--json` one
    object: `{"session", "turn", "ending", "questions"}` (`Headless.outcomeCodec`; `ending` is the
    session's `TurnEnd` JSON).
 5. Ctrl+C interrupts the turn on the control path; a second Ctrl+C exits (130).
