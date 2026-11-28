@@ -146,6 +146,24 @@ module Arg =
                     | None -> Error [ Issue.at [ PathSegment.Key name ] "is required" ]
         }
 
+    /// A parameter the cell must pass, taken as the value it is: inline data, or a reference (a blob or a
+    /// handle) as it came (T201c: what `context.pin` keeps in view).
+    let value (name: string) (description: string) : Arg<Value> =
+        {
+            Param =
+                {
+                    Name = name
+                    Description = describe description
+                    Schema = Codec.json.Schema
+                    Optional = false
+                }
+            Decode =
+                fun value ->
+                    match value with
+                    | Some value -> Ok value
+                    | None -> Error [ Issue.at [ PathSegment.Key name ] "is required" ]
+        }
+
     /// An optional parameter with a default.
     let withDefault (name: string) (description: string) (fallback: 'T) (codec: Codec<'T>) : Arg<'T> =
         let arg = optional name description codec
@@ -276,6 +294,27 @@ module HostBinding =
                                 let! handle = HandleTable.issue kind.Table kind.Type preview target
                                 return Ok handle
                         }
+                    | issues -> EffResult.error (HostCallError.InvalidArguments issues)
+        }
+
+    /// A binding with three parameters.
+    let create3
+        (path: string)
+        (description: string)
+        (a: Arg<'A>, b: Arg<'B>, c: Arg<'C>)
+        (returns: Codec<'O>)
+        (run: 'A * 'B * 'C -> Eff<'R, Result<'O, HostCallError>>)
+        : HostBinding<'R> =
+        {
+            Decl = decl path description [ a.Param; b.Param; c.Param ] returns
+            Invoke =
+                fun args ->
+                    let first = a.Decode(List.tryItem 0 args)
+                    let second = b.Decode(List.tryItem 1 args)
+                    let third = c.Decode(List.tryItem 2 args)
+
+                    match tooMany 3 args @ issuesOf first @ issuesOf second @ issuesOf third with
+                    | [] -> answer returns (run (value first, value second, value third))
                     | issues -> EffResult.error (HostCallError.InvalidArguments issues)
         }
 

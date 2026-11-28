@@ -149,6 +149,12 @@ type CodeAct<'R, 'K
     let ranges =
         ConcurrentDictionary<string, HandleTable<string>>(StringComparer.Ordinal)
 
+    let contexts = ConcurrentDictionary<string, ContextAsks>(StringComparer.Ordinal)
+
+    /// What a session's cells asked to pin and unpin, for its turn to record (T201c).
+    let contextOf (session: string) : ContextAsks =
+        contexts.GetOrAdd(session, (fun _ -> ContextAsks()))
+
     /// A session's `HistoryRange` handles (T201b): one table per session, so they resolve only there.
     let rangesOf (session: string) : HandleKind<string> =
         HistoryBindings.rangeKind (ranges.GetOrAdd(session, (fun _ -> HandleTable<string>())))
@@ -278,7 +284,7 @@ type CodeAct<'R, 'K
                     id,
                     watchOf writer,
                     journal,
-                    HistoryBindings.groups @ JobBindings.groups,
+                    HistoryBindings.groups @ ContextBindings.groups @ JobBindings.groups,
                     fun settings ->
                         [
                             Recall.binding (journalOf id) config.Blobs
@@ -290,6 +296,15 @@ type CodeAct<'R, 'K
                                 settings.Exclusions
                                 settings.OutputChars
                             HistoryBindings.openRange (transcriptOf id) (rangesOf id) settings.Exclusions
+                            ContextBindings.pin (contextOf id) settings.OutputChars
+                            ContextBindings.pinFile (contextOf id) settings
+                            ContextBindings.unpin (contextOf id) (transcriptOf id)
+                            ContextBindings.pins (contextOf id) (transcriptOf id) (fun path lines ->
+                                ContextBindings.readPinned settings settings.OutputChars path lines
+                                |> Eff.map (fun read ->
+                                    match read with
+                                    | Ok view -> Some view.Text.Length
+                                    | Error _ -> None))
                         ]
                         @ JobBindings.all (jobsOf id) writer settings
                 )
@@ -893,6 +908,7 @@ type CodeAct<'R, 'K
                 let asks = asksOf session
                 asks.Mode <- settings.Compaction.Mode
                 asks.TakeCompact() |> ignore
+                (contextOf session).Take() |> ignore
 
                 // The session's jobs: their numbers go on from the journal (T143).
                 let sessionJobs = jobsOf session
@@ -1084,9 +1100,25 @@ type CodeAct<'R, 'K
                         let cfg = PromptSettings.config settings.Prompt sections exclusions caching
                         let! now = Clock.now
 
+                        // Live-pinned files as they are now, read through the hands (T201c).
+                        let! files =
+                            Eff.provide
+                                hands.Env
+                                (eff {
+                                    let views = ResizeArray<FileView>()
+
+                                    for path, lines in Views.pinnedFiles transcript do
+                                        match! ContextBindings.readPinned core settings.OutputChars path lines with
+                                        | Ok view -> views.Add view
+                                        | Error _ -> ()
+
+                                    return List.ofSeq views
+                                })
+
                         let live =
                             { Live.none with
                                 Now = Some now.UnixMicroseconds
+                                Files = files
                                 Notes = state.Notes
                             }
 
@@ -1275,6 +1307,10 @@ type CodeAct<'R, 'K
                                                             Approvals = executed.Approvals
                                                             Jobs = executed.Jobs
                                                         })
+
+                                            // What the cell asked to pin or unpin, after its receipt (T201c).
+                                            for i, event in List.indexed ((contextOf session).Take()) do
+                                                do! record $"step/{step}/receipt/{index + 1}/context/{i + 1}" event
 
                                             match finished with
                                             | Some result -> state.Outcome <- Some(Ok result)

@@ -27,6 +27,7 @@
     <Compile Include="Kernels.fs" />
     <Compile Include="Recall.fs" />
     <Compile Include="History.fs" />
+    <Compile Include="Context.fs" />
     <Compile Include="Hybrid.fs" />
     <Compile Include="CodeAct.fs" />
     <Compile Include="SandboxGuard.fs" />
