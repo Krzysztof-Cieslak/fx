@@ -97,6 +97,39 @@ let tests =
                     "options that do not decode: the binding refuses them"
             }
 
+            test "reads under the blob store's directory need no grant; writes there do (T201a)" {
+                let blobs = "/home/me/.fx/envd/abc/envd/blobs"
+                let place = unix |> Workplace.readable [ blobs ]
+                let file = blobs + "/sha256/ab/cdef"
+
+                Expect.equal (show (needsOf place "fs.read" [ Json.String file ])) [] "fs.read of a blob's file"
+
+                Expect.equal
+                    (show (needsOf unix "fs.read" [ Json.String file ]))
+                    [ "fs.read " + file ]
+                    "without the directory, a read outside"
+
+                Expect.equal
+                    (show (needsOf place "fs.read" [ Json.String "/home/me/.fx/envd/abc/envd/blobs2/x" ]))
+                    [ "fs.read /home/me/.fx/envd/abc/envd/blobs2/x" ]
+                    "a sibling with the same prefix is outside"
+
+                Expect.equal
+                    (confined place ("grep -n needle " + file))
+                    [ $"shell.exec grep -n needle {file} (listed) (in workspace)" ]
+                    "a listed search of it runs"
+
+                Expect.equal
+                    (confined place ("sed -n 1,5p < " + file))
+                    [ "shell.exec sed -n 1,5p (in workspace)" ]
+                    "reading it as input"
+
+                Expect.equal
+                    (show (needsOf place "fs.write" [ Json.String file; Json.String "x" ]))
+                    [ "fs.write " + file ]
+                    "a write there is a write outside the workspace"
+            }
+
             test
                 "each simple command of a line is a shell.exec; listed ones written plainly in the workspace need no person" {
                 Expect.equal (run unix "ls -la") [ "shell.exec ls -la (listed)" ] "listed"

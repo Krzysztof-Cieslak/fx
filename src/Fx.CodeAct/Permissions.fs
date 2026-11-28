@@ -334,6 +334,10 @@ type Workplace =
         Workspace: string
         Os: Os
         Shell: ShellDialect
+        /// Directories outside the workspace that reads need no grant for (absolute, in the
+        /// environment's syntax): the environment's blob store, whose files hold output the bindings
+        /// cut (T201a). Writes there are still writes outside the workspace.
+        Readable: string list
     }
 
     override this.ToString() =
@@ -350,7 +354,11 @@ module Workplace =
                     ShellDialect.PowerShell
                 else
                     ShellDialect.Sh
+            Readable = []
         }
+
+    /// The same workplace where reads under `dirs` need no grant.
+    let readable (dirs: string list) (place: Workplace) : Workplace = { place with Readable = dirs }
 
 /// What a host call needs from the grants log: one action on one canonical resource.
 type GrantNeed =
@@ -546,11 +554,31 @@ module Permissions =
                     }
                 ]
 
-    /// What a read of a path needs: nothing in the workspace.
+    /// Whether a path outside the workspace (as `locate` gives it) is in one of the workplace's
+    /// readable directories, compared by the case rules of its OS.
+    let isReadable (place: Workplace) (outside: string) : bool =
+        let comparison =
+            if place.Os = Os.Linux then
+                StringComparison.Ordinal
+            else
+                StringComparison.OrdinalIgnoreCase
+
+        place.Readable
+        |> List.exists (fun dir ->
+            match locate place place.Workspace dir with
+            | Location.Outside root ->
+                let root = root.TrimEnd '/'
+
+                String.Equals(outside, root, comparison)
+                || outside.StartsWith(root + "/", comparison)
+            | _ -> false)
+
+    /// What a read of a path needs: nothing in the workspace or a readable directory.
     let read (place: Workplace) (via: string) (path: string) : CallNeeds =
         match locate place place.Workspace path with
         | Location.Unnamed reason -> CallNeeds.Refused $"{path} cannot be named in a grant ({reason})"
         | Location.Inside _ -> CallNeeds.Needs []
+        | Location.Outside outside when isReadable place outside -> CallNeeds.Needs []
         | Location.Outside outside ->
             CallNeeds.Needs
                 [
@@ -631,11 +659,12 @@ module Permissions =
             if next.Length > MaxDirectories then None else Some next
         | _ -> None
 
-    /// Whether a path is out of a listed command's reach: outside the workspace, unnamed, or a file
-    /// content exclusions keep from models.
+    /// Whether a path is out of a listed command's reach: outside the workspace and its readable
+    /// directories, unnamed, or a file content exclusions keep from models.
     let private hidden (settings: GrantSettings) (place: Workplace) (cwd: string) (path: string) : bool =
         match locate place cwd path with
         | Location.Inside relative -> (Exclusions.test settings.Exclusions relative).IsSome
+        | Location.Outside outside when isReadable place outside -> false
         | _ -> true
 
     /// Whether an argument of a listed command may name something out of its reach.
