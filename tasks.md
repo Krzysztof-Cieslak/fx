@@ -25,14 +25,14 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 2:** T004 Spike: Kestrel/WS/SSE, T005 Spike: PTY, T006 Spike: SQLite, T007 Spike: keychains, T008 Spike: tree-sitter, T010 Spike: envd bootstrap, T101 Codecs + JSON, T103 Eff + capabilities
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
-- **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
+- **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T301 Ledger core, T504 Relay + Dialback
 - **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201a Values: blobs and output overflow, T510 First cloud env (E2B)
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T201b Values: handles and history, T203a Readable results, T205 Activity, diffs, undo, T206 Steering + compaction, T604 Memory, T605 MCP bridge
 - **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T139 Cells: large arguments, T141 Cells: outcomes that say why, T143 Background jobs, T201c Values: context pins, T203b Smart previews, T204a Anchored edits, T212 Run kernel, T213 Agents, T217 Eval harness
-- **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T204b Edit guard, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor, T608 Agent teams
-- **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
+- **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T202 Repo search, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor, T608 Agent teams
+- **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T204b Edit guard, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
 - **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
 - **Wave 14:** T133c TUI: Markdown, T134b Yolo approvals, T307 Runs panel (graph), T609 Desktop
 - **Wave 15:** T133b TUI: transcript layout
@@ -124,7 +124,7 @@ flowchart LR
     T201a["T201a Values: blobs and output overflow"]
     T201b["T201b Values: handles and history"]
     T201c["T201c Values: context pins"]
-    T202["T202 Repo navigation"]
+    T202["T202 Repo search"]
     T203a["T203a Readable results"]
     T203b["T203b Smart previews"]
     T204a["T204a Anchored edits"]
@@ -321,12 +321,11 @@ flowchart LR
   T126 --> T201a
   T201a --> T201b
   T201b --> T201c
-  T008 --> T202
   T111 --> T202
+  T204a --> T202
   T126 --> T203a
   T127 --> T203a
   T201a --> T203b
-  T202 --> T203b
   T203a --> T203b
   T203a --> T204a
   T201b --> T204b
@@ -427,15 +426,14 @@ flowchart LR
   T108 --> T605
   T127 --> T605
   T129b --> T606
-  T202 --> T607
   T211 --> T607
   T213 --> T608
   T508 --> T609
   classDef done fill:#c8e6c9,stroke:#2e7d32
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
-  class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T201a,T201b,T201c,T203a,T204a,T206 done
-  class T008,T132 inprogress
+  class T001,T002,T003,T004,T005,T006,T007,T008,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T201a,T201b,T201c,T203a,T204a,T206 done
+  class T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -453,7 +451,7 @@ flowchart LR
 | T005 | Spike: PTY | T003 | §6.5, §20 | done | PTY spawn/resize/read under AOT on Linux/macOS (forkpty) and Windows (ConPTY); PowerShell 7 launch verified. |
 | T006 | Spike: SQLite | T003 | §20 | done | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
 | T007 | Spike: keychains | T003 | §11.4 | done | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
-| T008 | Spike: tree-sitter | T003 | §6.7 | in-progress | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
+| T008 | Spike: tree-sitter | T003 | §6.7 | done | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. Works, not adopted: no evidence it helps and ~25 MB of grammars; code kept on the branch `spike/t008-tree-sitter`. Findings: [docs/spikes/tree-sitter.md](docs/spikes/tree-sitter.md). |
 | T009 | Spike: Bun kernel | T001 | §6.3 | done | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
 | T010 | Spike: envd bootstrap | T003 | §9.2 | todo | Upload + exec a native binary into a Docker container and talk to it over stdio JSON-RPC. |
 
@@ -528,9 +526,9 @@ flowchart LR
 | T201a | Values: blobs and output overflow | T117, T126 | §6.6 | done | `Value.Blob` in practice for output: a command's stream beyond `OutputChars`, a cell's printed output beyond `outputChars` (the kernel protocol's optional `overflowChars` and `output.whole`) and a string or command result its receipt cuts are stored whole in the environment's blob store, and the marker names where (a grep-able file under envd's store, `Overflow {hash, bytes, path?}`); reads there need no grant; `fx.blobs.read(hash, {from, maxChars})`; kernel conformance covers `whole`. Values as blobs in kernels and host-call arguments as blobs moved to T501. |
 | T201b | Values: handles and history | T201a | §6.6, §5 | done | `Value.Handle` in practice: bindings hand out and take back handles (`HandleKind`, `Arg.valueOrHandle`, `HostBinding.createHandle1`; ids from the hands' journaled `IIds`), kept handles journaled by reference and back in a new kernel while the host's table has them, `Piece.Ref` in receipts; `fx.history.list`, `fx.history.read` (an id or a `HistoryRange`) and `fx.history.open` read collapsed originals back (`Originals`). Handles inside data moved to T213. |
 | T201c | Values: context pins | T201b | §6.6, §5 | done | `fx.context.pin(name, value)`, `fx.context.pinFile(name, path, {lines})` (a live view: read through the hands before each call), `fx.context.unpin(name)` and `fx.context.pins()` (each pin's cost); the strategy records the asks as `Pinned`/`Unpinned` context events after the cell's receipt, the `pins` view shows them; the TUI shows pins as activity lines and `/context` lists them with their cost. Pins needed no `IContext` capability. |
-| T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. |
+| T202 | Repo search | T111, T204a | §6.7 | todo | `fx.repo.grep(pattern, {path, glob, ignoreCase, context, max})`: search by fx itself (ripgrep semantics, `.gitignore` respected), results always as `FileRange` matches `fx.fs.editRange` takes, bounded (a cap with counts per file), content exclusions and the sandbox applied by construction; works where the shell has no `rg` or `grep` (PowerShell). `fx.repo.files({glob, path})`: the repository's files, recursive, `.gitignore` respected. Outlines and symbols are out (T008: tree-sitter deferred); language-server navigation is T607's. |
 | T203a | Readable results | T126, T127 | §6.6, §6.7 | done | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
-| T203b | Smart previews | T201a, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
+| T203b | Smart previews | T201a, T203a | §6.7 | todo | Type-aware previews: full small files, head/tail with the line count for large files (no outlines: T008), head/tail+summary for logs, shape+samples for data; thresholds as variants. |
 | T204a | Anchored edits | T203a | §6.8 | done | `fx.fs.read(path, {lines})` returns a range; `fx.fs.edit(path, {old, new, all?} or a list)`, checked against the digest read, and `fx.fs.editRange(range, text)`, stale if the lines changed; both return fresh ranges. Hybrid's `edit` becomes a host call of it; grants, the sandbox guard, content exclusions and replay cover it. Dogfooding sessions stop defining their own replace helpers. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
 | T204b | Edit guard | T201b, T202, T126, T204a | §6.8 | todo | Edit guard over `SeenRanges` with off/warn/require modes; `fx.repo` matches as anchors. |
 | T205 | Activity, diffs, undo | T111, T127 | §6.5, §5 | todo | Semantic activity events, per-cell workspace diffs, step snapshots, two-phase undo of agent-attributed changes. |
@@ -600,6 +598,6 @@ flowchart LR
 | T604 | Memory | T108, T127 | §16.4 | todo | `fx.memory` extension (agent-written, decaying; distinct from the ledger). |
 | T605 | MCP bridge | T108, T127 | §16.4 | todo | `fx.mcp`: MCP servers exposed as capabilities (deferred by default). |
 | T606 | ACP adapter | T129b | §17 | todo | `fx.acp` adapter for editors (Zed, JetBrains). |
-| T607 | LSP components | T202, T211 | §6.7 | todo | Language servers installed as components; diagnostics in activity. |
+| T607 | LSP components | T211 | §6.7 | todo | Language servers installed as components; diagnostics in activity; an LSP proxy for definitions, references and document symbols (moved from T202), only if measurements show agents need it. |
 | T608 | Agent teams | T213 | §7.4 | todo | Peer messaging and shared task board between agents. |
 | T609 | Desktop | T508 | §3 | todo | Tauri desktop shell around the web client. |
