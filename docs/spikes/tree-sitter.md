@@ -20,9 +20,10 @@ queries gives the outlines §6.7 sketches. Evidence:
   threads;
 - the native scenarios binary carries the library: no tree-sitter library is published next to it.
 
-What this spike did **not** settle, and T202 must: **size**. The grammars are about 25 MB of
-parse tables, two thirds of today's 37 MB `fx` (below). So `fx` does not link the binding yet;
-only the scenarios binary does.
+What this spike did **not** settle: **size**. The grammars are about 25 MB of parse tables, two
+thirds of today's 37 MB `fx` (below), and the languages people work in go far beyond these four.
+Decided after the spike: `fx` links the core only, and grammars are components installed on demand
+("Size", T202a). So `fx` does not link the binding yet; only the scenarios binary does.
 
 Not verified by hand here: macOS and Windows (MSVC, the `.def` exports, `tar.exe`). The build follows
 SQLite's, which works on all eight targets; CI's `os` jobs build, test and diff it on each.
@@ -107,17 +108,36 @@ Like SQLite (docs/spikes/sqlite.md "How SQLite is built"), with these difference
 99% of a grammar is read-only parse tables (F#: 11.84 MB `.rodata`, 0.13 MB code), so `-Os` changes
 nothing (11,966,036 vs 11,964,638 bytes for F#). For scale, `fx` itself is 37.5 MB on `linux-x64`.
 
-Options for T202, roughly in order of preference:
+**Decision: the core is linked, grammars are installed on demand.** Projects are written in many
+languages, and each grammar is 0.5 to 12 MB of tables, so fx cannot link them all and should not
+guess which. Each grammar becomes a **component** (spec §6.1) that the installer adds the first time
+a file of its language is parsed:
 
-1. **Link the core and the small grammars, install the large ones as components.** The core and
-   TypeScript, TSX and Python add ~3.5 MB. F#, F# signatures and C# (21 MB) become shared libraries
-   that the component installer (§6.1) downloads on first use, pinned and verified, and the binding
-   loads by path (`NativeLibrary.Load`, then `NativeLibrary.GetExport` for `tree_sitter_<name>`: no
-   `DllImport` for them). The ABI check stays. fx is mostly F# work, so in practice the F# grammar is
-   installed on the first `fx.repo` call in this repository.
-2. **Link everything** and accept a ~62 MB `fx`.
-3. **WebAssembly grammars** (tree-sitter's wasm store, wasmtime) were not tried: they would add a
-   wasm runtime to the binary, and the tables would not shrink.
+- **What a grammar component holds:** a shared library per target with the grammar's
+  `tree_sitter_<name>` (and its scanner), plus fx's outline query (and later symbol and locals
+  queries) for it. Grammars use their own allocator (`malloc`, unless built with
+  `TREE_SITTER_REUSE_ALLOCATOR`), so the library needs nothing from the core: any core that accepts
+  its ABI can load it.
+- **Where it comes from:** built by fx's CI from the pinned source archive, as this spike builds them
+  (one shared library per grammar instead of one for all), and published as release assets with their
+  digests in a grammar catalog compiled into `fx` (an `Archive` method per target). Users never need
+  a C compiler. A vendor index (`ReleaseIndex`) can come later for grammars fx does not build.
+- **How it is loaded:** `NativeLibrary.Load` of the installed path and `NativeLibrary.GetExport` for
+  `tree_sitter_<name>`: no `DllImport`, so Native AOT is not involved. The binding checks the ABI
+  against the core's range before use, as the tests do now.
+- **When it is installed:** on the first parse of a file whose extension maps to a known grammar that
+  is not installed. Until it is, callers fall back to plain text (a preview without an outline, `rg`
+  for search), so nothing waits on a download. A session can also prefetch the grammars of the
+  repository's main languages (by `git ls-files` extensions) at start. A first install is a grant
+  (§6.1); grammars run no code but a parser, so policy could approve them by default.
+- **Where it runs:** the installer runs in `envd`, so grammars install where the files are; parsing in
+  the environment (not the host) keeps file bytes off the wire for remote environments. T202 decides
+  which side parses.
+- **More languages** are catalog entries plus a query, with no new `fx` release of the core; an
+  extension could later contribute a grammar and its queries.
+
+Linking only the core adds about 0.2 MB to `fx`. Linking everything (about 62 MB) and WebAssembly
+grammars (a wasm runtime in the binary, tables no smaller) were considered and rejected.
 
 ## The binding
 
@@ -201,7 +221,8 @@ outline rather than hide it, and LSP (T607) stays the precise answer.
 
 ## Recommendations for T202
 
-- Decide the size question first ("Size"; option 1 recommended), before `fx` references the binding.
+- Grammars arrive as components first (T202a, "Size"); T202 asks for a file's grammar and works
+  without one (plain text, `rg`) until it is installed.
 - Keep the binding's shape: parse with a token, outlines from fx's queries, a parser per parse and
   queries shared. Parse on the thread pool, never on a session's actor.
 - Cap what is parsed (a file size limit as a variant, e.g. 2 MB) and pass a token with a deadline:

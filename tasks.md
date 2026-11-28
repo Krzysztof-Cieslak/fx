@@ -25,10 +25,10 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 2:** T004 Spike: Kestrel/WS/SSE, T005 Spike: PTY, T006 Spike: SQLite, T007 Spike: keychains, T008 Spike: tree-sitter, T010 Spike: envd bootstrap, T101 Codecs + JSON, T103 Eff + capabilities
 - **Wave 3:** T101b Codec AOT limits, T102 Schema→TS gen, T104 Machine host, T105 Event + blob store, T106 Variants + profiles, T107 JSON-RPC
 - **Wave 4:** T108 Extension system, T111 envd core, T116 Kernel protocol, T125 Session machine
-- **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T202 Repo navigation, T301 Ledger core, T504 Relay + Dialback
-- **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
-- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
-- **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201a Values: blobs and output overflow, T510 First cloud env (E2B)
+- **Wave 5:** T109 Public SDKs, T110 Component installer, T112 Env provider + local, T113 Sandbox drivers, T118 Canonical model, T121 Auth + credential stores, T122 Identity + tokens, T123 Grants log, T301 Ledger core, T504 Relay + Dialback
+- **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T202a Grammar components, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
+- **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T202 Repo navigation, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty
+- **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201a Values: blobs and output overflow, T510 First cloud env (E2B), T607 LSP components
 - **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T201b Values: handles and history, T203a Readable results, T205 Activity, diffs, undo, T206 Steering + compaction, T604 Memory, T605 MCP bridge
 - **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T139 Cells: large arguments, T141 Cells: outcomes that say why, T143 Background jobs, T201c Values: context pins, T203b Smart previews, T204a Anchored edits, T212 Run kernel, T213 Agents, T217 Eval harness
 - **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T204b Edit guard, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor, T608 Agent teams
@@ -124,6 +124,7 @@ flowchart LR
     T201a["T201a Values: blobs and output overflow"]
     T201b["T201b Values: handles and history"]
     T201c["T201c Values: context pins"]
+    T202a["T202a Grammar components"]
     T202["T202 Repo navigation"]
     T203a["T203a Readable results"]
     T203b["T203b Smart previews"]
@@ -321,7 +322,9 @@ flowchart LR
   T126 --> T201a
   T201a --> T201b
   T201b --> T201c
-  T008 --> T202
+  T008 --> T202a
+  T110 --> T202a
+  T202a --> T202
   T111 --> T202
   T126 --> T203a
   T127 --> T203a
@@ -528,7 +531,8 @@ flowchart LR
 | T201a | Values: blobs and output overflow | T117, T126 | §6.6 | done | `Value.Blob` in practice for output: a command's stream beyond `OutputChars`, a cell's printed output beyond `outputChars` (the kernel protocol's optional `overflowChars` and `output.whole`) and a string or command result its receipt cuts are stored whole in the environment's blob store, and the marker names where (a grep-able file under envd's store, `Overflow {hash, bytes, path?}`); reads there need no grant; `fx.blobs.read(hash, {from, maxChars})`; kernel conformance covers `whole`. Values as blobs in kernels and host-call arguments as blobs moved to T501. |
 | T201b | Values: handles and history | T201a | §6.6, §5 | done | `Value.Handle` in practice: bindings hand out and take back handles (`HandleKind`, `Arg.valueOrHandle`, `HostBinding.createHandle1`; ids from the hands' journaled `IIds`), kept handles journaled by reference and back in a new kernel while the host's table has them, `Piece.Ref` in receipts; `fx.history.list`, `fx.history.read` (an id or a `HistoryRange`) and `fx.history.open` read collapsed originals back (`Originals`). Handles inside data moved to T213. |
 | T201c | Values: context pins | T201b | §6.6, §5 | done | `fx.context.pin(name, value)`, `fx.context.pinFile(name, path, {lines})` (a live view: read through the hands before each call), `fx.context.unpin(name)` and `fx.context.pins()` (each pin's cost); the strategy records the asks as `Pinned`/`Unpinned` context events after the cell's receipt, the `pins` view shows them; the TUI shows pins as activity lines and `/context` lists them with their cost. Pins needed no `IContext` capability. |
-| T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. Builds on `src/Fx.TreeSitter` (T008); first decide how the large grammars ship (linked or installed as components: docs/spikes/tree-sitter.md "Size"). |
+| T202a | Grammar components | T008, T110 | §6.1, §6.7 | todo | Dogfooding needs any language a project uses, and grammars are 0.5–12 MB each: `fx` links the tree-sitter core only, and each grammar is a component installed on demand (docs/spikes/tree-sitter.md "Size"). CI builds a shared library per grammar and target from the pinned archives and publishes them with digests; a grammar catalog in `fx` (`Archive` per target, outline query per grammar); the binding loads an installed grammar by path (`NativeLibrary.Load`/`GetExport`) after an ABI check; install on the first parse of a language's file (a grant, default policy to decide), prefetch of a repository's main languages; F#, C#, Python, TypeScript, TSX first. Installer conformance and AOT scenarios with an installed grammar. |
+| T202 | Repo navigation | T202a, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. Builds on `src/Fx.TreeSitter` (T008) and T202a's grammars; works without a grammar (plain text, `rg`) until it is installed. |
 | T203a | Readable results | T126, T127 | §6.6, §6.7 | done | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
 | T203b | Smart previews | T201a, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
 | T204a | Anchored edits | T203a | §6.8 | done | `fx.fs.read(path, {lines})` returns a range; `fx.fs.edit(path, {old, new, all?} or a list)`, checked against the digest read, and `fx.fs.editRange(range, text)`, stale if the lines changed; both return fresh ranges. Hybrid's `edit` becomes a host call of it; grants, the sandbox guard, content exclusions and replay cover it. Dogfooding sessions stop defining their own replace helpers. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
