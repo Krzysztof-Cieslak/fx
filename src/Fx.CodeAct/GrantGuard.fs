@@ -629,7 +629,11 @@ module GrantGuard =
 
     /// Hands whose host calls also pass the grants guard (after the hands' own guard), for a turn.
     let attach<'K when 'K :> IClock and 'K :> IScopeWith<'K>> (setup: GrantSetup) (hands: Hands<'K>) : Hands<'K> =
-        let grants = create setup (Workplace.create hands.Workspace hands.Os)
+        let place =
+            Workplace.create hands.Workspace hands.Os
+            |> Workplace.readable (Option.toList hands.BlobRoot)
+
+        let grants = create setup place
 
         { hands with
             Guard =
