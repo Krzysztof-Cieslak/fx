@@ -414,6 +414,7 @@ let tests =
                                 IsError = false
                                 Restarted = None
                                 Approvals = []
+                                Jobs = []
                             }
 
                     let append (n: int) =

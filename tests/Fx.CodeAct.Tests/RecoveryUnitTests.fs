@@ -68,6 +68,7 @@ let private receipt (turn: int) (step: int) (call: string) =
             IsError = false
             Restarted = None
             Approvals = []
+            Jobs = []
         }
 
 let private ref' (turn: int) (step: int) (index: int) (id: string) (attempt: int) : CallRef =

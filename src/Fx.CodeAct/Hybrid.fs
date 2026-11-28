@@ -17,6 +17,8 @@ type Executed =
         Restarted: KernelRestart option
         /// How its host calls ran that no grant in force allowed (`Receipt.Approvals`).
         Approvals: Approval list
+        /// The background jobs it started (`Receipt.Jobs`).
+        Jobs: StartedJob list
     }
 
     override this.ToString() =
@@ -35,6 +37,7 @@ module Hybrid =
             IsError = true
             Restarted = None
             Approvals = []
+            Jobs = []
         }
 
     /// A refused or failed host call, as the model reads it.
@@ -74,6 +77,7 @@ module Hybrid =
                         IsError = false
                         Restarted = None
                         Approvals = []
+                        Jobs = []
                     }
         }
 
@@ -127,6 +131,7 @@ module Hybrid =
                             IsError = false
                             Restarted = None
                             Approvals = []
+                            Jobs = []
                         }
         }
 
@@ -153,5 +158,6 @@ module Hybrid =
                             IsError = result.TimedOut
                             Restarted = None
                             Approvals = []
+                            Jobs = []
                         }
         }

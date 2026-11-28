@@ -50,6 +50,7 @@ let coding: Sim =
                 IsError = true
                 Restarted = None
                 Approvals = []
+                Jobs = []
             }
     )
     |> steer "Keep the old API too."
@@ -164,6 +165,7 @@ let private everyKind: Sim =
                 IsError = false
                 Restarted = None
                 Approvals = []
+                Jobs = []
             }
     )
 
@@ -221,5 +223,44 @@ let tests =
                      |> String.concat "")
                     kept
                     "written back the same"
+            }
+
+            test "a receipt names the background jobs its action started, only when it started some (T143)" {
+                let receipt: Receipt =
+                    {
+                        Turn = 1
+                        Step = 1
+                        Call = Some "call-1"
+                        Name = "cell"
+                        Pieces = [ Piece.Text "ok" ]
+                        IsError = false
+                        Restarted = None
+                        Approvals = []
+                        Jobs = []
+                    }
+
+                let encoded = Json.serializeCanonical (ContextCodecs.receipt.Encode receipt)
+                Expect.isFalse (encoded.Contains "jobs") "absent when none, as receipts were written before"
+
+                let started =
+                    { receipt with
+                        Jobs =
+                            [
+                                {
+                                    Id = "j1"
+                                    Name = "CI"
+                                    Command = "gh pr checks --watch"
+                                }
+                            ]
+                    }
+
+                let json = ContextCodecs.receipt.Encode started
+
+                Expect.equal
+                    (Json.serializeCanonical json)
+                    "{\"call\":\"call-1\",\"isError\":false,\"jobs\":[{\"command\":\"gh pr checks --watch\",\"id\":\"j1\",\"name\":\"CI\"}],\"name\":\"cell\",\"pieces\":[{\"kind\":\"text\",\"text\":\"ok\"}],\"step\":1,\"turn\":1}"
+                    "its jobs"
+
+                Expect.equal (ContextCodecs.receipt.Decode json) (Ok started) "read back"
             }
         ]

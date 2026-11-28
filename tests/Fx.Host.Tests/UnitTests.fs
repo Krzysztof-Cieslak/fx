@@ -360,6 +360,7 @@ let tests =
                                     IsError = isError
                                     Restarted = restarted
                                     Approvals = []
+                                    Jobs = []
                                 }
 
                         let restart =
@@ -385,6 +386,58 @@ let tests =
                             "a restart without an error"
 
                         Expect.equal (Activity.ofContext (receipt None false)) [] "nothing to say"
+                    }
+
+                    test "a background job's start and end are activity lines (T143)" {
+                        let receipt =
+                            ContextEvent.Returned
+                                {
+                                    Turn = 1
+                                    Step = 1
+                                    Call = Some "call-1"
+                                    Name = "cell"
+                                    Pieces = [ Piece.Text "Value of Out[\"t1-s1-1\"] (Job): …" ]
+                                    IsError = false
+                                    Restarted = None
+                                    Approvals = []
+                                    Jobs =
+                                        [
+                                            {
+                                                Id = "j1"
+                                                Name = "CI"
+                                                Command = "gh pr checks --watch"
+                                            }
+                                        ]
+                                }
+
+                        Expect.equal
+                            (Activity.ofContext receipt)
+                            [ "  ▸ job j1 started  gh pr checks --watch" ]
+                            "started"
+
+                        let notice: Input =
+                            {
+                                Id = 9L
+                                By = Fx.Machines.Attribution.system "jobs"
+                                At = 0L
+                                Content =
+                                    InputContent.JobFinished(
+                                        "j1",
+                                        "`gh pr checks --watch` exited with code 1 after printing 300 bytes.\nIts last lines:\nX build failed"
+                                    )
+                            }
+
+                        Expect.equal
+                            (Activity.ofInput notice)
+                            [
+                                "▸ job j1 ended  `gh pr checks --watch` exited with code 1 after printing 300 bytes."
+                            ]
+                            "ended, in its notice's first line"
+
+                        Expect.equal
+                            (Activity.ending [] (TurnEnd.Completed(TurnResult.Waiting([ "j1" ], "CI"))))
+                            [ "… Waiting  CI" ]
+                            "a turn that waits"
                     }
 
                     test "the ending reads like a result card" {

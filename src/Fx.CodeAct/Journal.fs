@@ -606,6 +606,7 @@ type RunningAction(call: CallRef, key: string, cell: string option) =
     let gate = obj ()
     let mutable hostCalls = 0
     let approvals = ResizeArray<Fx.Prompt.Approval>()
+    let jobs = ResizeArray<Fx.Prompt.StartedJob>()
     let mutable printed = 0
     let mutable printedChars = 0
 
@@ -626,6 +627,15 @@ type RunningAction(call: CallRef, key: string, cell: string option) =
     /// How its host calls ran that no grant in force allowed, in order.
     member _.Approvals: Fx.Prompt.Approval list =
         lock gate (fun () -> List.ofSeq approvals)
+
+    /// Notes a background job it started (the receipt keeps the first `Receipt.MaxJobs`).
+    member _.Started(job: Fx.Prompt.StartedJob) =
+        lock gate (fun () ->
+            if jobs.Count < Fx.Prompt.Receipt.MaxJobs then
+                jobs.Add job)
+
+    /// The background jobs it started, in order.
+    member _.Jobs: Fx.Prompt.StartedJob list = lock gate (fun () -> List.ofSeq jobs)
 
     /// The number of its next host call, from 1.
     member _.NextHostCall() =

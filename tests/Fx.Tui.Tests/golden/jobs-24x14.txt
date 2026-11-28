@@ -1,0 +1,17 @@
+────────────────────────
+             checks
+    on j1
+  ▣ fx · anthropic/clau…
+
+  ▸ job j1 ended: `gh p…
+
+  CI failed on
+  ubuntu-latest; I will
+  read the test's log.
+
+  ⠼ turn 2 · thinking 0…
+┃ ›
+┃ anthropic/claude-sonn…
+fx · …/src/bil… ● turn 2
+────────────────────────
+cursor 11,4
