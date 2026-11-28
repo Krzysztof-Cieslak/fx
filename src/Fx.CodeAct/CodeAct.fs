@@ -145,6 +145,11 @@ type CodeAct<'R, 'K
     let asksOf (session: string) : HistoryAsks =
         asks.GetOrAdd(session, (fun _ -> HistoryAsks()))
 
+    /// A session's transcript as its log holds it now: what `fx.history.*` reads collapsed ranges from.
+    let transcriptOf (session: string) : Eff<'K, Transcript> =
+        ContextLog.load config.Sessions config.Contexts session
+        |> Eff.map (fun history -> Transcript.ofItems history.Items)
+
     let journalOf (session: string) : Eff<'E, Recorded<StepEvent> list> when 'E :> IScope =
         StepJournal.load config.Steps session
 
@@ -264,6 +269,8 @@ type CodeAct<'R, 'K
                         [
                             Recall.binding (journalOf id) config.Blobs
                             HistoryBindings.compact (asksOf id)
+                            HistoryBindings.list (transcriptOf id) settings.Exclusions
+                            HistoryBindings.read (transcriptOf id) settings.Exclusions settings.OutputChars
                         ]
                         @ JobBindings.all (jobsOf id) writer settings
                 )

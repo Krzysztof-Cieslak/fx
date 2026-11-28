@@ -1342,6 +1342,31 @@ module CoreBindings =
                 |> EffResult.map (entry settings)
                 |> EffResult.mapError fsFailed)
 
+    /// At most `maxChars` characters of `text` from the offset `from` (clamped), never half a surrogate
+    /// pair: the offset and the count of the window (`blobs.read`, `history.read`).
+    let window (text: string) (from: int) (maxChars: int) : int * int =
+        let from = min text.Length (max 0 from)
+
+        let from =
+            if from > 0 && from < text.Length && Char.IsLowSurrogate text[from] then
+                from - 1
+            else
+                from
+
+        let count = min (text.Length - from) (max 0 maxChars)
+
+        let count =
+            if
+                count > 0
+                && from + count < text.Length
+                && Char.IsHighSurrogate text[from + count - 1]
+            then
+                count - 1
+            else
+                count
+
+        from, count
+
     /// `blobs.read(hash, options?)`: the text of a blob of the environment's blob store (all of an
     /// output that was cut, T201a) from a character offset, at most `maxChars` of it (never half a
     /// surrogate pair).
@@ -1361,26 +1386,12 @@ module CoreBindings =
                     | Ok bytes ->
                         let text = utf8.GetString bytes
                         let options = options |> Option.defaultValue { From = None; MaxChars = None }
-                        let from = min text.Length (options.From |> Option.defaultValue 0)
 
-                        let from =
-                            if from > 0 && from < text.Length && Char.IsLowSurrogate text[from] then
-                                from - 1
-                            else
-                                from
-
-                        let count =
-                            min (text.Length - from) (options.MaxChars |> Option.defaultValue settings.OutputChars)
-
-                        let count =
-                            if
-                                count > 0
-                                && from + count < text.Length
-                                && Char.IsHighSurrogate text[from + count - 1]
-                            then
-                                count - 1
-                            else
-                                count
+                        let from, count =
+                            window
+                                text
+                                (options.From |> Option.defaultValue 0)
+                                (options.MaxChars |> Option.defaultValue settings.OutputChars)
 
                         return
                             Ok
