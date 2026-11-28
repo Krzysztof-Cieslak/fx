@@ -301,6 +301,7 @@ let tests =
                                 Text = ""
                                 Truncated = false
                                 TotalChars = 0L
+                                Whole = None
                             }
                         Declared = [ "x" ]
                         Unassigned = []
@@ -500,6 +501,7 @@ let tests =
                                 Text = ""
                                 Truncated = false
                                 TotalChars = 0L
+                                Whole = None
                             }
                         Declared = [ "tk"; "tl"; "c1" ]
                         Unassigned = [ "c1" ]
@@ -684,6 +686,7 @@ let tests =
                                 Text = ""
                                 Truncated = false
                                 TotalChars = 0L
+                                Whole = None
                             }
                         Declared = []
                         Unassigned = []

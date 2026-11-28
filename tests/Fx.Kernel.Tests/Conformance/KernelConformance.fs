@@ -366,6 +366,7 @@ let limits: KernelLimits =
         Preview = Limits.defaults
         InlineBytes = 4096
         ArgumentBytes = Some 65536
+        OverflowChars = Some 5000
     }
 
 let setup: KernelSetup =
@@ -723,10 +724,28 @@ let private output (subject: KernelSubject) =
                     Expect.stringStarts output.Text "0123456789\n" "the head"
                     Expect.stringEnds output.Text "0123456789\n" "the tail"
 
+                    Expect.equal
+                        output.Whole
+                        (Some(String.replicate 300 "0123456789\n"))
+                        "all of it, within overflowChars (T201a)"
+
                     Expect.isLessThanOrEqual
                         (c.Recorder.OutputOf result.CellId).Length
                         limits.OutputChars
                         "streamed output is bounded"
+                }
+
+            case subject "output beyond overflowChars, or not cut, does not come back whole (T201a)"
+            <| fun c ->
+                task {
+                    let! long = c.Run(s.PrintLines 600 "0123456789")
+                    completed long |> ignore
+                    Expect.isTrue long.Output.Truncated "truncated"
+                    Expect.isNone long.Output.Whole "more than overflowChars"
+
+                    let! short = c.Run(s.Statements [ s.Print "one" ])
+                    completed short |> ignore
+                    Expect.isNone short.Output.Whole "nothing was cut"
                 }
 
             case subject "output after a cell returned is reported late, for that cell"

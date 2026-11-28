@@ -1,6 +1,7 @@
 // Bounded output (spec §6.6 "bounded output everywhere"): a cell's result keeps the head and the
 // tail of what it printed, with one marker line for what was left out, and the kernel streams at
-// most `outputChars` of it as `cell/output` notifications. Overflow into a blob is T201's.
+// most `outputChars` of it as `cell/output` notifications. When the host asks (`overflowChars`), all of
+// a cut output comes back too (`whole`, within that bound), for the host to store (T201a).
 
 import type { BoundedText } from "./protocol.d.ts";
 
@@ -8,11 +9,17 @@ export class OutputBuffer {
   private head = "";
   private tail = "";
   private total = 0;
+  private whole: string[] = [];
 
-  constructor(private readonly limit: number) {}
+  constructor(
+    private readonly limit: number,
+    private readonly overflow?: number,
+  ) {}
 
   append(text: string): void {
     this.total += text.length;
+    if (this.overflow !== undefined && this.total <= this.overflow) this.whole.push(text);
+    else this.whole = [];
     const headLimit = Math.ceil(this.limit / 2);
     if (this.head.length < headLimit) {
       const take = Math.min(text.length, headLimit - this.head.length);
@@ -29,7 +36,8 @@ export class OutputBuffer {
     const kept = this.head.length + this.tail.length;
     const truncated = this.total > kept;
     const text = truncated ? `${this.head}\n… [${this.total - kept} chars omitted] …\n${this.tail}` : this.head + this.tail;
-    return { text, truncated, totalChars: this.total };
+    const whole = truncated && this.overflow !== undefined && this.total <= this.overflow ? this.whole.join("") : undefined;
+    return whole === undefined ? { text, truncated, totalChars: this.total } : { text, truncated, totalChars: this.total, whole };
   }
 }
 

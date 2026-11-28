@@ -36,6 +36,7 @@ let defaultLimits: KernelLimits =
         Preview = Limits.defaults
         InlineBytes = 64 * 1024
         ArgumentBytes = Some(8 * 1024 * 1024)
+        OverflowChars = None
     }
 
 module Codecs =
@@ -72,12 +73,22 @@ module Codecs =
                      |> Codec.describe
                          "The largest JSON (UTF-8 bytes) of one host call's argument; inlineBytes when absent.")
 
+            and! overflowChars =
+                Codec.optionalField
+                    "overflowChars"
+                    (fun l -> l.OverflowChars)
+                    (Codec.int
+                     |> Codec.atLeast 1
+                     |> Codec.describe
+                         "When a cell's output is cut, the most characters of all of it to return as output.whole; never when absent.")
+
             return
                 {
                     OutputChars = output
                     Preview = preview
                     InlineBytes = inlineBytes
                     ArgumentBytes = argumentBytes
+                    OverflowChars = overflowChars
                 }
         }
         |> Codec.describe "Bounds of a kernel's output and previews."
@@ -172,11 +183,19 @@ module Codecs =
             and! total =
                 Codec.field "totalChars" (fun t -> t.TotalChars) (Codec.int64 |> Codec.atLeast 0L)
 
+            and! whole =
+                Codec.optionalField
+                    "whole"
+                    (fun t -> t.Whole)
+                    (Codec.string
+                     |> Codec.describe "All of the text, when it was cut and the host asked for it.")
+
             return
                 {
                     Text = text
                     Truncated = truncated
                     TotalChars = total
+                    Whole = whole
                 }
         }
         |> Codec.describe "Text kept within a bound: its head and tail, and how much there was."
