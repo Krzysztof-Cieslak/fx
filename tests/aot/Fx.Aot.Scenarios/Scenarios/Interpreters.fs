@@ -203,6 +203,28 @@ let bridgeScenario =
                             """[{"op": "edit", "path": "src/app.ts", "edits": [{"line": 2, "count": 1, "lines": ["TWO"]}]}, {"op": "create", "path": "b.ts", "text": "b\n"}]"""
                     ]
                     "fs.read", [ str "src/app.ts" ]
+                    "fs.read", [ str "src/app.ts"; parse """{"lines": [2, 9]}""" ]
+                    "fs.read", [ str "src/app.ts"; parse """{"lines": [2, 1]}""" ]
+                    "fs.edit", [ str "src/app.ts"; parse """{"old": "TWO", "new": "two\nthree"}""" ]
+                    "fs.edit",
+                    [
+                        str "src/app.ts"
+                        parse """[{"old": "one", "new": "x"}, {"old": "o", "new": "0", "all": true}]"""
+                    ]
+                    "fs.edit", [ str "src/app.ts"; parse """{"old": "missing", "new": "x"}""" ]
+                    "fs.editRange",
+                    [
+                        parse
+                            """{"path": "src/app.ts", "start": 2, "end": 2, "text": "tw0\n", "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "lines": 3}"""
+                        str "2\r\n2b"
+                    ]
+                    "fs.editRange",
+                    [
+                        parse
+                            """{"path": "src/app.ts", "start": 2, "end": 2, "text": "tw0\n", "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "lines": 3}"""
+                        str "x"
+                    ]
+                    "fs.read", [ str "src/app.ts" ]
                     "shell.run", [ str "make test"; parse """{"cwd": "src", "stdin": "in"}""" ]
                     "shell.run", [ str "missing-tool" ]
                     "shell.run", [ parse "42" ]
