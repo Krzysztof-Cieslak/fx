@@ -8,6 +8,20 @@ declare namespace fx {
   /** The workspace's files. */
   const fs: {
     /**
+     * Replaces text in a file: each change's old text must occur exactly once (else data.code missing or ambiguous) unless all is set. Changes apply in order, each to the text the ones before it left, and are written together, only if the file did not change meanwhile. Returns the lines each change left as fresh ranges.
+     *
+     * @param path Relative to the workspace.
+     * @param changes One change, or a list applied in order.
+     */
+    edit(path: string, changes: TextChange | TextChange[]): Promise<Edited>;
+    /**
+     * Replaces exactly the lines of a range with text, if they still are what the range holds; otherwise fails with data.code stale and the lines there now (a FileRange) as data.data. Returns the new lines as a fresh range.
+     *
+     * @param range From fs.read, or a fresh range of an edit.
+     * @param text The new lines; a final line ending is optional, and empty text removes the lines.
+     */
+    editRange(range: FileRange, text: string): Promise<Edited>;
+    /**
      * Lists a directory (the workspace by default), sorted by name.
      *
      * @param path Relative to the workspace.
@@ -16,11 +30,11 @@ declare namespace fx {
     /** Applies changes to files: every change is checked first, then all are written; nothing is written if one fails (e.g. data.code stale: a file changed since it was read). */
     patch(patches: FilePatch[]): Promise<Written[]>;
     /**
-     * Reads a text file (UTF-8). Fails (data.code excluded) for files content exclusions keep from models.
+     * Reads a text file (UTF-8): whole, or with options.lines only those lines (start to end), which fs.editRange can then replace. Fails (data.code excluded) for files content exclusions keep from models.
      *
      * @param path Relative to the workspace.
      */
-    read(path: string): Promise<FileText>;
+    read(path: string, options?: ReadOptions): Promise<FileText>;
     /**
      * Describes a file or directory; fails (data.code notFound) if there is none.
      *
@@ -44,6 +58,28 @@ declare namespace fx {
      */
     run(command: string, options?: RunOptions): Promise<RunResult>;
   };
+
+  /** A file as an edit left it. */
+  interface Edited {
+    path: string;
+    /**
+     * SHA-256 of the content: sha256:<hex>.
+     * Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    digest: string;
+    /**
+     * Its line count.
+     * Integer, at least 0.
+     */
+    lines: number;
+    /**
+     * How many occurrences were replaced (1 for a range).
+     * Integer, at least 1.
+     */
+    replacements: number;
+    /** The lines each change left, in file order: fresh ranges, to edit the same lines again. */
+    ranges: FileRange[];
+  }
 
   type EntryKind = "file" | "directory" | "symlink" | "other";
 
@@ -90,19 +126,69 @@ declare namespace fx {
         digest?: string;
       };
 
-  /** A text file: its content, line count, size in bytes and digest. */
+  /** Lines of a file, as fs.read gives them or an edit left them (digest and lines are the whole file's). */
+  interface FileRange {
+    path: string;
+    /**
+     * The first line, 1-based.
+     * Integer, at least 1.
+     */
+    start: number;
+    /**
+     * The last line, inclusive; start - 1 when there are none.
+     * Integer, at least 0.
+     */
+    end: number;
+    /** The lines, with their line endings. */
+    text: string;
+    /**
+     * SHA-256 of the content: sha256:<hex>.
+     * Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    digest: string;
+    /**
+     * The whole file's line count.
+     * Integer, at least 0.
+     */
+    lines: number;
+  }
+
+  /** A text file, or the lines of it read: also a range fs.editRange takes (lines, size and digest are the whole file's). */
   interface FileText {
     path: string;
+    /** The lines read (start to end), with their line endings. */
     text: string;
-    /** Integer, at least 0. */
+    /**
+     * The whole file's line count.
+     * Integer, at least 0.
+     */
     lines: number;
-    /** Integer, at least 0. */
+    /**
+     * The whole file's size in bytes.
+     * Integer, at least 0.
+     */
     size: number;
     /**
      * SHA-256 of the content: sha256:<hex>.
      * Matches /^sha256:[0-9a-fA-F]{64}$/.
      */
     digest: string;
+    /**
+     * The first line, 1-based.
+     * Integer, at least 1.
+     */
+    start: number;
+    /**
+     * The last line, inclusive; start - 1 when there are none.
+     * Integer, at least 0.
+     */
+    end: number;
+  }
+
+  /** What to read of a file. */
+  interface ReadOptions {
+    /** The first and the last line to read, 1-based and inclusive; lines past the end are left out. */
+    lines?: [number, number];
   }
 
   /** How to run a command. */
@@ -131,6 +217,23 @@ declare namespace fx {
     /** The middle of stdout or stderr was left out (marked in the text). */
     truncated: boolean;
     timedOut: boolean;
+  }
+
+  /** Replaces text in a file. */
+  interface TextChange {
+    /**
+     * The text to replace, exactly as in the file (any line endings).
+     * Non-empty.
+     */
+    old: string;
+    /** The text to put in its place. */
+    new: string;
+    /**
+     * Replace every occurrence; otherwise `old` must occur exactly once.
+     *
+     * @default false
+     */
+    all?: boolean;
   }
 
   /** Replaces lines of the file as it is (edits of one file must not overlap). */

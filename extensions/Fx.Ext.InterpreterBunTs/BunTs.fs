@@ -136,8 +136,9 @@ let promptPack: PromptPack =
                         ""
                         "- Start every cell with one line `// intent: <what the cell is for>`."
                         "- Work through the `{global}` bridge declared below, e.g. `await {global}.shell.run(\"git status\")` or `await {global}.fs.read(\"src/app.ts\")`. Paths are relative to the workspace. The host checks every call: a call that fails throws an error with a `code`: `invalidArguments` (with the reasons), or `failed`, whose `data.code` says why (e.g. `notFound`)."
-                        "- The value of a cell's last expression comes back to you and stays available as `Out[\"<cell id>\"]`: a string as its text, a command's result as its output and exit code, a file you read as its numbered lines, anything else as a preview. End a cell with what you want to see; print with `console.log` only to see several things. Keep large values in variables and pass them on by name; text beyond a limit is cut in the middle."
+                        "- The value of a cell's last expression comes back to you and stays available as `Out[\"<cell id>\"]`: a string as its text, a command's result as its output and exit code, a file or lines you read as numbered lines, an edit as the lines it left, anything else as a preview. End a cell with what you want to see; print with `console.log` only to see several things. Keep large values in variables and pass them on by name; text beyond a limit is cut in the middle."
                         "- Put file bodies, commit messages, patches, a command's input and any text with backticks or more than a few lines in the `cell` tool's `texts`, never in a template literal: `{\"code\": \"…\", \"texts\": {\"notes\": \"…\"}}` makes `notes` a string constant before the code runs, with nothing to escape. Pass texts on by name."
+                        "- Edit files with `{global}.fs.edit` (text to replace, which must occur exactly once) or `{global}.fs.editRange` (exactly the lines of a range you read, if they did not change since), not by rewriting whole files or splicing text by hand."
                         "- `process`, `Bun` and `require` are not globals: import what you need, e.g. `const path = await import(\"node:path\")`."
                         "- End the turn with `await {global}.finish(result)`, with a result of the type `finish` declares. The host checks it; if it is rejected, the call throws with the reasons: fix the result and finish again."
                     ]
@@ -158,17 +159,30 @@ let promptPack: PromptPack =
                         )
                 }
                 {
-                    Title = "Change a file and check the change:"
+                    Title = "Change text in a file (changes apply in order) and check the change:"
                     Code =
                         withGlobal (
                             String.concat
                                 "\n"
                                 [
-                                    "// intent: rename the helper and run its tests"
-                                    "const file = await {global}.fs.read(\"src/retry.ts\")"
-                                    "await {global}.fs.write(file.path, file.text.replaceAll(\"retryOld\", \"retryNew\"))"
+                                    "// intent: rename the helper, retry five times, and run its tests"
+                                    "await {global}.fs.edit(\"src/retry.ts\", [{ old: \"retryOld(\", new: \"retryNew(\", all: true }, { old: \"const attempts = 3\", new: \"const attempts = 5\" }])"
                                     "const run = await {global}.shell.run(\"bun test test/retry.test.ts\")"
                                     "run"
+                                ]
+                        )
+                }
+                {
+                    Title =
+                        "Read some lines and replace exactly them (data.code stale if they changed since they were read):"
+                    Code =
+                        withGlobal (
+                            String.concat
+                                "\n"
+                                [
+                                    "// intent: bound the retry loop"
+                                    "const loop = await {global}.fs.read(\"src/retry.ts\", { lines: [40, 52] })"
+                                    "await {global}.fs.editRange(loop, loop.text.replace(\"while (true) {\", \"for (let i = 0; i < max; i++) {\"))"
                                 ]
                         )
                 }
@@ -195,7 +209,7 @@ let promptPack: PromptPack =
                                 "\n"
                                 [
                                     "// intent: report what was done"
-                                    "await {global}.finish({ kind: \"done\", summary: \"Renamed retryOld to retryNew; its tests pass.\", verify: \"bun test test/retry.test.ts\" })"
+                                    "await {global}.finish({ kind: \"done\", summary: \"Renamed retryOld to retryNew and retry five times; its tests pass.\", verify: \"bun test test/retry.test.ts\" })"
                                 ]
                         )
                 }
