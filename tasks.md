@@ -431,7 +431,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T206 done
-  class T132 inprogress
+  class T132,T203a inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -523,7 +523,7 @@ flowchart LR
 |---|---|---|---|---|---|
 | T201 | Values & references | T117, T126 | §6.6 | todo | `Value` inline/blob/handle wire type, unforgeable session-scoped handles, `fx.context.pin`/`pinFile`, `fx.recall`/`Out[n]`. |
 | T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. |
-| T203a | Readable results | T126, T127 | §6.6, §6.7 | todo | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T203a | Readable results | T126, T127 | §6.6, §6.7 | in-progress | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
 | T203b | Smart previews | T201, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
 | T204a | Anchored edits | T203a | §6.8 | todo | `fx.fs.read(path, {lines})` returns a range; `fx.fs.edit(path, {old, new, all?} or a list)`, checked against the digest read, and `fx.fs.edit(range, text)`, stale if the lines changed; both return fresh ranges. Hybrid's `edit` becomes a host call of it; grants, the sandbox guard, content exclusions and replay cover it. Dogfooding sessions stop defining their own replace helpers. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
 | T204b | Edit guard | T201, T202, T126, T204a | §6.8 | todo | Edit guard over `SeenRanges` with off/warn/require modes; `fx.repo` matches as anchors. |
