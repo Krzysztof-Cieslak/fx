@@ -232,10 +232,10 @@ export const reads: variants.VariantReads = [
   {
     "slot": "values.previewLimits",
     "value": {
-      "maxChars": 1000,
-      "maxDepth": 3,
-      "maxItems": 10,
-      "maxStringChars": 120
+      "maxChars": 4000,
+      "maxDepth": 4,
+      "maxItems": 50,
+      "maxStringChars": 1000
     },
     "source": {
       "layer": "default",
@@ -341,10 +341,10 @@ export const profile: variants.Profile = {
     "values.argumentMaxBytes": 8388608,
     "values.inlineMaxBytes": 16384,
     "values.previewLimits": {
-      "maxChars": 1000,
-      "maxDepth": 3,
-      "maxItems": 10,
-      "maxStringChars": 120
+      "maxChars": 4000,
+      "maxDepth": 4,
+      "maxItems": 50,
+      "maxStringChars": 1000
     }
   },
   "extensions": {

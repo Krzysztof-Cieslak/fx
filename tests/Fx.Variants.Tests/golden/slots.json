@@ -42,10 +42,10 @@
     "owner": "core",
     "description": "The bounds of value previews shown to models: characters, items, depth and string length.",
     "default": {
-      "maxChars": 1000,
-      "maxDepth": 3,
-      "maxItems": 10,
-      "maxStringChars": 120
+      "maxChars": 4000,
+      "maxDepth": 4,
+      "maxItems": 50,
+      "maxStringChars": 1000
     },
     "privileged": false,
     "schema": {
