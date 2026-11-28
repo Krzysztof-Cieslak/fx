@@ -66,6 +66,8 @@ type CellValue =
     | File of FileText
     /// What `fs.write` or `fs.patch` returned: what was written.
     | Written of Written list
+    /// What `fs.edit` or `fs.editRange` returned: the lines the edit left (a file piece).
+    | Edited of Edited
 
     override this.ToString() =
         match this with
@@ -74,6 +76,7 @@ type CellValue =
         | Ran result -> $"ran {result.Command}"
         | File file -> $"file {file.Path}"
         | Written files -> $"written ({files.Length} files)"
+        | Edited edited -> $"edited {edited.Path}"
 
 [<RequireQualifiedAccess>]
 module CellValue =
@@ -96,6 +99,8 @@ module CellValue =
             | Some r when r.Binding = "fs.write" ->
                 decoded CoreBindings.Codecs.written (fun w -> CellValue.Written [ w ])
             | Some r when r.Binding = "fs.patch" -> decoded (Codec.list CoreBindings.Codecs.written) CellValue.Written
+            | Some r when r.Binding = "fs.edit" || r.Binding = "fs.editRange" ->
+                decoded CoreBindings.Codecs.edited CellValue.Edited
             | _ -> CellValue.Preview info
         | None -> CellValue.Preview info
 
@@ -329,18 +334,19 @@ module Receipts =
             else
                 parts
 
-    /// `read`'s receipt: the lines shown, as a file piece (they count as seen; exclusions withhold
-    /// them), and how to see more.
-    let read (file: FileText) (offset: int option) (limit: int option) (maxLines: int) : Piece list =
-        let all = splitLines file.Text
-        let first = defaultArg offset 1
-        let count = min maxLines (defaultArg limit maxLines)
+    /// Lines of a file read from line `first` (in the file), at most `count`, as a file piece (they
+    /// count as seen; exclusions withhold them), and a note when they are not the whole file, where
+    /// `more` says how to read on from a line.
+    let private fileLines (file: FileText) (first: int) (count: int) (more: int -> string) : Piece list =
+        let held = splitLines file.Text
 
         let shown =
-            all |> List.skip (min all.Length (max 0 (first - 1))) |> List.truncate count
+            held
+            |> List.skip (min held.Length (max 0 (first - file.Start)))
+            |> List.truncate count
 
         let last = first + shown.Length - 1
-        let whole = first = 1 && shown.Length = all.Length
+        let whole = first = 1 && shown.Length = file.Lines
 
         let view: FileView =
             {
@@ -355,50 +361,81 @@ module Receipts =
             }
 
         [
-            if shown.IsEmpty && not all.IsEmpty then
-                Piece.Text $"{file.Path} has {all.Length} lines; nothing at line {first}."
-            elif all.IsEmpty then
+            if shown.IsEmpty && file.Lines > 0 then
+                Piece.Text $"{file.Path} has {file.Lines} lines; nothing at line {first}."
+            elif file.Lines = 0 then
                 Piece.Text $"{file.Path} is empty."
             else
                 Piece.File view
 
                 if not whole then
-                    Piece.Text $"[Lines {first}–{last} of {all.Length}. Read on with offset {last + 1}.]"
+                    Piece.Text $"[Lines {first}–{last} of {file.Lines}.{more (last + 1)}]"
         ]
 
-    /// `edit`'s receipt: what changed, and the changed lines with some context as the file now is.
-    let edited
-        (path: string)
-        (digest: string)
-        (replacements: int)
-        (first: int)
-        (newLines: string list)
-        (context: string list * string list)
-        : Piece list =
-        let before, after = context
-        let shownFirst = first - before.Length
-        let shown = before @ newLines @ after
+    /// `read`'s receipt: the lines shown, as a file piece (they count as seen; exclusions withhold
+    /// them), and how to see more.
+    let read (file: FileText) (offset: int option) (limit: int option) (maxLines: int) : Piece list =
+        fileLines file (defaultArg offset file.Start) (min maxLines (defaultArg limit maxLines)) (fun next ->
+            $" Read on with offset {next}.")
 
-        let summary =
-            let times =
-                if replacements = 1 then
-                    "1 replacement"
-                else
-                    $"{replacements} replacements"
+    /// A cell's `FileText` value: its lines from where it starts (a ranged read's), up to `maxLines`.
+    let private fileValue (file: FileText) (maxLines: int) : Piece list =
+        fileLines file file.Start maxLines (fun next ->
+            if next <= file.End then
+                $" Read on with `{Fx.Product.kernelGlobal}.fs.read({Json.quote file.Path}, {{ lines: [{next}, {file.End}] }})`."
+            else
+                "")
 
-            $"Edited {path} ({times})."
+    /// `edit`'s receipt, and a cell's `Edited` value's: what changed, then the lines it left as file
+    /// pieces of the new version (they count as seen). `around`: the lines around them, read after the
+    /// edit (`edit`'s context), shown if the file is still as the edit left it; otherwise each fresh
+    /// range, up to `maxLines` lines in all.
+    let edited (maxLines: int) (edited: Edited) (around: FileText option) : Piece list =
+        let times =
+            if edited.Replacements = 1 then
+                "1 replacement"
+            else
+                $"{edited.Replacements} replacements"
 
-        [
-            Piece.Text summary
-            if not shown.IsEmpty then
-                Piece.File
-                    {
-                        Path = Paths.normalize path
-                        Digest = digest
-                        Lines = [ LineRange.create shownFirst (shownFirst + shown.Length - 1) ]
-                        Text = numbered shownFirst shown
-                    }
-        ]
+        let view (first: int) (lines: string list) : Piece =
+            Piece.File
+                {
+                    Path = Paths.normalize edited.Path
+                    Digest = string edited.Digest
+                    Lines = [ LineRange.create first (first + lines.Length - 1) ]
+                    Text = numbered first lines
+                }
+
+        let shown =
+            match around with
+            | Some file when file.Digest = edited.Digest && file.End >= file.Start ->
+                [ view file.Start (splitLines file.Text) ]
+            | _ ->
+                let pieces = ResizeArray<Piece>()
+                let mutable left = maxLines
+                let mutable hidden = 0
+
+                for range in edited.Ranges do
+                    let lines = splitLines range.Text
+
+                    if lines.IsEmpty then
+                        pieces.Add(Piece.Text $"[Lines removed before line {range.Start}.]")
+                    elif left > 0 then
+                        let fits = lines |> List.truncate left
+                        pieces.Add(view range.Start fits)
+                        left <- left - fits.Length
+                        hidden <- hidden + lines.Length - fits.Length
+                    else
+                        hidden <- hidden + lines.Length
+
+                if hidden = 1 then
+                    pieces.Add(Piece.Text "[1 more changed line is not shown.]")
+                elif hidden > 1 then
+                    pieces.Add(Piece.Text $"[{hidden} more changed lines are not shown.]")
+
+                List.ofSeq pieces
+
+        Piece.Text $"Edited {edited.Path} ({times})." :: shown
 
     /// A command's line and how it ended, then its output: what `bash` and a cell's `RunResult` show.
     let private ranParts (result: RunResult) : string * string =
@@ -458,6 +495,7 @@ module Receipts =
                 |> String.concat ", "
 
             $"Value of {label} (Written): {written}"
+        | CellValue.Edited edited -> $"Value of {label} (Edited): {edited.Path}, {edited.Lines} lines, {edited.Digest}"
 
     /// The most characters of a host call's first argument a receipt names it by.
     [<Literal>]
@@ -506,8 +544,8 @@ module Receipts =
     /// stopped while they waited for approval, the names it declared and those it never assigned,
     /// whether its `finish` was accepted, and a note if the kernel started afresh. The value shows as
     /// `value` says (`CellValue.ofValue`): a string as its text, a command's result as `bash` shows it,
-    /// a file it read as numbered lines (a file piece: they count as seen); anything else as the
-    /// kernel's preview. The rest may quote what the cell read through the bridge, so it carries those
+    /// a file or lines it read as numbered lines (a file piece: they count as seen), an edit as `edit`
+    /// shows it; anything else as the kernel's preview. The rest may quote what the cell read through the bridge, so it carries those
     /// files as provenance.
     let cell
         (limits: CellLimits)
@@ -560,7 +598,12 @@ module Receipts =
         | Some(CellValue.File file) ->
             restarted note
             @ [ quoted limits.ReceiptChars reads head ]
-            @ read file None None limits.ReadLines
+            @ fileValue file limits.ReadLines
+            @ (if tail = "" then [] else [ Piece.Text tail ])
+        | Some(CellValue.Edited value) ->
+            restarted note
+            @ [ quoted limits.ReceiptChars reads head ]
+            @ edited limits.ReadLines value None
             @ (if tail = "" then [] else [ Piece.Text tail ])
         | _ ->
             let text = lines [ head; tail ]

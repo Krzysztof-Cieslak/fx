@@ -57,7 +57,7 @@ module Instructions =
                     "Your tools:"
                     "- `cell` runs a cell in the kernel described below: use it for work of several steps, for values you want to keep, and to finish the turn."
                     "- `read` shows a file with line numbers; `edit` replaces text in a file; `bash` runs a command line."
-                    $"`read`, `edit` and `bash` do what `{g}.fs.read`, `{g}.fs.patch` and `{g}.shell.run` do in a cell, with the same checks."
+                    $"`read`, `edit` and `bash` do what `{g}.fs.read`, `{g}.fs.edit` and `{g}.shell.run` do in a cell, with the same checks."
                 ]
 
     /// What the sandbox the hands' processes run in keeps from the model (spec §9.1, §18), so that a

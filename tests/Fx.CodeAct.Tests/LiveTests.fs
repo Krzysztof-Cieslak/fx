@@ -424,6 +424,60 @@ let private readable (f: Fixture) : Task<unit> =
         Expect.stringContains (text rs[2]) "(string, 500 chars):\nxxxxx" "a string's text"
     }
 
+/// TypeScript cells read a range, replace exactly its lines, edit by text with two changes, and find
+/// the first range stale (T204a): the bindings' declarations type-check, and the receipts show the
+/// lines read and the lines each edit left.
+let private anchored (f: Fixture) : Task<unit> =
+    task {
+        f.Write("notes.md", "one\ntwo\nthree\nfour\n")
+
+        f.Model.AddAll
+            [
+                Say.cell $"// intent: read two lines\nconst r = await {g}.fs.read(\"notes.md\", {{ lines: [2, 3] }})\nr"
+                Say.cell
+                    $"// intent: replace them\nconst e = await {g}.fs.editRange(r, r.text.replace(\"two\", \"TWO\"))\ne"
+                Say.cell
+                    $"// intent: edit by text\nawait {g}.fs.edit(\"notes.md\", [{{ old: \"one\", new: \"ONE\" }}, {{ old: \"four\", new: \"FOUR\", all: true }}])"
+                Say.cell
+                    $"// intent: the first range again\nconst stale = await {g}.fs.editRange(r, \"x\").then(() => \"applied\", (e) => e.data.code + \": \" + JSON.stringify(e.data.data.text))\nstale"
+                Say.cell $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"edited the notes\" }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Edit the notes"
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed ending) (TurnResult.Done("edited the notes", [], None)) $"finished: {seen f}"
+        Expect.equal (f.Read "notes.md") "ONE\nTWO\nthree\nFOUR\n" "edited"
+        let rs = receipts f "s1"
+
+        let files (r: Receipt) =
+            r.Pieces
+            |> List.choose (fun p ->
+                match p with
+                | Piece.File view -> Some view
+                | _ -> None)
+
+        match files rs[0] with
+        | [ view ] ->
+            Expect.equal view.Text "     2\ttwo\n     3\tthree" $"the range's lines: {seen f}"
+            Expect.equal view.Lines [ Fx.Models.LineRange.create 2 3 ] "seen"
+        | other -> failtest $"{other}: {seen f}"
+
+        Expect.stringContains (text rs[1]) "Edited notes.md (1 replacement)." $"a range replaced: {seen f}"
+        Expect.stringContains (text rs[1]) "2\tTWO\n     3\tthree" "the lines it left"
+        Expect.stringContains (text rs[2]) "Edited notes.md (2 replacements)." $"edited by text: {seen f}"
+        Expect.stringContains (text rs[3]) "stale: \"TWO\\nthree\\n\"" $"stale, with the lines there now: {seen f}"
+
+        let started =
+            journal f "s1"
+            |> List.choose (fun r ->
+                match r.Event with
+                | StepEvent.HostCallStarted started -> Some started.Binding
+                | _ -> None)
+
+        Expect.equal started [ "fs.editRange"; "fs.edit"; "fs.editRange" ] "edits are journaled, reads are not"
+    }
+
 let private rejected (f: Fixture) : Task<unit> =
     task {
         f.Model.AddAll
@@ -530,6 +584,10 @@ let tests =
 
             testTask "TypeScript cells' values show as their bindings' tools would" {
                 do! live "live-readable" [] readable ()
+            }
+
+            testTask "TypeScript cells read a range, replace its lines, edit by text and find a range stale" {
+                do! live "live-anchored" [] anchored ()
             }
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {

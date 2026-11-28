@@ -585,7 +585,7 @@ type CodeAct<'R, 'K
                 let! executed = Eff.provide env (Hybrid.read call settings.ReadLines input)
                 return executed, None
             | ToolAction.Edit input ->
-                let! executed = Eff.provide env (Hybrid.edit call input)
+                let! executed = Eff.provide env (Hybrid.edit call settings.ReadLines input)
                 return executed, None
             | ToolAction.Bash input ->
                 let! executed = Eff.provide env (Hybrid.bash call settings.ReceiptChars input)

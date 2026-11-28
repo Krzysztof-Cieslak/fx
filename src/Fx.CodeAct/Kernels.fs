@@ -385,6 +385,14 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                     | Some cell when call.CellId = Some cell.Id -> cell.Reads <- Reads.add file.Path cell.Reads
                     | _ -> ())
             | Error _ -> ()
+        | ("fs.edit" | "fs.editRange"), Ok value ->
+            match Value.decode CoreBindings.Codecs.edited value with
+            | Ok edited ->
+                lock gate (fun () ->
+                    match running with
+                    | Some cell when call.CellId = Some cell.Id -> cell.Reads <- Reads.add edited.Path cell.Reads
+                    | _ -> ())
+            | Error _ -> ()
         | _ -> ()
 
         match result with

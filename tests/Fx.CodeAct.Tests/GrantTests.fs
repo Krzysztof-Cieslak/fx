@@ -1142,6 +1142,57 @@ let private turnTests =
                         })
             }
 
+            testTask "an edit outside the workspace asks a read and a write at once, from a cell and from hybrid's edit" {
+                for surface, variants in [ "cells", []; "hybrid", hybrid ] do
+                    do!
+                        withGrants $"grant-edit-{surface}" variants [] (fun g ->
+                            task {
+                                let outside = Path.Combine(g.F.Root, "outside.txt")
+                                File.WriteAllText(outside, "old\n")
+
+                                let edit =
+                                    if surface = "cells" then
+                                        Say.cell
+                                            $"// intent: edit\ncall e = fs.edit [{Json.quote outside}, {{\"old\": \"old\", \"new\": \"new\"}}]\ne"
+                                    else
+                                        Say.tool
+                                            "edit"
+                                            [
+                                                "path", Json.String outside
+                                                "old", Json.String "old"
+                                                "new", Json.String "new"
+                                            ]
+
+                                g.F.Model.AddAll [ edit; Say.finish "Edited" ]
+                                do! kickoff g.F "Edit outside"
+                                let! (requests: GrantRequest list) = g.Pending 2
+
+                                Expect.equal
+                                    (requests |> List.map (fun r -> string r.Action, r.Resource) |> List.sort)
+                                    [
+                                        "fs.read", WorkspacePath.normalize outside
+                                        "fs.write", WorkspacePath.normalize outside
+                                    ]
+                                    $"{surface}: its lines come back, so a read and a write"
+
+                                Expect.equal (File.ReadAllText outside) "old\n" $"{surface}: not before the answers"
+
+                                for request in requests do
+                                    g.Answer(request, allow ScopeChoice.Once None)
+
+                                let! _ = ended g.F "s1" 1
+                                Expect.equal (File.ReadAllText outside) "new\n" $"{surface}: edited"
+                                let receipt = (receipts g.F "s1").Head
+                                Expect.isFalse receipt.IsError (text receipt)
+                                Expect.stringContains (text receipt) "1\tnew" $"{surface}: the line it left"
+
+                                Expect.equal
+                                    (requestCount g.Service)
+                                    2
+                                    $"{surface}: asked once (no read for context outside)"
+                            })
+            }
+
             testTask "an interrupt while a cell or a tool waits withdraws the request" {
                 for surface, reply in
                     [

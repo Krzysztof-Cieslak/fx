@@ -48,7 +48,15 @@ module SandboxGuard =
             match call.Args with
             | [] -> [ resolve ".", PathAccess.ReadOnly ]
             | _ -> first PathAccess.ReadOnly
-        | "fs.write" -> first PathAccess.ReadWrite
+        | "fs.write"
+        | "fs.edit" -> first PathAccess.ReadWrite
+        | "fs.editRange" ->
+            match call.Args with
+            | Value.Inline json :: _ ->
+                match Codec.decode CoreBindings.Codecs.fileRange json with
+                | Ok range -> [ resolve range.Path, PathAccess.ReadWrite ]
+                | Error _ -> []
+            | _ -> []
         | "fs.patch" ->
             match call.Args with
             | Value.Inline json :: _ ->
