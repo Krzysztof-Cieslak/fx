@@ -225,6 +225,7 @@ declare namespace fx {
     stderr: string;
     /** The middle of stdout or stderr was left out (marked in the text). */
     truncated: boolean;
+    /** It ran out of time and was killed with its children; stdout and stderr hold what it printed until then. */
     timedOut: boolean;
   }
 

@@ -116,7 +116,7 @@ environment, `EnvClient`'s proxies.
 
 | Binding | Does | Returns |
 |---|---|---|
-| `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`, killed after `options.timeoutMs` | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut}`; a non-zero exit is data |
+| `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`; after `options.timeoutMs` it is killed with its children and keeps what it printed (below) | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut}`; a non-zero exit is data |
 | `fs.read(path, options?)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`), or with `options.lines: [first, last]` only those lines (lines past the end left out; a `first` past the line after the last: `outOfRange`); a byte order mark dropped; not UTF-8: `notText`; a file content exclusions keep from models: `excluded` (origin and pattern as data; nothing is read, [egress.md](egress.md)) | `FileText {path, text, lines, size, digest, start, end}`: `text` holds lines `start` to `end` as they are in the file (their endings kept); `lines`, `size` and `digest` are the whole file's, so a `FileText` is also a `FileRange` |
 | `fs.write(path, text)` | creates the directories, then writes atomically (`FsOps.WriteAtomic`) | `Written {path, digest, lines}` |
 | `fs.list(path = ".")` | a directory's entries, by name | `FileEntry[] {path, name, kind, size}` |
@@ -141,6 +141,15 @@ environment, `EnvClient`'s proxies.
 - Output is bounded (spec §6.6): each stream of a command keeps `OutputChars` (16 000) characters, the
   head and the tail with a marker line (`… [n chars omitted] …`), never half a surrogate pair. Overflow
   into a blob with a grep-able path is T201's.
+- **Commands are spawned** (T142): `shell.run` starts the command with `Shell.Spawn`, writes its input,
+  and reads its output until both streams end, then its exit code. With `timeoutMs`, that read races
+  the clock's delay (`Eff.timeout`); when the delay wins, the process is killed with its children
+  (`Proc.Kill`: the whole tree, [eff.md](eff.md), [envd.md](envd.md)) and its output is read on to
+  its end, for at most two seconds (`killGrace`: a process that left the tree may hold the pipes
+  open), so `stdout` and `stderr` hold what it printed until then, `timedOut` is true and `exitCode`
+  absent. A call that is cancelled kills it the same way. Whether it timed out is which finished first, the command's reads or the
+  delay: both are journaled in their order, so a recorded session replays the same way
+  ([replay.md](replay.md)); never decide it from the wall clock.
 - `CoreSettings.CommandEnv` is the environment commands get: envd's own (`Inherit []`) by default. On
   the host's machine that is the host's variables without credentials and injection vectors
   (`HostEnvironment.scrub`, [environments.md](environments.md)); it never holds the host's credentials

@@ -81,7 +81,16 @@ let private fakes () : Env * InMemoryFs =
         FsRead = fs.FsRead
         Fs = fs.Fs
         FsOps = FsOpsOver.create fs.FsRead fs.Fs
-        Shell = shell.Shell
+        // `shell.run` spawns its commands (T142): a program that is not there does not start.
+        Shell =
+            { shell.Shell with
+                Spawn =
+                    fun spec cancellation ->
+                        match spec.Program with
+                        | Program.Script "missing-tool" ->
+                            Task.FromResult(Error(NotStarted("missing-tool", "not found")))
+                        | _ -> shell.Shell.Spawn spec cancellation
+            }
         Scope = Scope.root
     },
     fs
