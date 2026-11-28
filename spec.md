@@ -317,6 +317,7 @@ and InterpreterCaps =
 ### 6.6 Values and references
 
 - Values live in kernel variables; the model sees bounded, type-aware previews and passes variables by name. Bounded output everywhere; overflow → blob with a grep-able path; prefill cell binds task inputs.
+- **Overflow** (T201a): what a binding or a receipt cuts (a command's stream, a cell's printed output, a string or command result in a receipt) is stored whole in the environment's blob store, and the cut text's marker names where: the blob's file (envd's store keeps blobs as files, `<state>/blobs/sha256/ab/cd…`), which the model greps or reads by lines without a grant (writes there stay writes outside the workspace), or the blob's hash, which `fx.blobs.read(hash, {from, maxChars})` reads. Results carry it as `Overflow {hash, bytes, path?}` (`stdoutOverflow`, `stderrOverflow`). It is stored from the text the hands already redacted.
 - Wire type:
 
 ```fsharp
@@ -328,7 +329,7 @@ type Value =
 
   Handles are unforgeable and session-scoped; values decode only into declared types; thresholds are variants.
 - **What the model sees of a cell's value** (the last expression): a string as its text, a binding's result the way that binding's direct tool shows it (a command's output and exit code, a file's numbered lines, which count as seen), anything else as a preview (`values.previewLimits`). The model ends a cell with what it wants to see instead of printing it again.
-- **Host-call arguments** (a file's text, a command's input) are copied inline up to their own limit, `values.argumentMaxBytes` (8 MiB; at most 12 MiB, under the JSON-RPC message limit), beyond `values.inlineMaxBytes`, which bounds the values a kernel keeps and `finish`. Journals keep only bounded previews and digests of arguments. Arguments as blobs (content that need not travel to the host, for remote environments) are T201's.
+- **Host-call arguments** (a file's text, a command's input) are copied inline up to their own limit, `values.argumentMaxBytes` (8 MiB; at most 12 MiB, under the JSON-RPC message limit), beyond `values.inlineMaxBytes`, which bounds the values a kernel keeps and `finish`. Journals keep only bounded previews and digests of arguments. Values that live as blobs in kernels and arguments as blobs (content that need not travel to the host) pay off only for remote environments: T501's.
 - Deliberate prompt inclusion: `fx.context.pin(name, value)`, `fx.context.pinFile(path, range)` (live view); visible in `/context` with cost.
 
 ### 6.7 Reading and navigation

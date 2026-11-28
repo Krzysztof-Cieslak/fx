@@ -516,6 +516,19 @@ never regenerated), one entry at a time per session (`JournalWriter`), every ent
 - Not in scope of a decision: calls that never started (they did not run) and model calls (they have no
   side effects); both end as above.
 
+### Overflow (spec §6.6, T201a)
+
+What is cut is stored, not lost. `shell.run` stores a cut stream (interpreters.md); CodeAct asks
+kernels for all of a cut output (`overflowChars`: a third of `values.argumentMaxBytes`, in characters;
+kernel-protocol.md) and stores it; and a cell's string or command result whose text its receipt cuts
+to `codeact.outputChars` is stored before the receipt is made (`Receipts.valueBody`). Each goes to the
+environment's blob store from the redacted text, and the marker line of the cut text names where (the
+blob's file, else its hash); a command's result in a receipt also gets a line per stream it cut. The
+grants guard's workplace lists the store's directory as readable (`Workplace.Readable`, from
+`Hands.BlobRoot`, journaled in `HandsInfo.blobRoot`): `fs.read` there needs no grant, and a command's
+path arguments and inputs there count as in the workspace (listed commands, auto approvals); writes
+there are still writes outside the workspace.
+
 ### Kept values and `recall` (spec §6.5 "Durability")
 
 The bun-ts kernel has no snapshots (`caps.snapshot = false`), so durability is Jupyter semantics plus
@@ -630,7 +643,7 @@ workspace, no argument or input outside it or excluded from models), and not one
 reaches outside the workspace asks.
 
 - **What still asks.** Writes outside the workspace or to protected paths (`fs.write`, also a
-  redirection's), reads outside it, network bindings (`net.connect`), opaque lines, commands with an
+  redirection's), reads outside it (except the environment's blob store: below), network bindings (`net.connect`), opaque lines, commands with an
   expansion or a path outside the workspace, and `codeact.grants.askCommands` (privileged; matched
   ignoring case after leading assignments and wrappers such as `env`, `sudo`, `nohup`, `time`,
   `timeout`, `nice`, `xargs`, with the program's directory dropped): downloads and remote shells
@@ -820,14 +833,15 @@ fake clock, auto approvals and their decision), on all eight targets.
 | The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
 | Partial output of commands in doubt (`shell.run`, `bash`): they run as envd processes (spawned since T142); after a restart, resume their output logs by byte offset, and journal the process | T205 |
 | Background jobs that survive a host restart: reattach to envd's processes and resume their output by byte offset (today a restart loses them, reported `lost`) | later |
-| Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
+| Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values | interpreters that have them |
+| Values in envd's blob store (remote environments); handles in the journal | T501; T201b |
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
 | Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | the sandbox is off by default (T137), so nothing catches them there |
 | Withdrawing grant requests a crash left pending (the call in doubt never ran; recovery knows its keys) | when recovery holds `IGrants` |
 | Exact replay of model streams and variant reads from a journal | done: T131, [replay.md](replay.md) (`Recording.codeact`) |
 | Activity events and per-cell diffs; `Read` activity as provenance | T205 |
 | A person's compaction (a session command, the TUI's `/compact`) beside the model's `fx.history.compact` | when clients ask (T130's successors) |
-| Reading collapsed originals back (`fx.history.*` beyond `compact`), and `fx.context.pin` | T201 |
+| Reading collapsed originals back (`fx.history.*` beyond `compact`); `fx.context.pin` | T201b; T201c |
 | Compaction as the bundled extension `fx.compaction` (spec §16.4), a summarizer contributed by extensions | with a strategy contribution type (below) |
 | Brokered bindings (`fx.ask` for the model's own questions, `fx.llm`, agents, values and handles) | T201, T213 and their tasks |
 | A strategy contribution type for extensions (the SDK would need sessions, the render and interpreters) | when a second strategy exists |

@@ -124,6 +124,7 @@ environment, `EnvClient`'s proxies.
 | `fs.patch(patches)` | envd's apply-patch: `create`, `edit` (line ranges, with the digest from `fs.read`: `stale` if the file changed), `delete`; all checked, then all written | `Written[]` |
 | `fs.edit(path, changes)` | edits by text (spec §6.8): `changes` is one `TextChange {old, new, all?}` or a list. They apply in order, each to the text the ones before it left; each `old` must occur exactly once (`missing`, `ambiguous`), or everywhere with `all`; `old = new`, or changes that leave every line as it was: `unchanged`. The lines that differ are one `fs.patch` edit, checked against the digest read (`stale` if the file changed meanwhile) | `Edited {path, digest, lines, replacements, ranges}`: a fresh `FileRange` for the lines each change left, in file order |
 | `fs.editRange(range, text)` | replaces exactly the range's lines (from `fs.read`, or a fresh range of an edit) with the lines of `text` (a final line ending optional; empty text removes them; an empty range, `end = start - 1`, inserts before `start`), if they still hold the range's text; otherwise `stale`, with the lines there now as a `FileRange` in the error's data. Same lines: `unchanged` | `Edited`, its range the new lines |
+| `blobs.read(hash, options?)` | the text of a blob of the environment's blob store (all of an output that was cut, T201a) from `options.from` (a character offset, 0 by default), at most `options.maxChars` (`OutputChars` by default), never half a surrogate pair; `notFound` for a blob the store does not have. No grant: it reads only what the bindings stored | `BlobText {hash, from, next, totalChars, text}`: pass `next` as `from` to read on |
 
 - Paths are relative to the workspace (`/` or `\`; `.` and `..` resolved) or absolute in the
   environment's syntax; results show them relative, with `/`, when inside the workspace.
@@ -139,8 +140,12 @@ environment, `EnvClient`'s proxies.
   string`, and the declaration could not say which goes with which; with two, each signature says
   exactly what it takes, so the type check catches a mismatch before the cell runs.
 - Output is bounded (spec §6.6): each stream of a command keeps `OutputChars` (16 000) characters, the
-  head and the tail with a marker line (`… [n chars omitted] …`), never half a surrogate pair. Overflow
-  into a blob with a grep-able path is T201's.
+  head and the tail with a marker line (`… [n chars omitted] …`), never half a surrogate pair. A cut
+  stream is stored whole in the environment's blob store (T201a, `Blobs.put` on the hands' `IBlobs`):
+  `stdoutOverflow` / `stderrOverflow` (`Overflow {hash, bytes, path?}`) say where, and the marker
+  line names it (`… [n chars omitted; all of it: <file>] …`). `path` is the blob's file where the store
+  keeps files (`CoreSettings.BlobRoot`, `EnvLayout.blobs`: envd's `FileBlobStore`), else absent and
+  the marker names the hash. Replay stores into memory: a blob's reference depends only on its content.
 - **Commands are spawned** (T142): `shell.run` starts the command with `Shell.Spawn`, writes its input,
   and reads its output until both streams end, then its exit code. With `timeoutMs`, that read races
   the clock's delay (`Eff.timeout`); when the delay wins, the process is killed with its children
@@ -308,7 +313,8 @@ environment, a missing runtime).
 | A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores kept values with `recall` (done: [codeact.md](codeact.md)) | T127, T128 |
 | Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, …; `recall` is the CodeAct strategy's, T128) | their tasks (T201, T301, T213, …) |
 | `repo.*` bindings and smart previews (anchored edits, `fs.edit`, are T204a's and readable results T203a's: done); the edit guard over `SeenRanges` | T202, T203b, T204b |
-| Blobs and handles for large values and output overflow | T201 |
+| Handles in data and in the journal | T201b |
+| Values as blobs in kernels, host-call arguments as blobs (remote environments) | T501 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |
 | Killing stale kernels when envd starts (a pid file in the owned directory). Installing `Requires` in the environment is the host's ([host.md](host.md)); launching over envd's capability records is `EnvHands.ofHandle` (T127) | T128 |
