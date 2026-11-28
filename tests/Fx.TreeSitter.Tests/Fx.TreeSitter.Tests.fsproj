@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Support.fs" />
+    <Compile Include="LibraryTests.fs" />
+    <Compile Include="SyntaxTests.fs" />
+    <Compile Include="QueryTests.fs" />
+    <Compile Include="OutlineTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A source per grammar and its expected outline (<sample>.outline). -->
+    <None Include="Samples\*" CopyToOutputDirectory="PreserveNewest" LinkBase="Samples" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fx.TreeSitter\Fx.TreeSitter.fsproj" />
+  </ItemGroup>
+</Project>

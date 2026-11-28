@@ -1,0 +1,8 @@
+MAX_ATTEMPTS = 10                     6
+class RetryConfig:                    9–12
+class Retrier:                        15–28
+  def __init__(self, clock):          16–17
+  def count(self):                    19–21
+  async def execute(self, cfg, op):   23–28
+    def helper(x):                    24–25
+def retry(n, f):                      31–32

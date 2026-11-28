@@ -1,0 +1,19 @@
+namespace Billing.Retry;                                                    4
+public sealed record RetryConfig(int Attempts, TimeSpan Delay);             7
+public enum Outcome                                                         9–13
+  Succeeded,                                                                11
+  GaveUp,                                                                   12
+public interface IClock                                                     15–19
+  DateTimeOffset Now { get; }                                               17
+  Task Wait(TimeSpan delay);                                                18
+public class Retrier : IDisposable                                          21–51
+  private readonly IClock clock;                                            24
+  public const int MaxAttempts = 10;                                        25
+  public Retrier(IClock clock)                                              27–30
+  public int Count { get; private set; }                                    32
+  public event EventHandler? Retried;                                       34
+  public async Task<Outcome> ExecuteAsync(RetryConfig cfg, Func<Task> op)   36–43
+  public void Dispose() { }                                                 45
+  private struct State                                                      47–50
+    public int Attempt;                                                     49
+public delegate bool Decide(int attempt);                                   53

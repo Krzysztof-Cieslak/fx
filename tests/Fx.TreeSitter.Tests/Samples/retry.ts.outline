@@ -1,0 +1,15 @@
+export const MAX_ATTEMPTS = 10;                                                                    4
+export interface RetryConfig {                                                                     6–10
+  attempts: number;                                                                                7
+  delay: number;                                                                                   8
+  decide?(attempt: number): boolean;                                                               9
+export type Outcome<T> = { ok: true; value: T } | { ok: false; attempts: number };                 12
+export enum Mode {                                                                                 14–17
+export class Retrier {                                                                             19–32
+  private count = 0;                                                                               20
+  constructor(private readonly config: RetryConfig) {}                                             22
+  async execute<T>(op: () => Promise<T>): Promise<Outcome<T>> {                                    24–31
+export function retry<T>(n: number, op: () => Promise<T>): Promise<Outcome<T>> {                   34–36
+const describe = (o: Outcome<unknown>): string => (o.ok ? "ok" : `gave up after ${o.attempts}`);   38
+namespace Internal {                                                                               40–44
+  export function jitter(ms: number): number {                                                     41–43

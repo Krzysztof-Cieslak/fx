@@ -472,6 +472,12 @@
           "Fx.Prelude": "[0.0.0, )"
         }
       },
+      "fx.treesitter": {
+        "type": "Project",
+        "dependencies": {
+          "FSharp.Core": "[11.0.101, )"
+        }
+      },
       "fx.tui": {
         "type": "Project",
         "dependencies": {

@@ -1,0 +1,14 @@
+module Billing.Retry                                                            2–40
+  type RetryConfig = { Attempts: int; Delay: TimeSpan }                         8
+  type Outcome<'T> =                                                            10–12
+  exception RetryExhausted of string                                            14
+  let defaults =                                                                16–20
+  let execute (cfg: RetryConfig) (op: unit -> Task<'T>) : Task<Outcome<'T>> =   23–28
+  type Clock() =                                                                30–33
+    member _.Now = DateTimeOffset.UnixEpoch                                     31
+    member this.Wait(delay: TimeSpan) = Task.Delay delay                        32
+    static member Default = Clock()                                             33
+  module Http =                                                                 35–40
+    let retry n f =                                                             36–37
+    type Policy =                                                               39–40
+      abstract Decide: int -> bool                                              40

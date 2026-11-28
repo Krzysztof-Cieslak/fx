@@ -35,6 +35,7 @@
     <Compile Include="Scenarios\Contracts.fs" />
     <Compile Include="Scenarios\ContractsLarge.fs" />
     <Compile Include="Scenarios\Sqlite.fs" />
+    <Compile Include="Scenarios\TreeSitter.fs" />
     <Compile Include="Scenarios\Pty.fs" />
     <Compile Include="Scenarios\Store.fs" />
     <Compile Include="Scenarios\Variants.fs" />
@@ -80,10 +81,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The tree-sitter scenarios parse the binding tests' samples, copied next to the binary (resources would be reflection). -->
+    <None Include="..\..\Fx.TreeSitter.Tests\Samples\*" Exclude="..\..\Fx.TreeSitter.Tests\Samples\*.outline" LinkBase="tree-sitter-samples" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\src\Fx.Effects.Live\Fx.Effects.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Machines.Host\Fx.Machines.Host.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Prelude\Fx.Prelude.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Sqlite\Fx.Sqlite.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fx.TreeSitter\Fx.TreeSitter.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Pty\Fx.Pty.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Store.Live\Fx.Store.Live.fsproj" />
     <ProjectReference Include="..\..\..\src\Fx.Transport.Http\Fx.Transport.Http.fsproj" />

@@ -24,6 +24,7 @@ let all: Scenario list =
             Contracts.scenarios
             ContractsLarge.scenarios
             Sqlite.scenarios
+            TreeSitter.scenarios
             Pty.scenarios
             Store.scenarios
             Variants.scenarios

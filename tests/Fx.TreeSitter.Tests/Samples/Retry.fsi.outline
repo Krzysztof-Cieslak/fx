@@ -1,0 +1,5 @@
+module Billing.Retry                                      2–11
+  type RetryConfig = { Attempts: int; Delay: TimeSpan }   6
+  val defaults: RetryConfig                               8
+  module Http =                                           10–11
+    val retry: int -> (unit -> 'T) -> 'T                  11
