@@ -1,0 +1,214 @@
+<Project>
+  <!--
+    Builds the pinned tree-sitter and grammars (TreeSitter.props, library.c) into one library for one
+    runtime identifier and wires it in (T008, docs/spikes/tree-sitter.md). Imported into every
+    project by Directory.Build.targets; like native/sqlite/Sqlite.targets it acts on two kinds of
+    projects only:
+
+    - the binding (src/Fx.TreeSitter, FxTreeSitterBinding=true) builds the libraries for its RID and
+      copies the shared library to the output of every project that references it, so tests and the
+      JIT side of the JIT-vs-native diff load it;
+    - a Native AOT publish of an executable that references the binding links the static library into
+      the binary (NativeLibrary + DirectPInvoke) and leaves the shared library out.
+
+    Both libraries are made from the same objects. The archives are downloaded once each and
+    verified; builds are cached under artifacts/native/tree-sitter/<version>-<build key>/<rid>/, where
+    the key hashes TreeSitter.props, library.c and this file. Compilers are found as for SQLite:
+    FxTreeSitterCC, else clang, else gcc; MSVC through vswhere and vcvarsall on Windows.
+
+    Every grammar is compiled once with TREE_SITTER_HIDE_SYMBOLS, so its language function is not
+    __declspec(dllexport) (the core is not: on Linux and macOS that define would hide its API from the
+    shared library, api.h making it visible otherwise): the static library exports nothing, and on Windows the DLL's exports are
+    listed in a .def file written here from the core's own (lib/src/tree_sitter.def), the shim's
+    functions and the grammars' functions.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)TreeSitter.props" />
+
+  <PropertyGroup Label="tree-sitter build">
+    <FxTreeSitterCacheDir Condition="'$(FxTreeSitterCacheDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsPath)', 'native', 'tree-sitter'))</FxTreeSitterCacheDir>
+    <_FxTsSep>$([System.IO.Path]::DirectorySeparatorChar)</_FxTsSep>
+    <FxTreeSitterLibrarySource>$(MSBuildThisFileDirectory)library.c</FxTreeSitterLibrarySource>
+    <_FxTsInputsHash>$([MSBuild]::StableStringHash($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)TreeSitter.props'))$([System.IO.File]::ReadAllText('$(FxTreeSitterLibrarySource)'))$([System.IO.File]::ReadAllText('$(MSBuildThisFileFullPath)')), 'Sha256'))</_FxTsInputsHash>
+    <FxTreeSitterBuildKey>$(FxTreeSitterVersion)-$(_FxTsInputsHash.Substring(0, 12))</FxTreeSitterBuildKey>
+
+    <FxTreeSitterRid Condition="'$(FxTreeSitterRid)' == ''">$(RuntimeIdentifier)</FxTreeSitterRid>
+    <FxTreeSitterRid Condition="'$(FxTreeSitterRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</FxTreeSitterRid>
+    <_FxTsOs>$(FxTreeSitterRid.Split('-')[0])</_FxTsOs>
+    <_FxTsArch>$(FxTreeSitterRid.Substring($([MSBuild]::Add($(FxTreeSitterRid.LastIndexOf('-')), 1))))</_FxTsArch>
+    <_FxTsHostArch>$(NETCoreSdkPortableRuntimeIdentifier.Substring($([MSBuild]::Add($(NETCoreSdkPortableRuntimeIdentifier.LastIndexOf('-')), 1))))</_FxTsHostArch>
+
+    <FxTreeSitterOutputDir>$(FxTreeSitterCacheDir)$(FxTreeSitterBuildKey)$(_FxTsSep)$(FxTreeSitterRid)$(_FxTsSep)</FxTreeSitterOutputDir>
+    <FxTreeSitterStaticFileName Condition="'$(_FxTsOs)' == 'win'">$(FxTreeSitterLibraryName).lib</FxTreeSitterStaticFileName>
+    <FxTreeSitterStaticFileName Condition="'$(_FxTsOs)' != 'win'">lib$(FxTreeSitterLibraryName).a</FxTreeSitterStaticFileName>
+    <FxTreeSitterSharedFileName Condition="'$(_FxTsOs)' == 'win'">$(FxTreeSitterLibraryName).dll</FxTreeSitterSharedFileName>
+    <FxTreeSitterSharedFileName Condition="'$(_FxTsOs)' == 'osx'">lib$(FxTreeSitterLibraryName).dylib</FxTreeSitterSharedFileName>
+    <FxTreeSitterSharedFileName Condition="'$(_FxTsOs)' != 'win' and '$(_FxTsOs)' != 'osx'">lib$(FxTreeSitterLibraryName).so</FxTreeSitterSharedFileName>
+    <FxTreeSitterStaticLibrary>$(FxTreeSitterOutputDir)static$(_FxTsSep)$(FxTreeSitterStaticFileName)</FxTreeSitterStaticLibrary>
+    <FxTreeSitterSharedLibrary>$(FxTreeSitterOutputDir)shared$(_FxTsSep)$(FxTreeSitterSharedFileName)</FxTreeSitterSharedLibrary>
+    <!-- The core's sources: the first archive is tree-sitter itself. -->
+    <_FxTsCoreDir>$(FxTreeSitterCacheDir)tree-sitter-$(FxTreeSitterVersion)$(_FxTsSep)lib$(_FxTsSep)</_FxTsCoreDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(FxTreeSitterBinding)' == 'true'">
+    <None Include="$(FxTreeSitterSharedLibrary)" Link="$(FxTreeSitterSharedFileName)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="_FxTreeSitterBuildForBinding"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="FxTreeSitterBuildNative"
+          Condition="'$(FxTreeSitterBinding)' == 'true' and '$(DesignTimeBuild)' != 'true'" />
+
+  <Target Name="FxTreeSitterLinkStatic"
+          BeforeTargets="SetupOSSpecificProps"
+          DependsOnTargets="_FxTreeSitterFindBinding;_FxTreeSitterLinkStatic"
+          Condition="'$(PublishAot)' == 'true'" />
+
+  <Target Name="_FxTreeSitterFindBinding">
+    <ItemGroup>
+      <_FxTsBindingAssembly Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Fx.TreeSitter.dll'" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_FxTsLinkStatic Condition="'@(_FxTsBindingAssembly)' != ''">true</_FxTsLinkStatic>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="_FxTreeSitterLinkStatic" DependsOnTargets="FxTreeSitterBuildNative" Condition="'$(_FxTsLinkStatic)' == 'true'">
+    <ItemGroup>
+      <DirectPInvoke Include="$(FxTreeSitterLibraryName)" />
+      <NativeLibrary Include="$(FxTreeSitterStaticLibrary)" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == '$(FxTreeSitterSharedFileName)'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Builds both libraries for FxTreeSitterRid unless the cache has them. Returns their paths. -->
+  <Target Name="FxTreeSitterBuildNative"
+          DependsOnTargets="_FxTreeSitterFindMissing;_FxTreeSitterFetch;_FxTreeSitterCompile"
+          Returns="$(FxTreeSitterStaticLibrary);$(FxTreeSitterSharedLibrary)" />
+
+  <!-- Downloads, verifies and extracts each archive not yet extracted, into <cache>/<archive name>/. -->
+  <Target Name="_FxTreeSitterFindMissing">
+    <ItemGroup>
+      <_FxTsMissing Include="@(FxTreeSitterArchive)" Condition="!Exists('$(FxTreeSitterCacheDir)%(Identity)$(_FxTsSep)verified')">
+        <File>$(FxTreeSitterCacheDir)%(Identity).tar.gz</File>
+        <Dir>$(FxTreeSitterCacheDir)%(Identity)</Dir>
+      </_FxTsMissing>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_FxTreeSitterFetch" Condition="'@(_FxTsMissing)' != ''">
+    <DownloadFile SourceUrl="%(_FxTsMissing.Url)" DestinationFolder="$(FxTreeSitterCacheDir)" DestinationFileName="%(_FxTsMissing.Identity).tar.gz" Retries="3" RetryDelayMilliseconds="5000" Condition="!Exists('%(_FxTsMissing.File)')" />
+    <GetFileHash Files="@(_FxTsMissing->'%(File)')" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_FxTsHashed" />
+    </GetFileHash>
+    <!-- Conditions compare case-insensitively, so the hex case does not matter. -->
+    <Delete Files="%(_FxTsHashed.Identity)" Condition="'%(_FxTsHashed.FileHash)' != '%(_FxTsHashed.Sha256)'" />
+    <Error Condition="'%(_FxTsHashed.FileHash)' != '%(_FxTsHashed.Sha256)'" Text="%(_FxTsHashed.Url) has SHA-256 %(_FxTsHashed.FileHash), but native/tree-sitter/TreeSitter.props pins %(_FxTsHashed.Sha256). The download was deleted." />
+    <RemoveDir Directories="%(_FxTsHashed.Dir)" />
+    <MakeDir Directories="%(_FxTsHashed.Dir)" />
+    <!-- Windows' own tar (bsdtar): Git's GNU tar, often first on PATH, reads C: as a remote host. -->
+    <PropertyGroup>
+      <_FxTsTar Condition="'$(OS)' == 'Windows_NT'">&quot;$(SystemRoot)\System32\tar.exe&quot;</_FxTsTar>
+      <_FxTsTar Condition="'$(OS)' != 'Windows_NT'">tar</_FxTsTar>
+    </PropertyGroup>
+    <Exec Command="$(_FxTsTar) -xzf &quot;%(_FxTsHashed.Identity)&quot; -C &quot;%(_FxTsHashed.Dir)&quot; --strip-components=%(_FxTsHashed.Strip)" />
+    <Touch Files="%(_FxTsHashed.Dir)$(_FxTsSep)verified" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="_FxTreeSitterCompile" Condition="!Exists('$(FxTreeSitterStaticLibrary)') or !Exists('$(FxTreeSitterSharedLibrary)')">
+    <PropertyGroup>
+      <_FxTsWork>$(FxTreeSitterOutputDir)work-$([System.Guid]::NewGuid().ToString('N'))$(_FxTsSep)</_FxTsWork>
+      <_FxTsMacOSArch Condition="'$(_FxTsArch)' == 'x64'">x86_64</_FxTsMacOSArch>
+      <_FxTsMacOSArch Condition="'$(_FxTsArch)' == 'arm64'">arm64</_FxTsMacOSArch>
+      <_FxTsPin>@(FxTreeSitterArchive->'%(Identity)', ' ')</_FxTsPin>
+    </PropertyGroup>
+    <ItemGroup>
+      <_FxTsGrammar Include="@(FxTreeSitterGrammar)">
+        <SourceDir>$(FxTreeSitterCacheDir)%(Archive)$(_FxTsSep)%(Source)</SourceDir>
+      </_FxTsGrammar>
+    </ItemGroup>
+
+    <Error Condition="'$(_FxTsOs)' != 'linux' and '$(_FxTsOs)' != 'osx' and '$(_FxTsOs)' != 'win'" Text="Building tree-sitter for '$(FxTreeSitterRid)' is not supported: use a linux-*, osx-* or win-* runtime identifier." />
+    <Error Condition="'$(_FxTsOs)' == 'linux' and '$(FxTreeSitterCC)' == '' and ('$(_FxTsArch)' != '$(_FxTsHostArch)' or $(FxTreeSitterRid.Contains('-musl-')) != $(NETCoreSdkPortableRuntimeIdentifier.Contains('-musl-')))"
+           Text="Building tree-sitter for $(FxTreeSitterRid) on $(NETCoreSdkPortableRuntimeIdentifier) needs a cross compiler: set FxTreeSitterCC." />
+    <Error Condition="!Exists('%(_FxTsGrammar.SourceDir)$(_FxTsSep)parser.c') or !Exists('%(_FxTsGrammar.SourceDir)$(_FxTsSep)scanner.c')" Text="Grammar %(_FxTsGrammar.Identity): no parser.c and scanner.c in %(_FxTsGrammar.SourceDir)." />
+
+    <MakeDir Directories="$(_FxTsWork);$(FxTreeSitterOutputDir)static;$(FxTreeSitterOutputDir)shared" />
+    <WriteLinesToFile File="$(_FxTsWork)pin.h" Lines="#define FX_TS_PIN &quot;$(_FxTsPin)&quot;" Overwrite="true" />
+
+    <PropertyGroup Condition="'$(_FxTsOs)' != 'win'">
+      <_FxTsTarget Condition="'$(_FxTsOs)' == 'osx'">--target=$(_FxTsMacOSArch)-apple-macos$(FxTreeSitterMacOSMinVersion)</_FxTsTarget>
+      <_FxTsShared Condition="'$(_FxTsOs)' == 'osx'">-dynamiclib -install_name @rpath/$(FxTreeSitterSharedFileName)</_FxTsShared>
+      <_FxTsShared Condition="'$(_FxTsOs)' != 'osx'">-shared</_FxTsShared>
+      <_FxTsArchiver Condition="'$(_FxTsOs)' == 'osx'">ZERO_AR_DATE=1 ar rcs</_FxTsArchiver>
+      <_FxTsArchiver Condition="'$(_FxTsOs)' != 'osx'">ar rcsD</_FxTsArchiver>
+      <_FxTsCFlags>$(_FxTsTarget) -std=c11 -O2 -fPIC -ffunction-sections -fdata-sections -DNDEBUG</_FxTsCFlags>
+      <_FxTsGrammarCommands>@(_FxTsGrammar->'echo "  grammar %(Identity)"
+$cc $(_FxTsCFlags) -DTREE_SITTER_HIDE_SYMBOLS -I"%(SourceDir)" -c "%(SourceDir)/parser.c" -o "$(_FxTsWork)%(Identity).parser.o"
+$cc $(_FxTsCFlags) -DTREE_SITTER_HIDE_SYMBOLS -I"%(SourceDir)" -c "%(SourceDir)/scanner.c" -o "$(_FxTsWork)%(Identity).scanner.o"', '%0a')</_FxTsGrammarCommands>
+      <_FxTsUnixCommand><![CDATA[
+set -e
+cc="$(FxTreeSitterCC)"
+if [ -z "$cc" ]; then
+  for candidate in clang gcc; do
+    if command -v "$candidate" >/dev/null 2>&1; then cc="$candidate"; break; fi
+  done
+fi
+if [ -z "$cc" ]; then echo "error: no C compiler: install clang or gcc, or set FxTreeSitterCC" >&2; exit 1; fi
+echo "Compiling tree-sitter $(FxTreeSitterVersion) and its grammars for $(FxTreeSitterRid) with $cc"
+$cc $(_FxTsCFlags) -fvisibility=hidden -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_DARWIN_C_SOURCE -I"$(_FxTsWork)." -I"$(_FxTsCoreDir)src" -I"$(_FxTsCoreDir)include" -c "$(FxTreeSitterLibrarySource)" -o "$(_FxTsWork)library.o"
+$(_FxTsGrammarCommands)
+$(_FxTsArchiver) "$(_FxTsWork)$(FxTreeSitterStaticFileName)" "$(_FxTsWork)"*.o
+$cc $(_FxTsTarget) $(_FxTsShared) -o "$(_FxTsWork)$(FxTreeSitterSharedFileName)" "$(_FxTsWork)"*.o
+]]></_FxTsUnixCommand>
+    </PropertyGroup>
+    <Exec Condition="'$(_FxTsOs)' != 'win'" Command="$(_FxTsUnixCommand)" IgnoreStandardErrorWarningFormat="true" />
+
+    <!-- Windows: the DLL's exports, from the core's list, the shim's and the grammars' functions. -->
+    <ReadLinesFromFile Condition="'$(_FxTsOs)' == 'win'" File="$(_FxTsCoreDir)src$(_FxTsSep)tree_sitter.def">
+      <Output TaskParameter="Lines" ItemName="_FxTsCoreDef" />
+    </ReadLinesFromFile>
+    <ItemGroup Condition="'$(_FxTsOs)' == 'win'">
+      <_FxTsDefLine Include="EXPORTS" />
+      <_FxTsDefLine Include="@(_FxTsCoreDef)" Condition="!$([System.String]::new('%(Identity)').StartsWith(';')) and '%(Identity)' != 'EXPORTS'" />
+      <_FxTsDefLine Include="    fx_ts_parse_utf8;    fx_ts_pin;    fx_ts_language_version;    fx_ts_min_compatible_language_version" />
+      <_FxTsDefLine Include="@(_FxTsGrammar->'    %(Function)')" />
+    </ItemGroup>
+    <WriteLinesToFile Condition="'$(_FxTsOs)' == 'win'" File="$(_FxTsWork)exports.def" Lines="@(_FxTsDefLine)" Overwrite="true" />
+
+    <PropertyGroup Condition="'$(_FxTsOs)' == 'win'">
+      <_FxTsVSWhere>$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))\Microsoft Visual Studio\Installer\vswhere.exe</_FxTsVSWhere>
+      <_FxTsVCComponent Condition="'$(_FxTsArch)' == 'arm64'">ARM64</_FxTsVCComponent>
+      <_FxTsVCComponent Condition="'$(_FxTsArch)' != 'arm64'">x86.x64</_FxTsVCComponent>
+      <_FxTsVCHost>$(_FxTsHostArch.Replace('x64', 'amd64'))</_FxTsVCHost>
+      <_FxTsVCTarget>$(_FxTsArch.Replace('x64', 'amd64'))</_FxTsVCTarget>
+      <_FxTsVCEnvironment>$(_FxTsVCHost)_$(_FxTsVCTarget)</_FxTsVCEnvironment>
+      <_FxTsVCEnvironment Condition="'$(_FxTsVCHost)' == '$(_FxTsVCTarget)'">$(_FxTsVCHost)</_FxTsVCEnvironment>
+      <!-- /MT: the static C runtime, which Native AOT links; /utf-8: grammar sources are UTF-8. -->
+      <_FxTsCl>cl /nologo /c /std:c11 /utf-8 /O2 /Gy /Gw /MT /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /Brepro</_FxTsCl>
+      <_FxTsGrammarWindowsCommands>@(_FxTsGrammar->'echo   grammar %(Identity)
+$(_FxTsCl) /DTREE_SITTER_HIDE_SYMBOLS /I"%(SourceDir)" /Fo"$(_FxTsWork)%(Identity).parser.obj" "%(SourceDir)\parser.c" || exit /b 1
+$(_FxTsCl) /DTREE_SITTER_HIDE_SYMBOLS /I"%(SourceDir)" /Fo"$(_FxTsWork)%(Identity).scanner.obj" "%(SourceDir)\scanner.c" || exit /b 1', '%0d%0a')</_FxTsGrammarWindowsCommands>
+      <_FxTsWindowsCommand><![CDATA[
+setlocal
+set "VSDIR="
+for /f "usebackq delims=" %%i in (`"$(_FxTsVSWhere)" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.$(_FxTsVCComponent) -property installationPath`) do set "VSDIR=%%i"
+if not defined VSDIR (
+  echo error: Visual Studio with the C++ tools for $(_FxTsArch) not found ^(vswhere: Microsoft.VisualStudio.Component.VC.Tools.$(_FxTsVCComponent)^) 1>&2
+  exit /b 1
+)
+call "%VSDIR%\VC\Auxiliary\Build\vcvarsall.bat" $(_FxTsVCEnvironment) >NUL || exit /b 1
+echo Compiling tree-sitter $(FxTreeSitterVersion) and its grammars for $(FxTreeSitterRid) with MSVC ^($(_FxTsVCEnvironment)^)
+$(_FxTsCl) /I"$(_FxTsWork)." /I"$(_FxTsCoreDir)src" /I"$(_FxTsCoreDir)include" /Fo"$(_FxTsWork)library.obj" "$(FxTreeSitterLibrarySource)" || exit /b 1
+$(_FxTsGrammarWindowsCommands)
+lib /nologo /Brepro /OUT:"$(_FxTsWork)$(FxTreeSitterStaticFileName)" "$(_FxTsWork)*.obj" || exit /b 1
+link /nologo /Brepro /DLL /DEF:"$(_FxTsWork)exports.def" /OUT:"$(_FxTsWork)$(FxTreeSitterSharedFileName)" "$(_FxTsWork)*.obj" || exit /b 1
+]]></_FxTsWindowsCommand>
+    </PropertyGroup>
+    <Error Condition="'$(_FxTsOs)' == 'win' and !Exists('$(_FxTsVSWhere)')" Text="vswhere.exe not found at '$(_FxTsVSWhere)': building tree-sitter needs Visual Studio (or the Build Tools) with the C++ workload, as Native AOT does." />
+    <Exec Condition="'$(_FxTsOs)' == 'win'" Command="$(_FxTsWindowsCommand)" IgnoreStandardErrorWarningFormat="true" />
+
+    <Move SourceFiles="$(_FxTsWork)$(FxTreeSitterStaticFileName);$(_FxTsWork)$(FxTreeSitterSharedFileName)"
+          DestinationFiles="$(FxTreeSitterStaticLibrary);$(FxTreeSitterSharedLibrary)" />
+    <RemoveDir Directories="$(_FxTsWork)" />
+  </Target>
+</Project>

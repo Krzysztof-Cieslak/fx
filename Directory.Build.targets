@@ -25,4 +25,11 @@
     to whatever references it; linked statically into a Native AOT executable that references it.
   -->
   <Import Project="$(MSBuildThisFileDirectory)native/sqlite/Sqlite.targets" />
+
+  <!--
+    The pinned tree-sitter and its grammars (native/tree-sitter, docs/spikes/tree-sitter.md): built for
+    src/Fx.TreeSitter, copied next to whatever references it, linked statically into a Native AOT
+    executable that references it.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)native/tree-sitter/TreeSitter.targets" />
 </Project>
