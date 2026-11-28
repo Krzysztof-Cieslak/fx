@@ -405,7 +405,14 @@ let tests =
                                     | Ok _ -> ()
                                     | Error e -> failtest $"{name}: {e}"
 
-                                for example in BunTs.promptPack.Examples do
+                                // Examples of the session's own bindings (`jobs`, T143) type-check in a
+                                // session's kernel instead (tests/Fx.CodeAct.Tests/LiveTests.fs).
+                                let core =
+                                    BunTs.promptPack.Examples
+                                    |> List.filter (fun example ->
+                                        not (example.Code.Contains(Product.kernelGlobal + ".jobs.")))
+
+                                for example in core do
                                     let! diagnostics = l.Check example.Code
                                     Expect.isEmpty (diagnostics |> List.map string) example.Title
                             })

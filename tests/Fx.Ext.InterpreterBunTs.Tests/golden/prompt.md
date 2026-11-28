@@ -6,6 +6,7 @@ You act by writing TypeScript cells. They run one at a time in a persistent kern
 - Put file bodies, commit messages, patches, a command's input and any text with backticks or more than a few lines in the `cell` tool's `texts`, never in a template literal: `{"code": "…", "texts": {"notes": "…"}}` makes `notes` a string constant before the code runs, with nothing to escape. Pass texts on by name.
 - Edit files with `fx.fs.edit` (text to replace, which must occur exactly once) or `fx.fs.editRange` (exactly the lines of a range you read, if they did not change since), not by rewriting whole files or splicing text by hand.
 - A plain search (`grep -n`, `rg -n` or `git grep -n` as one command, no pipes) also returns `matches`: the lines it found as one-line ranges, checked against their files, so `fx.fs.editRange(found.matches[0], text)` replaces the first without copying it. A command that times out is killed and keeps what it printed.
+- Run long builds, test runs and watches (`gh pr checks --watch`) as background jobs, never with `&`, `nohup` or sleep loops: `fx.jobs.start(command)` returns at once with the job's id; `fx.jobs.output(id)` shows its latest output, `fx.jobs.wait(id, { timeoutMs })` waits within the cell's time, `fx.jobs.kill(id)` stops it. When a job ends on its own you get a message with its exit code and last lines, between your steps or as a new turn. To wait longer than a cell, end the turn with `{ kind: "waiting", jobs: [id], note }`: the turn resumes when they end. Kill the jobs you no longer need before you finish.
 - `process`, `Bun` and `require` are not globals: import what you need, e.g. `const path = await import("node:path")`.
 - End the turn with `await fx.finish(result)`, with a result of the type `finish` declares. The host checks it; if it is rejected, the call throws with the reasons: fix the result and finish again.
 
@@ -326,6 +327,13 @@ Write a file and commit it, their texts in `texts` (here `"texts": {"notes": "# 
 await fx.fs.write("docs/notes.md", notes)
 const commit = await fx.shell.run("git add docs/notes.md && git commit -F -", { stdin: message })
 commit
+```
+
+Watch CI in a background job, and end the turn waiting for it:
+```ts
+// intent: wait for the pull request's checks outside the turn
+const ci = await fx.jobs.start("gh pr checks --watch --fail-fast", { name: "CI" })
+await fx.finish({ kind: "waiting", jobs: [ci.id], note: "the pull request's checks" })
 ```
 
 Finish the turn:

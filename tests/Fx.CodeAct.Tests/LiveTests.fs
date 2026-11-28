@@ -548,11 +548,70 @@ let private crashed (f: Fixture) : Task<unit> =
         Expect.stringContains (text read) "[3, 3]" $"Out and recall give the value back: {seen f}"
     }
 
+/// TypeScript cells start background jobs (T143): one waited for in the cell, one the turn ends
+/// waiting for, whose end starts the next turn. The prompt pack's examples of jobs type-check in the
+/// session's kernel, which declares them.
+let private backgroundJobs (f: Fixture) : Task<unit> =
+    task {
+        f.Model.AddAll
+            [
+                Say.cell
+                    $"// intent: build in the background and wait for it\nconst job = await {g}.jobs.start(\"echo built\", {{ name: \"build\" }})\nconst status = await {g}.jobs.wait(job.id, {{ timeoutMs: 60000 }})\nconst out = await {g}.jobs.output(job.id)\njob.id + \" | \" + status.state + \" | \" + status.exitCode + \" | \" + out.text.trim()"
+                Say.cell
+                    $"// intent: wait for a slower job outside the turn\nconst slow = await {g}.jobs.start(\"sleep 1; echo later\")\nawait {g}.finish({{ kind: \"waiting\", jobs: [slow.id], note: \"the slow build\" }})"
+                Say.cell $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"Both jobs built\" }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Build twice"
+        let! first = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+
+        match completed first with
+        | TurnResult.Waiting([ "j2" ], _) -> ()
+        | other -> failtest $"{other}; receipts: {seen f}"
+
+        Expect.stringContains (text (receipts f "s1").Head) "j1 | exited | 0 | built" $"waited for: {seen f}"
+        let! second = (ended f "s1" 2).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed second) (TurnResult.Done("Both jobs built", [], None)) "resumed"
+
+        Expect.stringContains
+            (requestText (List.last f.Model.Requests))
+            "Job j2 finished: `sleep 1; echo later` exited with code 0"
+            "the notice"
+
+        match f.Kernel "s1" with
+        | None -> failtest "no kernel"
+        | Some kernel ->
+            let examples =
+                Fx.Ext.InterpreterBunTs.BunTs.promptPack.Examples
+                |> List.filter (fun example -> example.Code.Contains(g + ".jobs."))
+
+            Expect.isNonEmpty examples "the prompt shows jobs"
+
+            for example in examples do
+                match!
+                    run
+                        f
+                        (Kernel.check
+                            kernel
+                            {
+                                CellId = "example"
+                                Code = example.Code
+                            })
+                with
+                | Ok checkedCell -> Expect.isEmpty (checkedCell.Diagnostics |> List.map string) example.Title
+                | Error e -> failtest $"{e}"
+    }
+
 [<Tests>]
 let tests =
     testList
         "CodeAct on bun-ts"
         [
+            testTask "TypeScript cells start background jobs, wait for one and end the turn waiting for another" {
+                do! live "live-jobs" [] backgroundJobs ()
+            }
+
             testTask "cells-only: TypeScript cells read, edit, run a command and finish with evidence" {
                 do! live "live-cells" [] cellsOnly ()
             }
