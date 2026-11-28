@@ -67,7 +67,7 @@ from: `TextPart`, `MediaPart` and `ToolResult` carry `Sources: ContentSource lis
 
 | Producer | Sources it sets | Task |
 |---|---|---|
-| Prompt render (`Fx.Prompt`): every text part and tool result made from pieces that show a file (`Piece.File`: sections, pinned files, receipts, summaries, views) | each file and its lines (`Piece.sources`) | T126 (done), T203 |
+| Prompt render (`Fx.Prompt`): every text part and tool result made from pieces that show a file (`Piece.File`: sections, pinned files, receipts, summaries, views) | each file and its lines (`Piece.sources`) | T126 (done), T203a, T203b |
 | The CodeAct loop: a cell's result as a tool result or message | every file the cell read through the bridge (`fs.read` calls of its cell), as a `Piece.Quote` | T127 (done), T205 |
 | Hybrid tools (`read`, `edit` diffs) | the file read or edited (`Piece.File`) | T127 (done) |
 | Per-cell diffs shown to the model | the files changed | T205 |

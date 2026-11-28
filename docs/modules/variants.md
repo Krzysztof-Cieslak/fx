@@ -250,7 +250,7 @@ with the model routes (T208, T217).
 | `goal.context` | `continue` \| `compact` \| `fresh-handoff` | `fresh-handoff` | §8.2 |
 | `model.role.<role>` for `main`, `fast`, `summarizer`, `review`, `judge`, `embed` | `provider/model` or `null` | `null` (unset until configured) | §10.4 |
 
-The code that reads them comes with later tasks (T127, T201, T203, T204, T111, T214, T208). Agents and
+The code that reads them comes with later tasks (T127, T201, T203b, T204b, T111, T214, T208). Agents and
 extensions add their own model roles with `Slots.modelRole role |> Slot.ownedBy id`. Slots of a feature that
 lives in an extension belong to that extension.
 

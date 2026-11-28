@@ -250,7 +250,7 @@ environment, a missing runtime).
 |---|---|
 | A session's bridge and kernel: the strategy builds the bridge (its `TurnResult` codec and `Ensure`), reads the core settings and whether type errors block (`check`) through variants, numbers cells, passes intents, restarts killed kernels and restores kept values with `recall` (done: [codeact.md](codeact.md)) | T127, T128 |
 | Brokered host-side bindings (`ledger`, `grants`, `llm`, `agents`, `runs`, `context`, `history`, …; `recall` is the CodeAct strategy's, T128) | their tasks (T201, T301, T213, …) |
-| `repo.*` bindings, anchored edits (`fs.edit`), smart previews | T202, T204, T203 |
+| `repo.*` bindings, anchored edits (`fs.edit`), readable results and smart previews | T202, T204a, T203a, T203b |
 | Blobs and handles for large values and output overflow | T201 |
 | Activity wrappers around bindings and per-cell diffs | T205 |
 | Provenance from kernel-side activity (`CoreSettings.Exclusions` from the session's variants and the provenance of `fs.read` calls are T127's, done) | T205 |

@@ -29,9 +29,9 @@ Earliest wave in which each task can start (longest dependency chain). Tasks in 
 - **Wave 6:** T109b Extension host capabilities, T113b envd paths beneath roots, T114 fx.runtime.bun, T119 anthropic.messages, T120 openai.responses, T124 Egress hooks, T126 Prompt render, T137 Sandbox opt-in, T207 openai.chat, T208 Catalog + probes + roles, T211 Install methods, T216 Benchmark env provider, T302 Ledger git store, T401 Decision adapters, T501 SSH provider, T505 Device pairing, T506 GitHub OAuth + OIDC, T509 Cloud model routes, T511 AppContainer sandbox
 - **Wave 7:** T115 fx.exthost.bun, T117 bun-ts kernel, T209 Sign in with ChatGPT, T210 Copilot provider, T402 Judgments, T502 Docker provider, T503 Materialize/export, T512 Sandbox: copy-on-write home, T601 Egress redaction, T602 fsi interpreter, T603 python + monty, T607 LSP components
 - **Wave 8:** T115b Bun extension host in the host, T127 CodeAct strategy, T201 Values & references, T510 First cloud env (E2B)
-- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203 Smart previews, T204 Anchored edits + guard, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
-- **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T212 Run kernel, T217 Eval harness, T608 Agent teams
-- **Wave 11:** T129b Client protocol + `fx serve`, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
+- **Wave 9:** T127b CodeAct grants, T128 Crash recovery, T131 Record + replay, T135 CodeAct: a kernel that stays, T203a Readable results, T205 Activity, diffs, undo, T206 Steering + compaction, T213 Agents, T604 Memory, T605 MCP bridge
+- **Wave 10:** T129a Host composition + headless run, T138 Environments: chosen variables, T139 Cells: large arguments, T141 Cells: outcomes that say why, T143 Background jobs, T203b Smart previews, T204a Anchored edits, T212 Run kernel, T217 Eval harness, T608 Agent teams
+- **Wave 11:** T129b Client protocol + `fx serve`, T140 Cells: text without escaping, T142 Shell results with structure, T204b Edit guard, T214 Goals, T218 SWE-bench + TB2, T219 Capability tests, T220 Public dashboard, T304 Workflow IR + executor
 - **Wave 12:** T130 Minimal TUI, T132a Headless approvals, T305 Markdown workflows, T306 Wait gates, T403 TS workflow worker, T404 Triggers, T405 Safe outputs, T507 Multi-client + inbox, T606 ACP adapter
 - **Wave 13:** T132 Milestone: fx builds fx, T133a TUI: ask once, T133d TUI: colours and themes, T134 Approval modes, T215 Runs panel (timeline), T303 Decisions panel, T406 Templates, T508 Web client
 - **Wave 14:** T133c TUI: Markdown, T134b Yolo approvals, T307 Runs panel (graph), T609 Desktop
@@ -114,12 +114,19 @@ flowchart LR
     T135["T135 CodeAct: a kernel that stays"]
     T137["T137 Sandbox opt-in"]
     T138["T138 Environments: chosen variables"]
+    T139["T139 Cells: large arguments"]
+    T140["T140 Cells: text without escaping"]
+    T141["T141 Cells: outcomes that say why"]
+    T142["T142 Shell results with structure"]
+    T143["T143 Background jobs"]
   end
   subgraph P2["Phase 2 — Agent quality, UX, models, agents, goals, evals"]
     T201["T201 Values & references"]
     T202["T202 Repo navigation"]
-    T203["T203 Smart previews"]
-    T204["T204 Anchored edits + guard"]
+    T203a["T203a Readable results"]
+    T203b["T203b Smart previews"]
+    T204a["T204a Anchored edits"]
+    T204b["T204b Edit guard"]
     T205["T205 Activity, diffs, undo"]
     T206["T206 Steering + compaction"]
     T207["T207 openai.chat"]
@@ -299,15 +306,29 @@ flowchart LR
   T123 --> T138
   T131 --> T138
   T137 --> T138
+  T127 --> T139
+  T135 --> T139
+  T139 --> T140
+  T127b --> T141
+  T135 --> T141
+  T204a --> T142
+  T127b --> T143
+  T131 --> T143
+  T203a --> T143
   T117 --> T201
   T126 --> T201
   T008 --> T202
   T111 --> T202
-  T201 --> T203
-  T202 --> T203
-  T201 --> T204
-  T202 --> T204
-  T126 --> T204
+  T126 --> T203a
+  T127 --> T203a
+  T201 --> T203b
+  T202 --> T203b
+  T203a --> T203b
+  T203a --> T204a
+  T201 --> T204b
+  T202 --> T204b
+  T126 --> T204b
+  T204a --> T204b
   T111 --> T205
   T127 --> T205
   T126 --> T206
@@ -490,6 +511,11 @@ flowchart LR
 | T135 | CodeAct: a kernel that stays | T127 | §6.9 | done | Dogfooding (T132): the kernel restarted between turns and between cells of one turn, so names from earlier cells were lost. Find the cause; a kernel lives for the session unless it is killed or the host restarts, and a restart is logged with its reason. Tests for a kernel kept across turns. |
 | T137 | Sandbox opt-in | T113 | §9.1, §18 | done | Dogfooding (T132): the sandbox kept ordinary tools from working (NuGet could not read `~/.nuget/NuGet/NuGet.Config`, a credential location; Cargo, Yarn Berry and the MSBuild server write or read under `~`), and per-tool variables (T136, dropped) were a growing list of special cases; mainstream agents run without an OS sandbox, with permission prompts as the control. The sandbox becomes opt-in: `sandbox.driver` defaults to `none` (privileged: host config or the command line turn it on with `auto` or a driver; a project cannot); the default carries no warning (`sandbox: off` in the TUI and `fx run`), while a requested sandbox that cannot run still warns (`auto`) or fails the environment (a driver). Seatbelt lets the environment's own unix sockets through; the prompt describes the sandbox when one confines. spec §9.1, §18 and the docs say what each mode leaves open and what breaks. Host tests: the default, opting in, `auto`'s fallback, a project's config. Replaces T136. |
 | T138 | Environments: chosen variables | T112, T121, T123, T131, T137 | §9.4, §11, §13, §18 | done | Dogfooding (T132): fx's agent cannot use `gh` or push, because the host scrubs credential-like variables (`GH_TOKEN`). A person chooses the variables an environment's commands get: the privileged slot `env.variables` (`host:<NAME>`, `secret:<name>` or a literal for plain names; `env.deny`), and an environment spec's `variables`, where a project's credentials need the person's consent (`env.credential`, `secret.read`, repo-scoped). Values are redacted from everything the model, logs and the journal see; names shown and recorded. Plan: [docs/plans/t138-env-variables.md](docs/plans/t138-env-variables.md). |
+| T139 | Cells: large arguments | T127, T135 | §6.6 | todo | Dogfooding (T132): a cell cannot pass more than 16 KiB to a host call (`fs.write` of a 43 KB file failed, while results have no cap), so sessions wrote files in chunks through `cat >>`. Host-call arguments travel inline up to `values.argumentMaxBytes` (a new core slot, 8 MiB; an optional kernel limit, so an older kernel keeps 16 KiB); `values.inlineMaxBytes` still bounds kept values and `finish`; journals keep only digests and previews of arguments. Kernel conformance on both kernels; a cell writes a 200 KB file with one `fs.write`. Blob arguments stay T201's. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T140 | Cells: text without escaping | T139 | §6.9, §6.10 | todo | Dogfooding (T132): F# and Markdown backticks end TypeScript template literals, and the model's workaround corrupted a file. The `cell` tool takes optional `texts` (names to text), bound as constants before the code runs, for file bodies, commit messages and stdin; a new version of the tools section (conversations keep the one their frame recorded); the prompt pack teaches it. A 50 KB F# file with backticks is written byte for byte in one cell. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T141 | Cells: outcomes that say why | T127b, T135 | §6.4, §6.5, §13 | todo | Dogfooding (T132): cells were stopped at the 600 s timeout while a host call waited for a person's approval, and the receipt said only "timed out"; a failed cell leaves names declared but unassigned. While a host call waits for a person, the host holds the cell's clock (`cell/hold`, optional); a cell stopped while one waits names the call and the request, which is withdrawn with that reason; receipts list the names a failed cell never assigned (`unassigned`). Kernel conformance on both kernels; CodeAct tests on a fake clock. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T142 | Shell results with structure | T204a | §6.5, §6.7 | todo | A command that times out keeps the output it printed (today `shell.run` returns none) and is killed with its children; a plain search (`grep -n`, `rg -n` or `git grep -n`, one command, no pipes, nothing cut) also returns `matches`, ranges that `fs.edit` takes, attached only when every line checks against its file; the receipt says how to edit one. Hybrid's `bash` gets the same. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T143 | Background jobs | T127b, T131, T203a | §5, §6.5 | todo | Dogfooding (T132): sessions polled test runs and CI with `setsid nohup` and sleep loops. `fx.jobs` (`start`, `list`, `status`, `output`, `wait`, `kill`): commands in the environment's shell, sandboxed and granted as `shell.run` is, in a table per session on the host; a job's end reaches the session as `JobFinished` (a running turn sees it between steps, a turn that ended `waiting` on it resumes); `waiting` results name jobs that exist; jobs are journaled and replay; after a host restart, jobs that were running are reported lost. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
 
 ### Phase 2 — Agent quality, UX, models, agents, goals, evals
 
@@ -497,8 +523,10 @@ flowchart LR
 |---|---|---|---|---|---|
 | T201 | Values & references | T117, T126 | §6.6 | todo | `Value` inline/blob/handle wire type, unforgeable session-scoped handles, `fx.context.pin`/`pinFile`, `fx.recall`/`Out[n]`. |
 | T202 | Repo navigation | T008, T111 | §6.7 | todo | `fx.repo`: tree-sitter outlines/symbols/refs, ripgrep-style grep, `file.lines`, LSP proxy basics. |
-| T203 | Smart previews | T201, T202 | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
-| T204 | Anchored edits + guard | T201, T202, T126 | §6.8 | todo | `fx.fs.edit` with anchors, stale detection, fresh anchors; edit guard over `SeenRanges` with off/warn/require modes. |
+| T203a | Readable results | T126, T127 | §6.6, §6.7 | todo | Dogfooding (T132): a cell's string value was cut at 120 characters, so cells printed it again. A string a cell ends with is shown as text (cut in the middle at `codeact.output.maxChars`); values a binding returned are shown as hybrid's tools show them (`RunResult` as command, output and exit code; `FileText` as numbered lines that count as seen), through an optional `from` on completion values; larger default previews; the prompt pack updated. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T203b | Smart previews | T201, T202, T203a | §6.7 | todo | Type-aware previews: full small files, outlines for large files, head/tail+summary for logs, shape+samples for data; thresholds as variants. |
+| T204a | Anchored edits | T203a | §6.8 | todo | `fx.fs.read(path, {lines})` returns a range; `fx.fs.edit(path, {old, new, all?} or a list)`, checked against the digest read, and `fx.fs.edit(range, text)`, stale if the lines changed; both return fresh ranges. Hybrid's `edit` becomes a host call of it; grants, the sandbox guard, content exclusions and replay cover it. Dogfooding sessions stop defining their own replace helpers. Plan: [docs/plans/t139-cells-and-bridge.md](docs/plans/t139-cells-and-bridge.md). |
+| T204b | Edit guard | T201, T202, T126, T204a | §6.8 | todo | Edit guard over `SeenRanges` with off/warn/require modes; `fx.repo` matches as anchors. |
 | T205 | Activity, diffs, undo | T111, T127 | §6.5, §5 | todo | Semantic activity events, per-cell workspace diffs, step snapshots, two-phase undo of agent-attributed changes. |
 | T206 | Steering + compaction | T126, T127 | §5 | done | Steer vs queue at step boundaries; `Collapsed` compaction with cache-sharing summaries, background preparation, model-callable APIs. |
 | T207 | openai.chat | T118 | §10.1 | todo | Chat Completions adapter for local models and gateways; passes wire conformance. |

@@ -57,7 +57,7 @@ host code ── Fs / FsOps / Shell / Terminal / Blobs / Snapshots ──┐
   lines take the file's (its first line's, else `\n`); a missing final newline stays missing; a byte
   order mark stays; content that is not UTF-8 is `NotText`. Why not unified diffs: models get line
   numbers wrong and context matching is fuzzy; ranges plus a digest are exact and are what anchored
-  edits (spec §6.8, T204) need. A unified-diff parser that produces this list can come later.
+  edits (spec §6.8, T204a) need. A unified-diff parser that produces this list can come later.
 - `Search`: a depth-first walk in name order from `Root`; `.git` directories are skipped, symlinks not
   followed. `Include`/`Exclude` globs (git-style: `*`, `**`, `?`, `[a-z]`, `[!a]`, `{a,b}`; a glob
   without `/` matches the name at any depth) over paths relative to the root with `/`. With a pattern
@@ -280,7 +280,7 @@ agent-attributed changes (spec §5) builds on `Restore` with paths (T205).
   beneath roots" above).
 - **T131** (done, [replay.md](replay.md)): capability calls journaled (process output as `Read`
   results). Recording terminals, and a deterministic `ScriptedTerminal` fake, come when sessions use them.
-- **T202**: ripgrep semantics for search; **T204**: anchored edits on `FsOps.ApplyPatch`; **T205**:
+- **T202**: ripgrep semantics for search; **T204a**: anchored edits on `FsOps.ApplyPatch`; **T205**:
   per-step snapshots, retention and two-phase undo.
 - Signals other than kill and Ctrl+C (typed into a terminal), and starting pipe processes with default
   signal dispositions (pty.md, 8).

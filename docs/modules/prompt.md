@@ -218,7 +218,7 @@ originals stay in the log.
 ## SeenRanges
 
 Which file ranges, of which versions, entered the context (spec §5, §6.8): `{path → {digest → {whole; lines}}}`,
-a pure projection of what a rendered prompt shows. The edit guard (T204) reads it.
+a pure projection of what a rendered prompt shows. The edit guard (T204b) reads it.
 
 - Every `Piece.File` the prompt shows (prefix, visible history, suffix) adds its lines, or the whole file, to its
   normalized path and digest. Withheld files and what a collapse hides add nothing: after a collapse the model
@@ -322,8 +322,8 @@ kept JSON of version 1's context events.
 | What | Task |
 |---|---|
 | `Value` references and handles in receipts (`Piece.Ref`), `fx.context.pin`/`pinFile`, `fx.recall` | T201 |
-| Type-aware previews and outlines in receipts | T203 |
-| The edit guard over `SeenRanges` | T204 |
+| Type-aware previews and outlines in receipts | T203a, T203b |
+| The edit guard over `SeenRanges` | T204b |
 | The repo map's content | T202 |
 | The agent list from the agents registry | T213 |
 | Copilot organization exclusions (a provider's own egress hooks) | T210 |
