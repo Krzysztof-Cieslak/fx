@@ -351,8 +351,9 @@ FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=
 ### 6.9 Action surface (variants)
 
 - **`cells-only`**: one cell tool + `finish` (NOOA-style). `finish` is the bridge's `fx.finish`, called from a cell, so evidence is built from the values cells hold (§6.5) rather than retyped into a tool call.
+- **The cell tool** is `cell {code, texts?}`. `texts` maps names (identifiers) to text: each is bound in the kernel as a string constant of that name before the code runs (`value/decode`), so file bodies, commit messages, patches and a command's input travel without escaping (backticks end TypeScript template literals). A name the kernel cannot bind fails the cell before anything runs, saying which; a cell run again after a crash binds its texts again; receipts never repeat them.
 - **`hybrid`**: cells + direct `read` / `edit` / `bash` tools mapped onto the same `fx.*` capabilities (identical activity, grants, exclusions, edit guard): they are host calls of the bridge's own bindings.
-- **Both ship from phase 1 with no baseline preference**; evals decide. A conversation keeps the surface its first frame recorded: tools precede the prompt prefix that providers cache and check, so a new surface applies to new sessions.
+- **Both ship from phase 1 with no baseline preference**; evals decide. A conversation keeps the surface and the tools its first frame recorded: tools precede the prompt prefix that providers cache and check, so a new surface, or a new version of the tools' schemas, applies to new sessions.
 - Module spec: `docs/modules/codeact.md` (the CodeAct strategy: steps, receipts, kernels per session, policies, loop guard, budgets).
 
 ### 6.10 Example cells
@@ -373,6 +374,13 @@ const review = await fx.agents.reviewer({ diff: await fx.fs.diff(), intent: task
 ```ts
 fx.finish({ kind: "done", summary: "Migrated 37 call sites to RetryPolicy; preserved attempt semantics.",
             evidence: [run2, review], verify: "dotnet test tests/Billing" })
+```
+
+A new file and its commit message travel in the cell tool's `texts`, outside the code, so nothing in them needs escaping:
+
+```json
+{"code": "// intent: add the native layer and commit it\nawait fx.fs.write(\"src/Native.fs\", posix)\nawait fx.shell.run(\"git add src/Native.fs && git commit -F -\", { stdin: message })",
+ "texts": {"posix": "module Native.Posix\n/// See ``Native.fs``…", "message": "Add the `Native` layer…"}}
 ```
 
 ### 6.11 Example: F# interpreter plugin (condensed)

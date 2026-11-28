@@ -1,5 +1,5 @@
-/// Recorded CodeAct sessions replay exactly: both action surfaces, a kernel through the shell,
-/// steering, interrupts (a cell stopped, a cell killed), questions answered into the next turn, model
+/// Recorded CodeAct sessions replay exactly: both action surfaces, a kernel through the shell, cells'
+/// texts, steering, interrupts (a cell stopped, a cell killed), questions answered into the next turn, model
 /// retries, and a host stopped mid-cell whose turn people decide about after a restart.
 module Fx.Replay.Tests.SessionTests
 
@@ -51,6 +51,29 @@ let cellsOnly (f: Fixture) : Task<string> =
                 Say.cell
                     "// intent: write\ncall w = fs.write [\"notes.md\", \"# Notes\\nfirst\\n\"]\nprint wrote the notes\ncall r = shell.run [\"make test\"]\nr"
                 Say.cell "// intent: read\ncall n = fs.read [\"notes.md\"]\nn"
+                Say.finish "Wrote the notes"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Write the notes"
+        let! ending = ended f "s1" 1
+        completed ending
+        return "s1"
+    }
+
+/// A cell writes a file from its texts (T140), bound in the kernel before the code runs; a later cell
+/// binds one again.
+let withTexts (f: Fixture) : Task<string> =
+    task {
+        f.Model.AddAll
+            [
+                Say.cellWith
+                    "// intent: write the notes\ncall w = fs.write [\"notes.md\", \"$notes\"]\nprint wrote the notes"
+                    [
+                        "notes", "# Notes\n\nRun ``fx run`` with `--json`: ${x}\n"
+                        "message", "Add notes"
+                    ]
+                Say.cellWith "// intent: the message\nmessage" [ "message", "Add the `notes`" ]
                 Say.finish "Wrote the notes"
             ]
 
@@ -310,6 +333,9 @@ let tests =
                 Expect.equal report.Requests f.Model.Requests.Length "every request")
 
             recordsAndReplays "a hybrid turn" (fun () -> create hybrid) hybridTurn (fun f report ->
+                Expect.equal report.Requests f.Model.Requests.Length "every request")
+
+            recordsAndReplays "cells with texts, bound before they run" (fun () -> create []) withTexts (fun f report ->
                 Expect.equal report.Requests f.Model.Requests.Length "every request")
 
             recordsAndReplays "a steer delivered at the next boundary" (fun () -> create []) steered ignore2

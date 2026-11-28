@@ -590,14 +590,23 @@ type CodeAct<'R, 'K
             | ToolAction.Bash input ->
                 let! executed = Eff.provide env (Hybrid.bash call settings.ReceiptChars input)
                 return executed, None
-            | ToolAction.Cell code ->
+            | ToolAction.Cell input ->
+                let code = input.Code
                 let intent = Cell.intent code
 
                 let! acquired =
                     Eff.provide hands.Env (kernel.Acquire(hands, limits, settings.RecallRestore))
 
-                match acquired with
-                | Error reason ->
+                // The cell's texts are bound before its code runs (T140), in this action: after its
+                // start is journaled, and again when it runs again after a crash.
+                let! bound =
+                    match acquired with
+                    | Ok(running, _) when not input.Texts.IsEmpty ->
+                        Eff.provide env (CellTexts.bind running settings.ArgumentBytes input.Texts)
+                    | _ -> Eff.ret (Ok())
+
+                match acquired, bound with
+                | Error reason, _ ->
                     return
                         {
                             Pieces = Receipts.failed $"The kernel did not start: {reason}"
@@ -606,7 +615,16 @@ type CodeAct<'R, 'K
                             Approvals = []
                         },
                         None
-                | Ok(running, note) ->
+                | Ok(_, note), Error reason ->
+                    return
+                        {
+                            Pieces = Receipts.unbound note reason
+                            IsError = true
+                            Restarted = Receipts.restart note
+                            Approvals = []
+                        },
+                        None
+                | Ok(running, note), Ok() ->
                     let cell: CellRun =
                         {
                             CellId = cellId
@@ -689,7 +707,7 @@ type CodeAct<'R, 'K
 
             let cell, intent =
                 match action with
-                | ToolAction.Cell code -> Some(cellIdOf call), Cell.intent code
+                | ToolAction.Cell input -> Some(cellIdOf call), Cell.intent input.Code
                 | _ -> None, None
 
             do!
@@ -807,16 +825,16 @@ type CodeAct<'R, 'K
                     let call = halted.Started.Call
                     let! history = ContextLog.load config.Sessions config.Contexts session
 
-                    let surface =
-                        Instructions.recordedSurface (Transcript.ofItems history.Items).Current
-                        |> Option.defaultValue settings.Surface
+                    let toolSet =
+                        Instructions.recordedTools (Transcript.ofItems history.Items).Current
+                        |> Option.defaultValue (Tools.current settings.Surface)
 
                     kernel.Begin(core, Ensure.all settings.Evidence history.State)
 
                     let! executed, finished =
                         match resumed.Decided with
                         | Decided.Rerun _ ->
-                            match Tools.decode surface halted.Call with
+                            match Tools.decode toolSet.Surface halted.Call with
                             | Error message ->
                                 Eff.ret (
                                     {
@@ -904,12 +922,14 @@ type CodeAct<'R, 'K
                     let! history = ContextLog.load config.Sessions config.Contexts session
                     let transcript = Transcript.ofItems history.Items
 
-                    let surface =
-                        Instructions.recordedSurface transcript.Current
-                        |> Option.defaultValue settings.Surface
+                    let toolSet =
+                        Instructions.recordedTools transcript.Current
+                        |> Option.defaultValue (Tools.current settings.Surface)
+
+                    let surface = toolSet.Surface
 
                     let sections =
-                        Instructions.sections surface interpreter hands.Sandbox hands.Variables
+                        Instructions.sections toolSet interpreter hands.Sandbox hands.Variables
 
                     let! transcript =
                         match Transcript.reconcile sections transcript with
@@ -956,7 +976,7 @@ type CodeAct<'R, 'K
 
                         let template =
                             { ChatRequest.create model [] with
-                                Tools = Tools.specs surface hands.Interpreter.Language
+                                Tools = Tools.specs toolSet hands.Interpreter.Language
                                 MaxOutputTokens = settings.MaxOutputTokens
                             }
 

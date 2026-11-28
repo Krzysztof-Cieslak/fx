@@ -1,0 +1,143 @@
+{
+  "cells-only": [
+    {
+      "name": "cell",
+      "description": "Runs a cell: typescript code in this session's persistent kernel (top-level await; declarations persist across cells). Start it with a `// intent: <what and why>` line. The `fx` global reaches the workspace (files, commands); `await fx.finish(result)` ends the turn. The result shows what the cell printed and the value of its last expression, bounded. Put file bodies, commit messages, patches and any text with backticks or more than a few lines in `texts`, not in the code: each is a string constant of its name when the code runs, with nothing to escape.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The cell's code; its first line is `// intent: <what and why>`."
+          },
+          "texts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Texts the code uses, by name: file bodies, commit messages, patches, a command's input. Each is a string constant of its name (an identifier) before the code runs, so it needs no escaping: use it for any text with backticks or more than a few lines. At most 32.",
+            "default": {}
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "strict": false
+    }
+  ],
+  "hybrid": [
+    {
+      "name": "cell",
+      "description": "Runs a cell: typescript code in this session's persistent kernel (top-level await; declarations persist across cells). Start it with a `// intent: <what and why>` line. The `fx` global reaches the workspace (files, commands); `await fx.finish(result)` ends the turn. The result shows what the cell printed and the value of its last expression, bounded. Put file bodies, commit messages, patches and any text with backticks or more than a few lines in `texts`, not in the code: each is a string constant of its name when the code runs, with nothing to escape.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The cell's code; its first line is `// intent: <what and why>`."
+          },
+          "texts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Texts the code uses, by name: file bodies, commit messages, patches, a command's input. Each is a string constant of its name (an identifier) before the code runs, so it needs no escaping: use it for any text with backticks or more than a few lines. At most 32.",
+            "default": {}
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "strict": false
+    },
+    {
+      "name": "read",
+      "description": "Reads a text file of the workspace, with line numbers (use offset and limit for long files). Files that content exclusions keep from models are refused.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative to the workspace."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The first line to show (1-based)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "How many lines to show."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "strict": false
+    },
+    {
+      "name": "edit",
+      "description": "Edits a text file of the workspace: replaces `old` (which must occur exactly once, unless `all`) with `new`. Copy `old` from the file as read, without the line numbers.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative to the workspace."
+          },
+          "old": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The text to replace, exactly as in the file (without line numbers)."
+          },
+          "new": {
+            "type": "string",
+            "description": "The text to put in its place."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Replace every occurrence; otherwise `old` must occur exactly once.",
+            "default": false
+          }
+        },
+        "required": [
+          "path",
+          "old",
+          "new"
+        ]
+      },
+      "strict": false
+    },
+    {
+      "name": "bash",
+      "description": "Runs a command line in the workspace with its shell (sh; PowerShell 7 on Windows) and returns its exit code and output (the head and tail of each stream).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The command line."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Kills the command after this many milliseconds."
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "strict": false
+    }
+  ]
+}

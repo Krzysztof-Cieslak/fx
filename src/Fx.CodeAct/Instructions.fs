@@ -41,8 +41,9 @@ module Instructions =
                 "- Some files are kept from you by content exclusions: reading one fails with `excluded`. Do not work around it."
             ]
 
-    /// The tools section: which surface the conversation runs with. Its version names the surface, so
-    /// a conversation keeps the surface its frame recorded.
+    /// The tools section: which surface the conversation runs with. Its version names the surface and
+    /// the version of the tools' schemas (`Tools.sectionVersion`), so a conversation keeps the tools its
+    /// frame recorded.
     let tools (surface: ActionSurface) : string =
         match surface with
         | ActionSurface.CellsOnly ->
@@ -134,10 +135,11 @@ module Instructions =
                     | None -> ()
             ]
 
-    /// The prefix's sections: the instructions, the surface's tools, the interpreter's prompt, the
-    /// sandbox's description when one confines the hands' processes, and the chosen variables.
+    /// The prefix's sections: the instructions, the tools (their version names the surface and the
+    /// tools' schemas), the interpreter's prompt, the sandbox's description when one confines the hands'
+    /// processes, and the chosen variables.
     let sections
-        (surface: ActionSurface)
+        (toolSet: ToolSet)
         (interpreter: string)
         (sandboxPolicy: SandboxPolicy option)
         (chosen: HandsVariable list)
@@ -147,8 +149,8 @@ module Instructions =
                 Sections.instructions text
                 {
                     Id = "tools"
-                    Version = Some(string surface)
-                    Pieces = [ Piece.Text(tools surface) ]
+                    Version = Some(Tools.sectionVersion toolSet)
+                    Pieces = [ Piece.Text(tools toolSet.Surface) ]
                 }
                 Sections.interpreter interpreter
                 {
@@ -170,16 +172,12 @@ module Instructions =
                 }
             ]
 
-    /// The surface a conversation's frame recorded, if it has one.
-    let recordedSurface (current: Block list) : ActionSurface option =
+    /// The tools a conversation's frame recorded (surface and schemas' version), if it has one.
+    let recordedTools (current: Block list) : ToolSet option =
         current
         |> List.tryFind (fun block -> block.Id = "tools")
         |> Option.bind (fun block -> block.Version)
-        |> Option.bind (fun version ->
-            match version with
-            | "cells-only" -> Some ActionSurface.CellsOnly
-            | "hybrid" -> Some ActionSurface.Hybrid
-            | _ -> None)
+        |> Option.bind Tools.ofSectionVersion
 
     let private note (id: string) (text: string) : Block =
         {
