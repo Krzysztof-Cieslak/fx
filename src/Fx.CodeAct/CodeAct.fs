@@ -105,6 +105,8 @@ type private TurnState(settings: CodeActSettings) =
     member val Collapses = 0 with get, set
     /// The last call's render configuration, live data and request template.
     member val Shape: (RenderConfig * Live * ChatRequest) option = None with get, set
+    /// What the turn's start says about the session's jobs was taken in (T143).
+    member val JobsTaken = false with get, set
     member _.Settings = settings
 
 /// The CodeAct strategy (spec §4.4–4.5, §6.9): a turn runner that, step by step, takes steers at the
@@ -132,6 +134,12 @@ type CodeAct<'R, 'K
         writers.GetOrAdd(session, (fun id -> JournalWriter(config.Steps, id)))
 
     let asks = ConcurrentDictionary<string, HistoryAsks>(StringComparer.Ordinal)
+
+    let jobs = ConcurrentDictionary<string, SessionJobs<'K>>(StringComparer.Ordinal)
+
+    /// A session's background jobs as the strategy knows them (T143).
+    let jobsOf (session: string) : SessionJobs<'K> =
+        jobs.GetOrAdd(session, (fun id -> SessionJobs<'K>(id, writerOf id)))
 
     let asksOf (session: string) : HistoryAsks =
         asks.GetOrAdd(session, (fun _ -> HistoryAsks()))
@@ -250,11 +258,13 @@ type CodeAct<'R, 'K
                     id,
                     watchOf writer,
                     journal,
-                    HistoryBindings.groups,
-                    [
-                        Recall.binding (journalOf id) config.Blobs
-                        HistoryBindings.compact (asksOf id)
-                    ]
+                    HistoryBindings.groups @ JobBindings.groups,
+                    fun settings ->
+                        [
+                            Recall.binding (journalOf id) config.Blobs
+                            HistoryBindings.compact (asksOf id)
+                        ]
+                        @ JobBindings.all (jobsOf id) writer settings
                 )
         )
 
@@ -796,6 +806,10 @@ type CodeAct<'R, 'K
                 asks.Mode <- settings.Compaction.Mode
                 asks.TakeCompact() |> ignore
 
+                // The session's jobs: their numbers go on from the journal (T143).
+                let sessionJobs = jobsOf session
+                do! sessionJobs.Prepare()
+
                 kernel.Begin(core, [ Ensure.summary ])
                 let interpreter = hands.Interpreter.Prompt(kernel.Surface core)
                 let started = EventRef.create (Session.stream session) start.Seq
@@ -831,7 +845,7 @@ type CodeAct<'R, 'K
                         Instructions.recordedTools (Transcript.ofItems history.Items).Current
                         |> Option.defaultValue (Tools.current settings.Surface)
 
-                    kernel.Begin(core, Ensure.all settings.Evidence history.State)
+                    kernel.Begin(core, Ensure.all settings.Evidence history.State sessionJobs.Check)
 
                     let! executed, finished =
                         match resumed.Decided with
@@ -920,8 +934,18 @@ type CodeAct<'R, 'K
                 while state.Outcome.IsNone do
                     state.Step <- state.Step + 1
                     let step = state.Step
-                    let! _ = context.Boundary step
+                    let! delivered = context.Boundary step
                     let! history = ContextLog.load config.Sessions config.Contexts session
+
+                    // What the turn learns of the session's jobs (T143), from the log alone: jobs lost
+                    // with an earlier host, and the notices of jobs that ended among its inputs.
+                    if not state.JobsTaken then
+                        state.JobsTaken <- true
+                        let! lost = sessionJobs.Orphans history.Items
+                        state.Notes <- state.Notes @ lost
+                        do! sessionJobs.Delivered start.Inputs
+
+                    do! sessionJobs.Delivered delivered
                     let transcript = Transcript.ofItems history.Items
 
                     let toolSet =
@@ -943,7 +967,7 @@ type CodeAct<'R, 'K
                                 return Transcript.ofItems history.Items
                             }
 
-                    kernel.Begin(core, Ensure.all settings.Evidence history.State)
+                    kernel.Begin(core, Ensure.all settings.Evidence history.State sessionJobs.Check)
 
                     let overBudget =
                         step > settings.MaxSteps
@@ -1271,7 +1295,7 @@ type CodeAct<'R, 'K
                                                 state.Nudged <- true
                                                 state.Notes <- state.Notes @ [ Instructions.nudge ]
                                             | TextOnlyPolicy.Done when
-                                                (Ensure.all settings.Evidence history.State
+                                                (Ensure.all settings.Evidence history.State sessionJobs.Check
                                                  |> List.collect (fun check -> check (TurnResult.Done(text, [], None))))
                                                     .IsEmpty
                                                 ->
@@ -1329,6 +1353,7 @@ type CodeAct<'R, 'K
                 let kernel = kernelOf start.Session
 
                 envs[start.Session] <- hands.Env
+                (jobsOf start.Session).Hands <- hands.Jobs
                 let! held = kernel.Enter()
                 use _ = held
                 return! turn context hands kernel settings None
@@ -1398,6 +1423,7 @@ type CodeAct<'R, 'K
                     | Ok hands ->
                         let kernel = kernelOf session
                         envs[session] <- hands.Env
+                        (jobsOf session).Hands <- hands.Jobs
                         let! held = kernel.Enter()
                         use _ = held
                         let! result = turn context hands kernel settings (Some resumed)

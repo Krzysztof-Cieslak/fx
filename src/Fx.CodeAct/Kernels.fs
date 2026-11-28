@@ -67,6 +67,10 @@ type Hands<'K> =
         /// The variables a person chose for the environment's commands (T138), by name: the prompt
         /// says which are set and which were left out (`Instructions.variables`).
         Variables: HandsVariable list
+        /// The environment's background jobs (T143): the composition root's `LiveJobs`, which tells
+        /// sessions when their jobs end; a recording journals what they answered, as the guard's
+        /// decisions, and replay answers from the journal (`Jobs.none`: no jobs).
+        Jobs: Jobs<'K>
     }
 
     override this.ToString() = $"hands ({this.Workspace})"
@@ -196,20 +200,25 @@ module Ensure =
                     $"{Json.quote id} is not an open request; to ask the user, reply with your question as plain text instead")
         | _ -> []
 
-    /// `waiting` names jobs that exist (none can be started yet: T212).
-    let jobs (known: string list) (result: TurnResult) : Issue list =
+    /// `waiting` names jobs of the session that run (T143): `check` says why a job cannot be waited
+    /// for (`SessionJobs.Check`: not the session's, or ended already).
+    let jobs (check: string -> string option) (result: TurnResult) : Issue list =
         match result with
         | TurnResult.Waiting(ids, _) ->
             ids
             |> List.indexed
-            |> List.filter (fun (_, id) -> not (List.contains id known))
-            |> List.map (fun (i, id) ->
-                at [ PathSegment.Key "jobs"; PathSegment.Index i ] $"there is no background job {Json.quote id}")
+            |> List.choose (fun (i, id) ->
+                check id
+                |> Option.map (fun reason -> at [ PathSegment.Key "jobs"; PathSegment.Index i ] reason))
         | _ -> []
 
     /// Every check for a turn.
-    let all (policy: EvidencePolicy) (state: SessionState) : (TurnResult -> Issue list) list =
-        [ summary; evidence policy; requests state; jobs [] ]
+    let all
+        (policy: EvidencePolicy)
+        (state: SessionState)
+        (check: string -> string option)
+        : (TurnResult -> Issue list) list =
+        [ summary; evidence policy; requests state; jobs check ]
 
 /// How a cell ended: the kernel's result, the result `finish` accepted in it, and what it read.
 type CellRecord =
@@ -231,14 +240,16 @@ type CellRecord =
 
     override this.ToString() = $"cell record ({this.Reads})"
 
-/// Commands a cell runs (`shell.run`) share its timeout (T141): kernels stop a cell's clock while one
-/// of its host calls is in flight, so that a person's wait for a grant never counts, and the host bounds
-/// the commands instead. Their time counts from after the guard: approval waits never do. Pure.
+/// Commands a cell runs (`shell.run`) and its waits for background jobs (`jobs.wait`, T143) share its
+/// timeout (T141): kernels stop a cell's clock while one of its host calls is in flight, so that a
+/// person's wait for a grant never counts, and the host bounds these calls instead (a wait for a process
+/// is the cell's time, not a person's). Their time counts from after the guard: approval waits never
+/// do. Pure.
 [<RequireQualifiedAccess>]
 module CellCommands =
-    /// The binding whose calls share the cell's timeout.
-    [<Literal>]
-    let Binding = "shell.run"
+    /// The bindings whose calls share the cell's timeout: each takes `timeoutMs` in its second
+    /// argument's options.
+    let Bindings: string list = [ "shell.run"; "jobs.wait" ]
 
     /// What is left of a cell's timeout for its commands once they ran for `spent`: `None` once used up.
     let remaining (timeoutMs: int) (spent: TimeSpan) : int option =
@@ -276,11 +287,11 @@ module CellCommands =
             }
         | _ -> call
 
-    /// A command refused because the cell's commands used up its timeout.
+    /// A command (or wait) refused because the cell's commands and waits used up its timeout.
     let usedUp (timeoutMs: int) : HostCallError =
         HostCallError.Failed(
             "cellTimeout",
-            $"not run: this cell's commands already ran for its whole timeout ({timeoutMs} ms); run it in a cell of its own",
+            $"not run: this cell's commands and waits already ran for its whole timeout ({timeoutMs} ms); run it in a cell of its own",
             None
         )
 
@@ -288,12 +299,12 @@ module CellCommands =
 type private RunningCell(id: string, timeoutMs: int option) =
     let mutable entered = 0
     member val Id = id
-    /// The cell's `timeoutMs`, which its commands share.
+    /// The cell's `timeoutMs`, which its commands and waits share.
     member val TimeoutMs = timeoutMs
     member val Reads = Reads.none with get, set
     member val Returned: Returned list = [] with get, set
     member val Finished: TurnResult option = None with get, set
-    /// How long its commands ran.
+    /// How long its commands and waits ran.
     member val Spent = TimeSpan.Zero with get, set
     /// Its host calls in the guard: numbered as they enter.
     member val Guarded: (int * HostCall) list = [] with get, set
@@ -319,7 +330,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
         watch: Watch<'K>,
         journal: KernelJournal<'K>,
         groups: (string * string) list,
-        extra: HostBinding<'K> list
+        extra: CoreSettings -> HostBinding<'K> list
     ) =
     let gate = obj ()
     let turns = new SemaphoreSlim(1, 1)
@@ -363,7 +374,8 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                             }
         }
 
-    let bindings (current: CoreSettings) : HostBinding<'K> list = CoreBindings.all current @ extra
+    let bindings (current: CoreSettings) : HostBinding<'K> list =
+        CoreBindings.all current @ extra current
 
     let bridge (current: CoreSettings) : Bridge<'K> =
         Bridge.create finishing
@@ -406,7 +418,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
         | _ -> ()
 
     /// A session's kernel without a step journal (launches count from 1 in this process).
-    new(session: string) = SessionKernel<'K>(session, Watch.none, KernelJournal.none, [], [])
+    new(session: string) = SessionKernel<'K>(session, Watch.none, KernelJournal.none, [], (fun _ -> []))
 
     member _.Session = session
 
@@ -445,8 +457,8 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
             lock gate (fun () -> guard <- value)
 
     /// A host call, from a cell or a direct tool: the guard, then the binding with the turn's settings.
-    /// A command of the running cell (`CellCommands`) runs for at most what is left of the cell's
-    /// timeout, counted from after the guard, so a person's wait for a grant never counts.
+    /// A command or a wait for a job of the running cell (`CellCommands`) runs for at most what is left
+    /// of the cell's timeout, counted from after the guard, so a person's wait for a grant never counts.
     member _.Call
         (guard: HostCall -> Eff<'K, Result<Approval list, HostCallError>>)
         : HostCall -> Eff<'K, Result<Value, HostCallError>> =
@@ -468,7 +480,7 @@ type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :>
                 // The time left for the cell's commands, if this is one.
                 let budget =
                     match cell with
-                    | Some cell when call.Binding = CellCommands.Binding ->
+                    | Some cell when List.contains call.Binding CellCommands.Bindings ->
                         cell.TimeoutMs
                         |> Option.map (fun timeoutMs ->
                             cell, timeoutMs, CellCommands.remaining timeoutMs (lock gate (fun () -> cell.Spent)))

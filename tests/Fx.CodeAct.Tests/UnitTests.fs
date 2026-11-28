@@ -818,14 +818,29 @@ let tests =
             test "a result's checks: a summary, evidence when required, open requests, known jobs" {
                 let empty = Session.initial
 
+                // j2 runs; j3 ended (T143).
+                let jobs (id: string) =
+                    match id with
+                    | "j2" -> None
+                    | "j3" -> Some "job j3 ended already"
+                    | other -> Some $"there is no background job {other}"
+
                 let check policy result =
-                    Ensure.all policy empty |> List.collect (fun c -> c result)
+                    Ensure.all policy empty jobs |> List.collect (fun c -> c result)
 
                 Expect.isEmpty (check EvidencePolicy.Optional (TurnResult.Done("did it", [], None))) "fine"
                 Expect.isNonEmpty (check EvidencePolicy.Optional (TurnResult.Done(" ", [], None))) "blank summary"
                 Expect.isNonEmpty (check EvidencePolicy.Required (TurnResult.Done("did it", [], None))) "no evidence"
                 Expect.isNonEmpty (check EvidencePolicy.Optional (TurnResult.NeedInput [ "r1" ])) "unknown request"
                 Expect.isNonEmpty (check EvidencePolicy.Optional (TurnResult.Waiting([ "j1" ], "x"))) "unknown job"
+                Expect.isEmpty (check EvidencePolicy.Optional (TurnResult.Waiting([ "j2" ], "x"))) "a running job"
+
+                let ended =
+                    check EvidencePolicy.Optional (TurnResult.Waiting([ "j2"; "j3" ], "x"))
+                    |> List.exactlyOne
+
+                Expect.stringContains (string ended) "$.result.jobs[1]" "the ended job, at its place"
+                Expect.stringContains (string ended) "ended already" "why"
 
                 let issue =
                     check EvidencePolicy.Optional (TurnResult.NeedInput [ "r1" ]) |> List.head

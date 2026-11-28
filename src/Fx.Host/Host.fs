@@ -842,6 +842,31 @@ module Host =
             let sessionLog = SessionLog.typed stores.Log
             let grantsCapability = GrantsService.grants grants
 
+            // Background jobs (T143): the environments' processes started for sessions' cells. When one
+            // ends on its own its session is told (a `NotifyJob` keyed by the job, so once); they die with
+            // the host, and the next host reports them lost.
+            let sessionHost: SessionHost<HostEnv> option ref = ref None
+
+            let notifyJob (notice: JobNotice) : Task<unit> =
+                task {
+                    match sessionHost.Value with
+                    | Some host ->
+                        let! _ =
+                            Eff.run
+                                env
+                                (SessionHost.send
+                                    host
+                                    notice.Session
+                                    (JobNotices.key notice.Job)
+                                    JobNotices.by
+                                    (JobNotices.command notice))
+
+                        ()
+                    | None -> ()
+                }
+
+            let liveJobs = LiveJobs<EnvHands>(notifyJob)
+
             // Each turn's hands ask the grants log before sensitive host calls (T127b), with the
             // settings of the turn's profile: kernels outlive turns, and use the running turn's guard.
             let hands (turn: TurnStart) : Eff<HostEnv, Result<Hands<EnvHands>, string>> =
@@ -868,8 +893,12 @@ module Host =
                                     AutoApprovals.Unsandboxed
                         }
 
-                    return
-                        GrantGuard.attach guarded (EnvHands.ofHandle options.Clock hostScope plan turn.Session handle)
+                    let hands =
+                        { EnvHands.ofHandle options.Clock hostScope plan turn.Session handle with
+                            Jobs = liveJobs.Jobs
+                        }
+
+                    return GrantGuard.attach guarded hands
                 }
 
             // Sessions are recorded (session.record) for exact replay (`fx replay`, spec §15): every
@@ -914,8 +943,9 @@ module Host =
                         Catalog = catalog
                     }
 
-            // Kernels close before environments stop.
+            // Kernels and jobs close before environments stop.
             cleanup.Push(fun () -> codeact.Close())
+            cleanup.Push(fun () -> liveJobs.Close())
 
             let profiles =
                 ProfileBinder.ofVariants registry config.Policies config.Layers (describe extensions lockfile)
@@ -941,11 +971,15 @@ module Host =
                         settings)
 
             cleanup.Push(fun () -> Eff.run env (SessionHost.stop sessions) :> Task)
+            sessionHost.Value <- Some sessions
 
-            // Sessions with work in flight: starting their actors recovers them (spec §5).
+            // Sessions with work in flight: starting their actors recovers them (spec §5). A session
+            // that waits for jobs waits for none that runs: they died with the host before this one.
             for entry in indexed do
-                let! _ = Eff.provide env (SessionHost.state sessions entry.Session)
-                ()
+                let! snapshot = Eff.provide env (SessionHost.state sessions entry.Session)
+
+                for notice in JobNotices.lostAll snapshot.State do
+                    do! Eff.ofTask (fun () -> notifyJob notice)
 
             return
                 Host(

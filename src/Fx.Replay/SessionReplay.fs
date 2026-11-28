@@ -529,6 +529,7 @@ module SessionReplay =
                                                         None
                                                 Sandbox = info.Sandbox
                                                 Variables = info.Variables
+                                                Jobs = Replay.jobs segment Markers.Hands
                                             })
                                 }
                     Catalog = settings.Catalog

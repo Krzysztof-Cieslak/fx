@@ -563,3 +563,50 @@ module Replay =
                         (Codec.option Values.appended)
                         cancellation
         }
+
+    /// A call whose answer depends on when it was made: it completes in the order recorded.
+    let private ordered<'K, 'T when 'K :> IScope>
+        (segment: ReplaySegment, lane: string, op: string, input: string, summary: string, codec: Codec<'T>)
+        : Eff<'K, 'T> =
+        fun env ->
+            segment.Answer(
+                segment.Claim(lane, op, input, summary),
+                Gate.Ordered,
+                Decode.using codec,
+                env.Scope.Cancellation
+            )
+
+    /// The hands' background jobs (T143) answer as recorded: no process starts. A job's state and
+    /// output depend on when they were asked, so those answers come in the order recorded.
+    let jobs<'K when 'K :> IScope> (segment: ReplaySegment) (lane: string) : Fx.CodeAct.Jobs<'K> =
+        {
+            Start =
+                fun launch ->
+                    fun env ->
+                        answer
+                            segment
+                            lane
+                            Ops.JobStart
+                            (Inputs.json (Values.jobLaunch launch))
+                            $"{launch.Id}: {launch.Command}"
+                            Values.jobStarted
+                            env.Scope.Cancellation
+            Info =
+                fun job -> ordered (segment, lane, Ops.JobInfo, Inputs.json (Values.jobRef job), job.Id, Values.jobInfo)
+            List = fun session -> ordered (segment, lane, Ops.JobList, Inputs.text session, "", Values.jobInfos)
+            Read =
+                fun read ->
+                    ordered (
+                        segment,
+                        lane,
+                        Ops.JobRead,
+                        Inputs.json (Values.jobRead read),
+                        read.Job.Id,
+                        Values.jobOutput
+                    )
+            Wait =
+                fun wait ->
+                    ordered (segment, lane, Ops.JobWait, Inputs.json (Values.jobWait wait), wait.Job.Id, Values.jobInfo)
+            Kill =
+                fun job -> ordered (segment, lane, Ops.JobKill, Inputs.json (Values.jobRef job), job.Id, Values.jobInfo)
+        }

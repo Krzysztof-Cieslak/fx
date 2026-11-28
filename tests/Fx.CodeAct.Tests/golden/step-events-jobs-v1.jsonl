@@ -1,0 +1,7 @@
+{"call":{"attempt":1,"id":"call-1","index":1,"step":2,"turn":1},"command":"dotnet build","cwd":"src","job":"j1","kind":"jobStarted","name":"build"}
+{"command":"gh pr checks --watch","job":"j2","kind":"jobStarted","name":"gh pr checks --watch"}
+{"bytes":2048,"how":{"code":1,"kind":"exited"},"job":"j1","kind":"jobEnded"}
+{"bytes":0,"how":{"kind":"killed"},"job":"j2","kind":"jobEnded"}
+{"how":{"kind":"failed","reason":"could not start /bin/sh: not found"},"job":"j3","kind":"jobEnded"}
+{"how":{"kind":"lost"},"job":"j4","kind":"jobEnded"}
+{"how":{"kind":"reported","note":"`make` exited with code 0; it printed nothing."},"job":"j5","kind":"jobEnded"}

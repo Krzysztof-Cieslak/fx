@@ -19,6 +19,7 @@
     <Compile Include="TurnTests.fs" />
     <Compile Include="CompactionTests.fs" />
     <Compile Include="CrashTests.fs" />
+    <Compile Include="JobTests.fs" />
     <Compile Include="ReplayTests.fs" />
     <Compile Include="ProviderTests.fs" />
     <Compile Include="LiveTests.fs" />

@@ -60,6 +60,43 @@ let tests =
     testList
         "Permissions"
         [
+            test "a background job's command needs what shell.run of it needs (T143)" {
+                let start (place: Workplace) (args: Json list) = show (needsOf place "jobs.start" args)
+
+                Expect.equal
+                    (start unix [ Json.String "dotnet test && git push" ])
+                    (run unix "dotnet test && git push")
+                    "each command"
+
+                Expect.equal
+                    (start unix [ Json.String "make > ../out.txt"; Json.Object [ "name", Json.String "build" ] ])
+                    (run unix "make > ../out.txt")
+                    "its redirections, with options"
+
+                Expect.equal
+                    (start unix [ Json.String "touch ../x"; Json.Object [ "cwd", Json.String "sub" ] ])
+                    (runIn unix "sub" "touch ../x")
+                    "in its working directory"
+
+                Expect.equal
+                    (start windows [ Json.String "Remove-Item -Recurse build" ])
+                    (run windows "Remove-Item -Recurse build")
+                    "PowerShell on Windows"
+
+                let auto (args: Json list) =
+                    match needsOf unix "jobs.start" args with
+                    | CallNeeds.Needs needs -> needs |> List.map (fun n -> n.InWorkspace)
+                    | CallNeeds.Refused reason -> failtest reason
+
+                Expect.equal (auto [ Json.String "npm test" ]) [ true ] "auto approvals run it in the workspace"
+                Expect.equal (auto [ Json.String "curl https://x.dev" ]) [ false ] "askCommands still ask"
+
+                Expect.equal
+                    (start unix [ Json.String "make"; Json.Object [ "cwd", Json.int 3 ] ])
+                    []
+                    "options that do not decode: the binding refuses them"
+            }
+
             test
                 "each simple command of a line is a shell.exec; listed ones written plainly in the workspace need no person" {
                 Expect.equal (run unix "ls -la") [ "shell.exec ls -la (listed)" ] "listed"
