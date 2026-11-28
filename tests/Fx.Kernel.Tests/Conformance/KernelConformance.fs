@@ -355,6 +355,7 @@ let limits: KernelLimits =
         OutputChars = 1000
         Preview = Limits.defaults
         InlineBytes = 4096
+        ArgumentBytes = Some 65536
     }
 
 let setup: KernelSetup =
@@ -1015,6 +1016,13 @@ let private marshalling (subject: KernelSubject) =
 let private hostCalls (subject: KernelSubject) =
     let s = subject.Snippets
 
+    let decode (c: Context) (name: string) (value: Value) =
+        task {
+            match! Eff.run c.Env (Kernel.decode c.Kernel name value None) |> within with
+            | Ok info -> return info
+            | Error e -> return failtest $"decode failed: {e}"
+        }
+
     testList
         "host calls"
         [
@@ -1046,6 +1054,35 @@ let private hostCalls (subject: KernelSubject) =
                 task {
                     let! result = c.Run(s.Call "r" "test.missing" [])
                     runtimeError result |> ignore
+                }
+
+            case subject "an argument larger than inlineBytes, within argumentBytes, reaches the host whole"
+            <| fun c ->
+                task {
+                    let text = String('a', 20000)
+                    let! _ = decode c "big" (Value.Inline(Json.String text))
+                    let! result = c.Run(s.CallWith "seen" "test.echo" "big")
+                    completed result |> ignore
+
+                    let call = c.Recorder.Calls |> Seq.find (fun call -> call.Binding = "test.echo")
+
+                    match call.Args with
+                    | [ Value.Inline(Json.String passed) ] -> Expect.equal passed text "the whole argument"
+                    | other -> failtest $"""the host got {other |> List.map string |> String.concat ", "}"""
+                }
+
+            case subject "an argument larger than argumentBytes fails the cell before the host sees it"
+            <| fun c ->
+                task {
+                    let! _ = decode c "huge" (Value.Inline(Json.String(String('h', 100000))))
+                    let! result = c.Run(s.CallWith "seen" "test.echo" "huge")
+                    let failure = runtimeError result
+                    Expect.equal failure.Code (Some "invalidArguments") "code"
+                    Expect.stringContains failure.Message "test.echo" "names the binding"
+
+                    Expect.isFalse
+                        (c.Recorder.Calls |> Seq.exists (fun call -> call.Binding = "test.echo"))
+                        "the host never saw the call"
                 }
 
             case subject "cancelling a cell cancels its host calls"

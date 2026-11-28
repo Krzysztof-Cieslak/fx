@@ -91,6 +91,11 @@ export interface VariantsConfig {
    * Integer, from 0 to 1048576.
    */
   "values.inlineMaxBytes"?: number;
+  /**
+   * The largest argument of a host call, in bytes of JSON, that a cell passes inline (a file's text, a command's input).
+   * Integer, from 1024 to 12582912.
+   */
+  "values.argumentMaxBytes"?: number;
   /** The shell that runs scripts on Windows: pwsh (PowerShell 7) or powershell (Windows PowerShell). */
   "shell.windows"?: "pwsh" | "powershell";
   /** How a goal's iterations carry context: continue, compact, or fresh-handoff (a fresh session with a handoff). */

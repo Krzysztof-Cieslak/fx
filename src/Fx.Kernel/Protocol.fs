@@ -12,10 +12,17 @@ type KernelLimits =
         Preview: Limits
         /// The largest JSON (UTF-8 bytes) a kernel copies inline; larger values are references.
         InlineBytes: int
+        /// The largest JSON (UTF-8 bytes) of one host call's argument (a file's text, a command's
+        /// input): arguments are copied up to this, beyond `InlineBytes`. `None` (an older host):
+        /// `InlineBytes`.
+        ArgumentBytes: int option
     }
 
+    /// The largest argument of a host call a kernel sends.
+    member this.Arguments = this.ArgumentBytes |> Option.defaultValue this.InlineBytes
+
     override this.ToString() =
-        $"output {this.OutputChars} chars, inline {this.InlineBytes} bytes, preview {this.Preview}"
+        $"output {this.OutputChars} chars, inline {this.InlineBytes} bytes, arguments {this.Arguments} bytes, preview {this.Preview}"
 
 /// What the host tells a kernel in `initialize` (the `kernel` member of the params).
 type KernelSetup =

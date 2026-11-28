@@ -251,6 +251,14 @@ export const reads: variants.VariantReads = [
     }
   },
   {
+    "slot": "values.argumentMaxBytes",
+    "value": 8388608,
+    "source": {
+      "layer": "default",
+      "origin": ""
+    }
+  },
+  {
     "slot": "shell.windows",
     "value": "pwsh",
     "source": {
@@ -330,6 +338,7 @@ export const profile: variants.Profile = {
     "model.role.review": null,
     "model.role.summarizer": null,
     "shell.windows": "pwsh",
+    "values.argumentMaxBytes": 8388608,
     "values.inlineMaxBytes": 16384,
     "values.previewLimits": {
       "maxChars": 1000,

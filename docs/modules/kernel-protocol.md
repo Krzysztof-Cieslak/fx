@@ -58,7 +58,7 @@ The host is the client. Its `initialize` params carry the member `kernel` (`Kern
 {"protocolVersions":["1"],"peer":{…},"capabilities":{…},
  "kernel":{"versions":["1"],"global":"fx","bindings":["shell.run","fs.read"],"moduleBase":"/work",
            "limits":{"outputChars":16000,"preview":{"maxChars":1000,"maxItems":10,"maxDepth":3,"maxStringChars":120},
-                     "inlineBytes":65536}}}
+                     "inlineBytes":65536,"argumentBytes":8388608}}}
 ```
 
 - `versions`: the kernel protocol versions the host speaks, preferred first. The kernel picks one or
@@ -69,6 +69,11 @@ The host is the client. Its `initialize` params carry the member `kernel` (`Kern
   `<global>.shell.run(…)` in TypeScript; every call is a `host/call`.
 - `moduleBase`: where relative imports in cells resolve, if the language has them.
 - `limits`: output, preview and inline bounds (`KernelLimits`); their values are variants (spec §6.6).
+  `inlineBytes` bounds the values a kernel encodes (`value/encode`, `finish`). `argumentBytes`
+  (optional, T139) bounds each argument of a `host/call`, so a cell can pass a file's text or a
+  command's input beyond `inlineBytes`; a host that sends none gets `inlineBytes` for arguments too. An
+  argument over the limit never reaches the host: the cell gets an error with the code
+  `invalidArguments` that names the binding, the size and the limit.
 
 The result carries `kernel` (`KernelInfo`): the chosen `version`, the cells' `language`, `caps`
 (`InterpreterCaps`, spec §6.2) and free-form `details` (runtime versions):
@@ -284,7 +289,7 @@ stays language-neutral and checks everything through the protocol. Version 1 cov
 | Errors | runtime errors with their message, syntax errors that run nothing, state surviving errors |
 | Previews | within default and given limits for long strings, long lists and deep values; small values whole; `notFound` |
 | Marshalling | JSON round trips (Unicode, int64 within 2^53, nesting), values visible to cells, `tooLarge`, `notEncodable`, `invalidName`, handles back to the host unchanged, plain data never a handle, blobs as references |
-| Host calls | results, typed errors with their kind as code, missing bindings, cancellation with the cell |
+| Host calls | results, typed errors with their kind as code, missing bindings, cancellation with the cell, arguments beyond `inlineBytes` within `argumentBytes` whole, beyond `argumentBytes` refused in the cell (`invalidArguments`) |
 | Finish | accepted, rejected by the codec, rejected by an `Ensure` check, with the issues in the cell |
 | Cancellation | `cell/cancel`, `$/cancelRequest`, timeouts of waits and busy loops (the kernel survives), a busy loop the kernel cannot interrupt: killed, a new kernel, `recall` |
 | Activity | reported for its cell before the result (if cells can report it), intent lines |

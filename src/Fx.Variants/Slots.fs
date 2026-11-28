@@ -93,6 +93,16 @@ module Slots =
             (Codec.int |> Codec.between 0 (1024 * 1024))
             (16 * 1024)
 
+    /// `values.argumentMaxBytes`: the largest argument of a host call that a cell passes inline (a
+    /// file's text, a command's input), beyond `values.inlineMaxBytes` (spec §6.6). At most 12 MiB,
+    /// so a message stays under the JSON-RPC limit of 16 MiB.
+    let argumentMaxBytes: Slot<int> =
+        Slot.create
+            "values.argumentMaxBytes"
+            "The largest argument of a host call, in bytes of JSON, that a cell passes inline (a file's text, a command's input)."
+            (Codec.int |> Codec.between 1024 (12 * 1024 * 1024))
+            (8 * 1024 * 1024)
+
     /// `shell.windows`: the shell of `Script` commands on Windows (spec §6.5).
     let windowsShell: Slot<WindowsShell> =
         Slot.enum
@@ -139,6 +149,7 @@ module Slots =
             Slot.info editGuard
             Slot.info previewLimits
             Slot.info inlineValueMaxBytes
+            Slot.info argumentMaxBytes
             Slot.info windowsShell
             Slot.info goalContext
             yield! coreModelRoles |> List.map (modelRole >> Slot.info)

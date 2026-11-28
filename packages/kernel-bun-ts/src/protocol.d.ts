@@ -322,6 +322,11 @@ export interface KernelLimits {
   preview: Limits;
   /** Integer, at least 1. */
   inlineBytes: number;
+  /**
+   * The largest JSON (UTF-8 bytes) of one host call's argument; inlineBytes when absent.
+   * Integer, at least 1.
+   */
+  argumentBytes?: number;
 }
 
 /** The notifications a kernel sends to its host. */

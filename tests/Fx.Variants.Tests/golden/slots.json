@@ -90,6 +90,18 @@
     }
   },
   {
+    "id": "values.argumentMaxBytes",
+    "owner": "core",
+    "description": "The largest argument of a host call, in bytes of JSON, that a cell passes inline (a file's text, a command's input).",
+    "default": 8388608,
+    "privileged": false,
+    "schema": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 12582912
+    }
+  },
+  {
     "id": "shell.windows",
     "owner": "core",
     "description": "The shell that runs scripts on Windows: pwsh (PowerShell 7) or powershell (Windows PowerShell).",

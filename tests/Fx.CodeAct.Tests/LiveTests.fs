@@ -305,6 +305,47 @@ let private reviewer (f: Fixture) : Task<unit> =
         | _ -> ()
     }
 
+/// A TypeScript cell passes a file of 212 KB to `fs.write` and 100 KB to `shell.run`'s stdin, each
+/// in one call: arguments beyond `values.inlineMaxBytes`, within `values.argumentMaxBytes` (T139).
+/// The step journal keeps only bounded previews of them.
+let private largeArguments (f: Fixture) : Task<unit> =
+    task {
+        let count =
+            if OperatingSystem.IsWindows() then
+                "[Console]::In.ReadToEnd().Length"
+            else
+                "wc -c"
+
+        f.Model.AddAll
+            [
+                Say.cell
+                    $"// intent: write a large file and pipe a large input\nconst text = \"0123456789abcdef\\n\".repeat(12800)\nawait {g}.fs.write(\"big.txt\", text)\nconst run = await {g}.shell.run({Json.quote count}, {{ stdin: text.slice(0, 102400) }})\nrun.stdout.trim()"
+                Say.cell $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"wrote big.txt\" }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Write a large file"
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed ending) (TurnResult.Done("wrote big.txt", [], None)) $"finished: {seen f}"
+
+        Expect.equal (f.Read "big.txt").Length (17 * 12800) "the whole file"
+        let first = receipts f "s1" |> List.head
+        Expect.isFalse first.IsError $"the cell ran: {seen f}"
+        Expect.stringContains (text first) "102400" "the command got the whole input"
+
+        let started =
+            journal f "s1"
+            |> List.choose (fun r ->
+                match r.Event with
+                | StepEvent.HostCallStarted started -> Some started
+                | _ -> None)
+
+        Expect.equal (started |> List.map (fun s -> s.Binding)) [ "fs.write"; "shell.run" ] "journaled"
+
+        for s in started do
+            Expect.isLessThanOrEqual s.Args.Length (StepJournal.ArgsChars + 1) $"{s.Binding}'s arguments, bounded"
+    }
+
 let private rejected (f: Fixture) : Task<unit> =
     task {
         f.Model.AddAll
@@ -399,6 +440,10 @@ let tests =
 
             testTask "a reviewer's read-only sandbox, in an environment: bindings and commands cannot write" {
                 do! inEnvironmentWith SandboxOverrides.readOnly "live-reviewer" reviewer ()
+            }
+
+            testTask "a cell passes a large file and a large input in one host call each" {
+                do! live "live-large" [] largeArguments ()
             }
 
             testTask "a rejected finish throws in the TypeScript cell, and the next one is accepted" {

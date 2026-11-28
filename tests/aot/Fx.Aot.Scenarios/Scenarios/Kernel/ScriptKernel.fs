@@ -376,6 +376,22 @@ type Kernel(stray: string -> unit) =
                             | Json.String s when s.StartsWith '$' -> get (s.Substring 1)
                             | json -> Value.Inline json)
 
+                    // Arguments are copied up to their own limit (`KernelLimits.Arguments`), as
+                    // the reference kernel does; beyond it the host never sees the call.
+                    let limit = (limits ()).Arguments
+
+                    for value in values do
+                        match value with
+                        | Value.Inline json ->
+                            let bytes = Encoding.UTF8.GetByteCount(Json.serialize json)
+
+                            if bytes > limit then
+                                stop
+                                    "Error"
+                                    $"cannot pass an argument of {binding}: {bytes} bytes of JSON, more than the {limit} a host call takes"
+                                    (Some "invalidArguments")
+                        | _ -> ()
+
                     let! outcome =
                         Rpc.call
                             peer

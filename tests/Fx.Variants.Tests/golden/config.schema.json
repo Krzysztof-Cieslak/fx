@@ -28,6 +28,12 @@
       "maximum": 1048576,
       "description": "The largest value, in bytes of JSON, that is copied inline; larger values travel as blob references."
     },
+    "values.argumentMaxBytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 12582912,
+      "description": "The largest argument of a host call, in bytes of JSON, that a cell passes inline (a file's text, a command's input)."
+    },
     "shell.windows": {
       "type": "string",
       "enum": [
