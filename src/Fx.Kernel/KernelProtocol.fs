@@ -28,12 +28,14 @@ let private cellIdRegex = Regex(CellIdPattern, RegexOptions.CultureInvariant)
 let isCellId (text: string) = cellIdRegex.IsMatch text
 
 /// The host's defaults: 16 000 output characters (as the Bun kernel spike measured), the
-/// contracts' preview limits, and 64 KiB inline. Their values are variants (spec §6.6).
+/// contracts' preview limits, 64 KiB inline and 8 MiB per host-call argument. Their values are
+/// variants (spec §6.6).
 let defaultLimits: KernelLimits =
     {
         OutputChars = 16000
         Preview = Limits.defaults
         InlineBytes = 64 * 1024
+        ArgumentBytes = Some(8 * 1024 * 1024)
     }
 
 module Codecs =
@@ -61,11 +63,21 @@ module Codecs =
             and! inlineBytes =
                 Codec.field "inlineBytes" (fun l -> l.InlineBytes) (Codec.int |> Codec.atLeast 1)
 
+            and! argumentBytes =
+                Codec.optionalField
+                    "argumentBytes"
+                    (fun l -> l.ArgumentBytes)
+                    (Codec.int
+                     |> Codec.atLeast 1
+                     |> Codec.describe
+                         "The largest JSON (UTF-8 bytes) of one host call's argument; inlineBytes when absent.")
+
             return
                 {
                     OutputChars = output
                     Preview = preview
                     InlineBytes = inlineBytes
+                    ArgumentBytes = argumentBytes
                 }
         }
         |> Codec.describe "Bounds of a kernel's output and previews."

@@ -339,6 +339,8 @@ type CodeActSettings =
         PreviewLimits: Limits
         /// `values.inlineMaxBytes`: the largest value a kernel copies inline.
         InlineBytes: int
+        /// `values.argumentMaxBytes`: the largest argument of a host call a kernel passes inline.
+        ArgumentBytes: int
         /// `codeact.journal.snapshots`.
         Snapshots: bool
         /// `codeact.recall.maxBytes`.
@@ -378,6 +380,7 @@ module CodeActSettings =
             let! readLines = Variants.get CodeActSlots.readLines
             let! evidence = Variants.get CodeActSlots.evidence
             let! inlineBytes = Variants.get Slots.inlineValueMaxBytes
+            let! argumentBytes = Variants.get Slots.argumentMaxBytes
             let! snapshots = Variants.get CodeActSlots.snapshots
             let! recallMaxBytes = Variants.get CodeActSlots.recallMaxBytes
             let! recallRestore = Variants.get CodeActSlots.recallRestore
@@ -410,6 +413,7 @@ module CodeActSettings =
                     Evidence = evidence
                     PreviewLimits = prompt.Limits
                     InlineBytes = inlineBytes
+                    ArgumentBytes = argumentBytes
                     Snapshots = snapshots
                     RecallMaxBytes = recallMaxBytes
                     RecallRestore = recallRestore

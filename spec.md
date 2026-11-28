@@ -324,6 +324,7 @@ type Value =
 ```
 
   Handles are unforgeable and session-scoped; values decode only into declared types; thresholds are variants.
+- **Host-call arguments** (a file's text, a command's input) are copied inline up to their own limit, `values.argumentMaxBytes` (8 MiB; at most 12 MiB, under the JSON-RPC message limit), beyond `values.inlineMaxBytes`, which bounds the values a kernel keeps and `finish`. Journals keep only bounded previews and digests of arguments. Arguments as blobs (content that need not travel to the host, for remote environments) are T201's.
 - Deliberate prompt inclusion: `fx.context.pin(name, value)`, `fx.context.pinFile(path, range)` (live view); visible in `/context` with cost.
 
 ### 6.7 Reading and navigation

@@ -749,6 +749,7 @@ type CodeAct<'R, 'K
                         OutputChars = settings.OutputChars
                         Preview = settings.PreviewLimits
                         InlineBytes = settings.InlineBytes
+                        ArgumentBytes = Some settings.ArgumentBytes
                     }
 
                 let caching =

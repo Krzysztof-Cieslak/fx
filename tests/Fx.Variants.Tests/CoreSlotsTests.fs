@@ -21,6 +21,7 @@ let tests =
                         "edit.guard"
                         "values.previewLimits"
                         "values.inlineMaxBytes"
+                        "values.argumentMaxBytes"
                         "shell.windows"
                         "goal.context"
                         "model.role.main"
@@ -39,6 +40,8 @@ let tests =
                 Expect.equal (Resolution.value Slots.editGuard defaults) EditGuard.Warn "edit guard"
                 Expect.equal (Resolution.value Slots.previewLimits defaults) Limits.defaults "preview limits"
                 Expect.equal (Resolution.value Slots.inlineValueMaxBytes defaults) 16384 "inline values"
+
+                Expect.equal (Resolution.value Slots.argumentMaxBytes defaults) (8 * 1024 * 1024) "host-call arguments"
                 Expect.equal (Resolution.value Slots.windowsShell defaults) WindowsShell.Pwsh "windows shell"
                 Expect.equal (Resolution.value Slots.goalContext defaults) GoalContext.FreshHandoff "goal context"
                 Expect.equal (Resolution.value (Slots.modelRole "main") defaults) None "main model"

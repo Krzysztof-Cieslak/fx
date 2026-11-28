@@ -570,7 +570,9 @@ the turn rather than send excluded content.
 
 Every setting is read once per turn through the turn's profile (`CodeActConfig.Profile`), so it is
 recorded and replayable (spec §15): `agent.actionSurface`, `model.role.main`, the render's slots
-(prompt.md), content exclusions' (egress.md), `values.previewLimits`, `values.inlineMaxBytes`, and:
+(prompt.md), content exclusions' (egress.md), `values.previewLimits`, `values.inlineMaxBytes`,
+`values.argumentMaxBytes` (the largest argument of a host call a cell passes: a file's text for
+`fs.write`, a command's input; the kernel's `argumentBytes`, T139), and:
 
 | Slot | Default |
 |---|---|

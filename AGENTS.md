@@ -173,6 +173,7 @@ Notes record **constraints that must stay true**, not summaries of changes. With
   - A kernel writes each message as `{"jsonrpc":"2.0",…}` (`jsonrpc` first) on a line of its own, so the host recovers messages after stray bytes on fd 1. No binary channels, no batches.
   - A change an old kernel or host would misread is a new protocol version (`KernelProtocol.versions`), documented in the module spec.
 - Values cross the boundary as `Value` (`Inline | Blob | Handle`). Issue handles only from the session's `HandleTable` and resolve them there; decode values only into declared types (`Value.decode`, `Kernel.encodeAs`); validate `finish` with `KernelProtocol.Finish.validate`.
+  - A host call's arguments are bounded by `KernelLimits.Arguments` (`values.argumentMaxBytes`, megabytes: a file's text), not `InlineBytes`; kernels refuse a larger one in the cell (`invalidArguments`). Never put an argument into an event as it came: the step journal keeps a bounded preview, the replay journal a digest.
 - Start kernels with `Kernel.start` and a `KernelLaunch` whose environment is `Exactly` (the hygiene check refuses inherited environments and injection vectors).
 - A kernel is done when it passes `KernelConformance.tests` (tests/Fx.Kernel.Tests) on Linux, macOS and Windows: add it as a subject there, with its `Snippets`. Keep the suite language-neutral: check through the protocol, never a language's previews or completion values.
 

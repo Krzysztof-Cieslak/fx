@@ -116,7 +116,7 @@ export class Kernel {
   private readonly ContextError: ErrorConstructor;
   private active: Cell | undefined;
   private setup: KernelSetup | undefined;
-  private limits: KernelLimits = { outputChars: 16_000, preview: { maxChars: 1000, maxItems: 10, maxDepth: 3, maxStringChars: 120 }, inlineBytes: 65_536 };
+  private limits: KernelLimits = { outputChars: 16_000, preview: { maxChars: 1000, maxItems: 10, maxDepth: 3, maxStringChars: 120 }, inlineBytes: 65_536, argumentBytes: 8_388_608 };
   private moduleBase = process.cwd();
   private checker: Checker | string | undefined;
 
@@ -240,11 +240,15 @@ export class Kernel {
     // Trailing undefined arguments were not given.
     let given = args.length;
     while (given > 0 && args[given - 1] === undefined) given--;
+    // Arguments (a file's text, a command's input) are copied up to their own limit, beyond
+    // inlineBytes; an older host sends none, and inlineBytes stands.
+    const limit = this.limits.argumentBytes ?? this.limits.inlineBytes;
     let encoded: Value[];
     try {
-      encoded = args.slice(0, given).map((arg) => values.encode(arg, this.limits.inlineBytes, true));
+      encoded = args.slice(0, given).map((arg) => values.encode(arg, limit, true));
     } catch (e) {
-      throw this.contextError(`cannot pass an argument of ${binding}: ${e instanceof Error ? e.message : String(e)}`, { code: "invalidArguments" });
+      const reason = e instanceof values.TooLarge ? `${e.bytes} bytes of JSON, more than the ${e.limit} a host call takes` : e instanceof Error ? e.message : String(e);
+      throw this.contextError(`cannot pass an argument of ${binding}: ${reason}`, { code: "invalidArguments" });
     }
     try {
       const result = (await this.peer.request("host/call", { cellId: cell?.id, binding, args: encoded }, cell?.calls.signal)) as Value;
