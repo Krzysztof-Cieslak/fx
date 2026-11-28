@@ -5,6 +5,7 @@
 
 import {
   type Activation,
+  Capability,
   Codec,
   Decision,
   Declare,
@@ -16,6 +17,7 @@ import {
   type Observer,
   Runtimes,
   type Transform,
+  VariantSlots,
   contribution,
   err,
   extensionId,
@@ -45,6 +47,28 @@ export const Methods = {
     .describe("Integer division; dividing by zero is a typed error."),
   observed: ExtMethod.define("observed", Codec.unit, Codec.array(Codec.string)).describe("The notes the recorder has seen, in order."),
   fail: ExtMethod.define("fail", Codec.unit, Codec.unit).describe("Throws: a defect."),
+  style: ExtMethod.define("style", Codec.unit, Codec.string).describe("The value of the sample's style slot (the variants capability)."),
+  packages: ExtMethod.define("packages", Codec.unit, Codec.array(Codec.string)).describe("The ids of the extensions in effect (the packages capability)."),
+  data: ExtMethod.define("data", Codec.string, Codec.array(Codec.json))
+    .withErrors(Codec.string, (e) => e)
+    .describe("The data contributions of a type in effect (the packages capability)."),
+  check: ExtMethod.define("check", Codec.json, Codec.json)
+    .withErrors(Codec.string, (e) => e)
+    .describe("Checks a grant query (the grants capability): a GrantQuery in, a GrantCheck out."),
+  ask: ExtMethod.define("ask", Codec.json, Codec.json)
+    .withErrors(Codec.string, (e) => e)
+    .describe("Asks for a permission (the grants capability): a GrantAsk in, an AskOutcome out."),
+};
+
+/** The sample's variant slot: how it would style its output. */
+export const Slots = {
+  style: {
+    id: "sample.style",
+    description: "How the sample styles its output.",
+    default: "plain",
+    choices: ["plain", "fancy"],
+    privileged: false,
+  },
 };
 
 export const id = extensionId("sample");
@@ -52,7 +76,7 @@ export const id = extensionId("sample");
 export const manifest: Manifest = {
   ...Manifest.create(id, "1.0.0", Runtimes.bun),
   description: "The sample extension: one of each hook kind, data and methods.",
-  capabilities: ["clock"],
+  capabilities: [Capability.clock, Capability.grants, Capability.packages, Capability.variants],
   contributions: [
     Declare.contribution(Points.greeting, "polite"),
     Declare.contribution(Points.greeting, "fragile"),
@@ -64,9 +88,20 @@ export const manifest: Manifest = {
     Declare.contribution(Points.words, "beta"),
     Declare.contribution(Points.notes, "recorder"),
     Declare.contribution(Points.notes, "flaky"),
+    Declare.contribution(VariantSlots.contributionType, Slots.style.id),
   ],
   rpc: {
-    methods: [Declare.method(Methods.echo), Declare.method(Methods.divide), Declare.method(Methods.observed), Declare.method(Methods.fail)],
+    methods: [
+      Declare.method(Methods.echo),
+      Declare.method(Methods.divide),
+      Declare.method(Methods.observed),
+      Declare.method(Methods.fail),
+      Declare.method(Methods.style),
+      Declare.method(Methods.packages),
+      Declare.method(Methods.data),
+      Declare.method(Methods.check),
+      Declare.method(Methods.ask),
+    ],
   },
 };
 
@@ -120,6 +155,7 @@ export function activate(): Activation {
       contribution(Points.words, "beta", "beta"),
       contribution(Points.notes, "recorder", recorder),
       contribution(Points.notes, "flaky", flaky),
+      contribution(VariantSlots.contributionType, Slots.style.id, Slots.style),
     ],
     methods: [
       Methods.echo.handle((note) => ok(note)),
@@ -127,6 +163,26 @@ export function activate(): Activation {
       Methods.observed.handle(() => ok([...notes])),
       Methods.fail.handle(() => {
         throw new Error("the sample failed");
+      }),
+      Methods.style.handle((_, env) => {
+        const read = env.variants.read(Slots.style.id);
+        if (read === undefined) throw new Error("the style slot is not registered");
+        return ok(read.value as string);
+      }),
+      Methods.packages.handle(async (_, env) => ok((await env.packages.list()).map((p) => p.id))),
+      Methods.data.handle(async (type, env) => {
+        const data = await env.packages.data(type);
+        if (data.ok) return ok(data.value.map((d) => d.value as never));
+        const error = data.error;
+        return err(error.kind === "unknownType" ? `unknown contribution type ${error.type}` : `${error.type} is not data (its values are ${error.contributionKind} code)`);
+      }),
+      Methods.check.handle(async (query, env) => {
+        const check = await env.grants.check(query as never);
+        return check.ok ? ok(check.value as never) : err(JSON.stringify(check.error));
+      }),
+      Methods.ask.handle(async (ask, env) => {
+        const outcome = await env.grants.request(ask as never);
+        return outcome.ok ? ok(outcome.value as never) : err(JSON.stringify(outcome.error));
       }),
     ],
   };

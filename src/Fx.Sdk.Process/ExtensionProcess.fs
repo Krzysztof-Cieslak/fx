@@ -27,7 +27,7 @@ type private ProcessEnv =
     override env.ToString() = $"ProcessEnv({env.Scope})"
 
 /// Serves the extensions on standard input and output, each in its `BasicExtensionEnv` with the
-/// system clock, until the host closes standard input; returns the exit code. The protocol owns
+/// system clock and the capabilities its manifest lists (over the connection to the host), until the host closes standard input; returns the exit code. The protocol owns
 /// standard output: anything the extensions write to `Console.Out` goes to standard error.
 let run (name: string) (version: string) (extensions: Extension list) : int =
     let input = Console.OpenStandardInput()
@@ -47,7 +47,7 @@ let run (name: string) (version: string) (extensions: Extension list) : int =
         ExtensionServer.serve
             { Name = name; Version = version }
             extensions
-            (BasicExtensionEnv.forManifest SystemClock.clock)
+            (BasicExtensionEnv.create SystemClock.clock)
             transport
 
     match (Eff.run env served).GetAwaiter().GetResult() with

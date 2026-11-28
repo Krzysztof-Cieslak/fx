@@ -1819,6 +1819,450 @@
           }
         ]
       }
+    },
+    "packageInfo": {
+      "kind": "named",
+      "name": "PackageInfo",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "id",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "version",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "description",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "optional"
+            }
+          },
+          {
+            "name": "runtime",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "source",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "contributions",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "PackageContribution",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "type",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "ignore"
+                }
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "methods",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "string"
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore",
+        "description": "An extension in effect, as the packages capability describes it."
+      }
+    },
+    "contributedData": {
+      "kind": "named",
+      "name": "ContributedData",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "id",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "value",
+            "schema": {
+              "kind": "any"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "dataParams": {
+      "kind": "named",
+      "name": "DataParams",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "extension",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          },
+          {
+            "name": "type",
+            "schema": {
+              "kind": "string"
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "hostSlots": {
+      "kind": "named",
+      "name": "HostSlots",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "slots",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "ResolvedVariant",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "slot",
+                      "schema": {
+                        "kind": "string",
+                        "description": "A variant slot id: dotted segments, e.g. \"agent.actionSurface\"."
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "value",
+                      "schema": {
+                        "kind": "any"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "source",
+                      "schema": {
+                        "kind": "named",
+                        "name": "VariantSource",
+                        "body": {
+                          "kind": "object",
+                          "fields": [
+                            {
+                              "name": "layer",
+                              "schema": {
+                                "kind": "enum",
+                                "values": [
+                                  "default",
+                                  "host",
+                                  "project",
+                                  "session",
+                                  "explicit",
+                                  "policy"
+                                ],
+                                "description": "Where a value comes from: default, host, project, session, explicit or policy."
+                              },
+                              "presence": {
+                                "kind": "required"
+                              }
+                            },
+                            {
+                              "name": "origin",
+                              "schema": {
+                                "kind": "string"
+                              },
+                              "presence": {
+                                "kind": "defaulted",
+                                "value": ""
+                              }
+                            }
+                          ],
+                          "unknownFields": "ignore",
+                          "description": "Where a variant value comes from."
+                        }
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "ignore",
+                  "description": "The value of a variant slot and where it came from."
+                }
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "hostPackages": {
+      "kind": "named",
+      "name": "HostPackages",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "packages",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "PackageInfo",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "version",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "description",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "optional"
+                      }
+                    },
+                    {
+                      "name": "runtime",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "source",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "contributions",
+                      "schema": {
+                        "kind": "array",
+                        "items": {
+                          "kind": "named",
+                          "name": "PackageContribution",
+                          "body": {
+                            "kind": "object",
+                            "fields": [
+                              {
+                                "name": "type",
+                                "schema": {
+                                  "kind": "string"
+                                },
+                                "presence": {
+                                  "kind": "required"
+                                }
+                              },
+                              {
+                                "name": "id",
+                                "schema": {
+                                  "kind": "string"
+                                },
+                                "presence": {
+                                  "kind": "required"
+                                }
+                              }
+                            ],
+                            "unknownFields": "ignore"
+                          }
+                        }
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "methods",
+                      "schema": {
+                        "kind": "array",
+                        "items": {
+                          "kind": "string"
+                        }
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "ignore",
+                  "description": "An extension in effect, as the packages capability describes it."
+                }
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
+    },
+    "hostData": {
+      "kind": "named",
+      "name": "HostData",
+      "body": {
+        "kind": "object",
+        "fields": [
+          {
+            "name": "contributions",
+            "schema": {
+              "kind": "array",
+              "items": {
+                "kind": "named",
+                "name": "ContributedData",
+                "body": {
+                  "kind": "object",
+                  "fields": [
+                    {
+                      "name": "extension",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "id",
+                      "schema": {
+                        "kind": "string"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    },
+                    {
+                      "name": "value",
+                      "schema": {
+                        "kind": "any"
+                      },
+                      "presence": {
+                        "kind": "required"
+                      }
+                    }
+                  ],
+                  "unknownFields": "ignore"
+                }
+              }
+            },
+            "presence": {
+              "kind": "required"
+            }
+          }
+        ],
+        "unknownFields": "ignore"
+      }
     }
   },
   "manifests": [

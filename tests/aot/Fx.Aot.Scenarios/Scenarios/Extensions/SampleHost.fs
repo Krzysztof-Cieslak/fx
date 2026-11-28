@@ -78,11 +78,57 @@ let processSettings: ProcessRuntime.ProcessSettings =
         StderrBytes = 4096
     }
 
-/// Settings with the sample's hook points in the catalog.
-let settings: HostSettings<HostEnv> =
-    { ExtensionHost.settings trust (BasicExtensionEnv.forManifest SystemClock.clock) processSettings with
-        Catalog = Catalog.create Sample.Points.all
+/// The sample's slot as the test host resolves it: `fancy`, from the host's config.
+let styleValue: Fx.Variants.Resolved =
+    {
+        Slot = Sample.Slots.style.Id
+        Value = Json.String "fancy"
+        Source = Fx.Variants.Source.create Fx.Variants.Layer.Host "test"
     }
+
+/// A grants log for the sample's transcript: resources under `ok/` are allowed by grant `g1`, others
+/// need a person; an ask is denied at once with its key and requester as the reason, so the transcript
+/// shows what the host received.
+let grants: Grants =
+    {
+        Check =
+            fun query _ ->
+                Task.FromResult(
+                    Ok(
+                        if query.Resource.StartsWith "ok/" then
+                            Fx.Grants.GrantCheck.Allowed(Fx.Grants.GrantId "g1")
+                        else
+                            Fx.Grants.GrantCheck.MustAsk [ "a person decides" ]
+                    )
+                )
+        Request =
+            fun ask _ ->
+                Task.FromResult(
+                    Ok(Fx.Grants.AskOutcome.Settled(Fx.Grants.Resolution.Denied [ $"{ask.Key} by {ask.Requester}" ]))
+                )
+        Await = fun id _ -> Task.FromResult(Error(Fx.Grants.GrantError.UnknownRequest id))
+        Withdraw = fun id _ _ -> Task.FromResult(Error(Fx.Grants.GrantError.UnknownRequest id))
+    }
+
+/// What the test host offers extensions: the sample's slot, the packages of `current`, `grants`.
+let services (current: unit -> Host) : HostServices =
+    {
+        Slots = fun extension -> if extension = Sample.id then [ styleValue ] else []
+        Packages = ExtensionHost.packages current
+        Grants = grants
+    }
+
+/// Settings with the sample's hook points in the catalog, whose extensions' capabilities see `current`.
+let settingsFor (current: unit -> Host) : HostSettings<HostEnv> =
+    let catalog = Catalog.create Sample.Points.all
+
+    { ExtensionHost.settings trust (BasicExtensionEnv.attenuated SystemClock.clock (services current)) processSettings with
+        Catalog = catalog
+    }
+
+/// Settings with the sample's hook points in the catalog (the packages capability sees no extensions).
+let settings: HostSettings<HostEnv> =
+    settingsFor (fun () -> ExtensionHost.empty (Catalog.create Sample.Points.all))
 
 let hostEnv (shell: Shell) : HostEnv =
     {
@@ -103,7 +149,12 @@ type Loaded =
 
 let private bootstrap (env: HostEnv) (candidate: Candidate) : Task<Loaded> =
     task {
-        let! host = within (Eff.run env (ExtensionHost.bootstrap settings [ candidate ]))
+        let current = ref (ExtensionHost.empty (Catalog.create Sample.Points.all))
+
+        let! host =
+            within (Eff.run env (ExtensionHost.bootstrap (settingsFor (fun () -> current.Value)) [ candidate ]))
+
+        current.Value <- host
 
         return
             {
@@ -209,11 +260,7 @@ let memoryProcOf (extensions: Extension list) : Proc =
             match!
                 Eff.run
                     serverEnv
-                    (ExtensionServer.serve
-                        info
-                        extensions
-                        (BasicExtensionEnv.forManifest SystemClock.clock)
-                        serverTransport)
+                    (ExtensionServer.serve info extensions (BasicExtensionEnv.create SystemClock.clock) serverTransport)
             with
             | Ok peer ->
                 let! _ = peer.Completion
@@ -365,6 +412,78 @@ let transcript (loaded: Loaded) : Task<string list> =
             + (match unknown with
                | Error failure -> string failure
                | Ok _ -> "ok")
+        )
+
+        // The host capabilities its manifest lists: its slot, the packages in effect, grants.
+        let! style = call Sample.Methods.style ()
+        lines.Add $"style: {show style}"
+
+        let! packages = call Sample.Methods.packages ()
+
+        lines.Add(
+            "packages: "
+            + (match packages with
+               | Ok ids ->
+                   "the sample is in effect: "
+                   + (if List.contains Sample.id ids then "yes" else "no")
+               | Error e -> string e)
+        )
+
+        for contributionType in [ Sample.Points.words.Name; "nope"; Sample.Points.greeting.Name ] do
+            let! data = call Sample.Methods.data contributionType
+
+            lines.Add(
+                $"data {contributionType}: "
+                + (match data with
+                   | Ok values -> "ok " + String.Join(", ", values |> List.map Json.serialize)
+                   | other -> show other)
+            )
+
+        for resource in [ "ok/a"; "secret" ] do
+            let query: Fx.Grants.GrantQuery =
+                {
+                    Action = Fx.Grants.ActionName "file.read"
+                    Resource = resource
+                    Context = Fx.Grants.GrantContext.none
+                }
+
+            let! check = call Sample.Methods.check (Fx.Grants.Codecs.query.Encode query)
+
+            lines.Add(
+                $"check {resource}: "
+                + (match check |> Result.map Fx.Grants.Codecs.check.Decode with
+                   | Ok(Ok check) -> "ok " + string check
+                   | Ok(Error issues) -> "invalid " + Issue.render issues
+                   | Error e -> show (Error e))
+            )
+
+        let ask: Fx.Grants.GrantAsk =
+            {
+                Key = "k1"
+                Action = Fx.Grants.ActionName "file.read"
+                Resource = "secret"
+                Context = Fx.Grants.GrantContext.none
+                Requester =
+                    {
+                        Principal = "user:spoofed:1"
+                        Agent = Some "agent"
+                        Extension = Some "someone.else"
+                    }
+                Summary = "Read the secret"
+                Evidence = []
+                Suggestions = []
+                Scopes = []
+                Expires = None
+            }
+
+        let! asked = call Sample.Methods.ask (Fx.Grants.Codecs.ask.Encode ask)
+
+        lines.Add(
+            "ask: "
+            + (match asked |> Result.map Fx.Grants.Codecs.askOutcome.Decode with
+               | Ok(Ok outcome) -> "ok " + string outcome
+               | Ok(Error issues) -> "invalid " + Issue.render issues
+               | Error e -> show (Error e))
         )
 
         return List.ofSeq lines

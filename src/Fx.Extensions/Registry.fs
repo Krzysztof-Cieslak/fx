@@ -58,6 +58,17 @@ type DeclaredContribution =
 
     override this.ToString() = string this.Key
 
+/// A capability as admission sees it: its name, and whether the host offers it (never what the
+/// manifest says).
+type DeclaredCapability =
+    {
+        Name: string
+        /// Whether the host knows the capability (`Capability.known`).
+        Known: bool
+    }
+
+    override this.ToString() = this.Name
+
 /// The host's side of admission: facts from the world that `Handle` decides with.
 type TrustContext =
     {
@@ -89,6 +100,8 @@ type AdmitRequest =
         Protocol: string
         Source: Source
         Contributions: DeclaredContribution list
+        /// The capabilities its manifest lists.
+        Capabilities: DeclaredCapability list
         Methods: string list
         Replaces: string list
         /// The hash host config pins this extension to, if any.
@@ -236,6 +249,9 @@ module Registry =
             |> List.map (fun c -> c.Key.Type)
             |> List.distinct
 
+        let unknownCapabilities =
+            request.Capabilities |> List.filter (fun c -> not c.Known) |> List.map _.Name
+
         let privileged =
             request.Contributions |> List.filter (fun c -> c.Privileged) |> List.map string
 
@@ -287,6 +303,10 @@ module Registry =
             reject
                 "contribution.unknown-type"
                 $"{request.Id} contributes types this host does not know: {listed unknownTypes}"
+        | _ when not unknownCapabilities.IsEmpty ->
+            reject
+                "extension.capability"
+                $"{request.Id} asks for capabilities this host does not offer: {listed unknownCapabilities}"
         | _ when not privileged.IsEmpty && not (Source.mayContributePrivileged request.Source) ->
             reject
                 "trust.privileged"

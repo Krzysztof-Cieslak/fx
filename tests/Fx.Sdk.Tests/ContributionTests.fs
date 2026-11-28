@@ -30,6 +30,7 @@ let private remote (answer: Json -> Result<Json, RemoteFailure>) (seen: ResizeAr
                         Task.FromResult(answer input)
                 Call = fun _ _ _ _ -> unexpected ()
                 Deactivate = fun _ _ -> unexpected ()
+                Attach = fun _ _ -> ()
             }
         Address =
             {

@@ -55,6 +55,7 @@ let private run (effect: Eff<IExtensionEnv, 'T>) : 'T =
         {
             Extension = "conformance"
             Clock = clock.Clock
+            Capabilities = ExtensionCapabilities.none ("conformance")
             Scope = Scope.root
         }
         :> IExtensionEnv
@@ -167,6 +168,7 @@ let tests (name: string) (provider: IdentityProvider) (cases: Cases) : Test =
                                 {
                                     Extension = "conformance"
                                     Clock = clock.Clock
+                                    Capabilities = ExtensionCapabilities.none ("conformance")
                                     Scope = Scope.root
                                 }
                                 :> IExtensionEnv

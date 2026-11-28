@@ -36,6 +36,7 @@ let request (id: string) (source: Source) (keys: ContributionKey list) : AdmitRe
                     Known = true
                     Privileged = false
                 })
+        Capabilities = []
         Methods = []
         Replaces = []
         Pin = None
@@ -248,6 +249,21 @@ let tests =
                     }
 
                 rejected "contribution.unknown-type" [ RegistryCommand.Admit unknown ]
+
+                let unknownCapability =
+                    { request "a" Source.Builtin [] with
+                        Capabilities = [ { Name = "variants"; Known = true }; { Name = "fs.read"; Known = false } ]
+                    }
+
+                rejected "extension.capability" [ RegistryCommand.Admit unknownCapability ]
+
+                let knownCapabilities =
+                    { request "a" Source.Builtin [] with
+                        Capabilities = [ { Name = "variants"; Known = true } ]
+                    }
+
+                let _, events, _ = runAll [ RegistryCommand.Admit knownCapabilities ]
+                Expect.equal events.Length 1 "known capabilities are admitted"
             }
 
             test "replacing disables the replaced extension and takes over its contributions" {

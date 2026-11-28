@@ -95,6 +95,9 @@ type RemotePeer =
         /// Calls a method of an extension's RPC contract.
         Call: string -> string -> Json -> CancellationToken -> Task<Result<Json, MethodFailure>>
         Deactivate: string -> CancellationToken -> Task<Result<unit, RemoteFailure>>
+        /// Answers the process's `host/*` requests for an extension with its environment (attenuated
+        /// to its manifest), until it is deactivated. Called before it is activated.
+        Attach: string -> IExtensionEnv -> unit
     }
 
     override _.ToString() = "RemotePeer"

@@ -18,6 +18,7 @@ let HookId = "exclusions"
 let manifest: Manifest =
     { Manifest.create id "1.0.0" Runtimes.Native with
         Description = Some "Content exclusions: keeps the content of excluded files out of every model request."
+        Capabilities = [ Capability.Variants ]
         Contributions =
             (ContentExclusions.slots
              |> List.map (fun slot -> Declare.contribution VariantSlots.contributionType (string slot.Id)))
@@ -27,9 +28,8 @@ let manifest: Manifest =
             ]
     }
 
-/// The extension with the settings it reads for each request, in its environment. The host passes
-/// `ContentExclusions.ofVariants` over the resolution in effect; once extensions read their own
-/// slots through their environment (T109b), that becomes `ContentExclusions.read`.
+/// The extension with the settings it reads for each request, in its environment (tests pass fixed
+/// settings).
 let create (settings: Eff<IExtensionEnv, ExclusionSettings>) : Extension =
     {
         Manifest = manifest
@@ -49,3 +49,7 @@ let create (settings: Eff<IExtensionEnv, ExclusionSettings>) : Extension =
                         []
             }
     }
+
+/// The built-in: it reads its own slots for each request (`ContentExclusions.read`, through the
+/// `variants` capability), as the host resolved them.
+let extension: Extension = create ContentExclusions.read

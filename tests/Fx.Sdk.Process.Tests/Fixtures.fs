@@ -370,6 +370,12 @@ let contracts: (string * Schema) list =
         "extensionRef", ExtensionProtocol.Codecs.extensionRef.Schema
         "output", ExtensionProtocol.Codecs.output.Schema
         "protocolError", ExtensionProtocol.Codecs.protocolError.Schema
+        "packageInfo", ExtensionProtocol.HostCodecs.packageInfo.Schema
+        "contributedData", ExtensionProtocol.HostCodecs.contributedData.Schema
+        "dataParams", ExtensionProtocol.HostCodecs.dataParams.Schema
+        "hostSlots", ExtensionProtocol.HostCodecs.hostSlots.Schema
+        "hostPackages", ExtensionProtocol.HostCodecs.hostPackages.Schema
+        "hostData", ExtensionProtocol.HostCodecs.hostData.Schema
     ]
 
 /// Manifests, and what `Manifest.decode` makes of them: the manifest and its hash, or the issues.

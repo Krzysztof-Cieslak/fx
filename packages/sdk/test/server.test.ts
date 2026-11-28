@@ -15,6 +15,7 @@ import {
   Hook,
   Transform,
   activationMismatches,
+  basicEnv,
   contribution,
   err,
   ok,
@@ -207,7 +208,7 @@ describe("the extension protocol's server", () => {
   });
 
   test("activationMismatches lists what an activation provides beyond or short of its manifest", async () => {
-    const activation = await extension.activate({ extension: "test.ext", signal: new AbortController().signal, clock: { now: () => new Date(0) } });
+    const activation = await extension.activate(basicEnv("test.ext", new AbortController().signal, { now: () => new Date(0) }));
     expect(activationMismatches(extension.manifest, activation)).toEqual([]);
     expect(activationMismatches({ ...extension.manifest, contributions: [], rpc: { methods: [] } }, activation)).toHaveLength(7);
   });

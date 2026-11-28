@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ExtensionProtocol.fs" />
+    <Compile Include="HostClient.fs" />
     <Compile Include="ExtensionServer.fs" />
     <Compile Include="ExtensionProcess.fs" />
   </ItemGroup>

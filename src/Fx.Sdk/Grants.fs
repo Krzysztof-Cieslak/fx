@@ -6,31 +6,6 @@ open System.Threading.Tasks
 open Fx.Effects
 open Fx.Grants
 
-/// The grants capability (spec §4.2 `IGrants`, §13): how agents, strategies and extensions ask for
-/// permissions. It checks and requests, and never grants: only people grant, through the host's
-/// client protocol (`grants/*`), so an environment holding this capability cannot authorize itself
-/// (spec §13.2: agents can only request). The host builds it from the grants log
-/// (`GrantsService.grants` in Fx.Grants.Host). Data in and out, the cancellation token last.
-type Grants =
-    {
-        /// What the effective rules say about a query now. Consumes nothing and records nothing.
-        Check: GrantQuery -> CancellationToken -> Task<Result<GrantCheck, GrantError>>
-        /// Settles an ask from the rules if they allow or deny; otherwise records a durable pending
-        /// request (spec §5) that a person answers. Asking again with the same key is the same request.
-        Request: GrantAsk -> CancellationToken -> Task<Result<AskOutcome, GrantError>>
-        /// Waits until a pending request is answered, covered by a later grant, refused, withdrawn or
-        /// timed out. Cancelling the wait leaves the request pending.
-        Await: RequestId -> CancellationToken -> Task<Result<Resolution, GrantError>>
-        /// Withdraws a pending request the requester no longer needs, with a reason.
-        Withdraw: RequestId -> string -> CancellationToken -> Task<Result<unit, GrantError>>
-    }
-
-    override _.ToString() = "Grants"
-
-/// An environment that can ask for permissions.
-type IGrants =
-    abstract Grants: Grants
-
 /// A durable log of grant events (spec §13.2 `GrantStore`, §16.2 persistence): where the grants log
 /// lives. The host runs the grants machine on it as the single writer; the built-in store is
 /// host-local, on the host's event store (`GrantStores.ofEventLog` in Fx.Grants.Host), and a
@@ -96,7 +71,7 @@ and [<RequireQualifiedAccess>] GrantAppendError =
         | ReadOnly reason -> "read-only: " + reason
 
 /// Effects over the grants capability.
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Grants =
     let check<'R when 'R :> IGrants and 'R :> IScope> (query: GrantQuery) : Eff<'R, Result<GrantCheck, GrantError>> =
         fun env -> env.Grants.Check query env.Scope.Cancellation

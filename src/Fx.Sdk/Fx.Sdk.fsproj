@@ -16,6 +16,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Versions.fs" />
+    <Compile Include="Capabilities.fs" />
     <Compile Include="ExtensionEnv.fs" />
     <Compile Include="InjectionVectors.fs" />
     <Compile Include="Manifest.fs" />

@@ -96,6 +96,58 @@ type HostConfig =
 
 /// The steps of a host's start that commands such as `fx variants` share: reading config, loading the
 /// built-ins, building the variant registry and resolving it. No store is opened.
+/// What the host offers extensions (`HostServices`: their own slots, the packages in effect, grants),
+/// filled in as the host starts: the variants once the in-binary phase is loaded and resolved, the
+/// extensions as each phase loads, the grants log once it runs. Until then an extension's slots read
+/// as their defaults, the packages are those loaded so far, and grants are unavailable.
+[<Sealed>]
+type ExtensionServices(catalog: Catalog) =
+    let slots = ref (fun (_: string) -> ([]: Resolved list))
+    let host = ref (ExtensionHost.empty catalog)
+    let grants: Fx.Sdk.Grants option ref = ref None
+
+    let unavailable () =
+        Task.FromResult(Error(Fx.Grants.GrantError.Unavailable "the grants log is not running yet"))
+
+    let current () =
+        match grants.Value with
+        | Some grants -> grants
+        | None ->
+            {
+                Check = fun _ _ -> unavailable ()
+                Request = fun _ _ -> unavailable ()
+                Await = fun _ _ -> unavailable ()
+                Withdraw = fun _ _ _ -> unavailable ()
+            }
+
+    /// Each extension's own slots, from the host's registry and resolution.
+    member _.SetVariants(registry: SlotRegistry, resolution: Fx.Variants.Resolution) =
+        slots.Value <-
+            fun extension ->
+                registry.Slots
+                |> List.filter (fun slot -> slot.Owner = SlotOwner.Extension extension)
+                |> List.choose (fun slot -> resolution.TryFind slot.Id)
+
+    /// The extensions in effect.
+    member _.SetHost(extensions: Fx.Extensions.Host) = host.Value <- extensions
+
+    member _.SetGrants(value: Fx.Sdk.Grants) = grants.Value <- Some value
+
+    member _.Services: HostServices =
+        {
+            Slots = fun extension -> slots.Value extension
+            Packages = ExtensionHost.packages (fun () -> host.Value)
+            Grants =
+                {
+                    Check = fun query cancellation -> (current ()).Check query cancellation
+                    Request = fun ask cancellation -> (current ()).Request ask cancellation
+                    Await = fun id cancellation -> (current ()).Await id cancellation
+                    Withdraw = fun id reason cancellation -> (current ()).Withdraw id reason cancellation
+                }
+        }
+
+    override _.ToString() = "ExtensionServices"
+
 [<RequireQualifiedAccess>]
 module Setup =
     /// The variables as the host reads them (case-insensitive names on Windows).
@@ -180,27 +232,39 @@ module Setup =
             StderrBytes = 4096
         }
 
-    let private settings (options: HostOptions) (config: HostConfig) : HostSettings<HostEnv> =
-        { ExtensionHost.settings (trust config) (BasicExtensionEnv.forManifest options.Clock) (processSettings options) with
+    let private settings
+        (options: HostOptions)
+        (config: HostConfig)
+        (services: ExtensionServices)
+        : HostSettings<HostEnv> =
+        { ExtensionHost.settings
+              (trust config)
+              (BasicExtensionEnv.attenuated options.Clock services.Services)
+              (processSettings options) with
             Catalog = Builtins.catalog
             Disabled = config.Host.Disabled
         }
 
     /// The built-ins (their bundled packages under the data directory's `extensions`) and the
     /// options' extensions.
-    let candidates (options: HostOptions) (exclusions: Eff<IExtensionEnv, ExclusionSettings>) : Candidate list =
-        Builtins.candidates options.Paths.Extensions exclusions @ options.Extensions
+    let candidates (options: HostOptions) : Candidate list =
+        Builtins.candidates options.Paths.Extensions @ options.Extensions
 
     /// The bootstrap's first phase (spec §16.1): the built-ins and the options' extensions that are in
     /// the binary (native, then declarative). Commands such as `fx variants` stop here; the variant
     /// registry, grants and the component plan are made from what it loaded. Nothing is written and
-    /// no process starts.
-    let bootstrap
+    /// no process starts. Extensions' capabilities come from `services` (`ExtensionServices`).
+    let bootstrapWith
         (options: HostOptions)
         (config: HostConfig)
-        (exclusions: Eff<IExtensionEnv, ExclusionSettings>)
+        (services: ExtensionServices)
         : Eff<HostEnv, Fx.Extensions.Host> =
-        ExtensionHost.bootstrapInBinary (settings options config) (candidates options exclusions)
+        ExtensionHost.bootstrapInBinary (settings options config services) (candidates options)
+
+    /// The bootstrap's first phase for commands that stop there: extensions' slots read as their
+    /// defaults, and there is no grants log.
+    let bootstrap (options: HostOptions) (config: HostConfig) : Eff<HostEnv, Fx.Extensions.Host> =
+        bootstrapWith options config (ExtensionServices Builtins.catalog)
 
     /// The bootstrap's later phases on what `bootstrap` loaded: the components phase (`install`: the
     /// host's installer), then extension processes (`fx.exthost.bun` among them), then extensions on
@@ -208,16 +272,16 @@ module Setup =
     let bootstrapRest
         (options: HostOptions)
         (config: HostConfig)
-        (exclusions: Eff<IExtensionEnv, ExclusionSettings>)
+        (services: ExtensionServices)
         (install: Manifest -> Eff<HostEnv, Result<InstalledComponent list, string>>)
         (host: Fx.Extensions.Host)
         : Eff<HostEnv, Fx.Extensions.Host> =
         ExtensionHost.bootstrapRest
-            { settings options config with
+            { settings options config services with
                 InstallComponents = install
             }
             host
-            (candidates options exclusions)
+            (candidates options)
 
     /// Whether a failure is of an extension that only contributes extension runtimes (`fx.exthost.bun`)
     /// that none of the candidates runs on: nothing needs it, so it is no warning (it stays in the

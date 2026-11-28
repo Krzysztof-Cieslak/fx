@@ -43,6 +43,14 @@ let expectedTranscript: string list =
         "fail: crashed"
         "divide without a divisor: invalid params $.divisor: missing required field"
         "unknown method: unknown method nope"
+        "style: ok fancy"
+        "packages: the sample is in effect: yes"
+        "data sample.word: ok \"alpha\", \"beta\""
+        "data nope: typed error unknown contribution type nope"
+        $"data {Sample.Points.greeting.Name}: typed error {Sample.Points.greeting.Name} is not data (its values are gate code)"
+        "check ok/a: ok allowed by g1"
+        "check secret: ok ask: a person decides"
+        $"ask: ok denied: ext/{ext}/k1 by system extension {ext}"
     ]
 
 let private using (load: unit -> Task<Loaded>) (body: Loaded -> Task<unit>) : Task<unit> =

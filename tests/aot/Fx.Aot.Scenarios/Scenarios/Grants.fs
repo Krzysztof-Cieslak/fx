@@ -289,6 +289,7 @@ let service =
                             {
                                 BasicExtensionEnv.Extension = "fx.policy"
                                 Clock = clock.Clock
+                                Capabilities = ExtensionCapabilities.none ("fx.policy")
                                 Scope = Scope.root
                             }
                             :> IExtensionEnv

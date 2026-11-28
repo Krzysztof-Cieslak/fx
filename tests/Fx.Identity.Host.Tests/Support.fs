@@ -86,6 +86,7 @@ let extensionEnv (clock: Clock) (id: string) : IExtensionEnv =
     {
         Extension = id
         Clock = clock
+        Capabilities = ExtensionCapabilities.none id
         Scope = Scope.root
     }
     :> IExtensionEnv

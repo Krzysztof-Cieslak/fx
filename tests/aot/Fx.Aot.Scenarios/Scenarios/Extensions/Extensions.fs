@@ -46,6 +46,7 @@ let private env (id: string) : IExtensionEnv =
     ({
         Extension = id
         Clock = SystemClock.clock
+        Capabilities = ExtensionCapabilities.none id
         Scope = Scope.root
     }
     : BasicExtensionEnv)
@@ -169,6 +170,7 @@ let private registry () : string list =
                         Known = kind <> "unknown"
                         Privileged = privileged
                     })
+            Capabilities = []
             Methods = []
             Replaces = []
             Pin = None

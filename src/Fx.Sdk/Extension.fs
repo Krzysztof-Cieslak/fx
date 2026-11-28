@@ -37,6 +37,9 @@ type ActivationRequest =
         Manifest: Manifest
         Root: string option
         Load: ContributionDecl -> Remote option -> Validation<Contribution, Issue>
+        /// The package's own environment: its extension's capabilities, attenuated to its manifest.
+        /// The runtime runs the package's code in it (its own code runs in the runtime's).
+        Env: IExtensionEnv
     }
 
     override this.ToString() = "activate " + string this.Manifest
@@ -105,15 +108,19 @@ module RemoteActivation =
 
     /// Asks the process to activate an extension and loads what it provides with the host's catalog:
     /// data as values, code as proxies that call the process. The process must answer for the
-    /// manifest's id and version.
+    /// manifest's id and version. The process's `host/*` requests for the extension are answered
+    /// with `extensionEnv` (its environment, attenuated to its manifest) from before activation on.
     let activate
         (peer: RemotePeer)
         (parameters: ActivateParams)
         (expected: Manifest)
+        (extensionEnv: IExtensionEnv)
         (load: ContributionDecl -> Remote option -> Validation<Contribution, Issue>)
         : Eff<IExtensionEnv, Result<Activation, string>> =
         fun env ->
             task {
+                peer.Attach expected.Id extensionEnv
+
                 match! peer.Activate parameters env.Scope.Cancellation with
                 | Error failure -> return Error("the process did not activate it: " + string failure)
                 | Ok activated when
@@ -200,6 +207,7 @@ module ExtensionRuntimes =
                                                 Root = request.Root
                                             }
                                             request.Manifest
+                                            request.Env
                                             request.Load
                             }
             Serve = None

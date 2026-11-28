@@ -51,14 +51,16 @@ let private connect
 
     let env = hostEnv SampleHost.memoryShell
 
-    Eff.run env (ExtensionServer.serve info extensions (BasicExtensionEnv.forManifest SystemClock.clock) server)
+    Eff.run env (ExtensionServer.serve info extensions (BasicExtensionEnv.create SystemClock.clock) server)
     |> ignore
 
     task {
-        let! connected =
-            within (Eff.run env (Rpc.connect (Service.create info []) members client))
+        let attached = RpcRemote.Attached()
 
-        return connected |> Result.map (fun peer -> RpcRemote.ofPeer peer, peer)
+        let! connected =
+            within (Eff.run env (Rpc.connect (Service.create info (RpcRemote.hostHandlers attached)) members client))
+
+        return connected |> Result.map (fun peer -> RpcRemote.ofPeer attached peer, peer)
     }
 
 let private remote (extensions: Extension list) : RemotePeer =
@@ -111,6 +113,65 @@ let tests =
                 | Error(RemoteFailure.Failed reason) ->
                     Expect.stringContains reason "runs only in its process" "not servable"
                 | other -> failtest (string other)
+            }
+
+            test "the host answers host/* only for extensions attached to the connection, with their capabilities" {
+                let client, server =
+                    InProcess.pair
+                        (256 * 1024)
+                        (ConnectionLimits.frames ConnectionLimits.defaults)
+                        (ConnectionLimits.frames ConnectionLimits.defaults)
+
+                let env = hostEnv SampleHost.memoryShell
+                let attached = RpcRemote.Attached()
+
+                let current () =
+                    ExtensionHost.empty (Catalog.create Sample.Points.all)
+
+                attached.Attach(
+                    Sample.id,
+                    BasicExtensionEnv.attenuated SystemClock.clock (SampleHost.services current) Sample.manifest
+                )
+
+                attached.Attach(
+                    "acme.bare",
+                    BasicExtensionEnv.attenuated
+                        SystemClock.clock
+                        (SampleHost.services current)
+                        (Manifest.create "acme.bare" "1.0.0" Runtimes.Process)
+                )
+
+                // The process's side: a plain client of the host's service.
+                let hostSide =
+                    Eff.run env (Rpc.accept (Service.create info (RpcRemote.hostHandlers attached)) server)
+
+                let processPeer =
+                    wait (Eff.run env (Rpc.connect (Service.create info []) RpcRemote.initializeMembers client))
+                    |> Result.defaultWith (fun e -> failtest (string e))
+
+                wait hostSide |> ignore
+
+                let variants (id: string) =
+                    wait (Eff.run env (Rpc.call processPeer ExtensionProtocol.hostVariants { Extension = id }))
+
+                Expect.equal (variants Sample.id) (Ok { Slots = [ SampleHost.styleValue ] }) "the sample's slots"
+
+                Expect.equal
+                    (variants "acme.bare")
+                    (Error(CallError.Failed(ExtensionProtocol.HostError.NotGranted("acme.bare", Capability.Variants))))
+                    "not listed in its manifest"
+
+                Expect.equal
+                    (variants "acme.nope")
+                    (Error(CallError.Failed(ExtensionProtocol.HostError.UnknownExtension "acme.nope")))
+                    "not on this connection"
+
+                attached.Detach Sample.id
+
+                Expect.equal
+                    (variants Sample.id)
+                    (Error(CallError.Failed(ExtensionProtocol.HostError.UnknownExtension Sample.id)))
+                    "detached"
             }
 
             test "a runtime contributed by an extension process loads packages through that process" {

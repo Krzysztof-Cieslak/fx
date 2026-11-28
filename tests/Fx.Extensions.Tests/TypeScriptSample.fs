@@ -160,16 +160,20 @@ let load () : Task<Loaded> =
         let env =
             hostEnv (LocalShell.create (LocalShell.defaultShell ()) AppContext.BaseDirectory)
 
+        let current = ref (ExtensionHost.empty settings.Catalog)
+
         let! host =
             within (
                 Eff.run
                     env
                     (ExtensionHost.bootstrap
-                        settings
+                        (settingsFor (fun () -> current.Value))
                         [
                             Candidate.create Source.Builtin (Package.Manifest(manifest prepared, Some root))
                         ])
             )
+
+        current.Value <- host
 
         return
             {

@@ -20,6 +20,16 @@ type private ExtEnv =
 
     interface IExtensionEnv with
         member _.Extension = Anthropic.id
+        member _.Capabilities = ExtensionCapabilities.none Anthropic.id
+
+    interface Fx.Variants.IVariants with
+        member _.Variants = (ExtensionCapabilities.none Anthropic.id).Variants
+
+    interface IPackages with
+        member _.Packages = (ExtensionCapabilities.none Anthropic.id).Packages
+
+    interface IGrants with
+        member _.Grants = (ExtensionCapabilities.none Anthropic.id).Grants
 
     interface IClock with
         member env.Clock = env.Clock

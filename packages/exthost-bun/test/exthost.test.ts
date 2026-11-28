@@ -7,7 +7,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Manifest, RpcPeer, Runtimes, activationMismatches, serveExtensions } from "../../sdk/src/index.ts";
+import { Manifest, RpcPeer, Runtimes, activationMismatches, basicEnv, serveExtensions } from "../../sdk/src/index.ts";
 import { manifest as sampleManifest } from "../../sample-extension/src/sample.ts";
 import { entryFile, extension, id, load, manifest } from "../src/exthost.ts";
 import fixture from "./fixtures/manifest.json";
@@ -46,7 +46,7 @@ describe("the Bun extension host", () => {
   });
 
   test("provides exactly what it declares", async () => {
-    const activation = await extension.activate({ extension: id, signal: new AbortController().signal, clock: { now: () => new Date(0) } });
+    const activation = await extension.activate(basicEnv(id, new AbortController().signal, { now: () => new Date(0) }));
     expect(activationMismatches(manifest, activation)).toEqual([]);
   });
 
@@ -66,9 +66,16 @@ describe("the Bun extension host", () => {
 
   test("the process serves the packages its runtime loads, each in its own environment", async () => {
     const waiting = new Map<number, (message: any) => void>();
+    const variantsAsked: string[] = [];
     const peer = new RpcPeer({
       write: (frame) => {
         const message = JSON.parse(frame);
+        // The process asks the host for an extension's slots when it activates (host/variants).
+        if (message.method === "host/variants") {
+          variantsAsked.push(message.params.extension);
+          queueMicrotask(() => peer.handleLine(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { slots: [] } })));
+          return;
+        }
         waiting.get(message.id)?.(message);
       },
     });
@@ -91,7 +98,8 @@ describe("the Bun extension host", () => {
     const missing = await send("extension/activate", { extension: sample.id, manifest: sample, root: packageWith(undefined) });
     expect(missing.error.data).toEqual({ kind: "activationFailed", extension: sample.id, reason: "the package has no extension.js" });
     const activated = await send("extension/activate", { extension: sample.id, manifest: sample, root: await samplePackage() });
-    expect(activated.result.methods).toEqual(["echo", "divide", "observed", "fail"]);
+    expect(activated.result.methods).toEqual(["echo", "divide", "observed", "fail", "style", "packages", "data", "check", "ask"]);
+    expect(variantsAsked).toEqual([sample.id, sample.id]);
     const echo = await send("extension/call", { extension: sample.id, method: "echo", params: { text: "hi" } });
     expect(echo.result).toEqual({ output: { text: "hi" } });
   });
