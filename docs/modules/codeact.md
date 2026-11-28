@@ -172,10 +172,13 @@ Keys derive from the turn's start event and the step: `<session>#<seq>/step/<n>/
 - Tools are made from codecs (`ToolSpec.ofCodec`), and their arguments decode with the same codecs: what
   does not decode is a receipt with the issues, and nothing runs.
 - **Same capabilities.** `read`, `edit` and `bash` are host calls of the bridge's own bindings
-  (`fs.read`, `fs.patch` after `fs.read`, `shell.run`), through the same guard (`Hands.Guard`, and so
-  the same grants), settings and content exclusions as cells' calls. `edit` replaces text read from the file and patches the lines
-  that changed, checked against the digest it read; `read` shows numbered lines as a `Piece.File` (they
-  count as seen).
+  (`fs.read`, `fs.edit`, `shell.run`), through the same guard (`Hands.Guard`, and so the same grants),
+  settings and content exclusions as cells' calls. `edit` is `fs.edit(path, {old, new, all})` (one
+  implementation of edits by text, spec §6.8: the binding replaces the text and patches the lines that
+  changed, checked against the digest it read, and its errors are `edit`'s), then, for a file in the
+  workspace, a ranged `fs.read` of three lines around what changed for the receipt (outside the
+  workspace that read would ask a person again, so the receipt shows the changed lines alone); `read`
+  shows numbered lines as a `Piece.File` (they count as seen).
 - **A conversation keeps the surface and the tools its frame recorded** (the `tools` section's version):
   tools come before the system prompt in providers' prefix checks, so changing them mid-conversation would
   break Anthropic's check on preserved thinking. A new surface applies to new sessions.
@@ -292,15 +295,19 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
   - what one of the cell's host calls returned, matched by the digest of its canonical JSON (the
     kernel tells the host nothing more, so this works for any kernel): `shell.run`'s `RunResult` as
     `bash` shows it (command, exit code, output), `fs.read`'s `FileText` as `read` shows it (numbered
-    lines in a `Piece.File`: they count as seen, and exclusions withhold them), `fs.write` and
-    `fs.patch` as the files written;
+    lines in a `Piece.File` from the line it starts at, so a ranged read counts exactly its lines as
+    seen, and exclusions withhold them; `codeact.read.maxLines` at most, then how to read on),
+    `fs.edit`'s and `fs.editRange`'s `Edited` as `edit` shows it (what changed, then each fresh range's
+    lines as a `Piece.File`, up to `codeact.read.maxLines` lines in all), `fs.write` and `fs.patch` as
+    the files written;
   - anything else as the kernel's preview, within `values.previewLimits` (4000 characters, 50 items, 4
     levels, 1000 characters per string).
 - **A cell whose texts could not be bound** (T140): which text and why (`invalidName`, or over
   `values.argumentMaxBytes`), and that nothing ran. Receipts never repeat a cell's texts.
 - **`read`**: a `Piece.File` (path, digest, the lines shown), numbered, and where to read on.
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
-  new version.
+  new version (`Receipts.edited`, from the `Edited` result and the ranged read after it; without that
+  read, each fresh range's lines).
 - **`bash`**: the command, its exit code (or timeout) and its bounded output.
 - **Refused host calls** (grants, below): `Refused: <why>` for a direct tool; in a cell, the error the
   kernel throws with code `denied` and the same reason, which the cell's receipt shows unless the cell
@@ -471,6 +478,7 @@ the filesystem):
 |---|---|
 | `shell.run` | `shell.exec` for each simple command of the line (`ShellSyntax`, below), and `fs.write` for each file a redirection writes outside the workspace or to a protected path |
 | `fs.write`, `fs.patch` | `fs.write` for each file outside the workspace or under `codeact.grants.protectedPaths` (default `.git` and the project's directory: hooks run code, configuration changes behaviour) |
+| `fs.edit`, `fs.editRange` | as `fs.write` for the file, and `fs.read` for a file outside the workspace: their results (and a stale range's error) show its lines |
 | `fs.read` | `fs.read` for a file outside the workspace (content leaves for the model) |
 | network bindings | `net.connect host:port` for each endpoint (`Permissions.connects` with `Permissions.endpoint`); no core binding is one yet |
 | others (`fs.list`, `fs.stat`, …) | nothing: a binding that runs programs, writes, reads outside the workspace or connects must have a rule (`BindingRule`) |
@@ -631,8 +639,8 @@ activity lines `yolo`, `✓ yolo-approved`); auto approvals still say `auto` for
 
 `ContentExclusions.compile` over the turn's variants (`ContentExclusions.read`: policy, host, project
 lists) gives one `Exclusions` for the render (`RenderConfig.Exclusions`), the context log
-(`ContextEvent.withhold`), the bindings (`CoreSettings.Exclusions`: `fs.read` refuses excluded files, so
-`read` and `edit` do too) and, through the same slots, the egress hooks. Settings that do not compile fail
+(`ContextEvent.withhold`), the bindings (`CoreSettings.Exclusions`: `fs.read`, `fs.edit` and
+`fs.editRange` refuse excluded files before reading them, so `read` and `edit` do too) and, through the same slots, the egress hooks. Settings that do not compile fail
 the turn rather than send excluded content.
 
 ## Variants

@@ -363,14 +363,14 @@ dogfooding sessions no longer use `setsid nohup` or sleep loops.
 **What:**
 - **Partial output on timeout.** A command that times out keeps the output it printed, and it is killed
   with its children. Today `shell.run` returns an empty `stdout` and `stderr` on a timeout.
-- **Matches for plain searches.** A plain search also returns `matches`: one-line ranges (T204a's type)
-  that `fs.edit` takes.
+- **Matches for plain searches.** A plain search also returns `matches`: one-line ranges (T204a's type,
+  `FileRange`) that `fs.editRange` takes (T204a made edits by range a binding of their own).
   - A plain search is `grep -n`, `rg -n` or `git grep -n`, as one simple command by
     `ShellSyntax.parse`, with no pipes and nothing cut.
   - Matches are attached only when every line equals its file's line (checked through `FsOps`), so an
     anchor is never wrong; otherwise there are none.
 - **A hint.** The receipt of a search with matches ends with one line on editing one, e.g.
-  `fx.fs.edit(r.matches[0], …)`, as NOOA's `ShellTools` does.
+  `fx.fs.editRange(r.matches[0], …)`, as NOOA's `ShellTools` does.
 
 **Code map:**
 - `CoreBindings.shellRun` (`src/Fx.Interpreters/CoreBindings.fs`): read output from `Shell.Spawn`

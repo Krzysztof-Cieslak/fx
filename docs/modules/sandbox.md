@@ -226,7 +226,8 @@ The privileged variant `sandbox.driver` (default `none`, T137) and the spec's `s
 1. **Processes and kernels** start under the tightened policy (`EnvHandle.attenuate`).
 2. **The bindings' file operations** run in envd, outside the sandbox: `SandboxGuard.check` runs before
    every host call (before the grants guard) and refuses what the policy refuses a process (`fs.read`,
-   `fs.list`, `fs.stat` need read access; `fs.write` and `fs.patch` write access), as
+   `fs.list`, `fs.stat` need read access; `fs.write`, `fs.patch`, `fs.edit` and `fs.editRange` (the
+   range's file) write access), as
    `HostCallError.Denied`. The check reads paths as written, and a sandboxed process can make a link
    to a denied path wherever it may write: so the session's file operations resolve paths beneath the
    policy's writable roots (`SandboxGuard.roots`, `EnvClient.beneath`), where envd follows no symbolic

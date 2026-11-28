@@ -341,13 +341,18 @@ FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=
   module Http = let retry n f               232–260   [deprecated]  … ])
 ```
 
-- **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics), `file.lines(a, b)`, symbols/refs/definitions/callers (tree-sitter + LSP proxy), plain shell `rg`/`sed`.
+- **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics), `fx.fs.read(path, { lines: [a, b] })`, symbols/refs/definitions/callers (tree-sitter + LSP proxy), plain shell `rg`/`sed`.
 - Optional repo map in the cached prefix; ledger anchors as hints.
 
 ### 6.8 Anchored edits and the edit guard
 
-- **Anchored edits:** `fx.fs.edit(matches, fn)` replaces exactly the anchored ranges; fails **stale** on digest change; returns fresh anchors.
-- **Edit guard:** using `SeenRanges`, editing never-seen regions warns or errors naming the range; anchor lines count as seen. Modes `off | warn | require` (variant).
+- **Ranged reads:** `fx.fs.read(path, { lines: [first, last] })` gives those lines as a `FileText` whose `start` and `end` say where they are (lines past the end are left out); `lines`, `size` and `digest` stay the whole file's. So every `FileText` is also a `FileRange {path, start, end, text, digest, lines}`, the anchor that edits take.
+- **Edits by text:** `fx.fs.edit(path, change | change[])`, `change = {old, new, all?}`. Changes apply in order, each to the text the ones before it left; each `old` must occur exactly once unless `all` is set (else `missing` or `ambiguous`; `unchanged` when nothing would change). The lines that differ become one patch, checked against the digest read (**stale** if the file changed meanwhile). Text matches with `\n` line endings; new lines get the file's own, so CRLF files stay CRLF.
+- **Edits by range:** `fx.fs.editRange(range, text)` replaces exactly the range's lines if they still hold its text, whatever else changed in the file; otherwise it fails **stale**, with the lines there now as a range. An empty range (`end = start - 1`) inserts; empty text removes the lines.
+- **Fresh anchors:** both return `Edited {path, digest, lines, replacements, ranges}`, a fresh range for the lines each change left, so the same lines can be edited again.
+- **Two bindings, not one `fx.fs.edit(string | FileRange, …)`:** with one, the second argument would be `change | change[] | string`, and the declaration could not say which goes with which; with two, each signature says exactly what it takes, and the type check catches a mismatch before the cell runs. Search matches (T142) are ranges for `fx.fs.editRange`.
+- **One implementation:** hybrid's `edit` tool is a host call of `fx.fs.edit` (§6.9), and a cell ending with an `Edited` shows as `edit`'s receipt does: the changed lines, as seen file lines. Grants and the sandbox see an edit as a write of the file, and outside the workspace also as a read (its result shows the file's lines); content exclusions refuse it as they refuse a read. Module spec: `docs/modules/interpreters.md`.
+- **Edit guard** (T204b): using `SeenRanges`, editing never-seen regions warns or errors naming the range; anchor lines count as seen. Modes `off | warn | require` (variant).
 
 ### 6.9 Action surface (variants)
 
@@ -366,8 +371,8 @@ const calls = await fx.repo.refs("Http.retry")            // Match[](len=37, fil
 
 ```ts
 // intent: rewrite every call site via anchors, test, and get an independent review
-const res = await fx.fs.edit(calls, m =>
-  m.line.replace(/Http\.retry (\S+) /, "RetryPolicy.exponential($1).execute "))
+for (const m of calls)                                    // one-line ranges: positions stay
+  await fx.fs.editRange(m, m.text.replace(/Http\.retry (\S+) /, "RetryPolicy.exponential($1).execute "))
 const run = await fx.shell.run("dotnet test tests/Billing")
 const review = await fx.agents.reviewer({ diff: await fx.fs.diff(), intent: task.text })
 ```
