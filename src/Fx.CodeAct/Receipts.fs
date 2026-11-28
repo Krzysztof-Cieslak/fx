@@ -294,6 +294,9 @@ module Receipts =
 
         restarted note @ [ Piece.Text text ]
 
+    /// A cell whose texts could not all be bound, so its code did not run (`CellTexts.bind`'s reason).
+    let unbound (note: KernelNote) (reason: string) : Piece list = restarted note @ [ Piece.Text reason ]
+
     /// An action that could not run (invalid arguments, an unknown tool, a refused call).
     let failed (message: string) : Piece list = [ Piece.Text message ]
 

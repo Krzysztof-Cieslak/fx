@@ -419,7 +419,8 @@ without copying its text.
 - **Until T139 lands and the person rebuilds `fx`,** a cell cannot pass more than 16 KiB to a host
   call. Change large files with `fs.patch` line edits (read the file, find the lines, patch with its
   digest), never `fs.write` of the whole file.
-- **Until T140 lands,** never put F# or Markdown inside a TypeScript template literal. Use
-  double-quoted strings or arrays of lines (`fs.patch`'s `lines`), where backticks need no escaping.
+- **Until T140 lands and the person rebuilds `fx`,** never put F# or Markdown inside a TypeScript
+  template literal. Use double-quoted strings or arrays of lines (`fs.patch`'s `lines`), where backticks
+  need no escaping. Once it has, pass such text in the `cell` tool's `texts` and use it by name.
 - **Until T141 lands,** a command not on the auto list waits for the person, and a cell that waits
   longer than 10 minutes is stopped with only "timed out". Ask the person; do not retry with `pkill`.

@@ -141,8 +141,29 @@ Keys derive from the turn's start event and the step: `<session>#<seq>/step/<n>/
 
 | Surface | Tools |
 |---|---|
-| `cells-only` | `cell {code}`: a cell for the session's kernel |
+| `cells-only` | `cell {code, texts?}`: a cell for the session's kernel |
 | `hybrid` | `cell`, and `read {path, offset?, limit?}`, `edit {path, old, new, all?}`, `bash {command, timeoutMs?}` |
+
+- **Texts** (T140): `cell`'s optional `texts` is an object from names to strings, e.g.
+  `{"code": "// intent: add the native layer\nawait fx.fs.write(\"src/X.fs\", posix)", "texts": {"posix": "module …"}}`.
+  File bodies, commit messages, patches and a command's input go there instead of into the code, so
+  backticks and `${` need no escaping (in the dogfooding sessions they ended TypeScript template literals,
+  and the model's workarounds changed the text).
+  - Names are identifiers (`[A-Za-z_][A-Za-z0-9_]*`, at most 64 characters), never the bridge's global or
+    `Out`, at most 32 of them (`Tools.checkName`, `Tools.MaxTexts`): other names do not decode, and the
+    receipt names each (`$.texts["1x"]: "1x" is not a name …`); nothing starts.
+  - Before `cell/run`, in the action `runAction` journaled, each text is bound with `value/decode` as an
+    inline string (`CellTexts.bind`), up to `values.argumentMaxBytes` of JSON each, as a host call's
+    argument. A name the kernel refuses (`invalidName`: a reserved word of its language, one of its own
+    globals) fails the cell before its code runs, and the receipt says which text and why
+    (`Receipts.unbound`, after a new kernel's note).
+  - Texts are part of the call's arguments: the reply (`Replied`) keeps them, the step journal's
+    `callStarted` their fingerprint, and a cell run again after a crash (`rerun`) binds them again in its
+    kernel. The receipt does not repeat them; values the cell passes on are journaled as host calls'
+    arguments are (a bounded preview, a digest in the replay journal).
+  - Bound names persist like a cell's declarations (until a later cell or text rebinds them). The bun-ts
+    kernel declares them to its checker (`declare let posix: string`), so `codeact.cell.typeCheck`
+    accepts cells that use them.
 
 - **Finishing is the bridge's `finish`, called from a cell** (`await fx.finish(result)`), on both
   surfaces. A separate finish tool would make the model retype its evidence; from a cell the result is
@@ -155,9 +176,17 @@ Keys derive from the turn's start event and the step: `<session>#<seq>/step/<n>/
   the same grants), settings and content exclusions as cells' calls. `edit` replaces text read from the file and patches the lines
   that changed, checked against the digest it read; `read` shows numbered lines as a `Piece.File` (they
   count as seen).
-- **A conversation keeps the surface its frame recorded** (the `tools` section's version): tools come
-  before the system prompt in providers' prefix checks, so changing them mid-conversation would break
-  Anthropic's check on preserved thinking. A new surface applies to new sessions.
+- **A conversation keeps the surface and the tools its frame recorded** (the `tools` section's version):
+  tools come before the system prompt in providers' prefix checks, so changing them mid-conversation would
+  break Anthropic's check on preserved thinking. A new surface applies to new sessions.
+  - **A change to a tool's schema or description is a new version of the tools** (`Tools.Version`,
+    `ToolSet`): the section's version is the surface's name for version 1 (`cells-only`, as frames
+    recorded before T140) and `<surface>/<version>` after it (`cells-only/2`: `cell` with `texts`).
+    `Tools.specs` renders every version exactly as it was (`tests/Fx.CodeAct.Tests/golden/tools-v1.json`
+    is kept, never rewritten); a conversation framed with an older version keeps its tools, and one framed
+    with a version this host does not know (a newer fx's) gets the current tools, as an `Updated` frame.
+  - Arguments decode with the newest codecs, whose older versions are subsets: `texts` works in a
+    conversation framed with version 1 too, although its `cell` tool does not declare it.
 
 ## Kernels (spec §6.5)
 
@@ -243,6 +272,8 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
     `fs.patch` as the files written;
   - anything else as the kernel's preview, within `values.previewLimits` (4000 characters, 50 items, 4
     levels, 1000 characters per string).
+- **A cell whose texts could not be bound** (T140): which text and why (`invalidName`, or over
+  `values.argumentMaxBytes`), and that nothing ran. Receipts never repeat a cell's texts.
 - **`read`**: a `Piece.File` (path, digest, the lines shown), numbered, and where to read on.
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
   new version.
@@ -606,9 +637,11 @@ Defaults are provisional until evals decide (spec §1, principle 7).
 
 `tests/Fx.CodeAct.Tests`:
 
-- **Units**: tools from codecs and their decoding, the loop guard, line edits (line endings kept),
-  `read` receipts, the merged history's order, the checks of a result, questions, the recorded surface,
-  quotes' provenance, the slots.
+- **Units**: tools from codecs and their decoding (texts' names checked), every version of the tools
+  rendered as it was (golden: `tools-v1.json` kept, the current version's rewritten with
+  `UPDATE_GOLDEN=1`), the loop guard, line edits (line endings kept), `read` receipts, the merged
+  history's order, the checks of a result, questions, the recorded surface and tools' version, quotes'
+  provenance, the slots.
 - **Turns** on the real session host (in-memory store of payloads: every event through its JSON), with the
   script kernel in process and a scripted model that can hold a request: both surfaces doing a small
   coding task (read, edit, run a command, finish with evidence; each request a prefix of the next),
@@ -618,7 +651,9 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   that died between turns (each end journaled before the next launch, the receipts saying why), the loop
   guard, each text-only policy and a question answered into the next turn, length cuts, empty replies,
   retries, overflow, fatal errors, the step budget, content exclusions for cells and direct tools, an
-  unknown tool, calls after `finish`.
+  unknown tool, calls after `finish`; texts (a 50 KB F# file with double backticks and fences written
+  byte for byte, names refused by the codec and by the kernel before anything runs, a conversation framed
+  with version 1 of the tools keeping them).
 - **Grants**: the parsers (both dialects case by case; seeded random lines: plain lists split exactly,
   substitutions at any depth flattened in order, and any line split or opaque, never a crash), host
   calls as grants (`PermissionTests`), the guard over the real grants service (listed, asked and
@@ -643,13 +678,14 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   process is stopped mid-cell as a crash would stop it and started again on the same stores (with a
   command that hangs the first time): the decision and its evidence (output, host calls, workspace
   changes), nothing run before the answer, one decision over two restarts, every answer path (rerun
-  included), calls after the one in doubt, a crash during a model call (abandoned), values back after a
+  included; a rerun binds its cell's texts again in the new kernel), calls after the one in doubt, a crash during a model call (abandoned), values back after a
   host restart and a kill, `fx.recall`, launch numbers; each replays into the requests sent.
 - **Providers**: turns through `ModelAccess` with `anthropic.messages` and `openai.responses` and their
   catalogs, on streams in each provider's documented format (tool calls and results, tools from codecs,
   breakpoints, a stable cache key).
 - **Live** (the pinned Bun; skipped offline, required in CI): TypeScript cells on the bun-ts kernel for
-  both surfaces, a rejected `finish`, a turn in an environment of `fx.env.local` opened through `IEnvs`, and a
+  both surfaces, a rejected `finish`, a cell writing a file with backticks from its texts (type-checked;
+  a reserved word refused), a turn in an environment of `fx.env.local` opened through `IEnvs`, and a
   host stopped during a TypeScript cell (the decision shows what it printed; `Out` and `fx.recall` give a
   kept value back to the new kernel).
 

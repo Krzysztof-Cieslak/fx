@@ -1141,4 +1141,194 @@ let tests =
                             })
                         ()
             }
+
+            testTask "a cell's texts are bound before it runs: a 50 KB F# file with backticks, written byte for byte" {
+                do!
+                    within
+                        "texts"
+                        []
+                        (fun f ->
+                            task {
+                                let posix = fsharpWithBackticks 50000
+                                let marker = "let ``case 7 works``"
+                                Expect.stringContains posix marker "the text has double backticks"
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cellWith
+                                            "// intent: add the native layer\ncall w = fs.write [\"src/Native.fs\", \"$posix\"]\nprint wrote it"
+                                            [ "posix", posix; "message", "Add `Native.fs`\n\nWith ``backticks``." ]
+                                        Say.cellWith "// intent: the message\nmessage" [ "message", "again `bound`" ]
+                                        Say.finish "Added the native layer"
+                                    ]
+
+                                do! kickoff f "Add the native layer"
+                                let! ending = ended f "s1" 1
+
+                                Expect.equal
+                                    (completed ending)
+                                    (TurnResult.Done("Added the native layer", [], None))
+                                    "finished"
+
+                                Expect.equal
+                                    (IO.File.ReadAllBytes(f.File(IO.Path.Combine("src", "Native.fs"))))
+                                    (Text.Encoding.UTF8.GetBytes posix)
+                                    "byte for byte"
+
+                                let rs = receipts f "s1"
+                                Expect.isFalse rs[0].IsError $"the cell ran: {text rs[0]}"
+                                Expect.stringContains (text rs[0]) "wrote it" "its output"
+                                Expect.isFalse ((text rs[0]).Contains marker) "the receipt does not repeat the text"
+
+                                Expect.stringContains
+                                    (text rs[1])
+                                    "again `bound`"
+                                    "a text bound again by the next cell"
+
+                                // The texts are part of the call's arguments: the reply holds them, and
+                                // the step journal only a bounded preview of what the cell passed on.
+                                let replied =
+                                    contextEvents f "s1"
+                                    |> List.pick (fun r ->
+                                        match r.Event with
+                                        | ContextEvent.Replied reply -> Some reply
+                                        | _ -> None)
+
+                                match replied.Parts with
+                                | [ Part.ToolCall call ] ->
+                                    Expect.stringContains call.Arguments "case 7 works" "the reply"
+                                | other -> failtest $"{other}"
+
+                                let started =
+                                    journal f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | StepEvent.HostCallStarted s -> Some s
+                                        | _ -> None)
+
+                                Expect.equal (started |> List.map _.Binding) [ "fs.write" ] "journaled"
+
+                                for s in started do
+                                    Expect.isLessThanOrEqual s.Args.Length (StepJournal.ArgsChars + 1) "bounded"
+
+                                // The tools offered `texts` (version 2).
+                                let cellTool = f.Model.Requests.Head.Tools |> List.exactlyOne
+                                Expect.stringContains (Json.serialize cellTool.Parameters) "\"texts\"" "the schema"
+                                do! expectReplays f "s1"
+                            })
+                        ()
+            }
+
+            testTask "texts with invalid names are refused before anything runs, saying which" {
+                do!
+                    within
+                        "texts-invalid"
+                        []
+                        (fun f ->
+                            task {
+                                let ran = "// intent: try\ncall w = fs.write [\"ran.txt\", \"$a\"]"
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cellWith ran [ "a", "x"; "1x", "y" ]
+                                        Say.cellWith ran [ "a", "x"; g, "y" ]
+                                        // The script kernel's statements are its reserved words.
+                                        Say.cellWith ran [ "a", "x"; "print", "y" ]
+                                        Say.finish "Could not"
+                                    ]
+
+                                do! kickoff f "Try"
+                                let! _ = ended f "s1" 1
+                                let rs = receipts f "s1"
+
+                                for r in rs |> List.take 3 do
+                                    Expect.isTrue r.IsError $"refused: {text r}"
+
+                                Expect.stringContains
+                                    (text rs[0])
+                                    "$.texts[\"1x\"]: \"1x\" is not a name"
+                                    "an invalid name"
+
+                                Expect.stringContains (text rs[1]) $"\"{g}\" is a name the kernel keeps" "the global"
+
+                                Expect.stringContains
+                                    (text rs[2])
+                                    "The kernel cannot bind the text \"print\""
+                                    "a name the kernel refused"
+
+                                Expect.stringContains (text rs[2]) "Nothing ran." "nothing ran"
+                                Expect.isFalse (IO.File.Exists(f.File "ran.txt")) "no cell ran"
+
+                                // Arguments that do not decode never start; a name the kernel refuses
+                                // fails the started call before its code runs.
+                                let started =
+                                    journal f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | StepEvent.CallStarted s -> Some s.Call.Step
+                                        | _ -> None)
+
+                                Expect.equal started [ 3; 4 ] "journaled: the kernel's refusal and the finish"
+                            })
+                        ()
+            }
+
+            testTask "a conversation framed with version 1 of the tools keeps them; texts still decode" {
+                do!
+                    within
+                        "tools-v1"
+                        []
+                        (fun f ->
+                            task {
+                                let v1 =
+                                    {
+                                        Surface = Fx.Variants.ActionSurface.CellsOnly
+                                        Version = 1
+                                    }
+
+                                do! start f "s1"
+
+                                // The frame a conversation started before T140 recorded.
+                                do!
+                                    run
+                                        f
+                                        (ContextLog.record
+                                            (Fx.Sessions.Host.SessionLog.typed f.Store.Log)
+                                            (ContextLog.typed f.Store.Log)
+                                            "s1"
+                                            "earlier/frame"
+                                            (ContextEvent.Framed(Instructions.sections v1 "Cells are scripts." None [])))
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cellWith
+                                            "// intent: write\ncall w = fs.write [\"a.txt\", \"$a\"]"
+                                            [ "a", "`a`" ]
+                                        Say.finish "Wrote"
+                                    ]
+
+                                do! prompt f "s1" "p1" "Write"
+                                let! ending = ended f "s1" 1
+                                completed ending |> ignore
+                                Expect.equal (f.Read "a.txt") "`a`" "the text"
+
+                                for request in f.Model.Requests do
+                                    Expect.equal request.Tools (Tools.specs v1 "script") "the tools version 1 had"
+
+                                let tools =
+                                    contextEvents f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | ContextEvent.Framed sections
+                                        | ContextEvent.Updated { Changed = sections } ->
+                                            sections |> List.tryFind (fun s -> s.Id = "tools")
+                                        | _ -> None)
+
+                                Expect.equal
+                                    (tools |> List.map _.Version)
+                                    [ Some "cells-only" ]
+                                    "the tools section as framed, never updated"
+                            })
+                        ()
+            }
         ]

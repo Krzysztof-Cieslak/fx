@@ -346,6 +346,49 @@ let private largeArguments (f: Fixture) : Task<unit> =
             Expect.isLessThanOrEqual s.Args.Length (StepJournal.ArgsChars + 1) $"{s.Binding}'s arguments, bounded"
     }
 
+/// A TypeScript cell writes a 50 KB F# file with double backticks and Markdown fences from its texts,
+/// byte for byte, and passes a commit message on stdin: no escaping in the code (T140). Cells are
+/// type-checked, so texts are declared to the checker; a name TypeScript cannot bind is refused.
+let private texts (f: Fixture) : Task<unit> =
+    task {
+        let posix = fsharpWithBackticks 50000
+
+        let count =
+            if OperatingSystem.IsWindows() then
+                "[Console]::In.ReadToEnd()"
+            else
+                "cat"
+
+        f.Model.AddAll
+            [
+                Say.cellWith
+                    $"// intent: add the native layer\nawait {g}.fs.write(\"src/Native.fs\", posix)\nconst run = await {g}.shell.run({Json.quote count}, {{ stdin: message }})\nrun.stdout"
+                    [ "posix", posix; "message", "Add `Native.fs`: ``case 1`` and ${x}\n" ]
+                Say.cellWith
+                    $"// intent: try a reserved word\nawait {g}.fs.write(\"never.txt\", \"x\")"
+                    [ "class", "x" ]
+                Say.cell
+                    $"// intent: finish\nawait {g}.finish({{ kind: \"done\", summary: \"added the native layer\" }})"
+            ]
+
+        do! start f "s1"
+        do! prompt f "s1" "p1" "Add the native layer"
+        let! ending = (ended f "s1" 1).WaitAsync(TimeSpan.FromSeconds 180.0)
+        Expect.equal (completed ending) (TurnResult.Done("added the native layer", [], None)) $"finished: {seen f}"
+
+        Expect.equal
+            (File.ReadAllBytes(f.File(Path.Combine("src", "Native.fs"))))
+            (Text.Encoding.UTF8.GetBytes posix)
+            "byte for byte"
+
+        let rs = receipts f "s1"
+        Expect.isFalse rs[0].IsError $"the cell ran: {seen f}"
+        Expect.stringContains (text rs[0]) "Add `Native.fs`: ``case 1`` and ${x}" "the message, on stdin"
+        Expect.isTrue rs[1].IsError "a reserved word"
+        Expect.stringContains (text rs[1]) "The kernel cannot bind the text \"class\"" $"which: {seen f}"
+        Expect.isFalse (File.Exists(f.File "never.txt")) "nothing ran"
+    }
+
 /// TypeScript cells end with what bindings returned and with a long string: their receipts show them
 /// as the direct tools would, from the values' JSON the kernel encodes (T203a).
 let private readable (f: Fixture) : Task<unit> =
@@ -479,6 +522,10 @@ let tests =
 
             testTask "a cell passes a large file and a large input in one host call each" {
                 do! live "live-large" [] largeArguments ()
+            }
+
+            testTask "a TypeScript cell writes a file with backticks from its texts, byte for byte" {
+                do! live "live-texts" [ "codeact.cell.typeCheck", Json.Bool true ] texts ()
             }
 
             testTask "TypeScript cells' values show as their bindings' tools would" {

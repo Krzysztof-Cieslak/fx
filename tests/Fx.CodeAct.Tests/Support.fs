@@ -214,6 +214,13 @@ module Say =
     let cell (code: string) : Reply =
         Reply.Parts([ call "cell" (Json.Object [ "code", Json.String code ]) ], StopReason.ToolUse)
 
+    /// A reply with one cell and the texts it uses (T140).
+    let cellWith (code: string) (texts: (string * string) list) : Reply =
+        let texts =
+            Json.Object(texts |> List.map (fun (name, text) -> name, Json.String text))
+
+        Reply.Parts([ call "cell" (Json.Object [ "code", Json.String code; "texts", texts ]) ], StopReason.ToolUse)
+
     /// A reply with one call of a tool.
     let tool (name: string) (arguments: (string * Json) list) : Reply =
         Reply.Parts([ call name (Json.Object arguments) ], StopReason.ToolUse)
@@ -231,6 +238,30 @@ module Say =
     /// A cell that ends the turn `done`.
     let finish (summary: string) : Reply =
         cell $"// intent: finish\nfinish {{\"kind\":\"done\",\"summary\":{Json.quote summary}}}"
+
+/// An F# file of at least `size` characters with what ends or breaks a TypeScript template literal:
+/// identifiers in double backticks, Markdown fences in comments, `${…}`, backslashes; and non-ASCII
+/// text (T140).
+let fsharpWithBackticks (size: int) : string =
+    let sb = Text.StringBuilder()
+
+    sb.Append("module Native.Posix\n\n/// The POSIX layer (`spec §18`): see ``Native.fs``.\n\n")
+    |> ignore
+
+    let mutable i = 0
+
+    while sb.Length < size do
+        i <- i + 1
+        let n = string i
+
+        sb
+            .Append("/// ```fsharp\n")
+            .Append("/// let ``case " + n + "`` = \"${x}\\n\" // é ✓\n")
+            .Append("/// ```\n")
+            .Append("let ``case " + n + " works`` () = \"a\\\\b ${y}\" + `" + n + "`\n\n")
+        |> ignore
+
+    sb.ToString()
 
 /// A scratch directory under artifacts/.
 let scratch (name: string) : string =

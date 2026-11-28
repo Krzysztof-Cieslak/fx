@@ -248,6 +248,13 @@ module Say =
     let cell (code: string) : Reply =
         Reply.Parts([ call "cell" (Json.Object [ "code", Json.String code ]) ], StopReason.ToolUse)
 
+    /// A cell and the texts it uses (T140).
+    let cellWith (code: string) (texts: (string * string) list) : Reply =
+        let texts =
+            Json.Object(texts |> List.map (fun (name, text) -> name, Json.String text))
+
+        Reply.Parts([ call "cell" (Json.Object [ "code", Json.String code; "texts", texts ]) ], StopReason.ToolUse)
+
     let tool (name: string) (arguments: (string * Json) list) : Reply =
         Reply.Parts([ call name (Json.Object arguments) ], StopReason.ToolUse)
 

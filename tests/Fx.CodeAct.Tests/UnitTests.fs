@@ -38,11 +38,12 @@ let tests =
         "CodeAct units"
         [
             test "the surfaces' tools come from codecs" {
-                let cellsOnly = Tools.specs ActionSurface.CellsOnly "TypeScript"
+                let cellsOnly = Tools.specs (Tools.current ActionSurface.CellsOnly) "TypeScript"
                 Expect.equal (cellsOnly |> List.map (fun t -> t.Name)) [ "cell" ] "cells-only"
 
                 Expect.equal
-                    (Tools.specs ActionSurface.Hybrid "TypeScript" |> List.map (fun t -> t.Name))
+                    (Tools.specs (Tools.current ActionSurface.Hybrid) "TypeScript"
+                     |> List.map (fun t -> t.Name))
                     [ "cell"; "read"; "edit"; "bash" ]
                     "hybrid"
 
@@ -52,12 +53,82 @@ let tests =
                     "the schema of the codec"
 
                 Expect.stringContains cellsOnly.Head.Description "TypeScript code" "the language"
+                Expect.stringContains cellsOnly.Head.Description "`texts`" "texts, from version 2"
+            }
+
+            test "every version of the tools renders as it did: conversations keep theirs (golden)" {
+                let render (version: int) =
+                    Json.Object
+                        [
+                            for surface in [ ActionSurface.CellsOnly; ActionSurface.Hybrid ] ->
+                                string surface,
+                                Json.Array(
+                                    Tools.specs { Surface = surface; Version = version } "typescript"
+                                    |> List.map ToolSpec.codec.Encode
+                                )
+                        ]
+                    |> Json.serializeIndented
+
+                // What conversations framed before T140 were sent: never rewritten.
+                let v1 = render 1
+                Expect.equal v1 (Golden.kept "tools-v1.json" v1) "version 1, as conversations framed with it got it"
+                Golden.expect $"tools-v{Tools.Version}.json" (render Tools.Version)
+            }
+
+            test "texts decode with checked names; invalid ones are refused, saying which" {
+                Expect.equal
+                    (Tools.decode
+                        ActionSurface.CellsOnly
+                        (call "cell" """{"code":"x","texts":{"posix":"module ``A``\n","msg_2":"`fix`"}}"""))
+                    (Ok(
+                        ToolAction.Cell
+                            {
+                                Code = "x"
+                                Texts = [ "posix", "module ``A``\n"; "msg_2", "`fix`" ]
+                            }
+                    ))
+                    "two texts, in order"
+
+                Expect.equal
+                    (Tools.decode ActionSurface.Hybrid (call "cell" """{"code":"x","texts":null}"""))
+                    (Ok(ToolAction.Cell { Code = "x"; Texts = [] }))
+                    "no texts"
+
+                let refused (arguments: string) (expected: string list) =
+                    match Tools.decode ActionSurface.CellsOnly (call "cell" arguments) with
+                    | Error message ->
+                        Expect.stringContains message "nothing ran" "nothing ran"
+
+                        for text in expected do
+                            Expect.stringContains message text arguments
+                    | Ok action -> failtest $"{arguments}: {action}"
+
+                refused
+                    """{"code":"x","texts":{"1x":"a","a-b":"b"}}"""
+                    [ "$.texts[\"1x\"]: \"1x\" is not a name"; "\"a-b\" is not a name" ]
+
+                let g = Fx.Product.kernelGlobal
+                refused $"{{\"code\":\"x\",\"texts\":{{\"{g}\":\"a\"}}}}" [ $"\"{g}\" is a name the kernel keeps" ]
+                refused """{"code":"x","texts":{"Out":"a"}}""" [ "\"Out\" is a name the kernel keeps" ]
+                refused """{"code":"x","texts":{"a":1}}""" [ "$.texts.a: expected string" ]
+
+                let many =
+                    [ for i in 1 .. Tools.MaxTexts + 1 -> $"\"t{i}\":\"\"" ] |> String.concat ","
+
+                refused
+                    $"{{\"code\":\"x\",\"texts\":{{{many}}}}}"
+                    [
+                        $"$.texts: expected at most {Tools.MaxTexts} texts, got {Tools.MaxTexts + 1}"
+                    ]
+
+                let long = String.replicate (Tools.MaxNameChars + 1) "a"
+                refused $"{{\"code\":\"x\",\"texts\":{{\"{long}\":\"\"}}}}" [ "is not a name" ]
             }
 
             test "tool calls decode into actions, or say why not" {
                 Expect.equal
                     (Tools.decode ActionSurface.CellsOnly (call "cell" """{"code":"x"}"""))
-                    (Ok(ToolAction.Cell "x"))
+                    (Ok(ToolAction.Cell { Code = "x"; Texts = [] }))
                     "a cell"
 
                 Expect.equal
@@ -398,16 +469,49 @@ let tests =
                 Expect.isSome (RequestKinds.tryFind Questions.KindId Questions.kinds) "registered"
             }
 
-            test "a conversation keeps the surface its frame recorded" {
-                let sections = Instructions.sections ActionSurface.Hybrid "interpreter" None []
-                Expect.equal (Instructions.recordedSurface sections) (Some ActionSurface.Hybrid) "hybrid"
+            test "a conversation keeps the surface and the tools' version its frame recorded" {
+                let sections =
+                    Instructions.sections (Tools.current ActionSurface.Hybrid) "interpreter" None []
 
                 Expect.equal
-                    (Instructions.recordedSurface (Instructions.sections ActionSurface.CellsOnly "x" None []))
-                    (Some ActionSurface.CellsOnly)
+                    (Instructions.recordedTools sections)
+                    (Some(Tools.current ActionSurface.Hybrid))
+                    "hybrid, the current tools"
+
+                Expect.equal
+                    (Instructions.recordedTools (
+                        Instructions.sections (Tools.current ActionSurface.CellsOnly) "x" None []
+                    ))
+                    (Some(Tools.current ActionSurface.CellsOnly))
                     "cells-only"
 
-                Expect.equal (Instructions.recordedSurface []) None "none yet"
+                let v1 =
+                    {
+                        Surface = ActionSurface.CellsOnly
+                        Version = 1
+                    }
+
+                let framedV1 = Instructions.sections v1 "x" None []
+
+                Expect.equal
+                    (framedV1 |> List.find (fun s -> s.Id = "tools")).Version
+                    (Some "cells-only")
+                    "version 1 is named as frames before T140 recorded it"
+
+                Expect.equal (Instructions.recordedTools framedV1) (Some v1) "a conversation framed with version 1"
+
+                Expect.equal
+                    (Tools.ofSectionVersion "hybrid/2")
+                    (Some
+                        {
+                            Surface = ActionSurface.Hybrid
+                            Version = 2
+                        })
+                    "hybrid/2"
+
+                Expect.isNone (Tools.ofSectionVersion $"hybrid/{Tools.Version + 1}") "a version this host does not know"
+                Expect.isNone (Tools.ofSectionVersion "cells/2") "an unknown surface"
+                Expect.equal (Instructions.recordedTools []) None "none yet"
 
                 Expect.equal
                     (sections |> List.map (fun s -> s.Id))
@@ -429,7 +533,7 @@ let tests =
                     }
 
                 let sections =
-                    Instructions.sections ActionSurface.Hybrid "interpreter" (Some policy) []
+                    Instructions.sections (Tools.current ActionSurface.Hybrid) "interpreter" (Some policy) []
 
                 Expect.equal
                     (sections |> List.map (fun s -> s.Id))

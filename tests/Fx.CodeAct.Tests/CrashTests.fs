@@ -291,6 +291,31 @@ let tests =
                         })
             }
 
+            testTask "run it again: a cell's texts are bound again, in the new kernel" {
+                do!
+                    withGate "rerun-texts" (fun f gate ->
+                        task {
+                            let deployingWith =
+                                Say.cellWith
+                                    "// intent: deploy the site\nprint deploying\ncall w = fs.write [\"site.txt\", \"$site\"]\ncall r = shell.run [\"deploy\"]\nr"
+                                    [ "site", "v2 with ``backticks``\n" ]
+
+                            f.Model.AddAll [ deployingWith; Say.finish "Deployed again" ]
+                            let! _ = crash f gate
+                            // What the first attempt wrote goes: the second writes it from its texts.
+                            IO.File.Delete(f.File "site.txt")
+                            let! _ = send f "s1" "a1" (Command.Answer("unknown-t1-s1-1", answer "rerun" None))
+                            let! ending = ended f "s1" 1
+                            Expect.equal (completed ending) (TurnResult.Done("Deployed again", [], None)) "finished"
+                            Expect.equal gate.Runs 2 "deploy ran again"
+                            Expect.equal (f.Read "site.txt") "v2 with ``backticks``\n" "the text, bound again"
+
+                            let decided = receiptOfCall f "call-1"
+                            Expect.isFalse decided.IsError $"it worked this time: {text decided}"
+                            do! expectReplays f "s1"
+                        })
+            }
+
             testTask "calls after the call in doubt did not run, and say so" {
                 do!
                     withGate "not-run" (fun f gate ->
