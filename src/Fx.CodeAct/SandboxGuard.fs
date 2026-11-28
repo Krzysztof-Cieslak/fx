@@ -48,6 +48,26 @@ module SandboxGuard =
             match call.Args with
             | [] -> [ resolve ".", PathAccess.ReadOnly ]
             | _ -> first PathAccess.ReadOnly
+        | "repo.grep"
+        | "repo.files" ->
+            // The directory searched: options.path (grep's second argument, files' first), else the workspace.
+            let options =
+                match call.Binding, call.Args with
+                | "repo.grep", _ :: options :: _
+                | "repo.files", options :: _ -> Some options
+                | _ -> None
+
+            let path =
+                match options with
+                | Some(Value.Inline(Json.Object members)) ->
+                    members
+                    |> List.tryPick (fun (name, value) ->
+                        match name, value with
+                        | "path", Json.String path -> Some path
+                        | _ -> None)
+                | _ -> None
+
+            [ resolve (path |> Option.defaultValue "."), PathAccess.ReadOnly ]
         | "fs.write"
         | "fs.edit" -> first PathAccess.ReadWrite
         | "fs.editRange" ->

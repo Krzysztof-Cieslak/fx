@@ -440,6 +440,103 @@ let tests =
                     $"exit code 0\n2:retry\n[1 match, each a line checked against its file: `{g}.fs.editRange(Out[\"t1-s1-1\"].matches[0], text)` replaces the first one's line.]"
                     "a search's value ends with how to edit a match"
 
+                let range (path: string) (line: int) (text: string) : FileRange =
+                    {
+                        Path = path
+                        Start = line
+                        End = line
+                        Text = text
+                        Digest = Fx.Store.BlobHash.ofBytes [| 1uy |]
+                        Lines = 9
+                    }
+
+                let grepped: GrepResult =
+                    {
+                        Pattern = "retry"
+                        Matches =
+                            [
+                                {
+                                    Range = range "src/a.ts" 2 "retry(1)\n"
+                                    Column = 1
+                                    Context = None
+                                }
+                                {
+                                    Range = range "src/b.ts" 7 "  retry(2)\r\n"
+                                    Column = 3
+                                    Context = None
+                                }
+                            ]
+                        Files = [ { Path = "src/a.ts"; Matches = 1 }; { Path = "src/b.ts"; Matches = 4 } ]
+                        Truncated = true
+                        FilesTruncated = false
+                    }
+
+                let shownGrep =
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(CellValue.Grep grepped))
+                        None
+                        result
+                    |> text
+
+                Expect.stringContains
+                    shownGrep
+                    $"Value of Out[\"t1-s1-1\"] (GrepResult): the first 2 of 5 matches in 2 files for \"retry\"\nsrc/a.ts:2: retry(1)\nsrc/b.ts:7:   retry(2)\n[Each match is a line checked against its file: `{g}.fs.editRange(Out[\"t1-s1-1\"].matches[0], text)` replaces the first one's line.]"
+                    "a search shows as ripgrep prints it"
+
+                let withContext =
+                    { grepped with
+                        Matches =
+                            [
+                                {
+                                    Range = range "src/a.ts" 2 "retry(1)\n"
+                                    Column = 1
+                                    Context =
+                                        Some
+                                            { range "src/a.ts" 1 "let a\nretry(1)\nlet b\n" with
+                                                End = 3
+                                            }
+                                }
+                                {
+                                    Range = range "src/b.ts" 7 "x\n"
+                                    Column = 1
+                                    Context = Some(range "src/b.ts" 7 "x\n")
+                                }
+                            ]
+                    }
+
+                Expect.equal
+                    (Receipts.grepLines withContext)
+                    "src/a.ts-1- let a\nsrc/a.ts:2: retry(1)\nsrc/a.ts-3- let b\n--\nsrc/b.ts:7: x"
+                    "context lines, groups apart"
+
+                let shownFiles =
+                    Receipts.cell
+                        limits
+                        KernelNote.Same
+                        (Some "x")
+                        Reads.none
+                        []
+                        (Some(
+                            CellValue.Files
+                                {
+                                    Files = [ "a.ts"; "src/b.ts" ]
+                                    Truncated = false
+                                }
+                        ))
+                        None
+                        result
+                    |> text
+
+                Expect.stringContains
+                    shownFiles
+                    "Value of Out[\"t1-s1-1\"] (RepoFiles): 2 files\na.ts\nsrc/b.ts"
+                    "paths, one a line"
+
                 match Receipts.ran 1000 found with
                 | [ Piece.Text _; Piece.Text _; Piece.Text hint ] ->
                     Expect.stringStarts hint "[1 match, each checked against its file: `edit` one" "bash's hint"
