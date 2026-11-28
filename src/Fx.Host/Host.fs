@@ -894,7 +894,7 @@ module Host =
                         }
 
                     let hands =
-                        { EnvHands.ofHandle options.Clock hostScope plan turn.Session handle with
+                        { EnvHands.ofHandle options.Clock options.Ids hostScope plan turn.Session handle with
                             Jobs = liveJobs.Jobs
                         }
 
@@ -918,6 +918,7 @@ module Host =
                         fun taps env ->
                             { env with
                                 Clock = taps.Clock env.Clock
+                                Ids = taps.Ids env.Ids
                                 Client =
                                     { env.Client with
                                         FsRead = taps.FsRead env.Client.FsRead

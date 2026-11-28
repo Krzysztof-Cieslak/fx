@@ -328,7 +328,13 @@ type private RunningCell(id: string, timeoutMs: int option) =
 /// `finish` validated by the turn result's codec and the turn's checks. One turn at a time uses it.
 [<Sealed>]
 type SessionKernel<'K
-    when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> Fx.Store.IBlobs and 'K :> IClock and 'K :> IScopeWith<'K>>
+    when 'K :> IShell
+    and 'K :> IFs
+    and 'K :> IFsOps
+    and 'K :> Fx.Store.IBlobs
+    and 'K :> IIds
+    and 'K :> IClock
+    and 'K :> IScopeWith<'K>>
     (
         session: string,
         watch: Watch<'K>,

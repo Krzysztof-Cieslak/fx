@@ -15,12 +15,17 @@ open Fx.Sdk
 type EnvHands =
     {
         Clock: Clock
+        /// The host's ids: random bytes of handle ids (T201b), journaled by recording.
+        Ids: Ids
         Client: EnvClient
         Scope: Scope
     }
 
     interface IClock with
         member env.Clock = env.Clock
+
+    interface IIds with
+        member env.Ids = env.Ids
 
     interface IFs with
         member env.FsRead = env.Client.FsRead
@@ -82,6 +87,7 @@ module EnvHands =
     /// the same policy first (`SandboxGuard`).
     let ofHandle
         (clock: Clock)
+        (ids: Ids)
         (scope: Scope)
         (plan: KernelPlan)
         (session: string)
@@ -115,6 +121,7 @@ module EnvHands =
             Env =
                 {
                     Clock = clock
+                    Ids = ids
                     Client = client
                     Scope = scope
                 }

@@ -84,6 +84,12 @@ type HandsEnv =
     interface Fx.Store.IBlobs with
         member _.Blobs = HandsEnv.Stored.Blobs
 
+    /// Ids of handles (T201b): seeded, the same in every run.
+    static member val SeededIds = Fx.Effects.Fakes.FakeIds(7UL, Fx.Effects.Fakes.FakeClock(Instant.unixEpoch).Clock)
+
+    interface IIds with
+        member _.Ids = HandsEnv.SeededIds.Ids
+
     interface IScopeWith<HandsEnv> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }
@@ -411,7 +417,13 @@ let baseSelections: (string * Json) list =
 /// A fixture with these variant selections (on top of `baseSelections`) and the interpreter `make` gives
 /// for the fixture's root directory.
 let createOn<'K
-    when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IBlobs and 'K :> IClock and 'K :> IScopeWith<'K>>
+    when 'K :> IShell
+    and 'K :> IFs
+    and 'K :> IFsOps
+    and 'K :> IBlobs
+    and 'K :> IIds
+    and 'K :> IClock
+    and 'K :> IScopeWith<'K>>
     (name: string)
     (selections: (string * Json) list)
     (handsOf: string -> string -> ResizeArray<unit -> Task> -> Hands<'K>)

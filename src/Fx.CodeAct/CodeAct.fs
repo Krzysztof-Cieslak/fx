@@ -122,6 +122,7 @@ type CodeAct<'R, 'K
     and 'K :> IFs
     and 'K :> IFsOps
     and 'K :> Fx.Store.IBlobs
+    and 'K :> IIds
     and 'K :> IClock
     and 'K :> IScopeWith<'K>>(config: CodeActConfig<'R, 'K>) =
     let kernels =
@@ -144,6 +145,13 @@ type CodeAct<'R, 'K
 
     let asksOf (session: string) : HistoryAsks =
         asks.GetOrAdd(session, (fun _ -> HistoryAsks()))
+
+    let ranges =
+        ConcurrentDictionary<string, HandleTable<string>>(StringComparer.Ordinal)
+
+    /// A session's `HistoryRange` handles (T201b): one table per session, so they resolve only there.
+    let rangesOf (session: string) : HandleKind<string> =
+        HistoryBindings.rangeKind (ranges.GetOrAdd(session, (fun _ -> HandleTable<string>())))
 
     /// A session's transcript as its log holds it now: what `fx.history.*` reads collapsed ranges from.
     let transcriptOf (session: string) : Eff<'K, Transcript> =
@@ -270,7 +278,12 @@ type CodeAct<'R, 'K
                             Recall.binding (journalOf id) config.Blobs
                             HistoryBindings.compact (asksOf id)
                             HistoryBindings.list (transcriptOf id) settings.Exclusions
-                            HistoryBindings.read (transcriptOf id) settings.Exclusions settings.OutputChars
+                            HistoryBindings.read
+                                (transcriptOf id)
+                                (rangesOf id)
+                                settings.Exclusions
+                                settings.OutputChars
+                            HistoryBindings.openRange (transcriptOf id) (rangesOf id) settings.Exclusions
                         ]
                         @ JobBindings.all (jobsOf id) writer settings
                 )
@@ -1532,6 +1545,7 @@ module CodeAct =
         and 'K :> IFs
         and 'K :> IFsOps
         and 'K :> Fx.Store.IBlobs
+        and 'K :> IIds
         and 'K :> IClock
         and 'K :> IScopeWith<'K>>
         (config: CodeActConfig<'R, 'K>)
