@@ -34,7 +34,7 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
-| Command lines split as sh and PowerShell split them (`ShellSyntax`, `CommandLine`) | `ShellSyntax.fs` |
+| Command lines split as sh and PowerShell split them (`ShellSyntax`, `CommandLine`); one simple command's words (`ShellSyntax.words`: `shell.run`'s plain searches) | `ShellSyntax.fs` |
 | Host calls as grants, the guard's slots and settings (`Permissions`, `GrantSlots`, `GrantSettings`) | `Permissions.fs` |
 | The grants guard (`GrantGuard`, `GrantSetup`) | `GrantGuard.fs` |
 
@@ -206,7 +206,9 @@ host stops (T135).
   terminal interpreters start every process on one thread that lives as long as the host or envd
   (`ProcessStarter` in `Fx.Effects.Live` and `Fx.Pty`; [envd.md](envd.md)).
 - The bridge is `CoreBindings.all` with the turn's settings (`CoreSettings.Exclusions` from the session's
-  variants, `codeact.output.maxChars`), behind the running turn's `Hands.Guard` (`SessionKernel.Guard`,
+  variants, `codeact.output.maxChars`; `Words`, how `shell.run` tells a plain search, from
+  `ShellSyntax.words` in the hands' shell dialect; `Sandbox`, the hands' confining policy, which a
+  search's matches are checked under), behind the running turn's `Hands.Guard` (`SessionKernel.Guard`,
   set before each action: hands are per turn, a kernel outlives the turn that started it); `finish`
   validates with the session's `Codecs.turnResult` and the turn's checks, and only from the running cell.
 - **Interrupts** cancel the turn's scope. The cell runs shielded from it and is stopped in stages
@@ -294,9 +296,13 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
     `codeact.output.maxChars` as printed output is;
   - what one of the cell's host calls returned, matched by the digest of its canonical JSON (the
     kernel tells the host nothing more, so this works for any kernel): `shell.run`'s `RunResult` as
-    `bash` shows it (command, exit code, output), `fs.read`'s `FileText` as `read` shows it (numbered
-    lines in a `Piece.File` from the line it starts at, so a ranged read counts exactly its lines as
-    seen, and exclusions withhold them; `codeact.read.maxLines` at most, then how to read on),
+    `bash` shows it (command, exit code or `timed out (killed)`, output, which a command cut at its
+    timeout keeps up to where it was killed), and for a plain search with `matches` (T142,
+    interpreters.md) a last line on editing one: ``[2 matches, each a line checked against its file:
+    `fx.fs.editRange(Out["t1-s2-1"].matches[0], text)` replaces the first one's line.]``;
+    `fs.read`'s `FileText` as `read` shows it (numbered lines in a `Piece.File` from the line it
+    starts at, so a ranged read counts exactly its lines as seen, and exclusions withhold them;
+    `codeact.read.maxLines` at most, then how to read on),
     `fs.edit`'s and `fs.editRange`'s `Edited` as `edit` shows it (what changed, then each fresh range's
     lines as a `Piece.File`, up to `codeact.read.maxLines` lines in all), `fs.write` and `fs.patch` as
     the files written;
@@ -308,7 +314,10 @@ Stable and bounded when made (`codeact.receipt.maxChars`), recorded through `Con
 - **`edit`**: what changed, and the changed lines with three lines of context as a `Piece.File` of the
   new version (`Receipts.edited`, from the `Edited` result and the ranged read after it; without that
   read, each fresh range's lines).
-- **`bash`**: the command, its exit code (or timeout) and its bounded output.
+- **`bash`**: the command, its exit code (or timeout) and its bounded output (a command cut at its
+  timeout keeps what it printed). A plain search with `matches` ends with one line on editing one
+  (`Receipts.ran`): with `edit` and its line as `old`, or from a cell, whose `fx.shell.run` gives the
+  matches as ranges for `fx.fs.editRange` (`bash`'s own result never reaches a cell).
 - **Refused host calls** (grants, below): `Refused: <why>` for a direct tool; in a cell, the error the
   kernel throws with code `denied` and the same reason, which the cell's receipt shows unless the cell
   catches it.
@@ -740,7 +749,7 @@ fake clock, auto approvals and their decision), on all eight targets.
 | What | Task |
 |---|---|
 | The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
-| Partial output of commands in doubt (`shell.run`, `bash`): run them as envd processes, whose output logs resume by byte offset, and journal the process | T205 |
+| Partial output of commands in doubt (`shell.run`, `bash`): they run as envd processes (spawned since T142); after a restart, resume their output logs by byte offset, and journal the process | T205 |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
 | Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | the sandbox is off by default (T137), so nothing catches them there |

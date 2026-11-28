@@ -342,6 +342,7 @@ FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=
 ```
 
 - **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics), `fx.fs.read(path, { lines: [a, b] })`, symbols/refs/definitions/callers (tree-sitter + LSP proxy), plain shell `rg`/`sed`.
+- **Shell results with structure** (T142): a command that runs out of time (`timeoutMs`) is killed with its children and keeps what it printed until then (`timedOut`, no exit code). A plain search, `grep -n`, `rg -n` or `git grep -n` as one simple command that exited 0 with nothing cut, also returns `matches`: its lines as one-line `FileRange`s that `fx.fs.editRange` takes, attached only when every line equals its file's line now (files in the workspace, read as `fx.fs.read` reads them: content exclusions and a confining sandbox's policy apply), so an anchor is never wrong; otherwise none. The receipt of a search with matches ends with how to edit one. Module spec: `docs/modules/interpreters.md`.
 - Optional repo map in the cached prefix; ledger anchors as hints.
 
 ### 6.8 Anchored edits and the edit guard

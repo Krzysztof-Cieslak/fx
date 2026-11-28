@@ -116,7 +116,7 @@ environment, `EnvClient`'s proxies.
 
 | Binding | Does | Returns |
 |---|---|---|
-| `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`; after `options.timeoutMs` it is killed with its children and keeps what it printed (below) | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut}`; a non-zero exit is data |
+| `shell.run(command, options?)` | runs a command line with the environment's shell (`/bin/sh -c`; PowerShell 7 on Windows) in the workspace or `options.cwd`, with `options.stdin`; after `options.timeoutMs` it is killed with its children and keeps what it printed (below) | `RunResult {command, exitCode?, stdout, stderr, truncated, timedOut, matches?}`; a non-zero exit is data; `matches` for a plain search (below) |
 | `fs.read(path, options?)` | a UTF-8 text file, whole, up to `ReadBytes` (1 MiB; else `tooLarge`), or with `options.lines: [first, last]` only those lines (lines past the end left out; a `first` past the line after the last: `outOfRange`); a byte order mark dropped; not UTF-8: `notText`; a file content exclusions keep from models: `excluded` (origin and pattern as data; nothing is read, [egress.md](egress.md)) | `FileText {path, text, lines, size, digest, start, end}`: `text` holds lines `start` to `end` as they are in the file (their endings kept); `lines`, `size` and `digest` are the whole file's, so a `FileText` is also a `FileRange` |
 | `fs.write(path, text)` | creates the directories, then writes atomically (`FsOps.WriteAtomic`) | `Written {path, digest, lines}` |
 | `fs.list(path = ".")` | a directory's entries, by name | `FileEntry[] {path, name, kind, size}` |
@@ -150,6 +150,27 @@ environment, `EnvClient`'s proxies.
   absent. A call that is cancelled kills it the same way. Whether it timed out is which finished first, the command's reads or the
   delay: both are journaled in their order, so a recorded session replays the same way
   ([replay.md](replay.md)); never decide it from the wall clock.
+- **Plain searches** (T142, spec §6.7): `grep -n`, `rg -n` or `git grep -n` as one simple command
+  (`CoreSettings.Words`: CodeAct gives `ShellSyntax.words`, so no pipes, lists, substitutions,
+  redirections but to the null device, or expansions; the defaults recognize none), that exited 0 with
+  nothing cut, also return `matches`: each line it printed as a one-line `FileRange` (`start = end`,
+  `text` the file's line with its ending, the file's `digest` and `lines`), which `fs.editRange` takes.
+  - `Searches.recognize` reads the options: none that print other lines (`-c`, `-l`, `-L`, `-o`, `-v`,
+    context `-A`/`-B`/`-C`/`-<n>`/`--context`, byte offsets, `-Z`/`-z`, no file names, `--color=always`;
+    for rg `-r`/`--replace`, `--vimgrep`, `--json`, `--column`, `--heading`; for git grep `-W`, `-p`,
+    `--full-name`, …), and files to read (grep without `-r` and without a file reads its input: none).
+    With one operand the output says whether it named the file on each line (`path:line:text`) or
+    searched that one file (`line:text`).
+  - `Searches.parse` reads every line or none: the path ends at the first `:<digits>:`, and a path that
+    holds another `:` (but a Windows drive) is not read, since grep prints names as they are; at most
+    `MaxMatches` (100) lines from `MaxFiles` (20) files.
+  - Then every line is checked against its file as it is now: the path (relative to the command's
+    working directory) must be in the workspace, readable under the sandbox's policy when a driver
+    confines commands (`CoreSettings.Sandbox`: else a confined command could learn, line by line, what
+    a denied file holds), outside content exclusions, read as `fs.read` reads it (UTF-8, up to
+    `ReadBytes`), and its line must equal the printed text (a trailing `\r` and a first line's byte
+    order mark aside). Anything else, a line that changed since, a file not there, means no matches at
+    all: a match is never wrong, and `matches` is never a part of what the search printed.
 - `CoreSettings.CommandEnv` is the environment commands get: envd's own (`Inherit []`) by default. On
   the host's machine that is the host's variables without credentials and injection vectors
   (`HostEnvironment.scrub`, [environments.md](environments.md)); it never holds the host's credentials
@@ -192,7 +213,7 @@ interpreter `bun-ts`: TypeScript cells on the pinned Bun (`fx.runtime.bun`, `bun
 | Caps | no snapshot (Jupyter semantics plus the journal, spec §6.5), host calls awaited, no packages, not deterministic |
 | Check | `CheckSpec.Kernel`: `cell/check`, and `cell/run` with `check` |
 | Bindings | `<global>.d.ts`: `DeclarationFile.render` with `Layout.Global(global, description)`; every binding as `<global>.<group>.<name>(…): Promise<Result>`, plus `finish(result): Promise<null>`, and every named type they use; groups without bindings left out |
-| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, the `cell` tool's `texts` for file bodies, messages and anything with backticks or several lines, imports, `finish`), the declarations, four examples (one writes a file and commits it from `texts`) |
+| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, the `cell` tool's `texts` for file bodies, messages and anything with backticks or several lines, a plain search's `matches` for `fs.editRange` and a timed-out command's kept output, imports, `finish`), the declarations, four examples (one writes a file and commits it from `texts`) |
 
 ### How the kernel ships (spec §16.4)
 
