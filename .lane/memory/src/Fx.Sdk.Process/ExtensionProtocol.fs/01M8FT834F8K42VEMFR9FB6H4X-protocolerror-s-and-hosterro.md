@@ -3,6 +3,10 @@ id: 01M8FT834F8K42VEMFR9FB6H4X
 anchor: '@file'
 created: 2026-11-28T00:52:54Z
 norm: '1'
+sig: f53cc7540482c466
+body_hash: 68365b9221107351
+raw_hash: 02deb42880b964d9
+lines: 1-562
 supersedes: 01M884S9V068XG7DCYCAP9CJAP
 ---
 
