@@ -142,7 +142,10 @@ fx · …/src/billing · session …00000000    Enter send · Alt+Enter newline 
   every verbosity; in full when verbose; T135), the first line of an
   error under a failed one, `auto` before the status of an action whose commands ran on auto approvals
   and `asked` before one a person allowed (the receipt's `approvals`; verbose lists each, with who let
-  it run), steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
+  it run), the background jobs an action started (`▸ job j1 started  CI: gh pr checks --watch`, from
+  the receipt's `jobs`, in every verbosity; T143), a job's end where the session delivered its notice
+  (`▸ job j1 ended: <the notice's first line>`, as a steer or as the input of the turn it started),
+  steering delivered at a step (`↳`), a compaction (`◇ Compact`: the earlier
   conversation is summarized; the summary in verbose), requests asked and settled, and the
   result card from the turn's `TurnEnd` (`✓ Done` with evidence and how to verify; `? Needs input`;
   `… Waiting`; `⏹ Interrupted`; `✗ Failed`; `✗ Abandoned`). The code of the cells not expanded is
@@ -378,7 +381,8 @@ terminal check's P/Invoke without a terminal).
   width (starting, a finished turn, a running turn with steering
   and a queued prompt, the agent's question after a draft, the loop guard's question, permissions, a
   decision, wide characters and a failure, a compacted turn, verbose, scrolled up while the reply
-  streams in, an item selected, two expanded on their own, a reply and a result card collapsed);
+  streams in, an item selected, two expanded on their own, a reply and a result card collapsed, a
+  background job started by a cell whose turn waits for it, and its end starting the next turn);
   questions shown once and drafts; keys and cards through `update`; one item (selecting and moving,
   expanding and collapsing a cell, a reply and a result card, what was chosen kept as output
   arrives and streams and over `Ctrl+O`, brought into view only when it moves, other keys ending

@@ -52,7 +52,7 @@ An entry is one capability call, or a marker:
 Lanes of a session: `turn/<n>` (the turn's clock and model, and its calls to the session:
 `Turn.Boundary`, `Turn.Open`, `Turn.Await`), `turn/<n>/stream/<i>` (a model response's pulls, one entry:
 `Stream.Pulls`), `hands` (the environment's clock, files, envd's file operations, commands, spawns,
-snapshots, `Hands.Guard`, `Kernel.Launch`), `hands/proc/<i>` (each spawned process: writes, reads, wait, kill), `store`
+snapshots, `Hands.Guard`, `Kernel.Launch`, the background jobs' `Jobs.*`), `hands/proc/<i>` (each spawned process: writes, reads, wait, kill), `store`
 (the event store as the strategy uses it), `variants` (`Profile`, each slot's first read under each
 profile), `hands.open` (the hands each turn got), `strategy`, `turns` (`Turn.Began`, `Turn.Cancelled`,
 `Turn.Ended`) and `host` (`Host.Closing`, `Host.Closed`).
@@ -114,6 +114,15 @@ hands refuse terminals.
   in the recorded order (`Gate.Ordered`: it ended when people answered). An allowed call's decision
   carries how it ran that no grant allowed (`Approval`s: auto approvals, or a person's answer by request
   key, T134), written `null` when there are none as before, so older journals replay as they are.
+- **Background jobs** (T143). The hands' jobs (`Hands.Jobs`) are journaled at their level on the
+  `hands` lane, as the guard is, with what they answered: `Jobs.Start` (when it starts: it acts on the
+  world; the launch's input as a process's, variables by name), `Jobs.Info`, `Jobs.List`, `Jobs.Read`
+  (the output text, which the model saw), `Jobs.Wait` and `Jobs.Kill`. Their processes run on the
+  hands' own shell, below the taps, so no process lane has them. Replay answers these calls from the
+  journal, in the recorded order (`Gate.Ordered`: a job's state depends on when it was asked), without
+  a process: what a cell's `jobs.status` saw is data, not timing. A job's end reaches turns only as the
+  session's input (its notice, sent by the host's `LiveJobs`), which is replay's input too; the
+  strategy journals ends only from those answers and inputs (codeact.md "Background jobs").
 - **Kernel launches.** An interpreter from a provider (`Interpreter.ofProvider`) exposes what each launch
   starts from (`Interpreter.Launches`, the `InterpreterSession`); before each launch the recorder journals
   it (`Kernel.Launch`, a `LaunchInfo`: the provider's id, the installed components, the assets root, the

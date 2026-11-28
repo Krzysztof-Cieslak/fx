@@ -73,7 +73,13 @@ FSharp.Core, Fx.Machines and Fx.Contracts (Fable; `ArchitectureTests` reads the 
   Failed reason | Abandoned reason`.
 - **`NeedInput requests`**: the session waits until every one of those requests that is open and replies as
   input is settled, then starts the next turn with their resolutions. **`Waiting(jobs, note)`**: it waits for
-  `NotifyJob` of each job. Queued prompts wait too; a steer takes over at once (and ends the wait).
+  `NotifyJob` of each job; a job whose notice is already in the inbox (it came while the turn was ending)
+  is not waited for. Queued prompts wait too; a steer takes over at once (and ends the wait).
+- **Jobs' notices** (T143, [codeact.md](codeact.md#background-jobs-spec-5-65-t143)): the host's background
+  jobs send `NotifyJob(job, note)` when one ends on its own, keyed `jobs/<job>/ended` and attributed to
+  `system:jobs`, so each job's end is an input once: a running turn takes it at its next boundary, a
+  waiting session resumes, an idle one starts a turn with it, a held one keeps it in the inbox. A host
+  that starts sends the same notice (`lost: …`) for every job a session waits for.
 - **Held.** After an interrupt, a failure or an abandoned turn the session is held: nothing starts from the
   queue or inbox until someone sends a prompt (spec §5: nothing auto-resumes).
 - Commands about a turn that is not running are refused `session.stale-turn` (a late result after an
@@ -148,8 +154,8 @@ A request is opened with `OpenRequest spec` (a `RequestSpec`):
   `tests/Fx.Sessions.Tests/golden/events-v1.jsonl` keeps what it wrote for a scenario that appends every kind of
   event; it is written once and never rewritten (`Golden.kept`). A change to an event's JSON is a new schema
   version with an upcaster, and that file must still read.
-- The snapshot schema (`SessionLog.snapshot`, `session` v1): bump its version when `SessionState`'s JSON or
-  `evolve`'s meaning changes.
+- The snapshot schema (`SessionLog.snapshot`, `session` v2 since T143 changed what `TurnEnded(Waiting)`
+  waits for): bump its version when `SessionState`'s JSON or `evolve`'s meaning changes.
 - `Resolution.Expired(Some json)` is the tag `expiredWithAnswer`, so a default answer of `null` stays exact
   (optional fields cannot tell `null` from absent); `Evidence.Detail` is `null` for none.
 - TypeScript: `tests/Fx.Sessions.Host.Tests/golden/session.d.ts`, generated from the codecs and type-checked by

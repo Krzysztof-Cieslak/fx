@@ -4,7 +4,7 @@ Spec: §4.3–4.5 (functions, machines, strategies, turn results), §5 (sessions
 boundaries, prompt = pure render), §6.5 (kernel behaviour: host bridge, finishing, activity), §6.9
 (action surfaces), §6.10 (example cells), §10 (models), §13 (grants), §15 (variants), §18 (egress,
 sandbox, guardrails).
-Tasks: T127, T127b (grants), T128 (crash recovery), T206 (steering, compaction). Builds on [sessions.md](sessions.md) (the turn-runner boundary),
+Tasks: T127, T127b (grants), T128 (crash recovery), T206 (steering, compaction), T143 (background jobs). Builds on [sessions.md](sessions.md) (the turn-runner boundary),
 [prompt.md](prompt.md) (the render and context events), [models.md](models.md) (`ILlm`),
 [interpreters.md](interpreters.md) (the bridge and kernels), [kernel-protocol.md](kernel-protocol.md),
 [egress.md](egress.md), [environments.md](environments.md) and [grants.md](grants.md).
@@ -31,6 +31,7 @@ surface, by calling a few direct tools; a turn ends only with a result the harne
 | Cells' values kept for `recall` (`Recall`: keep, restore, the `recall` binding) | `Recall.fs` |
 | The hybrid tools over the bridge's bindings (`Hybrid`) | `Hybrid.fs` |
 | What cells ask of the history, the `history.compact` binding (`HistoryAsks`, `HistoryBindings`) | `History.fs` |
+| Background jobs: the hands' `Jobs`, their interpreter `LiveJobs`, notices (`JobNotices`), a session's jobs (`SessionJobs`) and the `jobs` bindings (`JobBindings`) | `Jobs.fs` |
 | The turn runner (`CodeAct`, `CodeActConfig`) | `CodeAct.fs` |
 | The sandbox's policy for the file bindings (`SandboxGuard`) | `SandboxGuard.fs` |
 | Hands in an environment opened through `IEnvs` (`EnvHands`, `KernelPlan`) | `Environment.fs` |
@@ -76,6 +77,11 @@ let! host = SessionHost.create sessions snapshots codeact.Runner
   withdraws them, and the call fails "not answered". Requests are keyed by the turn and the call, so a
   later turn (a later run) asks again: no answer, or a person's "once", is final only for its call.
 - `codeact.Close()` closes every session's kernel when the host stops.
+- The composition root owns the environments' background jobs (`LiveJobs`, below "Background jobs"):
+  it gives each turn's hands `Jobs = liveJobs.Jobs`, tells the session host when a job ends
+  (`SessionHost.send … (JobNotices.key job) JobNotices.by (Command.NotifyJob …)`), closes them when the
+  host stops, and, when it starts, tells every session that waits for jobs that they were lost
+  (`JobNotices.lostAll`).
 
 ## A turn
 
@@ -241,9 +247,11 @@ host stops (T135).
   only "timed out". Now no wait for a person counts against a cell:
   - the kernel counts only the cell's own time (`timeoutMs`, kernel-protocol.md): its clock stops while
     any host call of the cell is in flight, guard and binding alike;
-  - the host bounds the cell's commands instead (`CellCommands`): `shell.run` from the running cell
-    runs for at most what is left of `codeact.cell.timeoutMs` after the cell's earlier commands (its
-    `timeoutMs` option is added, or lowered when longer; the step journal shows the bound). Their time
+  - the host bounds the cell's commands instead (`CellCommands`): `shell.run` and `jobs.wait` (T143: a
+    wait for a process is the cell's time, not a person's) from the running cell run for at most what is
+    left of `codeact.cell.timeoutMs` after the cell's earlier commands and waits (their `timeoutMs`
+    option is added, or lowered when longer; the step journal shows a command's bound). A wait that
+    reaches it gives the job's status (`running`), not an error. Their time
     is measured around the binding, after the grants guard answered, on the hands' clock (recorded:
     replay gives the same bounds). Once the commands used it up, the next one is refused before it
     runs: `failed` with code `cellTimeout` and a message saying to run it in a cell of its own. A cell
@@ -263,10 +271,59 @@ A result is decoded by `Fx.Sessions.Codecs.turnResult`, then checked (`Ensure.al
 | `summary` | a `done` whose summary is blank |
 | `evidence` (`codeact.finish.evidence = required`) | a `done` without evidence |
 | `requests` | a `needInput` naming a request that is not open as input (the session would wait for nothing) |
-| `jobs` | a `waiting` on a job that does not exist (none can be started yet: T212; the session would wait forever) |
+| `jobs` | a `waiting` on a job that is not one of the session's, or that ended already as far as the strategy knows (`SessionJobs.Check`: the session would wait forever) |
 
 A refused `finish` throws in the cell with the issues (`finishRejected`); the model fixes the result and
 finishes again.
+
+### Background jobs (spec §5, §6.5; T143)
+
+Long builds, test runs and watches (`gh pr checks --watch`) run as background jobs instead of `&`,
+`nohup` or sleep loops: a cell starts one and goes on, and a turn that needs it to end ends `waiting` on
+it.
+
+| Binding | Does |
+|---|---|
+| `jobs.start(command, {name?, cwd?, stdin?})` | starts the command line with the environment's shell, as `shell.run` runs it (sandboxed, the commands' variables), and returns `Job {id, name, command}` at once; ids are `j1`, `j2`, … in the session |
+| `jobs.list()` | the session's jobs this host started, as `JobStatus` (`state`: `running`, `exited`, `killed` or `failed`, `exitCode`, `reason`, `bytes`) |
+| `jobs.status(id)` | one job's status; a job that ran before the host restarted fails `lost` (or `gone`), an unknown one `notFound` |
+| `jobs.output(id, {from?, maxChars?})` | `JobOutput {text, from, next, bytes, running}`: stdout and stderr together as they arrived, from a byte offset (by default the last `maxChars`, `codeact.output.maxChars`), never cutting a character; `next` is where to read on. A job keeps its last megabyte (`Jobs.RetainBytes`): an older offset reads from the first byte kept |
+| `jobs.wait(id, {timeoutMs?})` | the status once the job ended or the wait timed out; bounded by the cell's timeout (above) |
+| `jobs.kill(id)` | stops the job and what it started; its status (`killed`) |
+
+- **The environment's side** is a capability of the hands, `Hands.Jobs` (`Jobs<'K>`: data in and out,
+  like `Hands.Guard`). `LiveJobs` is its interpreter: it starts each job with the shell of the
+  environment the call runs in (the hands' sandboxed one), reads its output until it ends, keeps its last
+  megabyte, and tells the session when the job ends on its own (`JobNotices.ended`: how, e.g.
+  `` `dotnet test` exited with code 1 after printing 2048 bytes. ``, on the first line, then its last ten
+  lines and how to read more), as `Command.NotifyJob` keyed `jobs/<id>/ended`. A job `jobs.kill` stopped
+  sends no notice (the cell saw its end). Jobs live as long as the host: `LiveJobs.Close` kills them
+  without notices. Reattaching to envd's processes after a restart is later work.
+- **Notices reach turns through the session** (sessions.md): a running turn reads `Job j1 finished: …` at
+  its next step boundary, like a steer; a turn that ended `waiting` resumes once every job it named ended
+  (the notice is the next turn's input); a job that ends while the session is idle and waits for nothing
+  starts a turn with its notice, like any input, so the prompt says to kill jobs no longer needed.
+- **The strategy's side** (`SessionJobs`, one per session): ids are numbered on from the step journal,
+  read once per host process at a session's first turn (`Prepare`). The strategy learns of an end only
+  from data a recording journals: what a cell's `jobs.*` call answered (`Observe`), a job's notice among
+  a turn's inputs (`Delivered`, at its start and each boundary), or the journal after a restart
+  (`Orphans`). Never from a process's timing, so a recorded session replays exactly (replay.md).
+- **Journal** (step events, kept in `golden/step-events-jobs-v1.jsonl`): `jobStarted {job, name, command,
+  cwd, call}` before the process starts; `jobEnded {job, how, bytes}` when the strategy learns it:
+  `exited`, `killed` or `failed` from a cell's answer, `reported` (the notice's note) from a turn's
+  inputs, `lost` after a restart.
+- **A host restart.** No job survives its host. A host that starts sends `JobNotices.lostAll` to sessions
+  waiting for jobs (keyed like the jobs' own notices, so a notice sent before the crash wins): they go on
+  with `Job j1 finished: lost: …`. At a session's first turn in a host process, jobs the journal started
+  and never ended are journaled `lost` (or `reported`, when the session's log has their notice), and the
+  model's next call carries a note naming those it was not told about.
+- **Grants**: `jobs.start` needs what `shell.run` of the same command line needs (`Permissions.jobsStart`:
+  each simple command, redirections, auto approvals, `codeact.grants.askCommands`). Its process runs in
+  the sandbox as commands do, so `SandboxGuard` has no path of its own to check. `jobs.list`, `status`,
+  `output` and `wait` only read: the step journal does not journal them as host calls (`kill` and `start`
+  are).
+- **Receipts** name the jobs an action started (`Receipt.Jobs`, for people, never rendered: the TUI's
+  `▸ job j1 started  CI: gh pr checks --watch`, `fx run`'s `  ▸ job j1 started  …`).
 
 ### Chosen variables in the prompt (T138)
 
@@ -408,7 +465,9 @@ never regenerated), one entry at a time per session (`JournalWriter`), every ent
 | `callStarted {call, tool, cell?, intent?, fingerprint, snapshot?}` | before the call does anything | `/started` |
 | `kernelLaunched {launch}` | before a kernel starts (key `kernel/<launch>`) | |
 | `kernelEnded {launch, how}` | when the host learns how a kernel ended, before the next launch (key `kernel/<launch>/ended`); `how` is `exited {code?, stderr}`, `notStarted {reason}`, `killed` or `hostStopped` (T135; `golden/step-events-kernel-ended-v1.jsonl` is what it wrote first) | |
-| `hostCallStarted {call, index, binding, args, approved?}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`); `approved`: how it ran that no grant in force allowed (auto approvals, a person's answer; T134, absent when none) | `/host/<i>` |
+| `jobStarted {job, name, command, cwd?, call?}` | before a background job's process starts (key `jobs/<job>/started`; T143, `golden/step-events-jobs-v1.jsonl`) | |
+| `jobEnded {job, how, bytes?}` | when the strategy learns how a job ended (key `jobs/<job>/ended`); `how` is `exited {code}`, `killed`, `failed {reason}`, `lost` or `reported {note}` ("Background jobs" above) | |
+| `hostCallStarted {call, index, binding, args, approved?}` | before a host call of the running call runs (not the reads: `fs.read`, `fs.list`, `fs.stat`, `recall`, and `jobs.list`, `status`, `output`, `wait`); `approved`: how it ran that no grant in force allowed (auto approvals, a person's answer; T134, absent when none) | `/host/<i>` |
 | `hostCallEnded {call, index, failed, summary}` | after it | `/host/<i>/ended` |
 | `printed {call, text}` | as the running cell streams output (at most 64 entries and 16000 characters per call) | `/output/<j>` |
 | `valueKept {call, cell, value, type}` / `valueLost {call, cell, type, reason}` | after a cell returned a value | `/value` |
@@ -486,11 +545,12 @@ the filesystem):
 | Binding | Needs |
 |---|---|
 | `shell.run` | `shell.exec` for each simple command of the line (`ShellSyntax`, below), and `fs.write` for each file a redirection writes outside the workspace or to a protected path |
+| `jobs.start` (T143) | what `shell.run` of the same line in the same working directory needs (`Permissions.jobsStart`) |
 | `fs.write`, `fs.patch` | `fs.write` for each file outside the workspace or under `codeact.grants.protectedPaths` (default `.git` and the project's directory: hooks run code, configuration changes behaviour) |
 | `fs.edit`, `fs.editRange` | as `fs.write` for the file, and `fs.read` for a file outside the workspace: their results (and a stale range's error) show its lines |
 | `fs.read` | `fs.read` for a file outside the workspace (content leaves for the model) |
 | network bindings | `net.connect host:port` for each endpoint (`Permissions.connects` with `Permissions.endpoint`); no core binding is one yet |
-| others (`fs.list`, `fs.stat`, …) | nothing: a binding that runs programs, writes, reads outside the workspace or connects must have a rule (`BindingRule`) |
+| others (`fs.list`, `fs.stat`, `jobs.status`, `jobs.kill`, …) | nothing: a binding that runs programs, writes, reads outside the workspace or connects must have a rule (`BindingRule`) |
 
 Resources are canonical (`Resource.validate`): commands are their words joined by single spaces
 (`ShellSyntax.resource`), paths in the workspace are workspace-relative, others absolute, all
@@ -718,6 +778,14 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   `history.compact` with a focus, also in the turn's last cell; the window filled during a reply; a failed
   summary; modes `off` and `overflow`; each replays into the requests sent.
 - **Steering**: a steer after every result of a step's reply, a queued prompt in a turn of its own.
+- **Background jobs** (`JobTests`): a job's output read from offsets without cutting a character, its
+  tail by default and its last megabyte kept; a cell that starts a job, waits for it and reads its
+  output (both ends journaled, the receipt naming the job, the notice delivered at a step boundary); a
+  turn that ends waiting for a job and resumes with its notice; a killed job (no notice); a wait cut at
+  what is left of the cell's timeout and the next refused; `finish` waiting for an unknown or ended job;
+  a host restart with a running job (journaled lost, the next turn told) and one while a turn waits for
+  it (the host's lost notice resumes the session); replay of the logs into the requests sent. Grants:
+  `jobs.start` needs what `shell.run` needs (`PermissionTests`).
 - **Crash recovery** (`RecoveryUnitTests`, `CrashTests`): the journal's version 1 read back (and
   `kernelEnded` as first written); how kernels ended in words; finding the
   call in doubt; the card and its answers; each decision's receipt; kept values. End to end, the host
@@ -731,8 +799,9 @@ Defaults are provisional until evals decide (spec §1, principle 7).
   breakpoints, a stable cache key).
 - **Live** (the pinned Bun; skipped offline, required in CI): TypeScript cells on the bun-ts kernel for
   both surfaces, a rejected `finish`, a cell writing a file with backticks from its texts (type-checked;
-  a reserved word refused), a turn in an environment of `fx.env.local` opened through `IEnvs`, and a
-  host stopped during a TypeScript cell (the decision shows what it printed; `Out` and `fx.recall` give a
+  a reserved word refused), a turn in an environment of `fx.env.local` opened through `IEnvs`, TypeScript
+  cells that start jobs, wait for one and end a turn waiting for another (and the prompt's jobs examples
+  type-check in the session's kernel), and a host stopped during a TypeScript cell (the decision shows what it printed; `Out` and `fx.recall` give a
   kept value back to the new kernel).
 
 Native AOT: `codeact-hybrid`, `codeact-text-only` (a session on the session host with the script
@@ -750,6 +819,7 @@ fake clock, auto approvals and their decision), on all eight targets.
 |---|---|
 | The decision ledger takes over `decision.outcomeUnknown` (its cards as Session-scope decisions, anchors) | T301 |
 | Partial output of commands in doubt (`shell.run`, `bash`): they run as envd processes (spawned since T142); after a restart, resume their output logs by byte offset, and journal the process | T205 |
+| Background jobs that survive a host restart: reattach to envd's processes and resume their output by byte offset (today a restart loses them, reported `lost`) | later |
 | Kernels with snapshots (`snapshot`/`restore`) restored instead of kept values; values in envd's blob store and handles in the journal | T201, interpreters that have them |
 | Network bindings (`fx.http`, …) and their `net.connect` rules; the egress proxy for commands' own connections | T113 and the bindings' tasks |
 | Following symbolic links for workspace checks; commands in `sh -c`/`pwsh -c` strings split too | the sandbox is off by default (T137), so nothing catches them there |

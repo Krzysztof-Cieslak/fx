@@ -213,7 +213,7 @@ interpreter `bun-ts`: TypeScript cells on the pinned Bun (`fx.runtime.bun`, `bun
 | Caps | no snapshot (Jupyter semantics plus the journal, spec §6.5), host calls awaited, no packages, not deterministic |
 | Check | `CheckSpec.Kernel`: `cell/check`, and `cell/run` with `check` |
 | Bindings | `<global>.d.ts`: `DeclarationFile.render` with `Layout.Global(global, description)`; every binding as `<global>.<group>.<name>(…): Promise<Result>`, plus `finish(result): Promise<null>`, and every named type they use; groups without bindings left out |
-| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, the `cell` tool's `texts` for file bodies, messages and anything with backticks or several lines, a plain search's `matches` for `fs.editRange` and a timed-out command's kept output, imports, `finish`), the declarations, four examples (one writes a file and commits it from `texts`) |
+| Prompt | instructions (TypeScript, `// intent:` lines, the bridge, values by name and bounded output, the `cell` tool's `texts` for file bodies, messages and anything with backticks or several lines, a plain search's `matches` for `fs.editRange` and a timed-out command's kept output, long builds, test runs and CI watches as background jobs (`fx.jobs`, T143) and turns that end `waiting` on them, imports, `finish`), the declarations, six examples (edits by text and by range; one writes a file and commits it from `texts`; one watches CI in a job and ends the turn waiting for it) |
 
 ### How the kernel ships (spec §16.4)
 
@@ -283,7 +283,8 @@ protocol (T116) and finished here:
   over the local filesystem and shell, failures and their codes, `finish` accepted and rejected,
   `cell/check` against the generated declarations and earlier cells, `check: true`, values the host
   bound declared to the checker and names a cell could not use refused, and the prompt's examples
-  type-checking (with the texts they use bound).
+  type-checking (with the texts they use bound) against the core bridge; the examples of the session's
+  own bindings (`fx.jobs`) type-check in a session's kernel (CodeAct's live tests).
 - **Edits** (`tests/Fx.Interpreters.Tests`): `TextEditsTests` (changes in order, missing, ambiguous,
   `all`, unchanged, fresh ranges, and generated cases checking that the patch always makes the text the
   changes make, and that each range holds its edit's lines), and the bindings over fakes (ranged reads,
