@@ -435,7 +435,7 @@ flowchart LR
   classDef inprogress fill:#fff3c4,stroke:#f9a825
   classDef blocked fill:#ffcdd2,stroke:#c62828
   class T001,T002,T003,T004,T005,T006,T007,T009,T101,T101b,T102,T103,T104,T105,T106,T107,T108,T109,T109b,T110,T111,T112,T113,T113b,T114,T115,T115b,T116,T117,T118,T119,T120,T121,T122,T123,T124,T125,T126,T127,T127b,T128,T129a,T129b,T130,T131,T132a,T133a,T133d,T133c,T133b,T133e,T133f,T133g,T133h,T133i,T133j,T134,T134b,T135,T137,T138,T139,T140,T141,T142,T143,T201a,T201b,T201c,T203a,T204a,T206 done
-  class T132 inprogress
+  class T008,T132 inprogress
 ```
 
 <!-- /tasks:generated -->
@@ -453,7 +453,7 @@ flowchart LR
 | T005 | Spike: PTY | T003 | §6.5, §20 | done | PTY spawn/resize/read under AOT on Linux/macOS (forkpty) and Windows (ConPTY); PowerShell 7 launch verified. |
 | T006 | Spike: SQLite | T003 | §20 | done | Statically linked SQLite via `DllImport`/`NativeLibrary` works under AOT on all targets incl. musl. |
 | T007 | Spike: keychains | T003 | §11.4 | done | Keychain, CredMan/DPAPI and Secret Service read/write via P/Invoke/D-Bus under AOT; headless fallback behaviour documented. |
-| T008 | Spike: tree-sitter | T003 | §6.7 | todo | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
+| T008 | Spike: tree-sitter | T003 | §6.7 | in-progress | Native tree-sitter with a few grammars (F#, TS, C#, Python) under AOT; outline extraction prototype. |
 | T009 | Spike: Bun kernel | T001 | §6.3 | done | TS prototype: pinned Bun with hardened flags, `node:vm` context + `Bun.Transpiler` replMode persistence, top-level await, `bun check` against a `.d.ts`. |
 | T010 | Spike: envd bootstrap | T003 | §9.2 | todo | Upload + exec a native binary into a Docker container and talk to it over stdio JSON-RPC. |
 
