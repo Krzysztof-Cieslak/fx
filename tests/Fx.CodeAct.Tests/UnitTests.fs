@@ -618,7 +618,9 @@ let tests =
                         End = 5
                     }
 
-                match Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File long)) result with
+                match
+                    Receipts.cell limits KernelNote.Same (Some "x") Reads.none [] (Some(CellValue.File long)) result
+                with
                 | [ Piece.Text _; Piece.File view; Piece.Text more ] ->
                     Expect.equal view.Lines [ LineRange.create 1 3 ] "up to the receipt's lines"
                     Expect.stringContains more "fs.read(\"a.txt\", { lines: [4, 5] })" "how to read on"
