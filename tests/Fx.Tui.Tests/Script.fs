@@ -169,6 +169,13 @@ type Session(id: string) =
                 }
         )
 
+    /// A pin the model made (T201c).
+    member this.Pin(name: string, pin: Pin) =
+        this.Context(ContextEvent.Pinned { Name = name; Pin = pin })
+
+    member this.Unpin(name: string) =
+        this.Context(ContextEvent.Unpinned name)
+
     member this.End(result: TurnResult) =
         this.Send(Command.EndTurn(this.Running, result), host)
 

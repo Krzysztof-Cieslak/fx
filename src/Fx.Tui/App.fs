@@ -771,6 +771,7 @@ module App =
             | "yolo" as mode -> setApprovals mode model
             | other -> error $"no approval mode {other}: ask, auto or yolo" model, []
         | CommandAction.Yolo -> setApprovals "yolo" model
+        | CommandAction.Context -> notice (Timeline.contextLine model.Timeline) model, []
         | CommandAction.Exit -> { model with Quitting = true }, [ Cmd.Quit ]
 
     /// The commands a `/` prompt being typed may name, best first.

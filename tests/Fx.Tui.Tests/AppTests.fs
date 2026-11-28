@@ -1053,6 +1053,46 @@ let tests =
                         Expect.isTrue (Editor.isEmpty model.Editor) "the prompt is cleared"
                     }
 
+                    test "pins show as activity lines, and /context lists them with their cost (T201c)" {
+                        let s, model = ready ()
+
+                        let model, _ =
+                            play
+                                model
+                                [
+                                    yield! s.Prompt "keep the plan in view"
+                                    yield! s.Boundary 1
+                                    s.Pin(
+                                        "goal",
+                                        Fx.Prompt.Pin.Value [ Fx.Prompt.Piece.Text(String.replicate 40 "ship ") ]
+                                    )
+                                    s.Pin("plan", Fx.Prompt.Pin.File("plan.md", [ Fx.Models.LineRange.create 1 20 ]))
+                                    s.Pin("old", Fx.Prompt.Pin.Value [ Fx.Prompt.Piece.Text "x" ])
+                                    s.Unpin "old"
+                                ]
+
+                        let goalTokens = Fx.Prompt.Tokens.ofChars 200
+                        let shown = screen model
+                        Expect.stringContains shown "Pin" "the activity line"
+                        Expect.stringContains shown "plan: plan.md:1-20 (live)" "a file pin"
+                        Expect.stringContains shown "Unpin" "an unpin"
+
+                        Expect.equal
+                            (Timeline.pins model.Timeline)
+                            [ $"goal (≈{goalTokens} tokens)"; "plan: plan.md:1-20 (live)" ]
+                            "what is pinned now"
+
+                        let model, _ = play model (typing "/context" @ [ key KeyCode.Enter ])
+
+                        match model.Notice with
+                        | Some notice ->
+                            Expect.stringContains
+                                notice.Text
+                                $"pinned: goal (≈{goalTokens} tokens), plan: plan.md:1-20 (live)"
+                                "the pins"
+                        | None -> failtest "no notice"
+                    }
+
                     test "/theme with and without a name" {
                         let _, model = ready ()
                         let model, _ = play model (typing "/theme light" @ [ key KeyCode.Enter ])

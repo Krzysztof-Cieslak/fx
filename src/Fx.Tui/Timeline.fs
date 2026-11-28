@@ -73,6 +73,24 @@ type CallView =
 
     override this.ToString() = $"{this.Label} {this.Detail}"
 
+/// Pins as people see them (T201c): what each shows and what it costs at every call.
+[<RequireQualifiedAccess>]
+module Pins =
+    /// One pin in a line: a value with its estimated tokens, a file with its lines (a live view).
+    let describe (spec: PinSpec) : string =
+        match spec.Pin with
+        | Pin.Value pieces ->
+            let chars = pieces |> List.sumBy (fun p -> (Piece.render p).Length)
+            $"{spec.Name} (≈{Tokens.ofChars chars} tokens)"
+        | Pin.File(path, lines) ->
+            let lines =
+                match LineRange.normalize lines with
+                | [] -> ""
+                | ranges -> ":" + (ranges |> List.map string |> String.concat ",")
+
+            $"{spec.Name}: {path}{lines} (live)"
+
+
 /// What happened in a turn, in order.
 [<RequireQualifiedAccess>]
 type TurnItem =
@@ -90,6 +108,9 @@ type TurnItem =
     | Interrupted of by: string
     /// The conversation's oldest part was replaced by this summary in the model's context (compaction).
     | Compacted of summary: string
+    /// The model pinned something to keep it in view at every step (T201c): what, and what it costs.
+    | Pinned of what: string
+    | Unpinned of name: string
 
     override this.ToString() =
         match this with
@@ -101,6 +122,8 @@ type TurnItem =
         | Settled resolved -> "settled " + resolved.Request
         | Interrupted by -> "interrupted by " + by
         | Compacted summary -> "compacted " + string summary.Length
+        | Pinned what -> "pinned " + what
+        | Unpinned name -> "unpinned " + name
 
 type TurnView =
     {
@@ -532,10 +555,28 @@ module Timeline =
                     | _ -> ()
                 | ContextEvent.Collapsed collapse ->
                     add (TurnItem.Compacted(collapse.Summary |> List.map Piece.render |> String.concat "\n"))
+                | ContextEvent.Pinned spec -> add (TurnItem.Pinned(Pins.describe spec))
+                | ContextEvent.Unpinned name -> add (TurnItem.Unpinned name)
                 | _ -> ()
 
         flush ()
         List.ofSeq blocks
+
+    /// What is pinned now, as `Pins.describe` gives each, in the order they were pinned.
+    let pins (timeline: Timeline) : string list =
+        let mutable pins: PinSpec list = []
+
+        // Entries are newest first.
+        for entry in List.rev timeline.Entries do
+            match entry with
+            | Entry.Context recorded ->
+                match recorded.Event with
+                | ContextEvent.Pinned spec -> pins <- (pins |> List.filter (fun p -> p.Name <> spec.Name)) @ [ spec ]
+                | ContextEvent.Unpinned name -> pins <- pins |> List.filter (fun p -> p.Name <> name)
+                | _ -> ()
+            | _ -> ()
+
+        pins |> List.map Pins.describe
 
     /// What the session's model calls used: how full the context was at the last call and what they
     /// all cost.
@@ -561,6 +602,23 @@ module Timeline =
                 Window = last.Context
                 Cost = if costs.IsEmpty then None else Some(List.sum costs)
             }
+
+    /// What `/context` says in one line (T201c): how full the context was at the last call, and what is
+    /// pinned with what each pin costs.
+    let contextLine (timeline: Timeline) : string =
+        let used = usage timeline
+
+        let fill =
+            match used.Tokens, used.Window with
+            | Some tokens, Some window when window > 0 ->
+                let percent = string (100L * int64 tokens / int64 window) + "%"
+                $"context {tokens} of {window} tokens ({percent})"
+            | Some tokens, _ -> $"context {tokens} tokens"
+            | None, _ -> "no model call yet"
+
+        match pins timeline with
+        | [] -> fill + "; nothing pinned"
+        | pins -> fill + "; pinned: " + String.concat ", " pins
 
     /// Whether the transcript shows this request where it was asked.
     let shows (id: string) (timeline: Timeline) : bool =
