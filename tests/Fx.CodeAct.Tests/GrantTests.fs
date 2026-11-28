@@ -1225,14 +1225,16 @@ let private turnTests =
             }
 
             testTask "cells: a grant answered after longer than the cell's timeout still runs, and the cell completes" {
-                // The cell's clock stops while its host call waits for the person (T141).
+                // The cell's clock stops while its host call waits for the person (T141). The timeout
+                // leaves the command itself room: pwsh alone can take over a second to start on a
+                // loaded Windows runner, and the command gets what is left of the cell's timeout.
                 do!
-                    withGrants "grant-cell-slow-answer" [ "codeact.cell.timeoutMs", Json.int 1000 ] [] (fun g ->
+                    withGrants "grant-cell-slow-answer" [ "codeact.cell.timeoutMs", Json.int 5000 ] [] (fun g ->
                         task {
                             g.F.Model.AddAll [ cellRun "mkdir made"; Say.finish "Made it" ]
                             do! kickoff g.F "Make a directory"
                             let! (requests: GrantRequest list) = g.Pending 1
-                            do! Task.Delay 2500
+                            do! Task.Delay 6000
                             g.Answer(requests.Head, allow ScopeChoice.Once None)
                             let! ending = ended g.F "s1" 1
                             Expect.equal (completed ending) (TurnResult.Done("Made it", [], None)) "done"
