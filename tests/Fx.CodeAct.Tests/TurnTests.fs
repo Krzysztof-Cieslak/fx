@@ -680,6 +680,39 @@ let tests =
                     (f :> IDisposable).Dispose()
             }
 
+            testTask "a value the receipt cuts is stored whole, and the receipt says where (T201a)" {
+                do!
+                    within
+                        "overflow"
+                        []
+                        (fun f ->
+                            task {
+                                let long = String.replicate 4000 "0123456789"
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cell ("// intent: a long value\nlet s = \"" + long + "\"\ns")
+                                        Say.finish "long"
+                                    ]
+
+                                do! kickoff f "Long"
+                                let! _ = ended f "s1" 1
+                                let shown = text (receipts f "s1").Head
+                                let hash = Fx.Store.BlobHash.ofBytes (System.Text.Encoding.UTF8.GetBytes long)
+
+                                Expect.isTrue
+                                    (shown.Contains("characters omitted; all of it: blob " + string hash))
+                                    $"the marker names the blob: {shown.Substring(0, min 300 shown.Length)}"
+
+                                match
+                                    (HandsEnv.Stored.Blobs.Get hash System.Threading.CancellationToken.None).Result
+                                with
+                                | Ok bytes -> Expect.equal (System.Text.Encoding.UTF8.GetString bytes) long "all of it"
+                                | Error e -> failtest (string e)
+                            })
+                        ()
+            }
+
             testTask "one kernel for the session: names declared in earlier cells and turns stay" {
                 do!
                     within

@@ -495,14 +495,57 @@ module Receipts =
         | Piece.Text cut -> cut
         | _ -> text
 
+    /// The text of a value that a receipt shows cut to `OutputChars`: a string, or a command's output;
+    /// `None` for values shown otherwise. CodeAct stores it whole when it is longer (T201a), and the
+    /// receipt's marker names where (`cell`'s `stored`).
+    let valueBody (value: CellValue) : string option =
+        match value with
+        | CellValue.Text text -> Some text
+        | CellValue.Ran result -> Some(snd (ranParts result))
+        | _ -> None
+
+    /// `text` cut to `maxChars` (as `bounded`), the marker naming where all of it is when it was stored.
+    let private boundedStored (maxChars: int) (stored: Overflow option) (text: string) : string =
+        match stored with
+        | Some overflow when text.Length > maxChars ->
+            // The marker line `Piece.output` wrote (`… n characters omitted …`), with where all of it is.
+            let cut = bounded maxChars text
+
+            let marker =
+                System.Text.RegularExpressions.Regex.Match(cut, "\n… [0-9]+ characters omitted …\n")
+
+            if marker.Success then
+                cut.Substring(0, marker.Index + marker.Length - 3)
+                + "; "
+                + CoreBindings.whereAll overflow
+                + " …\n"
+                + cut.Substring(marker.Index + marker.Length)
+            else
+                cut
+        | _ -> bounded maxChars text
+
+    /// Where all of each stream of a command is, when the command's own bound cut it.
+    let private streamOverflows (result: RunResult) : string =
+        lines
+            [
+                match result.StdoutOverflow with
+                | Some overflow -> "[stdout was cut; " + CoreBindings.whereAll overflow + "]"
+                | None -> ""
+                match result.StderrOverflow with
+                | Some overflow -> "[stderr was cut; " + CoreBindings.whereAll overflow + "]"
+                | None -> ""
+            ]
+
     /// What a cell's receipt says about the value it ended with (a file's lines are a piece of their own).
-    let private valueText (outputChars: int) (cellId: string) (value: CellValue) : string =
+    let private valueText (outputChars: int) (stored: Overflow option) (cellId: string) (value: CellValue) : string =
         let label = $"Out[{Json.quote cellId}]"
 
         match value with
         | CellValue.Preview info -> $"Value of {label} ({info.Type}): {info.Preview.Text}"
         | CellValue.Text "" -> $"Value of {label} (string): \"\""
-        | CellValue.Text text -> $"Value of {label} (string, {text.Length} chars):\n" + bounded outputChars text
+        | CellValue.Text text ->
+            $"Value of {label} (string, {text.Length} chars):\n"
+            + boundedStored outputChars stored text
         | CellValue.Ran result ->
             let header, streams = ranParts result
 
@@ -510,7 +553,8 @@ module Receipts =
                 [
                     $"Value of {label} (RunResult):"
                     header
-                    bounded outputChars streams
+                    boundedStored outputChars stored streams
+                    streamOverflows result
                     (if result.Matches.IsEmpty then
                          ""
                      else
@@ -586,6 +630,7 @@ module Receipts =
         (reads: Reads)
         (waiting: HostCall list)
         (value: CellValue option)
+        (stored: Overflow option)
         (result: CellResult)
         : Piece list =
         let shown =
@@ -595,7 +640,7 @@ module Receipts =
 
         let outcome =
             match shown with
-            | Some value -> valueText limits.OutputChars result.CellId value
+            | Some value -> valueText limits.OutputChars stored result.CellId value
             | None -> outcomeText result.CellId result.Outcome
 
         let head =
