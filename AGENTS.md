@@ -453,6 +453,7 @@ Run from the repository root. The SDK is pinned in `global.json`; all output goe
 | Store benchmark | `dotnet run -c Release --project tools/Fx.Store.Bench` (results in `docs/modules/store.md`) |
 | Codec benchmark | `dotnet run -c Release --project tools/Fx.Contracts.Bench` (results in `docs/modules/contracts.md`) |
 | Task graph | `bun scripts/tasks.ts check` |
+| Cells of sessions | `bun scripts/cells.ts` lists the sessions in the data directory (`--data <dir>`); `bun scripts/cells.ts <session>…` or `--latest <n>` classifies their cells (run and print, edits, processing in the kernel, reuse of earlier data and helpers, text retyped from receipts; `--json`). Compare prompts and binaries with it (docs/research/kernel-first-prompting.md); its tests run in CI with the other scripts' (`bun test ./scripts/`) |
 | Bun kernel spike | In `spikes/bun-kernel`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`, `bun bench/bench.ts` |
 | bun-ts kernel | In `packages/kernel-bun-ts`: `bun install --frozen-lockfile`, `bun check --no-script`, `bun test`. Its conformance runs in `dotnet test` (tests/Fx.Kernel.Tests, launched through `fx.interpreter.bun-ts`), which downloads the pinned Bun into `artifacts/kernel-bun-ts/` (required in CI, skipped offline); then regenerate the kernel's files in the binary: `UPDATE_GOLDEN=1 dotnet test --project tests/Fx.Ext.InterpreterBunTs.Tests` and rebuild |
 | Kestrel size and startup probe | `docs/spikes/kestrel-probe/measure.sh <rid>`; CI runs it on every target weekly and by hand (`kestrel-probe.yml`) |
