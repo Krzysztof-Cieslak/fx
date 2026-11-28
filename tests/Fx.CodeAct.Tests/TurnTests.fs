@@ -751,6 +751,69 @@ let tests =
                         ()
             }
 
+            testTask "pins: a value and a live view of a file show at every later step until unpinned (T201c)" {
+                do!
+                    within
+                        "pins"
+                        []
+                        (fun f ->
+                            task {
+                                f.Write("plan.md", "step one\nstep two\nstep three\n")
+
+                                f.Model.AddAll
+                                    [
+                                        Say.cell
+                                            "// intent: pin\ncall a = context.pin [\"goal\", \"ship the parser\"]\ncall b = context.pinFile [\"plan\", \"plan.md\", {\"lines\": [1, 2]}]\nb"
+                                        Say.cell
+                                            "// intent: change the plan\ncall w = fs.write [\"plan.md\", \"step uno\\nstep two\\nstep three\\n\"]\nw"
+                                        Say.cell "// intent: list\ncall p = context.pins\np"
+                                        Say.cell "// intent: unpin\ncall u = context.unpin [\"plan\"]\nu"
+                                        Say.cell
+                                            "// intent: outside\ncall o = context.pinFile [\"x\", \"../elsewhere.txt\"]\no"
+                                        Say.finish "Done"
+                                    ]
+
+                                do! kickoff f "Keep the plan in view"
+                                let! ending = ended f "s1" 1
+                                Expect.equal (completed ending) (TurnResult.Done("Done", [], None)) "done"
+
+                                let requests = f.Model.Requests |> List.map requestText
+                                Expect.isFalse (requests[0].Contains "Pinned goal") "nothing pinned yet"
+                                Expect.stringContains requests[1] "Pinned goal:" "the value, at the next step"
+                                Expect.stringContains requests[1] "ship the parser" "its text"
+                                Expect.stringContains requests[1] "step one" "the file's lines"
+                                Expect.isFalse (requests[1].Contains "step three") "only the lines pinned"
+                                Expect.stringContains requests[2] "step uno" "live: the file as it is now"
+
+                                let rs = receipts f "s1"
+                                let listed = text rs[2]
+                                Expect.stringContains listed "\"goal\"" "the value pin"
+                                Expect.stringContains listed "\"plan.md\"" "the file pin"
+                                Expect.stringContains listed "tokens" "what each costs"
+                                Expect.stringContains (text rs[4]) "outside" "only workspace files"
+
+                                let last = requests[requests.Length - 1]
+                                let lastPins = last.Substring(last.LastIndexOf "Unpinned plan")
+                                Expect.isFalse (lastPins.Contains "Pinned plan:") "unpinned: no longer shown"
+
+                                let kinds =
+                                    contextEvents f "s1"
+                                    |> List.choose (fun r ->
+                                        match r.Event with
+                                        | ContextEvent.Pinned spec -> Some("pinned " + spec.Name)
+                                        | ContextEvent.Unpinned name -> Some("unpinned " + name)
+                                        | _ -> None)
+
+                                Expect.equal
+                                    kinds
+                                    [ "pinned goal"; "pinned plan"; "unpinned plan" ]
+                                    "recorded in order"
+
+                                do! expectReplays f "s1"
+                            })
+                        ()
+            }
+
             testTask "one kernel for the session: names declared in earlier cells and turns stay" {
                 do!
                     within
