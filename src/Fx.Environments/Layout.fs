@@ -43,6 +43,10 @@ module EnvLayout =
         else
             dir + string separator + name
 
+    /// The root of envd's blob store (`<EnvdState>/blobs`, a `FileBlobStore`): overflow names its files
+    /// (`CoreSettings.BlobRoot`, spec §6.6).
+    let blobs (layout: EnvLayout) : string = join layout.Os layout.EnvdState "blobs"
+
     /// The layout of a leased environment on a machine.
     let create (machine: EnvMachine) (lease: Lease) : EnvLayout =
         let os = machine.Target.Os

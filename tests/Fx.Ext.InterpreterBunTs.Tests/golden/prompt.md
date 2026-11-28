@@ -196,6 +196,22 @@ declare namespace fx {
     end: number;
   }
 
+  /** Where all of a text that was cut is: a blob of the environment's blob store. */
+  interface Overflow {
+    /**
+     * SHA-256 of the content: sha256:<hex>.
+     * Matches /^sha256:[0-9a-fA-F]{64}$/.
+     */
+    hash: string;
+    /**
+     * Its size.
+     * Integer, at least 0.
+     */
+    bytes: number;
+    /** The file that holds it (read it with grep, sed -n or fs.read); absent where blobs are not files. */
+    path?: string;
+  }
+
   /** What to read of a file. */
   interface ReadOptions {
     /** The first and the last line to read, 1-based and inclusive; lines past the end are left out. */
@@ -229,6 +245,10 @@ declare namespace fx {
     truncated: boolean;
     /** It ran out of time and was killed with its children; stdout and stderr hold what it printed until then. */
     timedOut: boolean;
+    /** Where all of stdout is, when the middle of it was left out. */
+    stdoutOverflow?: Overflow;
+    /** Where all of stderr is, when the middle of it was left out. */
+    stderrOverflow?: Overflow;
     /**
      * For a plain search (grep -n, rg -n or git grep -n, one command, nothing cut), the lines it printed as one-line ranges fs.editRange takes, each checked against its file in the workspace; absent when not every line could be.
      *

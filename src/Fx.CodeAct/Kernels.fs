@@ -61,6 +61,9 @@ type Hands<'K> =
         /// The workspace's snapshots (envd's), if the environment has them: each step records the
         /// workspace before its actions, so a call in doubt after a crash shows what changed.
         Snapshots: Snapshots option
+        /// The root of the environment's blob store where it keeps blobs as files (`EnvLayout.blobs`):
+        /// output the bindings cut names its files (`CoreSettings.BlobRoot`).
+        BlobRoot: string option
         /// The policy processes start under, when a sandbox driver confines them (spec §9.1): the
         /// prompt tells the model what the sandbox keeps from it (`Instructions.sandbox`).
         Sandbox: SandboxPolicy option
@@ -324,7 +327,8 @@ type private RunningCell(id: string, timeoutMs: int option) =
 /// settings (content exclusions included) behind the hands' guard, provenance of what cells read, and
 /// `finish` validated by the turn result's codec and the turn's checks. One turn at a time uses it.
 [<Sealed>]
-type SessionKernel<'K when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> IClock and 'K :> IScopeWith<'K>>
+type SessionKernel<'K
+    when 'K :> IShell and 'K :> IFs and 'K :> IFsOps and 'K :> Fx.Store.IBlobs and 'K :> IClock and 'K :> IScopeWith<'K>>
     (
         session: string,
         watch: Watch<'K>,

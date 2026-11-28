@@ -79,6 +79,12 @@ type private HandsEnv =
     interface IShell with
         member env.Shell = env.Shell
 
+    /// Where output cut by the bindings goes (T201a): one store for every environment of this type.
+    static member val Stored = Fx.Store.Fakes.InMemoryBlobs()
+
+    interface Fx.Store.IBlobs with
+        member _.Blobs = HandsEnv.Stored.Blobs
+
     interface IScopeWith<HandsEnv> with
         member env.Scope = env.Scope
         member env.WithScope scope = { env with Scope = scope }
@@ -272,6 +278,7 @@ let private sessionIn
                                         Interpreter = kernel
                                         Guard = fun _ -> EffResult.ok []
                                         Snapshots = None
+                                        BlobRoot = None
                                         Sandbox = None
                                         Variables = []
                                         Jobs = Jobs.none
@@ -552,6 +559,7 @@ let private recovery () : Task<string list> =
                                                 Interpreter = kernel
                                                 Guard = fun _ -> EffResult.ok []
                                                 Snapshots = None
+                                                BlobRoot = None
                                                 Sandbox = None
                                                 Variables = []
                                                 Jobs = Jobs.none

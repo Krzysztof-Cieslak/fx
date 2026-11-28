@@ -121,6 +121,7 @@ type CodeAct<'R, 'K
     and 'K :> IShell
     and 'K :> IFs
     and 'K :> IFsOps
+    and 'K :> Fx.Store.IBlobs
     and 'K :> IClock
     and 'K :> IScopeWith<'K>>(config: CodeActConfig<'R, 'K>) =
     let kernels =
@@ -788,6 +789,7 @@ type CodeAct<'R, 'K
                         Exclusions = exclusions
                         Words = ShellSyntax.words (Workplace.create hands.Workspace hands.Os).Shell
                         Sandbox = hands.Sandbox
+                        BlobRoot = hands.BlobRoot
                     }
 
                 let limits: KernelLimits =
@@ -1472,6 +1474,7 @@ module CodeAct =
         and 'K :> IShell
         and 'K :> IFs
         and 'K :> IFsOps
+        and 'K :> Fx.Store.IBlobs
         and 'K :> IClock
         and 'K :> IScopeWith<'K>>
         (config: CodeActConfig<'R, 'K>)

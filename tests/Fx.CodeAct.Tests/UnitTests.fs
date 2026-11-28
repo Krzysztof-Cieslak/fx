@@ -238,6 +238,8 @@ let tests =
                         Stderr = ""
                         Truncated = false
                         TimedOut = false
+                        StdoutOverflow = None
+                        StderrOverflow = None
                         Matches = []
                     }
 
@@ -328,6 +330,8 @@ let tests =
                         Stderr = "oops\n"
                         Truncated = false
                         TimedOut = false
+                        StdoutOverflow = None
+                        StderrOverflow = None
                         Matches = []
                     }
 

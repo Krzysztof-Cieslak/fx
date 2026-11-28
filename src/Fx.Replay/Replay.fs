@@ -43,6 +43,9 @@ type ReplayHandsEnv =
         Fs: Fs
         FsOps: FsOps
         Shell: Shell
+        /// Where cut output goes (T201a): in memory, since a blob's reference depends only on its
+        /// content, so replay stores what the recording stored without touching the world.
+        Blobs: Blobs
         Scope: Scope
     }
 
@@ -58,6 +61,9 @@ type ReplayHandsEnv =
 
     interface IShell with
         member env.Shell = env.Shell
+
+    interface IBlobs with
+        member env.Blobs = env.Blobs
 
     interface IScopeWith<ReplayHandsEnv> with
         member env.Scope = env.Scope
