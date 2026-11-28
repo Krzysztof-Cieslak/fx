@@ -348,6 +348,7 @@ FileText(path="src/billing/Retry.fs", lines=412, digest="sha256:9f…", outline=
 
 - **Navigation mirrors familiar habits:** `fx.repo.grep` (ripgrep semantics), `fx.fs.read(path, { lines: [a, b] })`, symbols/refs/definitions/callers (tree-sitter + LSP proxy), plain shell `rg`/`sed`.
 - **Shell results with structure** (T142): a command that runs out of time (`timeoutMs`) is killed with its children and keeps what it printed until then (`timedOut`, no exit code). A plain search, `grep -n`, `rg -n` or `git grep -n` as one simple command that exited 0 with nothing cut, also returns `matches`: its lines as one-line `FileRange`s that `fx.fs.editRange` takes, attached only when every line equals its file's line now (files in the workspace, read as `fx.fs.read` reads them: content exclusions and a confining sandbox's policy apply), so an anchor is never wrong; otherwise none. The receipt of a search with matches ends with how to edit one. Module spec: `docs/modules/interpreters.md`.
+- **Outlines** come from tree-sitter with fx's own outline query per language (the grammars' `tags.scm` serve navigation and leave out much an outline needs); an item's header is the line its name is on, and its lines exclude trailing comments (`docs/spikes/tree-sitter.md`).
 - Optional repo map in the cached prefix; ledger anchors as hints.
 
 ### 6.8 Anchored edits and the edit guard
@@ -1159,7 +1160,7 @@ Action surface (`cells-only` / `hybrid`), TUI style (`tui.theme`: `auto` / `dark
 | Protocols | Own JSON-RPC 2.0; WebSocket + SSE; kernel protocol over stdio |
 | Contracts / SDKs | F# contracts (Fable-compatible); **codec combinators first**; `Fx.Sdk` (F#), `@fx/sdk` (TypeScript) |
 | Models | Built-in F# wire adapters |
-| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI, tree-sitter, static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains in our own `Fx.Keyring` (Security.framework, Credential Manager + DPAPI, Secret Service over our own minimal D-Bus client rather than libsecret; see `docs/spikes/keychains.md`), archive extraction |
+| OS integration | `Process`, PTY (`/dev/ptmx` + `posix_spawn`) and ConPTY in our own `Fx.Pty` (no third-party PTY library: see `docs/spikes/pty.md`), `FileSystemWatcher`, git CLI, tree-sitter (pinned core and grammars built from source like SQLite, in our own `Fx.TreeSitter`; the large grammars' size is open for T202: see `docs/spikes/tree-sitter.md`), static SQLite (pinned amalgamation built from source, FTS5 and JSON; see `docs/spikes/sqlite.md`), OS keychains in our own `Fx.Keyring` (Security.framework, Credential Manager + DPAPI, Secret Service over our own minimal D-Bus client rather than libsecret; see `docs/spikes/keychains.md`), archive extraction |
 | CodeAct / workflows | `fx.runtime.bun` + `fx.interpreter.bun-ts`; host-side workflow worker |
 | Clients | Own Elm-style F# TUI (v1); Fable web; Tauri desktop; ACP |
 
